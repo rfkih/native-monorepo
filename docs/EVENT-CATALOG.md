@@ -49,6 +49,7 @@ has landed yet — the status names the phases that will land them.
 | **`CompanyCreated`** | **org-service** | **entitlement, finance, employee, verticals** | **company_id, legal_employer_id, base_currency, default_language** | **LIVE (M1.2)** |
 | **`OrgUnitCreated`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18); finance consumer Phase 2 outlet-scoping** |
 | **`OrgUnitChanged`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18); finance consumer Phase 2 outlet-scoping** |
+| **`OrgUnitDeleted`** | **org-service** | **employee, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (ADR 0070) — purges the cached ref on a hard delete** |
 | **`EntitlementGranted`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | **`EntitlementRevoked`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | **`EmployeeChanged`** | **employee-service** | **verticals** | **employee_id, company_id, status** | **LIVE (#19)** |
@@ -265,6 +266,65 @@ uniformly).
 ```
 
 **Compatibility.** Backward-compatible only, enforced by `OrgUnitEventContractTest`.
+
+### `OrgUnitDeleted`
+
+Emitted by org-service when an `org_unit` is **permanently deleted** — the ADR 0018 hard-delete of
+an empty unit (`DELETE /api/v1/org-units/{orgUnitId}`), and the ADR 0070 flattening reconciler
+retiring the `business_unit` / `team` levels. One event per deleted node, emitted from the SAME
+transaction as the row delete (rule 3), so a rollback drops both and no consumer can ever purge a
+unit that still exists.
+
+**This event closes a real gap.** Before it, a hard delete emitted nothing, so every consumer's
+cached org tree kept the deleted node forever as an inert ref — `finance.org_unit_ref` rows surfaced
+in unit-P&L pickers and `employee.org_unit_projection` rows anchored assignment checks against units
+that no longer existed. ADR 0018 recorded this as a follow-up; ADR 0070 delivers it.
+
+**Terminal.** No event ever follows `OrgUnitDeleted` for that `org_unit_id`, so a consumer's purge
+can never be resurrected by a late upsert. A delete for a unit the consumer never cached is a clean
+no-op (0 rows affected), which is the correct outcome — not an error.
+
+- **Producer:** `org-service`
+- **Consumers:** `employee-service` (purges `org_unit_projection`), `finance-service` (purges
+  `org_unit_ref`). The verticals do not consume it yet — they hold no org-unit read model.
+- **Aggregate type / partition key:** `org_unit` / `org_unit_id`
+- **Outbox `event_type`:** `OrgUnitDeleted`
+- **Schema (single source of truth, ADR 0003):** `libs/contracts/src/main/resources/avro/OrgUnitDeleted.avsc`
+- **Full name:** `id.co.nativeapp.events.org.OrgUnitDeleted`
+
+A whole subtree is deleted in one transaction, so a consumer receives one event per node and never
+needs to walk the tree itself; `parent_id` and `type` are carried for diagnostics only — a consumer
+purges by `(company_id, org_unit_id)` regardless of either.
+
+**Key fields** (ARCHITECTURE.md §5: `org_unit_id`, `type`, `parent_id`, `company_id`)
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `org_unit_id` | `string` | The org_unit aggregate id (UUID as string); the partition key and the purge key |
+| `company_id` | `string` | The owning tenant / company id (UUID as string); the consumer binds its tenant scope from it |
+| `type` | `string` | The kind at deletion: `business_unit` \| `outlet` \| `team` (informational) |
+| `parent_id` | `["null","string"]` (default `null`) | The parent at deletion, or null for a top-level node (informational) |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "OrgUnitDeleted",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when an org_unit is PERMANENTLY deleted (ADR 0018 hard-delete of an empty unit; also the ADR 0070 flattening reconciler retiring the business_unit/team levels). Consumed by employee-service and finance-service to PURGE the node from their cached slice of the org tree — before this event a deleted unit lingered in every read model as an inert ref forever (the follow-up ADR 0018 recorded). Terminal for the aggregate: no further event ever follows for this org_unit_id. Key fields per ARCHITECTURE.md §5: org_unit_id, type, parent_id, company_id.",
+  "fields": [
+    {"name": "org_unit_id", "type": "string", "doc": "The org_unit aggregate id (UUID as string); also the Kafka partition key. The consumer deletes the row keyed on (company_id, org_unit_id)."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string); the consumer binds its tenant scope from this so RLS applies to the delete (rule 5)."},
+    {"name": "type", "type": "string", "doc": "The org-unit kind at the moment of deletion: business_unit | outlet | team. Informational — a consumer purges by id regardless of type."},
+    {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The parent org_unit id (UUID as string) at the moment of deletion, or null for a top-level node. Informational; a whole subtree is deleted in one transaction, so a consumer never needs to walk it. MUST remain the LAST field (positional decode safety)."}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible only (add optional fields with a default; never a new
+required field without a default, never remove/rename/retype). Enforced by
+`OrgUnitDeletedContractTest` (producer) and the consumer contract tests in finance and employee.
 
 ### `SaleRecorded`
 
@@ -910,39 +970,51 @@ ints (epoch day); an open-ended assignment uses the far-future `9999-12-31` sent
 
 **Compatibility.** Backward-compatible only, enforced by `AssignmentChangedContractTest`.
 
-### `OrgUnitCreated` / `OrgUnitChanged` — employee-service consumer view
+### `OrgUnitCreated` / `OrgUnitChanged` / `OrgUnitDeleted` — employee-service consumer view
 
-employee-service **consumes** the org-service `OrgUnitCreated` / `OrgUnitChanged` (the producer
-contracts are documented above) into a **local org read model** (`org_unit_id -> {company_id,
-legal_employer_id, type, active}`) — the projection the same-legal-employer assignment invariant
-(ARCHITECTURE.md §2) is checked against (rule 2 — a cached read model, never a sync call). It keeps
-its own **consumer copies** of the schemas at
-`services/employee-service/src/main/resources/avro/OrgUnitCreated.avsc` and `.../OrgUnitChanged.avsc`
-(full names `id.co.nativeapp.events.org.OrgUnitCreated` / `.OrgUnitChanged`), reads the outbox
+employee-service **consumes** the org-service `OrgUnitCreated` / `OrgUnitChanged` / `OrgUnitDeleted`
+(the producer contracts are documented above) into a **local org read model** (`org_unit_id ->
+{company_id, legal_employer_id, type, active}`) — the projection the same-legal-employer assignment
+invariant (ARCHITECTURE.md §2) is checked against (rule 2 — a cached read model, never a sync call).
+It reads the schemas from `libs/contracts` on the classpath (`avro/OrgUnitCreated.avsc` /
+`avro/OrgUnitChanged.avsc` / `avro/OrgUnitDeleted.avsc`, the single source of truth — ADR 0003;
+full names `id.co.nativeapp.events.org.OrgUnitCreated` / `.OrgUnitChanged` / `.OrgUnitDeleted`), reads the outbox
 payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), and dedupes by
 the event UUID (`ProcessedEventStore`) so a re-delivery never double-applies. The projection write
 runs inside a `TenantContext` scope bound to the event's `company_id`, so RLS applies. The
-`OrgUnitConsumerContractTest` asserts the consumer copies stay backward-compatible with the producer
+`OrgUnitConsumerContractTest` asserts the consumer views stay backward-compatible with the producer
 schemas (rule 7). On creating an assignment, the target org_unit's `legal_employer_id` is resolved
 from this read model and a concurrent assignment under a DIFFERENT legal employer is rejected
 (`409`).
 
-### `OrgUnitCreated` / `OrgUnitChanged` — finance-service consumer view
+`OrgUnitDeleted` (ADR 0070) **purges** the projection row instead of upserting one — a permanently
+deleted unit must stop anchoring assignment checks. It is terminal, so the purge is never
+resurrected by a later event; deleting a unit that was never projected affects 0 rows, which is the
+correct outcome rather than an error.
 
-finance-service **consumes** the org-service `OrgUnitCreated` / `OrgUnitChanged` (the producer
+**Topics consumed:** `OrgUnitCreated`, `OrgUnitChanged`, `OrgUnitDeleted`.
+
+### `OrgUnitCreated` / `OrgUnitChanged` / `OrgUnitDeleted` — finance-service consumer view
+
+finance-service **consumes** the org-service `OrgUnitCreated` / `OrgUnitChanged` / `OrgUnitDeleted` (the producer
 contracts are documented above) into a **local org-unit name cache** (`org_unit_ref` table: `org_unit_id
 -> {company_id, type, parent_id, name, active}`) — the reference the `GET /api/v1/pnl/outlets`
 endpoint LEFT-JOINs to resolve outlet display names without a synchronous call to org-service (rule
 2). It reads the schemas from `libs/contracts` on the classpath (`avro/OrgUnitCreated.avsc` /
-`avro/OrgUnitChanged.avsc`, the single source of truth — ADR 0003), reads the outbox payload as
+`avro/OrgUnitChanged.avsc` / `avro/OrgUnitDeleted.avsc`, the single source of truth — ADR 0003), reads the outbox payload as
 **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), and dedupes by the event
 UUID (`ProcessedEventStore`) so a re-delivery never double-applies. The upsert runs inside a
 `TenantContext` scope bound to the event's `company_id` (RLS applies — rule 5). Names may lag by up
 to one event-delivery cycle after a rename; callers must tolerate `outletName: null` (not-yet-known
 is not an error — the revenue row is returned regardless). The `OrgUnitConsumerContractTest`
-(finance) asserts both schemas stay backward-compatible with the producer schemas (rule 7).
+(finance) asserts all three schemas stay backward-compatible with the producer schemas (rule 7).
 
-**Topics consumed:** `OrgUnitCreated`, `OrgUnitChanged`.
+`OrgUnitDeleted` (ADR 0070) **purges** the `org_unit_ref` row instead of upserting one, so a
+permanently deleted unit stops surfacing as a ghost name in unit-P&L pickers. The DELETE names
+`company_id` alongside RLS, mirroring the upsert's tenant-composite conflict target; deleting a unit
+finance never cached affects 0 rows, which is the correct outcome rather than an error.
+
+**Topics consumed:** `OrgUnitCreated`, `OrgUnitChanged`, `OrgUnitDeleted`.
 
 ### `EntitlementGranted` / `EntitlementRevoked` — carwash-service consumer view
 

@@ -30,7 +30,7 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0009](0009-error-inbox-fleet-rollout.md) | Extract the error-inbox into `libs/error-inbox` and roll it out fleet-wide | Accepted |
 | [0010](0010-distributed-tracing-otel.md) | Wire distributed tracing (Micrometer Tracing + OpenTelemetry) fleet-wide | Accepted |
 | [0011](0011-keycloak-admin-via-spring-restclient.md) | Use Spring RestClient for Keycloak Admin API calls (no keycloak-admin-client library) | Accepted |
-| [0012](0012-flatten-org-tree-remove-branch.md) | Flatten the org tree: remove BRANCH and seed a default outlet per business unit | Accepted |
+| [0012](0012-flatten-org-tree-remove-branch.md) | Flatten the org tree: remove BRANCH and seed a default outlet per business unit | Superseded by [0070](0070-flatten-org-tree-to-company-outlet.md) |
 | [0013](0013-per-login-page-grants-subtractive-ui.md) | Per-login page grants are subtractive UI gating; roles remain the API authz boundary | Accepted |
 | [0014](0014-accounts-receivable-subledger.md) | Accounts Receivable sub-ledger + the customer/party dimension in finance-service | Accepted |
 | [0015](0015-accounts-payable-subledger.md) | Accounts Payable sub-ledger — the vendor-facing mirror of AR | Accepted |
@@ -85,3 +85,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0064](0064-manager-close-correction-reverse-repost.md) | Manager/owner correction of a completed closing — reverse + re-post the cash variance (never mutate); stock opname self-compensates; recent/unsealed + owner/manager only | Accepted |
 | [0065](0065-gl-derived-dashboard-pnl.md) | Dashboard P&L is GL-derived (shares the income-statement computation) so beranda "Laba bersih" == Laba-Rugi report; `consolidated_pnl` demoted to write-path currency-guard state | Accepted |
 | [0066](0066-auto-official-payroll-on-company-created.md) | employee-service consumes `CompanyCreated` to auto-activate the OFFICIAL statutory payroll dataset for a new IDR tenant (no new tenant left illustrative); forward-only (dedicated group + `latest`), IDR-gated, idempotent; existing tenants activate via the console setup-gate | Accepted |
+| [0070](0070-flatten-org-tree-to-company-outlet.md) | Flatten the org tree to `company > outlet` — drop the division (business-unit) and team levels; the vertical moves to the company; `OrgUnitDeleted` closes the stale-ref gap | Accepted |

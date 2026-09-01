@@ -223,6 +223,14 @@ events:
       - { name: legal_employer_id, type: "string" }
       - { name: name, type: "string" }
       - { name: vertical, type: "null|string" }
+  - name: OrgUnitDeleted
+    namespace: id.co.nativeapp.events.org
+    schema: libs/contracts/src/main/resources/avro/OrgUnitDeleted.avsc
+    fields:
+      - { name: org_unit_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: type, type: "string" }
+      - { name: parent_id, type: "null|string" }
   - name: PaymentChargeExpired
     namespace: id.co.nativeapp.events.payment
     schema: libs/contracts/src/main/resources/avro/PaymentChargeExpired.avsc

@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee.org.messaging;
 
 import id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent;
+import id.co.nativeapp.employee.org.dto.OrgUnitRemovedEvent;
 import id.co.nativeapp.events.AvroSerde;
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,11 +32,17 @@ public final class OrgUnitEventSchemas {
   /** Classpath location of the {@code OrgUnitChanged} consumer-copy {@code .avsc}. */
   public static final String CHANGED_RESOURCE = "avro/OrgUnitChanged.avsc";
 
+  /** Classpath location of the {@code OrgUnitDeleted} consumer-copy {@code .avsc}. */
+  public static final String DELETED_RESOURCE = "avro/OrgUnitDeleted.avsc";
+
   /** The {@code OrgUnitCreated} Kafka topic (one topic per event type). */
   public static final String CREATED_TOPIC = "OrgUnitCreated";
 
   /** The {@code OrgUnitChanged} Kafka topic. */
   public static final String CHANGED_TOPIC = "OrgUnitChanged";
+
+  /** The {@code OrgUnitDeleted} Kafka topic (ADR 0070 — purges the projection). */
+  public static final String DELETED_TOPIC = "OrgUnitDeleted";
 
   private OrgUnitEventSchemas() {
     // static holder
@@ -53,6 +60,7 @@ public final class OrgUnitEventSchemas {
   private static final class Holder {
     private static final Schema CREATED_SCHEMA = parse(CREATED_RESOURCE);
     private static final Schema CHANGED_SCHEMA = parse(CHANGED_RESOURCE);
+    private static final Schema DELETED_SCHEMA = parse(DELETED_RESOURCE);
 
     private Holder() {}
   }
@@ -65,6 +73,11 @@ public final class OrgUnitEventSchemas {
   /** The parsed reader schema for {@code OrgUnitChanged} (employee's consumer copy). */
   public static Schema changedSchema() {
     return Holder.CHANGED_SCHEMA;
+  }
+
+  /** The parsed reader schema for {@code OrgUnitDeleted} (employee's consumer copy). */
+  public static Schema deletedSchema() {
+    return Holder.DELETED_SCHEMA;
   }
 
   /**
@@ -103,6 +116,22 @@ public final class OrgUnitEventSchemas {
         null, // legal_employer_id not on OrgUnitChanged; consumer retains the existing value
         record.get("type").toString(),
         (boolean) record.get("active"));
+  }
+
+  /**
+   * Decodes raw {@code OrgUnitDeleted} Avro bytes into the {@link OrgUnitRemovedEvent} the consumer
+   * applies as a PURGE of the projection (ADR 0070). Unlike the created/changed decoders this
+   * projects no state: a deleted node has none, and the row is removed outright.
+   *
+   * @param eventId the event's UUID — the idempotency key
+   * @param payload the raw Avro bytes off the topic
+   */
+  public static OrgUnitRemovedEvent decodeDeleted(UUID eventId, byte[] payload) {
+    GenericRecord record = AvroSerde.deserialize(payload, Holder.DELETED_SCHEMA);
+    return new OrgUnitRemovedEvent(
+        eventId,
+        UUID.fromString(record.get("org_unit_id").toString()),
+        record.get("company_id").toString());
   }
 
   private static Schema parse(String resource) {

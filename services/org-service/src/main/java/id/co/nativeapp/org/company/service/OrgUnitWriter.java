@@ -10,6 +10,7 @@ import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.org.company.messaging.OrgUnitChangedSchema;
 import id.co.nativeapp.org.company.messaging.OrgUnitCreatedSchema;
+import id.co.nativeapp.org.company.messaging.OrgUnitDeletedSchema;
 import id.co.nativeapp.org.company.repository.OrgUnitRepository;
 import id.co.nativeapp.org.user.repository.UserOutletAssignmentRepository;
 import id.co.nativeapp.org.user.service.OrgUnitNotFoundException;
@@ -106,9 +107,9 @@ public class OrgUnitWriter {
    * on a never-assigned outlet — those leave no assignment row and no synchronous cross-service
    * check is permitted (rule 2), so that residual orphan risk is accepted and documented in ADR
    * 0018 (the console additionally blocks on employees before offering delete; the fully-safe path
-   * is always deactivate). No event is emitted, so finance/HR/restaurant read-model rows for the
-   * deleted subtree persist as inert refs (documented follow-up: an {@code OrgUnitDeleted} event to
-   * purge them — ADR 0018).
+   * is always deactivate). One {@code OrgUnitDeleted} is emitted per deleted node (ADR 0070),
+   * atomically with the row deletes, so finance's and employee's cached org trees PURGE the subtree
+   * instead of keeping it forever as inert refs — the follow-up ADR 0018 recorded.
    *
    * <p>The whole subtree is removed in one transaction so no descendant is left pointing at a
    * deleted parent (org-service has no intra-schema FKs — the invariant is enforced here, not by
@@ -154,6 +155,14 @@ public class OrgUnitWriter {
       if (userOutletAssignmentRepository.existsByOrgUnitId(u.getId())) {
         throw new OrgUnitHasDataException(u.getId());
       }
+    }
+
+    // Emit BEFORE the delete, while the aggregates still hold their state — the outbox rows go on
+    // this transaction's connection, so the events and the row deletes commit together (rule 3).
+    // A rollback drops both; there is no window where a consumer purges a unit that still exists.
+    UUID companyId = UUID.fromString(TenantContext.require().companyId());
+    for (OrgUnit u : toDelete) {
+      emitDeleted(u, companyId);
     }
 
     orgUnitRepository.deleteAll(toDelete);
@@ -418,6 +427,23 @@ public class OrgUnitWriter {
         OrgUnitChangedSchema.AGGREGATE_TYPE,
         orgUnit.getId().toString(),
         OrgUnitChangedSchema.EVENT_TYPE,
+        AvroSerde.serialize(event),
+        null,
+        companyId,
+        clock.instant());
+  }
+
+  /**
+   * Writes one {@code OrgUnitDeleted} outbox row for a node being permanently removed (ADR 0070),
+   * on the caller's transactional connection so it commits atomically with the row delete (rule 3).
+   * Terminal for the aggregate — no event ever follows it for this {@code org_unit_id}.
+   */
+  void emitDeleted(OrgUnit orgUnit, UUID companyId) {
+    GenericRecord event = OrgUnitDeletedSchema.toRecord(orgUnit);
+    outboxWriter.write(
+        OrgUnitDeletedSchema.AGGREGATE_TYPE,
+        orgUnit.getId().toString(),
+        OrgUnitDeletedSchema.EVENT_TYPE,
         AvroSerde.serialize(event),
         null,
         companyId,

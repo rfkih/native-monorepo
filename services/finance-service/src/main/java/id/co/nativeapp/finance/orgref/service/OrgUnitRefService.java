@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.orgref.service;
 
 import id.co.nativeapp.finance.orgref.messaging.OrgUnitRefEvent;
+import id.co.nativeapp.finance.orgref.messaging.OrgUnitRefRemoval;
 import id.co.nativeapp.tenant.TenantContext;
 import org.springframework.stereotype.Service;
 
@@ -39,6 +40,26 @@ public class OrgUnitRefService {
     } catch (Exception e) {
       // TenantContext.callAs declares checked Exception; writer.apply throws only unchecked.
       throw new IllegalStateException("Failed to apply org-unit ref event", e);
+    }
+  }
+
+  /**
+   * Purges one deleted org unit from {@code org_unit_ref}, idempotently, in the event's tenant
+   * scope (ADR 0070). Same tenant-binding contract as {@link #apply}: the scope comes from the
+   * event's {@code company_id}, never a request, so RLS scopes the delete (rule 5).
+   *
+   * @return {@code true} if this delivery applied (first delivery), {@code false} if it was a
+   *     re-delivery skipped by the idempotent consumer.
+   */
+  public boolean remove(OrgUnitRefRemoval removal) {
+    try {
+      return TenantContext.callAs(
+          removal.companyId(), OrgUnitRefWriter.CONSUMER_ACTOR, () -> writer.remove(removal));
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      // TenantContext.callAs declares checked Exception; writer.remove throws only unchecked.
+      throw new IllegalStateException("Failed to purge org-unit ref", e);
     }
   }
 }

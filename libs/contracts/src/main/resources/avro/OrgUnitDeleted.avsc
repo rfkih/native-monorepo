@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "OrgUnitDeleted",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when an org_unit is PERMANENTLY deleted (ADR 0018 hard-delete of an empty unit; also the ADR 0070 flattening reconciler retiring the business_unit/team levels). Consumed by employee-service and finance-service to PURGE the node from their cached slice of the org tree — before this event a deleted unit lingered in every read model as an inert ref forever (the follow-up ADR 0018 recorded). Terminal for the aggregate: no further event ever follows for this org_unit_id. Key fields per ARCHITECTURE.md §5: org_unit_id, type, parent_id, company_id.",
+  "fields": [
+    {"name": "org_unit_id", "type": "string", "doc": "The org_unit aggregate id (UUID as string); also the Kafka partition key. The consumer deletes the row keyed on (company_id, org_unit_id)."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string); the consumer binds its tenant scope from this so RLS applies to the delete (rule 5)."},
+    {"name": "type", "type": "string", "doc": "The org-unit kind at the moment of deletion: business_unit | outlet | team. Informational — a consumer purges by id regardless of type."},
+    {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The parent org_unit id (UUID as string) at the moment of deletion, or null for a top-level node. Informational; a whole subtree is deleted in one transaction, so a consumer never needs to walk it. MUST remain the LAST field (positional decode safety)."}
+  ]
+}

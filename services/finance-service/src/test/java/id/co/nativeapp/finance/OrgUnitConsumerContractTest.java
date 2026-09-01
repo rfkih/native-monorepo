@@ -3,7 +3,9 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.finance.orgref.messaging.OrgUnitRefRemoval;
 import id.co.nativeapp.finance.orgref.messaging.OrgUnitRefSchemas;
+import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
@@ -238,6 +240,100 @@ class OrgUnitConsumerContractTest {
                     {"name": "name", "type": "string"},
                     {"name": "active", "type": "boolean"},
                     {"name": "reason_code", "type": "string"}
+                  ]
+                }
+                """);
+    assertThat(AvroSerde.isBackwardCompatible(producer, broken)).isFalse();
+  }
+
+  // ------------------------------------------------------------------ OrgUnitDeleted (ADR 0070)
+
+  /**
+   * The producer's registered {@code OrgUnitDeleted} schema, copied verbatim from
+   * docs/EVENT-CATALOG.md (the contract anchor).
+   */
+  private static final String PRODUCER_DELETED_JSON =
+      """
+      {
+        "type": "record",
+        "name": "OrgUnitDeleted",
+        "namespace": "id.co.nativeapp.events.org",
+        "fields": [
+          {"name": "org_unit_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "type", "type": "string"},
+          {"name": "parent_id", "type": ["null", "string"], "default": null}
+        ]
+      }
+      """;
+
+  @Test
+  void deletedSchemaParsesFromClasspathWithExpectedShape() {
+    Schema schema = OrgUnitRefSchemas.deletedSchema();
+    assertThat(schema.getFullName()).isEqualTo("id.co.nativeapp.events.org.OrgUnitDeleted");
+    assertThat(schema.getField("org_unit_id")).isNotNull();
+    assertThat(schema.getField("company_id")).isNotNull();
+    assertThat(schema.getField("type")).isNotNull();
+    assertThat(schema.getField("parent_id")).isNotNull();
+  }
+
+  @Test
+  void deletedRoundTripsThroughAvroSerde() {
+    Schema schema = OrgUnitRefSchemas.deletedSchema();
+    GenericRecord record = new GenericData.Record(schema);
+    record.put("org_unit_id", "22222222-2222-2222-2222-222222222222");
+    record.put("company_id", "11111111-1111-1111-1111-111111111111");
+    record.put("type", "BUSINESS_UNIT");
+    record.put("parent_id", null);
+
+    GenericRecord decoded = AvroSerde.deserialize(AvroSerde.serialize(record), schema);
+    assertThat(decoded.get("org_unit_id").toString())
+        .isEqualTo("22222222-2222-2222-2222-222222222222");
+    assertThat(decoded.get("parent_id")).isNull();
+  }
+
+  @Test
+  void deletedConsumerCopyIsBackwardCompatibleWithProducerSchema() {
+    Schema producer = new Schema.Parser().parse(PRODUCER_DELETED_JSON);
+    Schema consumer = OrgUnitRefSchemas.deletedSchema();
+    assertThat(AvroSerde.isBackwardCompatible(producer, consumer)).isTrue();
+  }
+
+  @Test
+  void producerDeletedBytesDecodeIntoTheRemovalCommand() {
+    Schema producer = new Schema.Parser().parse(PRODUCER_DELETED_JSON);
+    GenericRecord produced = new GenericData.Record(producer);
+    produced.put("org_unit_id", "33333333-3333-3333-3333-333333333333");
+    produced.put("company_id", "11111111-1111-1111-1111-111111111111");
+    produced.put("type", "OUTLET");
+    produced.put("parent_id", "44444444-4444-4444-4444-444444444444");
+
+    UUID eventId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+    OrgUnitRefRemoval removal =
+        OrgUnitRefSchemas.decodeDeleted(eventId, AvroSerde.serialize(produced));
+    assertThat(removal.eventId()).isEqualTo(eventId);
+    assertThat(removal.orgUnitId())
+        .isEqualTo(UUID.fromString("33333333-3333-3333-3333-333333333333"));
+    assertThat(removal.companyId()).isEqualTo("11111111-1111-1111-1111-111111111111");
+  }
+
+  @Test
+  void addingRequiredFieldToDeletedBreaksBackwardCompatibility() {
+    Schema producer = new Schema.Parser().parse(PRODUCER_DELETED_JSON);
+    Schema broken =
+        new Schema.Parser()
+            .parse(
+                """
+                {
+                  "type": "record",
+                  "name": "OrgUnitDeleted",
+                  "namespace": "id.co.nativeapp.events.org",
+                  "fields": [
+                    {"name": "org_unit_id", "type": "string"},
+                    {"name": "company_id", "type": "string"},
+                    {"name": "type", "type": "string"},
+                    {"name": "parent_id", "type": ["null", "string"], "default": null},
+                    {"name": "deleted_by", "type": "string"}
                   ]
                 }
                 """);

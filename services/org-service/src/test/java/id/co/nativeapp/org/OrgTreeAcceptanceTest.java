@@ -10,6 +10,7 @@ import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.org.company.messaging.OrgUnitChangedSchema;
 import id.co.nativeapp.org.company.messaging.OrgUnitCreatedSchema;
+import id.co.nativeapp.org.company.messaging.OrgUnitDeletedSchema;
 import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.company.service.OrgUnitHasDataException;
 import id.co.nativeapp.org.company.service.OrgUnitService;
@@ -500,6 +501,22 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
                     .map(id.co.nativeapp.org.company.projection.OrgUnitView::getId)
                     .toList());
     assertThat(remaining).isEmpty();
+
+    // ADR 0070: exactly ONE OrgUnitDeleted per removed node, on the same transaction as the
+    // deletes, so finance/employee PURGE their cached refs instead of keeping inert rows.
+    List<Map<String, Object>> deleted = orgUnitDeletedRows(t.companyId());
+    assertThat(deleted).hasSize(4); // root BU + its seeded default outlet + the outlet + the team
+    assertThat(deleted.stream().map(r -> r.get("aggregate_id")))
+        .contains(t.rootBusinessUnitId().toString(), ids[0].toString(), ids[1].toString());
+
+    GenericRecord rootEvent = decodeDeleted(deleted, t.rootBusinessUnitId());
+    assertThat(rootEvent.get("company_id").toString()).isEqualTo(t.companyId().toString());
+    assertThat(rootEvent.get("type").toString()).isEqualTo("BUSINESS_UNIT");
+    assertThat(rootEvent.get("parent_id")).isNull(); // a root node
+
+    GenericRecord teamEvent = decodeDeleted(deleted, ids[1]);
+    assertThat(teamEvent.get("type").toString()).isEqualTo("TEAM");
+    assertThat(teamEvent.get("parent_id").toString()).isEqualTo(ids[0].toString());
   }
 
   @Test
@@ -529,6 +546,9 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
         });
 
     assertThat(exists(outletId)).isTrue();
+    // ADR 0070: the guard throws BEFORE any event is written, and the transaction rolls back
+    // regardless — no consumer may ever purge a unit that still exists.
+    assertThat(orgUnitDeletedRows(t.companyId())).isEmpty();
   }
 
   @Test
@@ -667,5 +687,26 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
 
   private GenericRecord decodeChanged(Map<String, Object> row) {
     return AvroSerde.deserialize((byte[]) row.get("payload"), OrgUnitChangedSchema.schema());
+  }
+
+  /**
+   * {@code OrgUnitDeleted} outbox rows for ONE company. Scoped by {@code company_id} deliberately:
+   * the outbox is shared across every test in this class, so an unscoped read would see other
+   * tests' deletions and make any exact-count assertion order-dependent.
+   */
+  private List<Map<String, Object>> orgUnitDeletedRows(UUID companyId) {
+    return jdbcTemplate.queryForList(
+        "SELECT aggregate_id, payload FROM outbox WHERE event_type = 'OrgUnitDeleted' "
+            + "AND company_id = ? ORDER BY occurred_at, id",
+        companyId);
+  }
+
+  private GenericRecord decodeDeleted(List<Map<String, Object>> rows, UUID aggregateId) {
+    Map<String, Object> row =
+        rows.stream()
+            .filter(r -> aggregateId.toString().equals(r.get("aggregate_id")))
+            .findFirst()
+            .orElseThrow();
+    return AvroSerde.deserialize((byte[]) row.get("payload"), OrgUnitDeletedSchema.schema());
   }
 }

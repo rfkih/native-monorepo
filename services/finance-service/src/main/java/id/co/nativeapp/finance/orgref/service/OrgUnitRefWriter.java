@@ -2,6 +2,7 @@ package id.co.nativeapp.finance.orgref.service;
 
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.orgref.messaging.OrgUnitRefEvent;
+import id.co.nativeapp.finance.orgref.messaging.OrgUnitRefRemoval;
 import id.co.nativeapp.finance.orgref.repository.OrgUnitRefRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Timestamp;
@@ -66,6 +67,33 @@ public class OrgUnitRefWriter {
   @Transactional
   public boolean apply(OrgUnitRefEvent event) {
     return processedEvents.processOnce(event.eventId(), () -> upsert(event));
+  }
+
+  /**
+   * Purges the org unit from {@code org_unit_ref}, exactly once per event id (ADR 0070). Must be
+   * called inside a {@link TenantContext} scope bound to the event's {@code company_id}.
+   *
+   * <p>The DELETE names {@code company_id} explicitly as well as relying on RLS — belt and braces,
+   * and it mirrors the upsert's tenant-composite conflict target: a cross-tenant {@code
+   * org_unit_id} collision could never take out another tenant's row.
+   *
+   * @return {@code true} if this delivery applied (first delivery), {@code false} if skipped as a
+   *     duplicate (re-delivery).
+   */
+  @Transactional
+  public boolean remove(OrgUnitRefRemoval removal) {
+    return processedEvents.processOnce(removal.eventId(), () -> purge(removal));
+  }
+
+  private void purge(OrgUnitRefRemoval removal) {
+    String companyId = TenantContext.require().companyId();
+    // Deleting an absent row affects 0 rows — the correct outcome for a unit finance never cached
+    // (e.g. an org unit created and deleted before this consumer existed), so there is nothing to
+    // assert on the update count.
+    jdbcTemplate.update(
+        "DELETE FROM org_unit_ref WHERE company_id = ? AND org_unit_id = ?",
+        companyId,
+        removal.orgUnitId());
   }
 
   private void upsert(OrgUnitRefEvent event) {

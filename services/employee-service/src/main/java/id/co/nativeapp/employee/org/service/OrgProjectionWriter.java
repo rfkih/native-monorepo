@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.org.service;
 
 import id.co.nativeapp.employee.org.domain.OrgUnitProjection;
 import id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent;
+import id.co.nativeapp.employee.org.dto.OrgUnitRemovedEvent;
 import id.co.nativeapp.employee.org.repository.OrgUnitProjectionRepository;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.tenant.TenantContext;
@@ -53,6 +54,24 @@ public class OrgProjectionWriter {
   @Transactional
   public boolean apply(OrgUnitProjectedEvent event) {
     return processedEvents.processOnce(event.eventId(), () -> upsert(event));
+  }
+
+  /**
+   * Purges the projection row for a permanently deleted org unit, exactly once per event id (ADR
+   * 0070). Must be called inside a {@link TenantContext} scope bound to the event's {@code
+   * company_id} — RLS then scopes the lookup, so a cross-tenant id resolves empty and deletes
+   * nothing (rule 5).
+   *
+   * <p>Deleting an absent projection is a no-op: employee-service may never have projected the unit
+   * (e.g. it was created and deleted before this consumer existed), which is the correct outcome.
+   *
+   * @return {@code true} if this delivery applied (first delivery), {@code false} if skipped as a
+   *     duplicate (re-delivery).
+   */
+  @Transactional
+  public boolean remove(OrgUnitRemovedEvent removal) {
+    return processedEvents.processOnce(
+        removal.eventId(), () -> projectionRepository.deleteById(removal.orgUnitId()));
   }
 
   private void upsert(OrgUnitProjectedEvent event) {
