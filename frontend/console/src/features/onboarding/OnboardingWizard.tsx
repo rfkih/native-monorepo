@@ -91,6 +91,10 @@ export function OnboardingWizard() {
         actor: AUTH_MODE === 'oidc' ? auth.actor : DEV_ACTOR,
         planTier: toPlanTier(res.planTier),
         companyCode: res.companyCode ?? '',
+        // Load-bearing (ADR 0070): the vertical is the POS discriminator now, and this manual
+        // session is what the console runs on until /companies/mine catches up — omit it and a
+        // just-created carwash company opens the RESTAURANT POS.
+        vertical: res.vertical ?? vertical,
       })
     },
   })

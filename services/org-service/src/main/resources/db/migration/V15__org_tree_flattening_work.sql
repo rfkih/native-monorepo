@@ -23,6 +23,13 @@
 -- SELF-RETIRING. Rows are marked done_at as they are processed; once every row is done the
 -- reconciler is a no-op on every subsequent boot. It is also idempotent independently of this table:
 -- flattening a company with no business_unit/team rows and no parented outlets changes nothing.
+--
+-- WHICH DEPLOY MODELS ARE SAFE. Prod runs `docker compose up -d` (scripts/prod-deploy.sh), which
+-- RECREATES each service container — the old one stops before the new one runs Flyway, so nothing
+-- is serving during the window. The k8s overlay in deploy/ (replicas: 2, RollingUpdate) is NOT
+-- safe for this migration as written: the old pods keep serving while the new pod migrates, and a
+-- read served in that window would see every tenant's rows. If that overlay is ever adopted, this
+-- migration needs a maintenance window or a pre-serve migration job.
 -- ============================================================================================
 
 -- company_id is VARCHAR(64), matching org_unit.company_id / the Auditable tenant column — NOT uuid.

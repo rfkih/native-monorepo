@@ -34,6 +34,12 @@ import org.springframework.stereotype.Component;
  * worst repeat work that is idempotent anyway (the writer's work is defined by what is still
  * wrong).
  *
+ * <p><strong>One instance at a time.</strong> A rolling deploy runs several replicas concurrently,
+ * and the queue read is not itself a claim — so the drain is serialised behind a Postgres advisory
+ * lock. Without it two replicas would flatten the same tenant and emit duplicate events with
+ * DIFFERENT event ids, which the consumers' {@code ProcessedEventStore} dedupe (keyed on the event
+ * id) would not catch.
+ *
  * <p>Self-retiring: once every queued row is done this listener finds an empty queue and returns
  * immediately on every subsequent boot.
  */
@@ -41,6 +47,14 @@ import org.springframework.stereotype.Component;
 public class OrgTreeFlatteningReconciler {
 
   private static final Logger log = LoggerFactory.getLogger(OrgTreeFlatteningReconciler.class);
+
+  /**
+   * Advisory-lock key for the queue drain. An arbitrary but STABLE constant — the value means
+   * nothing, only that every replica of this service picks the same one. Session-scoped ({@code
+   * pg_try_advisory_lock}), released in a finally, and auto-released if the connection dies, so a
+   * crashed instance cannot wedge the migration.
+   */
+  private static final long DRAIN_LOCK_KEY = 70_0070L;
 
   private final JdbcTemplate jdbcTemplate;
   private final OrgTreeFlatteningWriter writer;
@@ -57,6 +71,28 @@ public class OrgTreeFlatteningReconciler {
    */
   @EventListener(ApplicationReadyEvent.class)
   public void onApplicationReady() {
+    // ONE instance flattens. A rolling deploy runs several replicas at once, and two of them
+    // draining the same queue would flatten the same tenant twice — emitting duplicate
+    // OrgUnitChanged/OrgUnitDeleted with DIFFERENT event ids, which ProcessedEventStore cannot
+    // dedupe (it keys on the event id, not the aggregate), on top of racing each other's deletes.
+    // A session-level advisory lock is the cheapest correct guard: whoever gets it does the work,
+    // everyone else skips this boot and finds an empty queue on the next one.
+    Boolean acquired =
+        jdbcTemplate.queryForObject(
+            "SELECT pg_try_advisory_lock(?)", Boolean.class, DRAIN_LOCK_KEY);
+    if (!Boolean.TRUE.equals(acquired)) {
+      log.info("org-tree flattening: another instance holds the drain lock; skipping this boot");
+      return;
+    }
+    try {
+      drainQueue();
+    } finally {
+      jdbcTemplate.queryForObject("SELECT pg_advisory_unlock(?)", Boolean.class, DRAIN_LOCK_KEY);
+    }
+  }
+
+  /** The drain itself, run by whichever instance holds {@link #DRAIN_LOCK_KEY}. */
+  private void drainQueue() {
     List<String> pending;
     try {
       pending = findPending();

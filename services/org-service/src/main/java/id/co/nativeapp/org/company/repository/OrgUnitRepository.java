@@ -74,8 +74,13 @@ public interface OrgUnitRepository extends JpaRepository<OrgUnit, UUID> {
    * <p>Selects only the columns the picker needs ({@code id}, {@code name}) — never {@code SELECT
    * *} of the entity (CLAUDE.md §3.3). ADR 0070 removed the parent self-join this query used to
    * carry: the {@code vertical} is a COMPANY attribute now (read once from {@code
-   * /api/v1/companies}) and the {@code division_id} it exposed no longer exists. The {@code type}
-   * filter went with it — every org unit IS an outlet.
+   * /api/v1/companies}) and the {@code division_id} it exposed no longer exists. <strong>The {@code
+   * type = 'OUTLET'} filter STAYS.</strong> It is tempting to drop it now that an outlet is the
+   * only creatable kind, but a tenant that has not yet been flattened still holds {@code
+   * BUSINESS_UNIT}/{@code TEAM} rows, and the reconciler runs on {@code ApplicationReadyEvent} —
+   * i.e. AFTER this endpoint is already serving. Without the filter the POS picker would offer a
+   * division during that window and a cashier could ring sales against a business-unit id:
+   * precisely the invariant ADR 0012 established and ADR 0070 keeps.
    */
   @Query(
       value =
@@ -83,7 +88,8 @@ public interface OrgUnitRepository extends JpaRepository<OrgUnit, UUID> {
           SELECT ou.id   AS id,
                  ou.name AS name
             FROM org_unit ou
-           WHERE ou.active = true
+           WHERE ou.type = 'OUTLET'
+             AND ou.active = true
            ORDER BY ou.name
           """,
       nativeQuery = true)

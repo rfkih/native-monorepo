@@ -62,10 +62,10 @@ public interface UserOutletAssignmentRepository extends JpaRepository<UserOutlet
   List<UserOutletAssignmentView> findActiveByUserId(String userId);
 
   /**
-   * Active assignments for one org unit. Since ADR 0070 the tree is flat ({@code company > outlet}),
-   * so "under a unit" means the unit itself — the {@code OR ou.parent_id = :orgUnitId} disjunct this
-   * query used to carry (rolling a business unit up over its child outlets) is gone with the
-   * division level, along with the only kind of node that could ever have matched it.
+   * Active assignments for one org unit. Since ADR 0070 the tree is flat ({@code company >
+   * outlet}), so "under a unit" means the unit itself — the {@code OR ou.parent_id = :orgUnitId}
+   * disjunct this query used to carry (rolling a business unit up over its child outlets) is gone
+   * with the division level, along with the only kind of node that could ever have matched it.
    *
    * <p>Joined to {@code org_unit} for the outlet name. Served by {@code
    * idx_user_outlet_assignment_outlet (company_id, org_unit_id)} — the index created for this admin

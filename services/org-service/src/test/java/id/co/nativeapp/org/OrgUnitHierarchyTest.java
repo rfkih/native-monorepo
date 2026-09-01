@@ -43,13 +43,22 @@ class OrgUnitHierarchyTest {
   }
 
   @Test
-  void outletIsTheOnlyType() {
-    assertThat(OrgUnitType.values()).containsExactly(OrgUnitType.OUTLET);
+  void outletIsTheOnlyCREATABLEType() {
+    // The retired constants MUST remain declared: org_unit.type is EnumType.STRING, so removing
+    // them makes a pre-ADR-0070 row impossible for Hibernate to load — which silently breaks the
+    // flattening reconciler on exactly the tenants that still need it. What must be true is that
+    // they are unreachable from every write path, not that they are absent.
+    assertThat(OrgUnitType.OUTLET.isRetired()).isFalse();
+    assertThat(OrgUnitType.BUSINESS_UNIT.isRetired()).isTrue();
+    assertThat(OrgUnitType.TEAM.isRetired()).isTrue();
+    assertThat(java.util.Arrays.stream(OrgUnitType.values()).filter(t -> !t.isRetired()).toList())
+        .containsExactly(OrgUnitType.OUTLET);
   }
 
   @Test
-  void theRemovedLevelsNoLongerParse() {
-    // An old client naming a retired level gets an explicit 400, not a silent substitution.
+  void theRetiredLevelsNoLongerParse() {
+    // An old client naming a retired level gets an explicit 400, not a silent substitution — this
+    // is what makes the surviving constants read-only in practice.
     assertThatThrownBy(() -> OrgUnitType.from("business_unit"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("business_unit");

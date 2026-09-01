@@ -28,6 +28,13 @@ export interface CompanyResponse {
   planTier?: string
   /** The company's login-namespace code (ADR 0054); absent on an older server. */
   companyCode?: string
+  /**
+   * The company's business vertical (ADR 0070 moved it up from the org unit). Load-bearing for the
+   * session: since the vertical is now the SOLE POS discriminator, a session created without it
+   * falls open to 'restaurant' — which would route a brand-new carwash company to the restaurant
+   * POS until /companies/mine refetched (and permanently in dev, where the session is persisted).
+   */
+  vertical?: string | null
 }
 
 /**

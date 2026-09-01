@@ -42,6 +42,13 @@
 -- window would see every tenant's rows. Safe under the standard migrate-before-serve model (the
 -- deploy runs migrations before routing traffic), which this deploy must already honour for any
 -- expand/contract migration.
+--
+-- WHICH DEPLOY MODELS ARE SAFE. Prod runs `docker compose up -d` (scripts/prod-deploy.sh), which
+-- RECREATES each service container — the old one stops before the new one runs Flyway, so nothing
+-- is serving during the window. The k8s overlay in deploy/ (replicas: 2, RollingUpdate) is NOT
+-- safe for this migration as written: the old pods keep serving while the new pod migrates, and a
+-- read served in that window would see every tenant's rows. If that overlay is ever adopted, this
+-- migration needs a maintenance window or a pre-serve migration job.
 -- ============================================================================================
 
 -- The business vertical, as the LOWERCASE module-key-style value ('restaurant' | 'carwash' |

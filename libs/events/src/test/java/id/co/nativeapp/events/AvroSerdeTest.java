@@ -125,4 +125,108 @@ class AvroSerdeTest {
   void identitySchemaIsBackwardCompatibleWithItself() {
     assertTrue(AvroSerde.isBackwardCompatible(V1, V1));
   }
+
+  // ---- replay tolerance: a payload written before a trailing field was appended ----------------
+
+  /** A record BEFORE a nullable, defaulted field was appended. */
+  private static final Schema BEFORE_APPEND =
+      new Schema.Parser()
+          .parse(
+              """
+              {
+                "type": "record",
+                "name": "Evolving",
+                "namespace": "id.co.nativeapp.events.test",
+                "fields": [
+                  {"name": "id", "type": "string"},
+                  {"name": "amount_minor", "type": "long"}
+                ]
+              }
+              """);
+
+  /** The same record AFTER two appends, each nullable with a default (the fleet convention). */
+  private static final Schema AFTER_APPEND =
+      new Schema.Parser()
+          .parse(
+              """
+              {
+                "type": "record",
+                "name": "Evolving",
+                "namespace": "id.co.nativeapp.events.test",
+                "fields": [
+                  {"name": "id", "type": "string"},
+                  {"name": "amount_minor", "type": "long"},
+                  {"name": "currency", "type": ["null", "string"], "default": null},
+                  {"name": "vertical", "type": ["null", "string"], "default": null}
+                ]
+              }
+              """);
+
+  /** A record whose appended trailing field is REQUIRED — a breaking change, not a valid append. */
+  private static final Schema AFTER_REQUIRED_APPEND =
+      new Schema.Parser()
+          .parse(
+              """
+              {
+                "type": "record",
+                "name": "Evolving",
+                "namespace": "id.co.nativeapp.events.test",
+                "fields": [
+                  {"name": "id", "type": "string"},
+                  {"name": "amount_minor", "type": "long"},
+                  {"name": "reason", "type": "string"}
+                ]
+              }
+              """);
+
+  private static byte[] oldPayload() {
+    GenericRecord old = new GenericData.Record(BEFORE_APPEND);
+    old.put("id", "evt-1");
+    old.put("amount_minor", 250_000L);
+    return AvroSerde.serialize(old);
+  }
+
+  @Test
+  void aPayloadWrittenBeforeAnAppendStillDecodesWithTheNewSchema() {
+    // The production consumer path: writer == reader == the consumer's CURRENT schema. Without
+    // replay tolerance this runs off the end of the buffer and DLTs every historical event.
+    GenericRecord decoded = AvroSerde.deserialize(oldPayload(), AFTER_APPEND);
+
+    assertEquals("evt-1", decoded.get("id").toString());
+    assertEquals(250_000L, decoded.get("amount_minor"));
+    // Absent on the wire → filled from the declared default.
+    assertNull(decoded.get("currency"));
+    assertNull(decoded.get("vertical"));
+  }
+
+  @Test
+  void aCurrentPayloadIsUnaffectedByTheFallback() {
+    GenericRecord current = new GenericData.Record(AFTER_APPEND);
+    current.put("id", "evt-2");
+    current.put("amount_minor", 1L);
+    current.put("currency", "IDR");
+    current.put("vertical", "restaurant");
+
+    GenericRecord decoded = AvroSerde.deserialize(AvroSerde.serialize(current), AFTER_APPEND);
+
+    assertEquals("IDR", decoded.get("currency").toString());
+    assertEquals("restaurant", decoded.get("vertical").toString());
+  }
+
+  @Test
+  void aCorruptPayloadStillFailsClosed() {
+    // The fallback must not turn a genuinely broken payload into a silent partial decode: only
+    // trailing DEFAULTED fields are ever dropped, and if no prefix decodes the original throws.
+    byte[] garbage = {0x4D, 0x5A, (byte) 0x90, 0x00, 0x03};
+    org.junit.jupiter.api.Assertions.assertThrows(
+        RuntimeException.class, () -> AvroSerde.deserialize(garbage, AFTER_APPEND));
+  }
+
+  @Test
+  void aTrailingREQUIREDFieldIsNeverDroppedByTheFallback() {
+    // Appending a required field is a breaking change (isBackwardCompatible rejects it). The
+    // fallback must not paper over one by decoding an old payload as if it were fine.
+    org.junit.jupiter.api.Assertions.assertThrows(
+        RuntimeException.class, () -> AvroSerde.deserialize(oldPayload(), AFTER_REQUIRED_APPEND));
+  }
 }
