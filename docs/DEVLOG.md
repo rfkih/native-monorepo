@@ -1,5 +1,64 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-01 — ADR 0070: the org tree is flat (`company > outlet`); the division level is gone
+
+The tree was `company > business_unit > outlet > team`, but only the OUTLET level ever did anything.
+Sales, menus, tables, bills, register sessions, labor allocation and per-outlet revenue all key on
+the outlet id (ADR 0012 guaranteed that); the `BUSINESS_UNIT` — the console's **"Division"** —
+existed only so outlets had a parent and the `vertical` had somewhere to live, and `TEAM` existed
+almost nowhere at all. That layer cost a self-join on the POS's hottest read, a `divisionId` threaded
+from `/api/v1/outlets` through the session into three payment modals, per-BU fan-out branches in
+Dashboard / HR / Payroll / Expenses, a second name at signup, and a *company-vs-division* decision at
+the worst possible moment — and bought nothing. [ADR 0021](adr/0021-multi-company-ownership.md)
+already delivers what it stood in for: **one login, N companies**. So a second business is now a
+second company, and grouping for reporting is group consolidation's job.
+
+**The vertical moved to the company** (`V14`), REQUIRED and IMMUTABLE like `base_currency` /
+`country`. Two traps shaped that migration: the column is **nullable in the DB with the non-null
+invariant in the aggregate** (the house rule — and it keeps `V14` expand-only for the ADR 0057
+rollback gate, which forbids `SET NOT NULL`); and the backfill is bracketed in `NO FORCE` … `FORCE`
+because `company` and `org_unit` are FORCE RLS, so a bare Flyway `UPDATE` matches **zero rows
+silently** — the failure that looks exactly like success. `CompanyCreated` gained `vertical` as a
+nullable, defaulted, **LAST** field; no other event schema changed, because `type` is a free string
+(now always `"OUTLET"`) and `parent_id` was already a nullable union (now always null). That is why
+`OrgUnitType` survives as a one-value enum and `org_unit.parent_id` survives as an always-null
+column: keeping them meant finance's `org_unit_ref` and employee's `org_unit_projection` needed **no
+consumer migration at all**.
+
+**`OrgUnitDeleted` (P1, shipped first and alone)** closes a gap ADR 0018 recorded as a follow-up: a
+hard delete emitted nothing, so every consumer kept the deleted node forever as an inert ref. It is
+terminal, emitted from the same transaction as the row delete, and consumed by finance + employee as
+a PURGE (a dedicated removal command, not an upsert with placeholder fields — a deletion has no
+state to project, and modelling it as one would let a malformed event write a ghost row). **Deploy
+order is load-bearing**: those consumers must be live before org-service ever emits.
+
+**The flattening itself runs as a one-shot idempotent reconciler, not SQL.** Reparenting and
+retiring nodes are state changes, so they publish through the outbox (rule 3), and hand-serialised
+Avro in a `.sql` file would be neither maintainable nor testable. The catch: the reconciler boots
+with no tenant bound, so under FORCE RLS it **cannot enumerate the affected tenants** — Flyway can,
+so `V15` does the discovery into a non-RLS work queue which the reconciler drains one transaction
+per tenant, failures isolated and left pending for the next boot. That queue is keyed
+`VARCHAR(64)`, matching `org_unit.company_id`: a `::uuid` cast hard-failed the whole migration on a
+non-canonical tenant id (caught by `VerticalBackfillMigrationTest`, whose fixture uses
+`"pre-v6-company"`).
+
+**Also gone:** the DIVISION rung in payment-service (settings resolve outlet → company; prod carries
+zero division-scoped rows, so no data migration), `POST /api/v1/companies/{id}/businesses` ("add"
+means add a *company* now), and `firstBusinessName` at signup — the bootstrap seeds one outlet named
+after the company, and an old body still sending `firstBusiness` is accepted with its vertical
+honoured as a fallback so an in-flight old console tab does not 400.
+
+A **prod pre-flight gated the whole thing** (2026-09-01): one tenant (`Bara Kebab`), one business
+unit (`restaurant`), one outlet, **zero** teams, **zero** division-scoped `payment_settings`, empty
+`user_outlet_assignment`. A tenant with two business units of *different* verticals would have
+silently lost one in the backfill; there was none, and such a tenant must be split into two
+companies before the migration runs.
+
+Tests: 1801 backend (org 272, payment 76, finance 834, employee 619) + 599 console, all green.
+Commits `81776ec6` (P1) and `9da9e0d5` (P2–P5). **Not yet deployed** — the prod rollout still needs
+a DB backup first (the `BUSINESS_UNIT` row is deleted, not deactivated: the reconciler is re-runnable
+but that delete is not reversible without the backup), and P1's consumers must go out before P2.
+
 ## 2026-08-31 — Follow-ups closed: `PaymentChargeExpired` event (order+bill release) + ArchUnit debt
 
 Cleared the open follow-ups from the money-flow audit below.
