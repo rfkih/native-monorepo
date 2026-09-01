@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Test;
 /**
  * Contract test for {@code PaymentChargeExpired} (ADR 0045) — producer side, no Spring context.
  * Proves the single-source {@code .avsc} parses, a record built by the schema holder round-trips
- * through {@code libs/events} {@link AvroSerde} (including the nullable {@code reference_id} in both
- * states), and the backward-compatibility gate holds: self-compatible, added-optional-field
+ * through {@code libs/events} {@link AvroSerde} (including the nullable {@code reference_id} in
+ * both states), and the backward-compatibility gate holds: self-compatible, added-optional-field
  * accepted, new REQUIRED field without default rejected (CLAUDE.md rule 7).
  */
 class PaymentChargeExpiredContractTest {

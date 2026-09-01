@@ -56,8 +56,8 @@ public final class PaymentChargeExpiredSchema {
    * @param businessId the outlet the charge was rung at
    * @param amountMinor the charge amount, minor units (audit/observability only — no capture)
    * @param currency ISO-4217 code ({@code IDR})
-   * @param reason why the charge terminated without settling ({@code EXPIRED}/{@code CANCELED}/{@code
-   *     FAILED})
+   * @param reason why the charge terminated without settling ({@code EXPIRED}/{@code
+   *     CANCELED}/{@code FAILED})
    * @param occurredAt when the terminal transition was recorded
    */
   public static GenericRecord toRecord(
