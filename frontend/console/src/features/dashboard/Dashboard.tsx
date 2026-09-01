@@ -145,9 +145,11 @@ export function Dashboard() {
   // multi-company/multi-BU concern that does not belong in the lean UMKM summary.
   const units = unitsQuery.data ?? []
   const unitById = new Map(units.map((u) => [u.id, u]))
-  const businessUnitCount = units.filter((u) => u.type === 'BUSINESS_UNIT').length
+  // ADR 0070 removed the division level, so there is nothing to roll outlets UP into — the
+  // per-outlet figures below are already the finest and the coarsest view there is. The panel
+  // stays wired but permanently off; a cross-company rollup is group consolidation's job.
   const buRows = groupByBusinessUnit(outletQuery.data?.outlets ?? null, unitById)
-  const showBuPanel = isExtended && businessUnitCount >= 2 && buRows !== null && buRows.length > 0
+  const showBuPanel = false
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -330,7 +332,7 @@ export function Dashboard() {
               {showBuPanel ? (
                 <BusinessUnitContributionPanel
                   title={t('dashboard.unitContribution')}
-                  rows={buRows}
+                  rows={buRows ?? []}
                   currency={outletQuery.data?.currency ?? company.baseCurrency}
                   locale={locale}
                   postedLabel={t('dashboard.postedToLedger')}

@@ -25,13 +25,13 @@ import {
   type OrgUnitType,
 } from './api'
 
-/** Type badge pill — color-coded by OrgUnitType. */
+/**
+ * Type badge pill. Since ADR 0070 there is exactly one kind (OUTLET), so the badge is a plain
+ * label rather than a colour-coded discriminator — kept because it still reads as a row's kind.
+ */
 export function OrgUnitTypeBadge({ type }: { type: OrgUnitType }) {
   const { t } = useTranslation()
-  const classes =
-    type === 'BUSINESS_UNIT'
-      ? 'bg-tint-info text-info'
-      : 'bg-ink-50 text-ink-500'
+  const classes = 'bg-ink-50 text-ink-500'
   return (
     <span
       className={cn(
@@ -98,16 +98,12 @@ export function DialogOverlay({
   )
 }
 
-/** Add-unit dialog (creates a child or top-level node). */
+/** Add-outlet dialog. ADR 0070: every outlet is top-level, so the name is the whole form. */
 export function AddUnitDialog({
-  parentId,
-  allUnits,
   companyId,
   actor,
   onClose,
 }: {
-  parentId: string | null
-  allUnits: OrgUnit[]
   companyId: string
   actor: string
   onClose: () => void
@@ -116,45 +112,17 @@ export function AddUnitDialog({
   const [name, setName] = useState('')
   const mutation = useCreateOrgUnit({ companyId, actor })
 
-  const parent = parentId ? (allUnits.find((u) => u.id === parentId) ?? null) : null
-  // Mirror of the backend hierarchy rule (OrgUnitType.allowedParentTypes, ADR 0012): an
-  // outlet only under a business unit; a team only under an outlet.
-  const types: OrgUnitType[] = !parent
-    ? ['BUSINESS_UNIT']
-    : parent.type === 'BUSINESS_UNIT'
-      ? ['OUTLET']
-      : parent.type === 'OUTLET'
-        ? ['TEAM']
-        : []
-  const [type, setType] = useState<OrgUnitType>(types[0] ?? 'OUTLET')
-  // Only a BUSINESS_UNIT carries a vertical (server-required there, rejected elsewhere).
-  const [vertical, setVertical] = useState<string>('restaurant')
-
-  const parentName = parent?.name ?? (parentId ?? t('org.addDialog.noParent'))
-
+  // ADR 0070: the tree is flat, so an outlet has no parent to pick, no type to choose (there is
+  // only one) and no vertical of its own (it is a company attribute). The name is the whole form.
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    mutation.mutate(
-      {
-        name: name.trim(),
-        type,
-        parentId,
-        ...(type === 'BUSINESS_UNIT' ? { vertical } : {}),
-      },
-      { onSuccess: () => { onClose() } },
-    )
+    mutation.mutate({ name: name.trim() }, { onSuccess: () => { onClose() } })
   }
 
   return (
     <DialogOverlay onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <h2 className="font-display text-lg font-semibold text-ink">{t('org.addDialog.title')}</h2>
-
-        <Field label={t('org.addDialog.parentLabel')}>
-          <p className="rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm text-ink">
-            {parentName}
-          </p>
-        </Field>
 
         <Field label={t('org.addDialog.nameLabel')} htmlFor="add-name">
           <TextInput
@@ -167,43 +135,6 @@ export function AddUnitDialog({
           />
         </Field>
 
-        <Field label={t('org.addDialog.typeLabel')} htmlFor="add-type">
-          {types.length === 0 ? (
-            <p className="rounded-xl border border-amber/30 bg-amber-tint px-3.5 py-2.5 text-xs leading-relaxed text-amber">
-              {t('org.addDialog.noChildAllowed')}
-            </p>
-          ) : (
-            <select
-              id="add-type"
-              value={type}
-              onChange={(e) => setType(e.target.value as OrgUnitType)}
-              className="w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-sm text-ink focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
-            >
-              {types.map((tp) => (
-                <option key={tp} value={tp}>
-                  {t(`org.type.${tp}` as Parameters<typeof t>[0])}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-
-        {type === 'BUSINESS_UNIT' ? (
-          <Field label={t('org.addDialog.verticalLabel')} htmlFor="add-vertical">
-            <select
-              id="add-vertical"
-              value={vertical}
-              onChange={(e) => setVertical(e.target.value)}
-              className="w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-sm text-ink focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
-            >
-              {(['restaurant', 'carwash', 'barbershop'] as const).map((v) => (
-                <option key={v} value={v}>
-                  {t(`vertical.${v}` as Parameters<typeof t>[0])}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : null}
 
         {mutation.isError ? (
           <p className="text-sm text-loss">{t('org.addDialog.errorTitle')}</p>
@@ -213,7 +144,7 @@ export function AddUnitDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" disabled={mutation.isPending || !name.trim() || types.length === 0}>
+          <Button type="submit" disabled={mutation.isPending || !name.trim()}>
             {mutation.isPending ? t('org.addDialog.submitting') : t('org.addDialog.submit')}
           </Button>
         </div>
@@ -442,9 +373,8 @@ export function DeletePermanentlyDialog({
   const scopeIds = collectSubtreeIds(unit.id, allUnits)
 
   const employeesQuery = useEmployees({ companyId, actor, orgUnitIds: scopeIds, enabled: true })
-  // The login list endpoint rejects a TEAM target (400) — teams never carry logins — so only query
-  // it for a BU/outlet; a team's login count is definitionally zero.
-  const usersEnabled = unit.type !== 'TEAM'
+  // ADR 0070 removed the TEAM level, so every unit is a valid target for the login list.
+  const usersEnabled = true
   const usersQuery = useUnitUsers({ companyId, actor, unitId: unit.id, enabled: usersEnabled })
 
   const checking =
@@ -512,12 +442,7 @@ export function DeletePermanentlyDialog({
         ) : (
           <>
             <p className="text-sm text-ink-2">
-              {t(
-                unit.type === 'BUSINESS_UNIT'
-                  ? 'org.deleteDialog.bodyBu'
-                  : 'org.deleteDialog.body',
-                { name: unit.name },
-              )}
+              {t('org.deleteDialog.body', { name: unit.name })}
             </p>
 
             {mutation.isError ? (

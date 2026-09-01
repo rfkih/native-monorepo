@@ -45,23 +45,22 @@ describe('visiblePeopleTabs — capability gating (mirrors rolePreset exactly)',
   })
 })
 
-describe('businessUnitsOf / childOutletsOf', () => {
+describe('businessUnitsOf / childOutletsOf — ADR 0070 flat tree', () => {
+  // Every org unit is a top-level OUTLET now; parentId is always null on the wire.
   const units: OrgUnit[] = [
-    unit({ id: 'bu-1', type: 'BUSINESS_UNIT', name: 'Cafe Group' }),
-    unit({ id: 'out-1', type: 'OUTLET', name: 'Cafe Sudirman', parentId: 'bu-1' }),
-    unit({ id: 'out-2', type: 'OUTLET', name: 'Cafe Kemang', parentId: 'bu-1' }),
-    unit({ id: 'bu-2', type: 'BUSINESS_UNIT', name: 'Laundromat' }),
-    unit({ id: 'out-3', type: 'OUTLET', name: 'Laundromat Menteng', parentId: 'bu-2' }),
-    unit({ id: 'team-1', type: 'TEAM', name: 'Ops team', parentId: 'bu-1' }),
+    unit({ id: 'out-1', type: 'OUTLET', name: 'Cafe Sudirman' }),
+    unit({ id: 'out-2', type: 'OUTLET', name: 'Cafe Kemang' }),
+    unit({ id: 'out-3', type: 'OUTLET', name: 'Laundromat Menteng' }),
   ]
 
-  it('businessUnitsOf returns only BUSINESS_UNIT rows, in server order', () => {
-    expect(businessUnitsOf(units).map((u) => u.id)).toEqual(['bu-1', 'bu-2'])
+  it('businessUnitsOf returns every outlet, in server order', () => {
+    expect(businessUnitsOf(units).map((u) => u.id)).toEqual(['out-1', 'out-2', 'out-3'])
   })
 
   it('childOutletsOf returns only OUTLET rows whose parentId matches, excluding TEAM', () => {
-    expect(childOutletsOf(units, 'bu-1').map((u) => u.id)).toEqual(['out-1', 'out-2'])
-    expect(childOutletsOf(units, 'bu-2').map((u) => u.id)).toEqual(['out-3'])
+    // ADR 0070: nothing nests any more, so there are never child outlets.
+    expect(childOutletsOf(units, 'out-1')).toEqual([])
+    expect(childOutletsOf(units, 'out-2')).toEqual([])
   })
 
   it('childOutletsOf returns empty for a unit with no outlets', () => {
@@ -71,8 +70,8 @@ describe('businessUnitsOf / childOutletsOf', () => {
 
 describe('defaultBusinessUnitId', () => {
   const businessUnits: OrgUnit[] = [
-    unit({ id: 'bu-1', type: 'BUSINESS_UNIT' }),
-    unit({ id: 'bu-2', type: 'BUSINESS_UNIT' }),
+    unit({ id: 'bu-1', type: 'OUTLET' }),
+    unit({ id: 'bu-2', type: 'OUTLET' }),
   ]
 
   it('picks the session business id when it IS one of the business units', () => {

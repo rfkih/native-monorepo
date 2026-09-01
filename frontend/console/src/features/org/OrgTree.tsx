@@ -169,28 +169,17 @@ function OrgNode({
           )}
         </button>
 
-        {/* node name — BU/outlet click through to the unit hub (teams have no detail page) */}
-        {unit.type === 'TEAM' ? (
-          <span
-            className={cn(
-              'min-w-0 flex-1 truncate text-[14.5px] font-semibold',
-              unit.active ? 'text-ink' : 'text-ink-3',
-            )}
-          >
-            {unit.name}
-          </span>
-        ) : (
-          <Link
-            to={`/org/${unit.id}`}
-            className={cn(
-              'min-w-0 flex-1 truncate text-[14.5px] font-semibold transition-colors',
-              'hover:text-brand-700 hover:underline',
-              unit.active ? 'text-ink' : 'text-ink-3',
-            )}
-          >
-            {unit.name}
-          </Link>
-        )}
+        {/* node name — every outlet clicks through to its detail page (ADR 0070: no teams) */}
+        <Link
+          to={`/org/${unit.id}`}
+          className={cn(
+            'min-w-0 flex-1 truncate text-[14.5px] font-semibold transition-colors',
+            'hover:text-brand-700 hover:underline',
+            unit.active ? 'text-ink' : 'text-ink-3',
+          )}
+        >
+          {unit.name}
+        </Link>
 
         {/* type + vertical badges + status dot as ONE shrink-0 cluster — keeps the name's width and
             stops the row overlapping at phone width (vertical renders only on business units) */}
@@ -335,8 +324,6 @@ export function OrgTree() {
       {/* Dialogs */}
       {dialog?.kind === 'add' ? (
         <AddUnitDialog
-          parentId={dialog.parentId}
-          allUnits={units}
           companyId={company.companyId}
           actor={company.actor}
           onClose={closeDialog}

@@ -69,16 +69,11 @@ class OrgUnitDeletedContractTest {
 
   @Test
   void toRecordProjectsTheAggregateBeingDeleted() {
-    UUID legalEmployerId = UUID.fromString(TENANT);
-    UUID parentId = UUID.fromString(PARENT);
     OrgUnit outlet =
         new OrgUnit(
             "Bara Kebab Binagriya",
             OrgUnitType.OUTLET,
-            null,
-            parentId,
-            OrgUnitType.BUSINESS_UNIT,
-            legalEmployerId,
+            UUID.fromString(TENANT),
             LocalDate.of(2026, 9, 1));
     outlet.setCompanyId(TENANT);
 
@@ -86,31 +81,14 @@ class OrgUnitDeletedContractTest {
     assertThat(record.get("org_unit_id").toString()).isEqualTo(outlet.getId().toString());
     assertThat(record.get("company_id")).isEqualTo(TENANT);
     assertThat(record.get("type")).isEqualTo("OUTLET");
-    assertThat(record.get("parent_id")).isEqualTo(PARENT);
+    // ADR 0070: an outlet is always top-level, so parent_id is the null branch of the union.
+    assertThat(record.get("parent_id")).isNull();
 
     // And it survives the wire.
     GenericRecord decoded =
         AvroSerde.deserialize(AvroSerde.serialize(record), OrgUnitDeletedSchema.schema());
     assertThat(decoded.get("org_unit_id").toString()).isEqualTo(outlet.getId().toString());
-    assertThat(decoded.get("parent_id").toString()).isEqualTo(PARENT);
-  }
-
-  @Test
-  void toRecordProjectsANullParentForATopLevelNode() {
-    OrgUnit topLevel =
-        new OrgUnit(
-            "Bara Kebab",
-            OrgUnitType.BUSINESS_UNIT,
-            id.co.nativeapp.org.company.domain.Vertical.RESTAURANT,
-            null,
-            null,
-            UUID.fromString(TENANT),
-            LocalDate.of(2026, 9, 1));
-    topLevel.setCompanyId(TENANT);
-
-    GenericRecord record = OrgUnitDeletedSchema.toRecord(topLevel);
-    assertThat(record.get("parent_id")).isNull();
-    assertThat(record.get("type")).isEqualTo("BUSINESS_UNIT");
+    assertThat(decoded.get("parent_id")).isNull();
   }
 
   @Test

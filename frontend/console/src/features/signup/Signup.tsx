@@ -98,7 +98,6 @@ function passwordStrength(pw: string): 0 | 1 | 2 | 3 | 4 {
 
 interface FormErrors {
   companyName?: string
-  firstBusinessName?: string
   ownerFirstName?: string
   ownerEmail?: string
   phone?: string
@@ -339,7 +338,6 @@ export function Signup() {
   const [defaultLanguage, setDefaultLanguage] = useState<string>(
     detectedCountry === 'ID' && i18n.language === 'id' ? 'id' : 'en',
   )
-  const [firstBusinessName, setFirstBusinessName] = useState('')
   const [vertical, setVertical] = useState<string>('restaurant')
   const [ownerFirstName, setOwnerFirstName] = useState('')
   const [ownerLastName, setOwnerLastName] = useState('')
@@ -367,7 +365,7 @@ export function Signup() {
     const errs: FormErrors = {}
     if (s === STEP_COMPANY) {
       // The shared required-rule (same as the in-app add-company wizard).
-      for (const field of invalidCompanyFields({ companyName, firstBusinessName })) {
+      for (const field of invalidCompanyFields({ companyName })) {
         errs[field] = t('signup.fieldRequired')
       }
     }
@@ -422,8 +420,6 @@ export function Signup() {
     switch (field) {
       case 'companyName':
         return { key: 'companyName', step: STEP_COMPANY, message: t('signup.fieldRequired') }
-      case 'firstBusinessName':
-        return { key: 'firstBusinessName', step: STEP_COMPANY, message: t('signup.fieldRequired') }
       case 'ownerFirstName':
         return { key: 'ownerFirstName', step: STEP_YOU, message: t('signup.fieldRequired') }
       case 'ownerEmail':
@@ -450,7 +446,6 @@ export function Signup() {
       companyName: companyName.trim(),
       country,
       defaultLanguage,
-      firstBusinessName: firstBusinessName.trim(),
       vertical,
       ownerFirstName: ownerFirstName.trim(),
       ownerLastName: ownerLastName.trim() || undefined,
@@ -592,20 +587,13 @@ export function Signup() {
               {step === STEP_COMPANY && (
                 <CompanyFields
                   companyName={companyName}
-                  firstBusinessName={firstBusinessName}
                   vertical={vertical}
                   onCompanyName={(v) => {
                     setCompanyName(v)
                     if (errors.companyName) setErrors((p) => ({ ...p, companyName: undefined }))
                   }}
-                  onFirstBusinessName={(v) => {
-                    setFirstBusinessName(v)
-                    if (errors.firstBusinessName)
-                      setErrors((p) => ({ ...p, firstBusinessName: undefined }))
-                  }}
                   onVertical={setVertical}
                   companyNameError={errors.companyName}
-                  firstBusinessNameError={errors.firstBusinessName}
                 />
               )}
 
@@ -788,7 +776,7 @@ export function Signup() {
               {/* Step 4 — Review */}
               {step === STEP_REVIEW && (
                 <CompanyReview
-                  basics={{ companyName, firstBusinessName, vertical, country, defaultLanguage }}
+                  basics={{ companyName, vertical, country, defaultLanguage }}
                   hint={t('signup.reviewHint')}
                   onEdit={(s) => {
                     setErrors({})

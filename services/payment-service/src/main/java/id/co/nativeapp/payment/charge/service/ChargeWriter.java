@@ -89,7 +89,6 @@ public class ChargeWriter {
       UUID paymentId,
       UUID referenceId,
       UUID businessId,
-      UUID divisionId,
       long amountMinor,
       String currency,
       String idempotencyKey) {
@@ -117,7 +116,7 @@ public class ChargeWriter {
       return new CreateOutcome(live.get(), false, null);
     }
 
-    QrisGatewayPort.GatewayCredentials credentials = requireGatewayReady(businessId, divisionId);
+    QrisGatewayPort.GatewayCredentials credentials = requireGatewayReady(businessId);
 
     PaymentCharge charge =
         new PaymentCharge(
@@ -186,7 +185,8 @@ public class ChargeWriter {
         && charge.getExpiresAt() != null
         && now.isAfter(charge.getExpiresAt().plusSeconds(EXPIRY_GRACE_SECONDS))) {
       charge.markExpired();
-      // Flush BEFORE the outbox emit: a concurrent settle that already flipped this row to SUCCEEDED
+      // Flush BEFORE the outbox emit: a concurrent settle that already flipped this row to
+      // SUCCEEDED
       // makes this flush throw on the version check and rolls the whole tx back — no EXPIRED event.
       charges.saveAndFlush(charge);
       emitChargeExpired(charge, ChargeExpiryReason.EXPIRED, now);
@@ -304,11 +304,12 @@ public class ChargeWriter {
   }
 
   /**
-   * Writes the {@code PaymentChargeExpired} outbox row (rule 3) for a charge that terminated without
-   * settling, in the CALLER's transaction. The counterpart of {@link #applySettlement}'s emit on the
-   * un-happy path — carries no money movement, only the release signal + audit fields.
+   * Writes the {@code PaymentChargeExpired} outbox row (rule 3) for a charge that terminated
+   * without settling, in the CALLER's transaction. The counterpart of {@link #applySettlement}'s
+   * emit on the un-happy path — carries no money movement, only the release signal + audit fields.
    */
-  private void emitChargeExpired(PaymentCharge charge, ChargeExpiryReason reason, Instant occurredAt) {
+  private void emitChargeExpired(
+      PaymentCharge charge, ChargeExpiryReason reason, Instant occurredAt) {
     byte[] payload =
         AvroSerde.serialize(
             PaymentChargeExpiredSchema.toRecord(
@@ -341,16 +342,13 @@ public class ChargeWriter {
    * The effective mode for {@code businessId ?? divisionId ?? company} must be GATEWAY and the
    * COMPANY row must carry usable credentials (they are company-level, ADR 0045 amendment).
    */
-  private QrisGatewayPort.GatewayCredentials requireGatewayReady(UUID businessId, UUID divisionId) {
+  private QrisGatewayPort.GatewayCredentials requireGatewayReady(UUID businessId) {
     Optional<PaymentSettings> companyRow = settings.findByOrgUnitIdIsNull();
     Optional<PaymentSettings> outletRow =
         businessId == null ? Optional.empty() : settings.findByOrgUnitId(businessId);
-    Optional<PaymentSettings> divisionRow =
-        divisionId == null ? Optional.empty() : settings.findByOrgUnitId(divisionId);
     QrisMode mode =
         outletRow
             .map(PaymentSettings::getMode)
-            .or(() -> divisionRow.map(PaymentSettings::getMode))
             .or(() -> companyRow.map(PaymentSettings::getMode))
             .orElse(QrisMode.MANUAL);
     if (mode != QrisMode.GATEWAY) {

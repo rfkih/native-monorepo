@@ -7,7 +7,6 @@ import id.co.nativeapp.org.company.domain.LegalEmployer;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
 import id.co.nativeapp.org.company.domain.Vertical;
-import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyResult;
 import id.co.nativeapp.org.company.messaging.CompanyCreatedSchema;
@@ -117,27 +116,23 @@ public class CompanyWriter {
             command.phone(),
             command.companySize(),
             command.primaryInterest(),
-            companyCode);
+            companyCode,
+            // ADR 0070: the vertical is a COMPANY attribute now (it used to live on the
+            // business-unit node). Required and immutable, like the base currency.
+            Vertical.fromKey(command.vertical()));
     // New companies start on the free tier (ADR 0044 D4 "signup-default-FREE", delivered with
     // the ADR 0047 three-tier pricing); pre-existing rows keep the V10 grandfather FULL default.
     company.changePlanTier("FREE");
     company.setCompanyId(tenant);
     Company savedCompany = companyRepository.save(company);
 
-    // The first business is the ROOT of the org tree: a top-level BUSINESS_UNIT (no
-    // parent) — the top of the business_unit > outlet > team hierarchy (sub-types are
-    // added under it via the org-unit endpoint; a default outlet is seeded below).
-    OrgUnit firstBusiness =
-        new OrgUnit(
-            command.businessName(),
-            OrgUnitType.BUSINESS_UNIT,
-            Vertical.fromKey(command.vertical()),
-            null,
-            null,
-            legalEmployerId,
-            today());
-    firstBusiness.setCompanyId(tenant);
-    OrgUnit savedBusiness = orgUnitRepository.save(firstBusiness);
+    // ADR 0070: the tree is flat, so the bootstrap seeds exactly ONE node — the company's first
+    // OUTLET, named after the company. There is no division level to create it under, and no
+    // second name to ask the owner for at signup; they rename the outlet on the Outlets page (the
+    // backend has no i18n, so the company name is the only sensible default).
+    OrgUnit firstOutlet = new OrgUnit(name, OrgUnitType.OUTLET, legalEmployerId, today());
+    firstOutlet.setCompanyId(tenant);
+    OrgUnit savedOutlet = orgUnitRepository.save(firstOutlet);
 
     // Flush so the inserts (and any RLS WITH CHECK violation) surface inside this transaction,
     // before the outbox rows, rather than at commit. flush() synchronizes the WHOLE persistence
@@ -168,76 +163,11 @@ public class CompanyWriter {
         newCompanyId,
         savedCompany.getCreatedAt());
 
-    // OrgUnitCreated for the root business unit — downstream services cache the org tree
-    // from these events; the bootstrap node is the first one.
-    writeOrgUnitCreated(savedBusiness, newCompanyId);
+    // OrgUnitCreated for the seeded outlet — downstream services cache the org tree from these
+    // events; this is the tenant's first (and, until the owner adds more, only) node.
+    writeOrgUnitCreated(savedOutlet, newCompanyId);
 
-    // ADR 0012: every new business unit seeds ONE default outlet (named after the business
-    // unit) so the POS always has a real OUTLET to bind to — sales are never keyed on the
-    // business-unit id. Same transaction: the outlet row and its event commit atomically
-    // with the company bootstrap.
-    seedDefaultOutlet(savedBusiness, tenant, newCompanyId);
-
-    return new CreateCompanyResult(savedCompany, savedBusiness);
-  }
-
-  /**
-   * Adds a business (org unit) under the bound company, in its own transaction. The tenant scope is
-   * already bound at the request edge for this tenant-scoped endpoint, so {@link
-   * RlsAutoApplyAspect} sets the GUC to the existing tenant and the RLS {@code WITH CHECK} confines
-   * the row to it.
-   *
-   * @param command the create-business command (company id from the path, validated name)
-   */
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public OrgUnit addBusiness(CreateBusinessCommand command) {
-    String tenant = TenantContext.require().companyId();
-
-    // A "business" added to a company is a top-level node — a root BUSINESS_UNIT (the
-    // top of the business_unit > outlet > team tree). The nested sub-types are added
-    // under it via the org-unit endpoint (OrgUnitWriter). RLS confines the row to the
-    // bound tenant; company_id is stamped from the scope, never the body (rule 5).
-    OrgUnit orgUnit =
-        new OrgUnit(
-            command.name(),
-            OrgUnitType.BUSINESS_UNIT,
-            Vertical.fromKey(command.vertical()),
-            null,
-            null,
-            UUID.fromString(tenant),
-            today());
-    orgUnit.setCompanyId(tenant);
-    OrgUnit saved = orgUnitRepository.save(orgUnit);
-    orgUnitRepository.flush();
-    writeOrgUnitCreated(saved, UUID.fromString(tenant));
-    // ADR 0012: a new business unit seeds its own default outlet (same rationale and
-    // transaction shape as the company bootstrap).
-    seedDefaultOutlet(saved, tenant, UUID.fromString(tenant));
-    return saved;
-  }
-
-  /**
-   * Seeds the default OUTLET under a freshly created business unit (ADR 0012): named after the
-   * business unit (the backend has no i18n — the owner renames it via the org-tree PATCH), active,
-   * effective today, same legal employer. Runs on the caller's transaction; the outlet row and its
-   * {@code OrgUnitCreated} outbox row commit atomically with the business unit (rule 3).
-   */
-  private void seedDefaultOutlet(OrgUnit businessUnit, String tenant, UUID companyId) {
-    // The outlet carries NO vertical of its own — it inherits the business unit's via the
-    // parent link (resolved by join where needed).
-    OrgUnit outlet =
-        new OrgUnit(
-            businessUnit.getName(),
-            OrgUnitType.OUTLET,
-            null,
-            businessUnit.getId(),
-            OrgUnitType.BUSINESS_UNIT,
-            businessUnit.getLegalEmployerId(),
-            today());
-    outlet.setCompanyId(tenant);
-    OrgUnit savedOutlet = orgUnitRepository.save(outlet);
-    orgUnitRepository.flush();
-    writeOrgUnitCreated(savedOutlet, companyId);
+    return new CreateCompanyResult(savedCompany, savedOutlet);
   }
 
   /**

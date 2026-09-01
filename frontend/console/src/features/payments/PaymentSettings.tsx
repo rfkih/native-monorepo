@@ -29,7 +29,6 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { Link } from 'react-router-dom'
 import {
-  Building2,
   ChevronDown,
   ChevronRight,
   LogOut,
@@ -221,19 +220,11 @@ function DivisionsSection({
   const orgUnitsQuery = useOrgUnits({ companyId: session.companyId, actor: session.actor, enabled: true })
   const rowByUnitId = new Map(unitOverrides.map((row) => [row.unitId, row]))
 
-  const allUnits = orgUnitsQuery.data ?? []
-  const divisions = allUnits
-    .filter((u) => u.type === 'BUSINESS_UNIT' && u.active)
+  // ADR 0070: the org structure is flat, so the per-unit scope list is simply the company's
+  // active outlets — there is no division tier to nest them under any more.
+  const outlets = (orgUnitsQuery.data ?? [])
+    .filter((u) => u.active)
     .sort((a, b) => a.name.localeCompare(b.name))
-  const outletsByDivision = new Map<string, OrgUnit[]>()
-  for (const u of allUnits) {
-    if (u.type === 'OUTLET' && u.active && u.parentId) {
-      const list = outletsByDivision.get(u.parentId) ?? []
-      list.push(u)
-      outletsByDivision.set(u.parentId, list)
-    }
-  }
-  for (const list of outletsByDivision.values()) list.sort((a, b) => a.name.localeCompare(b.name))
 
   const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null)
   const toggle = (unitId: string) => setExpandedUnitId((current) => (current === unitId ? null : unitId))
@@ -245,21 +236,19 @@ function DivisionsSection({
         <p className="mt-1 text-sm text-ink-3">{t('settings.payments.divisions.hint')}</p>
       </div>
 
-      {divisions.length > 0 ? (
+      {outlets.length > 0 ? (
         <div className="flex flex-col gap-3">
-          {divisions.map((division) => (
-            <DivisionBlock
-              key={division.id}
+          {outlets.map((outlet) => (
+            <OutletRow
+              key={outlet.id}
               session={session}
-              division={division}
-              divisionRow={rowByUnitId.get(division.id) ?? null}
-              outlets={outletsByDivision.get(division.id) ?? []}
-              rowByUnitId={rowByUnitId}
+              outlet={outlet}
+              row={rowByUnitId.get(outlet.id) ?? null}
               companyMode={companyMode}
               companyGateway={companyGateway}
               isIdr={isIdr}
-              expandedUnitId={expandedUnitId}
-              onToggle={toggle}
+              expanded={expandedUnitId === outlet.id}
+              onToggle={() => toggle(outlet.id)}
             />
           ))}
         </div>
@@ -275,251 +264,10 @@ function DivisionsSection({
   )
 }
 
-function DivisionBlock({
-  session,
-  division,
-  divisionRow,
-  outlets,
-  rowByUnitId,
-  companyMode,
-  companyGateway,
-  isIdr,
-  expandedUnitId,
-  onToggle,
-}: {
-  session: CompanySession
-  division: OrgUnit
-  divisionRow: PaymentSettingsRow | null
-  outlets: OrgUnit[]
-  rowByUnitId: Map<string | null, PaymentSettingsRow>
-  companyMode: QrisMode
-  companyGateway: PaymentSettingsRow['gateway']
-  isIdr: boolean
-  expandedUnitId: string | null
-  onToggle: (unitId: string) => void
-}) {
-  const { t } = useTranslation()
-  const hasOverride = divisionRow != null
-  const effectiveMode: QrisMode = divisionRow?.mode ?? companyMode
-  const hasImage = divisionRow?.hasStaticImage ?? false
-  const expanded = expandedUnitId === division.id
-  const panelId = `division-qris-panel-${division.id}`
-
-  return (
-    <div className="rounded-2xl border border-line-strong bg-paper/40">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={panelId}
-        onClick={() => onToggle(division.id)}
-        className="flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl p-4 text-left transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
-      >
-        <span className="flex min-w-0 items-center gap-2.5">
-          {expanded ? (
-            <ChevronDown className="size-4 shrink-0 text-ink-3" aria-hidden />
-          ) : (
-            <ChevronRight className="size-4 shrink-0 text-ink-3" aria-hidden />
-          )}
-          <Building2 className="size-4 shrink-0 text-ink-3" aria-hidden />
-          <span className="truncate font-semibold text-ink">{division.name}</span>
-          <Badge tone="info">{t('org.type.BUSINESS_UNIT')}</Badge>
-        </span>
-        <span className="flex flex-wrap items-center gap-2">
-          <Badge tone={hasOverride ? 'emerald' : 'neutral'}>
-            {hasOverride
-              ? t('settings.payments.outlet.effectiveOwn', { mode: modeLabel(t, effectiveMode) })
-              : t('settings.payments.outlet.effectiveInherits', { mode: modeLabel(t, companyMode) })}
-          </Badge>
-          <Badge tone={hasImage ? 'emerald' : 'neutral'}>
-            {hasImage
-              ? t('settings.payments.division.imageOwnSet')
-              : t('settings.payments.static.usingCompany')}
-          </Badge>
-        </span>
-      </button>
-
-      {expanded ? (
-        <div id={panelId} className="flex flex-col gap-4 border-t border-line p-4">
-          <DivisionModeEditor
-            session={session}
-            division={division}
-            row={divisionRow}
-            companyMode={companyMode}
-            companyGateway={companyGateway}
-            isIdr={isIdr}
-          />
-        </div>
-      ) : null}
-
-      {/* Outlets nested under this division — always listed (independent of the division's own
-          accordion state) so the owner can still browse/edit an outlet without first opening the
-          division's own editor. */}
-      <div className="flex flex-col gap-3 border-t border-line p-3 pl-4 sm:pl-7">
-        {outlets.length > 0 ? (
-          outlets.map((outlet) => (
-            <OutletRow
-              key={outlet.id}
-              session={session}
-              outlet={outlet}
-              row={rowByUnitId.get(outlet.id) ?? null}
-              divisionId={division.id}
-              divisionRow={divisionRow}
-              companyMode={companyMode}
-              companyGateway={companyGateway}
-              isIdr={isIdr}
-              expanded={expandedUnitId === outlet.id}
-              onToggle={() => onToggle(outlet.id)}
-            />
-          ))
-        ) : (
-          <p className="text-sm text-ink-3">{t('settings.payments.outlets.empty')}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/** The division's own mode/image editor — a single-level "inherit company default" (a division has
- *  no parent of its own to fall further back to). Structurally the same shape as `OutletModeEditor`
- *  below, minus the extra division-inherit branch. */
-function DivisionModeEditor({
-  session,
-  division,
-  row,
-  companyMode,
-  companyGateway,
-  isIdr,
-}: {
-  session: CompanySession
-  division: OrgUnit
-  row: PaymentSettingsRow | null
-  companyMode: QrisMode
-  companyGateway: PaymentSettingsRow['gateway']
-  isIdr: boolean
-}) {
-  const { t } = useTranslation()
-  const upsertOverride = useUpsertUnitOverride(session)
-  const deleteOverride = useDeleteUnitOverride(session)
-  const [pendingInherit, setPendingInherit] = useState(false)
-
-  const hasOverride = row != null
-  const effectiveMode: QrisMode = row?.mode ?? companyMode
-  const hasImage = row?.hasStaticImage ?? false
-  const displayValue: QrisMode | 'INHERIT' = pendingInherit ? 'INHERIT' : hasOverride ? row.mode : 'INHERIT'
-
-  const options: Choice<QrisMode | 'INHERIT'>[] = [
-    {
-      value: 'INHERIT',
-      title: t('settings.payments.outlet.inheritOption'),
-      subtitle: t('settings.payments.outlet.inheritDesc', { mode: modeLabel(t, companyMode) }),
-    },
-    {
-      value: 'MANUAL',
-      title: t('settings.payments.mode.manual'),
-      subtitle: t('settings.payments.mode.manualDesc'),
-    },
-    {
-      value: 'STATIC',
-      title: t('settings.payments.mode.static'),
-      subtitle: t('settings.payments.mode.staticDesc'),
-    },
-    {
-      value: 'GATEWAY',
-      title: t('settings.payments.mode.gateway'),
-      subtitle: isIdr ? t('settings.payments.mode.gatewayDesc') : t('settings.payments.mode.gatewayIdrOnly'),
-      disabled: !isIdr,
-    },
-  ]
-
-  function onChange(next: QrisMode | 'INHERIT') {
-    if (next === 'INHERIT') {
-      // The backend deletes the WHOLE override row on revert — including any division-specific
-      // image — so guard with an inline confirm only when there is something to lose.
-      if (hasImage) {
-        setPendingInherit(true)
-        return
-      }
-      deleteOverride.mutate(division.id)
-      return
-    }
-    setPendingInherit(false)
-    upsertOverride.mutate({ unitId: division.id, mode: next })
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h4 className="mb-2 text-sm font-bold text-ink">
-          {t('settings.payments.division.modeHeading', { division: division.name })}
-        </h4>
-        <ChoiceCards
-          name={`qris-mode-${division.id}`}
-          options={options}
-          value={displayValue}
-          columns={2}
-          onChange={onChange}
-        />
-        {upsertOverride.isError ? (
-          <p className="mt-2 text-sm text-loss">{t('settings.payments.mode.saveError')}</p>
-        ) : null}
-      </div>
-
-      {pendingInherit ? (
-        <div className="flex flex-col gap-3 rounded-xl border border-amber/30 bg-amber-tint p-3.5 text-xs leading-relaxed text-amber">
-          <p>{t('settings.payments.division.inheritConfirmMessage')}</p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              className="bg-loss text-white hover:opacity-90"
-              size="sm"
-              disabled={deleteOverride.isPending}
-              onClick={() =>
-                deleteOverride.mutate(division.id, { onSuccess: () => setPendingInherit(false) })
-              }
-            >
-              {deleteOverride.isPending ? <Spinner /> : t('settings.payments.outlet.inheritConfirmYes')}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setPendingInherit(false)}
-            >
-              {t('common.cancel')}
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {effectiveMode === 'GATEWAY' ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-paper px-3.5 py-2.5 text-xs text-ink-3">
-          <span>{t('settings.payments.division.gatewayHint')}</span>
-          <Badge tone={gatewayActiveConnected(companyGateway) ? 'profit' : 'neutral'}>
-            {gatewayActiveConnected(companyGateway)
-              ? t('settings.payments.gateway.connected')
-              : t('settings.payments.gateway.notConnected')}
-          </Badge>
-        </div>
-      ) : null}
-
-      <div className="flex flex-col gap-2 border-t border-line pt-4">
-        <h4 className="text-sm font-bold text-ink">{t('settings.payments.outlet.imageHeading')}</h4>
-        <StaticImageEditor session={session} unitId={division.id} previewDivisionId={division.id} hasImage={hasImage} />
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Outlets — nested under their division
-// ---------------------------------------------------------------------------
-
 function OutletRow({
   session,
   outlet,
   row,
-  divisionId,
-  divisionRow,
   companyMode,
   companyGateway,
   isIdr,
@@ -529,12 +277,6 @@ function OutletRow({
   session: CompanySession
   outlet: OrgUnit
   row: PaymentSettingsRow | null
-  /** This outlet's parent division id — always known here (outlets are only ever rendered nested
-   *  under their division block). */
-  divisionId: string
-  /** The division's OWN override row, or null when the division has none — decides whether this
-   *  outlet's "inherit" falls back to the division's setting or straight to the company's. */
-  divisionRow: PaymentSettingsRow | null
   companyMode: QrisMode
   companyGateway: PaymentSettingsRow['gateway']
   isIdr: boolean
@@ -543,9 +285,8 @@ function OutletRow({
 }) {
   const { t } = useTranslation()
   const hasOverride = row != null
-  const effectiveMode: QrisMode = row?.mode ?? divisionRow?.mode ?? companyMode
+  const effectiveMode: QrisMode = row?.mode ?? companyMode
   const hasImage = row?.hasStaticImage ?? false
-  const divisionHasImage = divisionRow?.hasStaticImage ?? false
   const panelId = `outlet-qris-panel-${outlet.id}`
 
   return (
@@ -569,16 +310,12 @@ function OutletRow({
           <Badge tone={hasOverride ? 'emerald' : 'neutral'}>
             {hasOverride
               ? t('settings.payments.outlet.effectiveOwn', { mode: modeLabel(t, effectiveMode) })
-              : divisionRow
-                ? t('settings.payments.outlet.effectiveInheritsDivision', { mode: modeLabel(t, divisionRow.mode) })
-                : t('settings.payments.outlet.effectiveInherits', { mode: modeLabel(t, companyMode) })}
+              : t('settings.payments.outlet.effectiveInherits', { mode: modeLabel(t, companyMode) })}
           </Badge>
           <Badge tone={hasImage ? 'emerald' : 'neutral'}>
             {hasImage
               ? t('settings.payments.static.overrideSet')
-              : divisionHasImage
-                ? t('settings.payments.outlet.imageInheritsDivision')
-                : t('settings.payments.static.usingCompany')}
+              : t('settings.payments.static.usingCompany')}
           </Badge>
         </span>
       </button>
@@ -589,8 +326,6 @@ function OutletRow({
             session={session}
             outlet={outlet}
             row={row}
-            divisionId={divisionId}
-            divisionRow={divisionRow}
             companyMode={companyMode}
             companyGateway={companyGateway}
             isIdr={isIdr}
@@ -605,8 +340,6 @@ function OutletModeEditor({
   session,
   outlet,
   row,
-  divisionId,
-  divisionRow,
   companyMode,
   companyGateway,
   isIdr,
@@ -614,8 +347,6 @@ function OutletModeEditor({
   session: CompanySession
   outlet: OrgUnit
   row: PaymentSettingsRow | null
-  divisionId: string
-  divisionRow: PaymentSettingsRow | null
   companyMode: QrisMode
   companyGateway: PaymentSettingsRow['gateway']
   isIdr: boolean
@@ -626,7 +357,8 @@ function OutletModeEditor({
   const [pendingInherit, setPendingInherit] = useState(false)
 
   const hasOverride = row != null
-  const fallbackMode: QrisMode = divisionRow?.mode ?? companyMode
+  // ADR 0070: outlet -> company. There is no division rung to fall back through.
+  const fallbackMode: QrisMode = companyMode
   const effectiveMode: QrisMode = row?.mode ?? fallbackMode
   const hasImage = row?.hasStaticImage ?? false
   const displayValue: QrisMode | 'INHERIT' = pendingInherit ? 'INHERIT' : hasOverride ? row.mode : 'INHERIT'
@@ -634,14 +366,9 @@ function OutletModeEditor({
   const options: Choice<QrisMode | 'INHERIT'>[] = [
     {
       value: 'INHERIT',
-      // ADR 0045 amendment: the "inherit" choice now reflects the REAL chain — the division's
-      // own default when it has one, else the company's.
-      title: divisionRow
-        ? t('settings.payments.outlet.inheritOptionDivision')
-        : t('settings.payments.outlet.inheritOption'),
-      subtitle: divisionRow
-        ? t('settings.payments.outlet.inheritDescDivision', { mode: modeLabel(t, divisionRow.mode) })
-        : t('settings.payments.outlet.inheritDesc', { mode: modeLabel(t, companyMode) }),
+      // ADR 0070: the chain is outlet -> company, so "inherit" always means the company default.
+      title: t('settings.payments.outlet.inheritOption'),
+      subtitle: t('settings.payments.outlet.inheritDesc', { mode: modeLabel(t, companyMode) }),
     },
     {
       value: 'MANUAL',
@@ -738,7 +465,6 @@ function OutletModeEditor({
           session={session}
           unitId={outlet.id}
           previewBusinessId={outlet.id}
-          previewDivisionId={divisionId}
           hasImage={hasImage}
         />
       </div>
@@ -839,7 +565,6 @@ function StaticImageEditor({
   session,
   unitId,
   previewBusinessId,
-  previewDivisionId,
   hasImage,
 }: {
   session: CompanySession
@@ -854,7 +579,7 @@ function StaticImageEditor({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const upload = useUploadStaticQr(session)
   const remove = useDeleteStaticQr(session)
-  const preview = useStaticQrImageUrl(session, previewBusinessId, true, version, previewDivisionId)
+  const preview = useStaticQrImageUrl(session, previewBusinessId, true, version)
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null

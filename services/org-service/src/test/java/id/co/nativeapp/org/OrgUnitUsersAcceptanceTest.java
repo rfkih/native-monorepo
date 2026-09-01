@@ -8,7 +8,6 @@ import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
 import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.company.service.OrgUnitService;
 import id.co.nativeapp.org.user.dto.OrgUnitUserResponse;
-import id.co.nativeapp.org.user.service.InvalidUnitUsersTargetException;
 import id.co.nativeapp.org.user.service.OrgUnitNotFoundException;
 import id.co.nativeapp.org.user.service.OrgUnitUsersReader;
 import id.co.nativeapp.org.user.service.UserOutletAssignmentWriter;
@@ -24,7 +23,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * the org-unit hub's People tab source:
  *
  * <ul>
- *   <li>a BUSINESS_UNIT returns active assignments across ALL its child outlets (incl. the seeded
+ *   <li>ADR 0070 flattened the tree, so there is no BUSINESS_UNIT to roll up from and no TEAM to
+ *       reject — an outlet returns its own active assignments (was: rolled up across child outlets
  *       default outlet), with outlet names;
  *   <li>an OUTLET returns only its own assignments;
  *   <li>a valid unit with no assignments returns an empty list (200, not 404);
@@ -49,41 +49,13 @@ class OrgUnitUsersAcceptanceTest extends PostgresRlsTestBase {
   private Setup bootstrap(String name) throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "restaurant", ACTOR));
+            new CreateCompanyCommand(name, "IDR", "id", "restaurant", ACTOR));
     UUID companyId = result.company().getId();
     UUID rootId = result.firstBusiness().getId();
     UUID seededOutletId =
         TenantContext.callAs(
             companyId.toString(), ACTOR, () -> orgUnitService.listActiveOutlets().get(0).id());
     return new Setup(companyId, rootId, seededOutletId);
-  }
-
-  @Test
-  void aBusinessUnitReturnsAssignmentsAcrossItsChildOutlets() throws Exception {
-    Setup s = bootstrap("HubAcross");
-    UUID secondOutlet =
-        TenantContext.callAs(
-            s.companyId().toString(),
-            ACTOR,
-            () ->
-                orgUnitService
-                    .create(new CreateOrgUnitCommand("Second Outlet", "outlet", s.rootId()))
-                    .getId());
-    TenantContext.runAs(
-        s.companyId().toString(),
-        ACTOR,
-        () -> {
-          assignmentWriter.replaceAssignments(USER_A, List.of(s.seededOutletId()));
-          assignmentWriter.replaceAssignments(USER_B, List.of(secondOutlet));
-        });
-
-    List<OrgUnitUserResponse> users =
-        TenantContext.callAs(
-            s.companyId().toString(), ACTOR, () -> orgUnitUsersReader.usersForUnit(s.rootId()));
-
-    assertThat(users).hasSize(2);
-    assertThat(users.stream().map(OrgUnitUserResponse::userId)).contains(USER_A, USER_B);
-    assertThat(users.stream().map(OrgUnitUserResponse::outletName)).contains("Second Outlet");
   }
 
   @Test
@@ -95,7 +67,7 @@ class OrgUnitUsersAcceptanceTest extends PostgresRlsTestBase {
             ACTOR,
             () ->
                 orgUnitService
-                    .create(new CreateOrgUnitCommand("Second Outlet", "outlet", s.rootId()))
+                    .create(new CreateOrgUnitCommand("Second Outlet", "outlet", null))
                     .getId());
     TenantContext.runAs(
         s.companyId().toString(),
@@ -144,25 +116,6 @@ class OrgUnitUsersAcceptanceTest extends PostgresRlsTestBase {
             s.companyId().toString(), ACTOR, () -> orgUnitUsersReader.usersForUnit(s.rootId()));
 
     assertThat(users).as("closed (inactive) assignments must not appear").isEmpty();
-  }
-
-  @Test
-  void aTeamTargetIsRejected() throws Exception {
-    Setup s = bootstrap("HubTeam");
-    UUID teamId =
-        TenantContext.callAs(
-            s.companyId().toString(),
-            ACTOR,
-            () ->
-                orgUnitService
-                    .create(new CreateOrgUnitCommand("Kitchen", "team", s.seededOutletId()))
-                    .getId());
-
-    assertThatThrownBy(
-            () ->
-                TenantContext.callAs(
-                    s.companyId().toString(), ACTOR, () -> orgUnitUsersReader.usersForUnit(teamId)))
-        .isInstanceOf(InvalidUnitUsersTargetException.class);
   }
 
   @Test

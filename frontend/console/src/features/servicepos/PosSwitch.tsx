@@ -5,7 +5,8 @@
  * re-resolving the outlet list here and letting the chosen surface re-resolve it again is
  * intentional and idempotent — this component never renders ticket/order UI itself.
  *
- * Vertical resolution fails OPEN to 'restaurant' on a missing/null vertical — identical semantics to
+ * The vertical comes from the COMPANY (ADR 0070 moved it up from the org unit; one company = one
+ * vertical = N outlets). Resolution fails OPEN to 'restaurant' on a missing/null value — identical to
  * components/OutletGate.tsx's own fail-open (never brick a POS terminal on cache staleness).
  *
  * CatalogSwitch is the /catalog counterpart: restaurant outlets already have a catalog manager
@@ -46,7 +47,7 @@ function CatalogSwitchSkeleton() {
 
 export function PosSwitch() {
   const { company } = useSession()
-  const { outlets, effectiveOutletId, status } = useResolvedOutlets()
+  const { status } = useResolvedOutlets()
 
   // No company at all — let Pos own its NoCompany screen (mirrors Pos.tsx's own `!company` gate;
   // useResolvedOutlets would otherwise report 'loading' forever with no company to resolve against).
@@ -62,8 +63,7 @@ export function PosSwitch() {
     return <PosSkeleton />
   }
 
-  const effectiveOutlet = outlets.find((o) => o.id === effectiveOutletId)
-  const vertical = effectiveOutlet?.vertical ?? 'restaurant'
+  const vertical = company?.vertical ?? 'restaurant'
 
   if (vertical === 'carwash') {
     return <ServicePos config={carwashConfig} />
@@ -83,7 +83,7 @@ export function PosSwitch() {
 
 export function CatalogSwitch() {
   const { company } = useSession()
-  const { outlets, effectiveOutletId, status } = useResolvedOutlets()
+  const { status } = useResolvedOutlets()
 
   // No company yet — render CatalogManagement anyway so it owns its own NoCompany screen (mirrors
   // PosSwitch's own `!company` branch above). The config passed here is never actually consulted:
@@ -96,8 +96,7 @@ export function CatalogSwitch() {
     return <CatalogSwitchSkeleton />
   }
 
-  const effectiveOutlet = outlets.find((o) => o.id === effectiveOutletId)
-  const vertical = effectiveOutlet?.vertical ?? 'restaurant'
+  const vertical = company?.vertical ?? 'restaurant'
 
   if (vertical === 'restaurant') {
     return <Navigate to="/menu" replace />

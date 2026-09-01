@@ -20,6 +20,5 @@ public record CreateChargeRequest(
     @NotNull UUID paymentId,
     UUID referenceId,
     @NotNull UUID businessId,
-    UUID divisionId,
     @NotNull @Positive Long amountMinor,
     @NotBlank String currency) {}

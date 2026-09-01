@@ -30,6 +30,11 @@ interface CompanyDto {
   planTier?: string
   /** The company's login-namespace code (ADR 0054). Absent on an older server → '' via toSession. */
   companyCode?: string
+  /**
+   * The company's business vertical (ADR 0070 — it moved here from the org unit). Absent on an
+   * older server; consumers fail open to 'restaurant'.
+   */
+  vertical?: string | null
 }
 
 const LEGACY_STORAGE_KEY = 'native.console.session'
@@ -158,6 +163,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       actor: auth.actor,
       planTier: toPlanTier(dto.planTier),
       companyCode: dto.companyCode ?? '',
+      vertical: dto.vertical ?? null,
     }),
     [auth.actor],
   )

@@ -64,7 +64,7 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
   private TenantSetup bootstrap(String name) {
     var r =
         companyService.createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "restaurant", ACTOR));
+            new CreateCompanyCommand(name, "IDR", "id", "restaurant", ACTOR));
     return new TenantSetup(r.company().getId(), r.firstBusiness().getId());
   }
 
@@ -72,7 +72,7 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
     return TenantContext.callAs(
         t.companyId().toString(),
         ACTOR,
-        () -> orgUnitService.create(new CreateOrgUnitCommand(name, "outlet", t.rootId())).getId());
+        () -> orgUnitService.create(new CreateOrgUnitCommand(name, "outlet", null)).getId());
   }
 
   private List<Map<String, Object>> outboxRows(String eventType) {

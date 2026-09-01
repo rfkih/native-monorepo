@@ -127,10 +127,12 @@ export function OrgUnitDetail() {
   })
   const units = unitsQuery.data ?? []
   const unit = unitId ? units.find((u) => u.id === unitId) : undefined
-  const isDetailType = unit?.type === 'BUSINESS_UNIT' || unit?.type === 'OUTLET'
-  const isBu = unit?.type === 'BUSINESS_UNIT'
-  const childOutlets = units.filter((u) => u.parentId === unitId && u.type === 'OUTLET')
-  const parent = unit?.parentId ? units.find((u) => u.id === unit.parentId) : undefined
+  // ADR 0070: the tree is flat — every unit is a top-level OUTLET, so there is no non-detail
+  // type to guard against, no division to be, no child outlets and no parent.
+  const isDetailType = unit?.type === 'OUTLET'
+  const isBu = false
+  const childOutlets: OrgUnit[] = []
+  const parent = undefined as OrgUnit | undefined
 
   const pnlQuery = useUnitPnl({
     companyId: company?.companyId ?? '',
@@ -346,7 +348,6 @@ export function OrgUnitDetail() {
       {tab === 'employees' ? (
         <EmployeesTab
           unit={unit}
-          childOutlets={childOutlets}
           units={units}
           companyId={company.companyId}
           actor={company.actor}
@@ -365,7 +366,6 @@ export function OrgUnitDetail() {
       {tab === 'expenses' ? (
         <OrgUnitExpensesTab
           unit={unit}
-          childOutlets={childOutlets}
           companyId={company.companyId}
           actor={company.actor}
           baseCurrency={company.baseCurrency}
@@ -394,8 +394,6 @@ export function OrgUnitDetail() {
       {/* Dialogs (lifted org parts; mutations invalidate ['orgUnits'] so the page re-renders) */}
       {dialog?.kind === 'addOutlet' ? (
         <AddUnitDialog
-          parentId={unit.id}
-          allUnits={units}
           companyId={company.companyId}
           actor={company.actor}
           onClose={() => setDialog(null)}

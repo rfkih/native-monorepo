@@ -91,8 +91,7 @@ class GroupCrossTenantIsolationTest extends PostgresRlsTestBase {
 
   private UUID bootstrapCompany(String name, String baseCurrency) {
     return companyService
-        .createCompany(
-            new CreateCompanyCommand(name, baseCurrency, "id", "HQ", "restaurant", "owner"))
+        .createCompany(new CreateCompanyCommand(name, baseCurrency, "id", "restaurant", "owner"))
         .company()
         .getId();
   }

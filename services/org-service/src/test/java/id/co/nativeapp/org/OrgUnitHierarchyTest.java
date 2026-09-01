@@ -5,182 +5,124 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
-import id.co.nativeapp.org.company.domain.Vertical;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * The org-tree hierarchy invariant, proven on the {@link OrgUnit} aggregate + {@link OrgUnitType}
- * with no Spring context — the cheapest place to pin the {@code business_unit > outlet > team}
- * nesting (ADR 0012: the tree is flat — no branch level) and the rename/move/deactivate behaviour.
+ * The org-tree invariant, proven on the {@link OrgUnit} aggregate + {@link OrgUnitType} with no
+ * Spring context — the cheapest place to pin it.
+ *
+ * <p>Since ADR 0070 the invariant is FLATNESS, not nesting: the tree is {@code company > outlet},
+ * {@code OUTLET} is the only kind, and every node is top-level. What this class used to assert (the
+ * {@code business_unit > outlet > team} parent→child rules, the vertical-belongs-to-a-business-unit
+ * rule, and the move/reparent behaviour) is gone with those levels — the vertical now lives on the
+ * company, and there is nowhere to move an outlet to. The rename / deactivate / reactivate
+ * behaviour is unchanged and still pinned here.
  */
 class OrgUnitHierarchyTest {
 
   private static final UUID LE = UUID.fromString("44444444-4444-4444-4444-444444444444");
   private static final LocalDate TODAY = LocalDate.of(2026, 6, 14);
 
-  private static OrgUnit node(OrgUnitType type, UUID parentId, OrgUnitType parentType) {
-    // A BUSINESS_UNIT requires a vertical; every other type must carry none.
-    Vertical vertical = type == OrgUnitType.BUSINESS_UNIT ? Vertical.RESTAURANT : null;
-    return new OrgUnit("node", type, vertical, parentId, parentType, LE, TODAY);
+  private static OrgUnit outlet() {
+    return new OrgUnit("node", OrgUnitType.OUTLET, LE, TODAY);
+  }
+
+  // ---- flatness -------------------------------------------------------------------------------
+
+  @Test
+  void everyNewOrgUnitIsATopLevelOutlet() {
+    OrgUnit unit = outlet();
+    assertThat(unit.getType()).isEqualTo(OrgUnitType.OUTLET);
+    assertThat(unit.getParentId()).isNull();
+    assertThat(unit.isActive()).isTrue();
+    assertThat(unit.getEffectiveFrom()).isEqualTo(TODAY);
+    assertThat(unit.getEffectiveTo()).isEqualTo(OrgUnit.OPEN_ENDED);
+    assertThat(unit.getLegalEmployerId()).isEqualTo(LE);
   }
 
   @Test
-  void aBusinessUnitWithoutAVerticalIsRejected() {
-    assertThatThrownBy(
-            () -> new OrgUnit("HQ", OrgUnitType.BUSINESS_UNIT, null, null, null, LE, TODAY))
+  void outletIsTheOnlyType() {
+    assertThat(OrgUnitType.values()).containsExactly(OrgUnitType.OUTLET);
+  }
+
+  @Test
+  void theRemovedLevelsNoLongerParse() {
+    // An old client naming a retired level gets an explicit 400, not a silent substitution.
+    assertThatThrownBy(() -> OrgUnitType.from("business_unit"))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("vertical");
-  }
-
-  @Test
-  void aNonBusinessUnitWithAVerticalIsRejected() {
-    OrgUnit bu = node(OrgUnitType.BUSINESS_UNIT, null, null);
-    assertThatThrownBy(
-            () ->
-                new OrgUnit(
-                    "Outlet",
-                    OrgUnitType.OUTLET,
-                    Vertical.CARWASH,
-                    bu.getId(),
-                    OrgUnitType.BUSINESS_UNIT,
-                    LE,
-                    TODAY))
+        .hasMessageContaining("business_unit");
+    assertThatThrownBy(() -> OrgUnitType.from("team"))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("vertical");
+        .hasMessageContaining("team");
   }
 
   @Test
-  void verticalKeysAreLowercaseAndTheParserNormalizes() {
-    assertThat(Vertical.RESTAURANT.key()).isEqualTo("restaurant");
-    assertThat(Vertical.fromKey(" Carwash ")).isEqualTo(Vertical.CARWASH);
-    assertThatThrownBy(() -> Vertical.fromKey("laundromat"))
-        .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> Vertical.fromKey("  ")).isInstanceOf(IllegalArgumentException.class);
+  void theTypeParserAcceptsAnyCasingOfOutletAndRejectsBlanks() {
+    assertThat(OrgUnitType.from("outlet")).isEqualTo(OrgUnitType.OUTLET);
+    assertThat(OrgUnitType.from("  OuTlEt  ")).isEqualTo(OrgUnitType.OUTLET);
+    assertThatThrownBy(() -> OrgUnitType.from(null)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> OrgUnitType.from("   ")).isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
-  void theNestingChainBusinessUnitOutletTeamIsAccepted() {
-    OrgUnit bu = node(OrgUnitType.BUSINESS_UNIT, null, null);
-    OrgUnit outlet = node(OrgUnitType.OUTLET, bu.getId(), OrgUnitType.BUSINESS_UNIT);
-    OrgUnit team = node(OrgUnitType.TEAM, outlet.getId(), OrgUnitType.OUTLET);
-
-    assertThat(bu.getParentId()).isNull();
-    assertThat(outlet.getParentId()).isEqualTo(bu.getId());
-    assertThat(team.getParentId()).isEqualTo(outlet.getId());
-    // A fresh node is active and open-ended (the 9999-12-31 sentinel, never null).
-    assertThat(team.isActive()).isTrue();
-    assertThat(team.getEffectiveTo()).isEqualTo(OrgUnit.OPEN_ENDED);
-  }
-
-  @Test
-  void aTeamDirectlyUnderABusinessUnitIsRejected() {
-    UUID buId = UUID.randomUUID();
-    assertThatThrownBy(() -> node(OrgUnitType.TEAM, buId, OrgUnitType.BUSINESS_UNIT))
+  void aBlankNameIsRejected() {
+    assertThatThrownBy(() -> new OrgUnit("  ", OrgUnitType.OUTLET, LE, TODAY))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("OUTLET");
+        .hasMessageContaining("name");
+  }
+
+  // ---- detachFromParent (the ADR 0070 migration path) -----------------------------------------
+
+  @Test
+  void detachFromParentIsANoopOnAnAlreadyTopLevelNode() {
+    OrgUnit unit = outlet();
+    assertThat(unit.detachFromParent()).isFalse();
+    assertThat(unit.getParentId()).isNull();
+  }
+
+  // ---- rename ---------------------------------------------------------------------------------
+
+  @Test
+  void renameReportsWhetherTheNameActuallyChanged() {
+    OrgUnit unit = outlet();
+    assertThat(unit.rename("Kemang")).isTrue();
+    assertThat(unit.getName()).isEqualTo("Kemang");
+    // Same name (and the trimmed form of it) is not a change — the caller emits no event.
+    assertThat(unit.rename("Kemang")).isFalse();
+    assertThat(unit.rename("  Kemang  ")).isFalse();
+    assertThatThrownBy(() -> unit.rename(" "))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("name");
+  }
+
+  // ---- deactivate / reactivate ----------------------------------------------------------------
+
+  @Test
+  void deactivateClosesTheEffectivePeriodAndIsIdempotent() {
+    OrgUnit unit = outlet();
+    LocalDate asOf = LocalDate.of(2026, 9, 1);
+
+    assertThat(unit.deactivate(asOf)).isTrue();
+    assertThat(unit.isActive()).isFalse();
+    assertThat(unit.getEffectiveTo()).isEqualTo(asOf);
+
+    // Already inactive — no state change, so the caller emits no second event.
+    assertThat(unit.deactivate(asOf.plusDays(1))).isFalse();
+    assertThat(unit.getEffectiveTo()).isEqualTo(asOf);
   }
 
   @Test
-  void anOutletUnderAnOutletIsRejected() {
-    UUID outletId = UUID.randomUUID();
-    assertThatThrownBy(() -> node(OrgUnitType.OUTLET, outletId, OrgUnitType.OUTLET))
-        .isInstanceOf(IllegalArgumentException.class);
-  }
+  void reactivateIsTheExactInverseOfDeactivate() {
+    OrgUnit unit = outlet();
+    unit.deactivate(LocalDate.of(2026, 9, 1));
 
-  @Test
-  void aNonRootTypeAtTheTopLevelIsRejected() {
-    assertThatThrownBy(() -> node(OrgUnitType.OUTLET, null, null))
-        .isInstanceOf(IllegalArgumentException.class);
-  }
+    assertThat(unit.reactivate()).isTrue();
+    assertThat(unit.isActive()).isTrue();
+    assertThat(unit.getEffectiveTo()).isEqualTo(OrgUnit.OPEN_ENDED);
 
-  @Test
-  void aBusinessUnitWithAParentIsRejected() {
-    UUID someParent = UUID.randomUUID();
-    assertThatThrownBy(() -> node(OrgUnitType.BUSINESS_UNIT, someParent, OrgUnitType.BUSINESS_UNIT))
-        .isInstanceOf(IllegalArgumentException.class);
-  }
-
-  @Test
-  void renameReportsWhetherItChanged() {
-    OrgUnit bu = node(OrgUnitType.BUSINESS_UNIT, null, null);
-    assertThat(bu.rename("New Name")).isTrue();
-    assertThat(bu.getName()).isEqualTo("New Name");
-    assertThat(bu.rename("New Name")).isFalse();
-    assertThatThrownBy(() -> bu.rename("  ")).isInstanceOf(IllegalArgumentException.class);
-  }
-
-  @Test
-  void moveRevalidatesTheTypeRuleAndRejectsSelfParent() {
-    OrgUnit bu1 = node(OrgUnitType.BUSINESS_UNIT, null, null);
-    OrgUnit bu2 = node(OrgUnitType.BUSINESS_UNIT, null, null);
-    OrgUnit outlet = node(OrgUnitType.OUTLET, bu1.getId(), OrgUnitType.BUSINESS_UNIT);
-
-    // Move the outlet under another business unit: legal, and reports a change.
-    assertThat(outlet.moveTo(bu2.getId(), OrgUnitType.BUSINESS_UNIT)).isTrue();
-    assertThat(outlet.getParentId()).isEqualTo(bu2.getId());
-
-    // Moving an outlet under another outlet is illegal (an outlet sits under a business_unit).
-    assertThatThrownBy(() -> outlet.moveTo(UUID.randomUUID(), OrgUnitType.OUTLET))
-        .isInstanceOf(IllegalArgumentException.class);
-
-    // A team may move between outlets.
-    OrgUnit team = node(OrgUnitType.TEAM, outlet.getId(), OrgUnitType.OUTLET);
-    OrgUnit otherOutlet = node(OrgUnitType.OUTLET, bu1.getId(), OrgUnitType.BUSINESS_UNIT);
-    assertThat(team.moveTo(otherOutlet.getId(), OrgUnitType.OUTLET)).isTrue();
-    assertThat(team.getParentId()).isEqualTo(otherOutlet.getId());
-
-    // A node cannot become its own parent.
-    assertThatThrownBy(() -> outlet.moveTo(outlet.getId(), OrgUnitType.BUSINESS_UNIT))
-        .isInstanceOf(IllegalArgumentException.class);
-  }
-
-  @Test
-  void deactivateClosesTheEffectivePeriodOnceAndIsIdempotent() {
-    OrgUnit bu = node(OrgUnitType.BUSINESS_UNIT, null, null);
-    LocalDate closeDate = LocalDate.of(2026, 12, 31);
-
-    assertThat(bu.deactivate(closeDate)).isTrue();
-    assertThat(bu.isActive()).isFalse();
-    assertThat(bu.getEffectiveTo()).isEqualTo(closeDate);
-
-    // A second deactivation is a no-op.
-    assertThat(bu.deactivate(LocalDate.of(2027, 1, 1))).isFalse();
-    assertThat(bu.getEffectiveTo()).isEqualTo(closeDate);
-  }
-
-  @Test
-  void reactivateIsTheExactInverseOfDeactivateAndIsIdempotent() {
-    OrgUnit bu = node(OrgUnitType.BUSINESS_UNIT, null, null);
-
-    // Reactivating an already-active node is a no-op.
-    assertThat(bu.reactivate()).isFalse();
-
-    bu.deactivate(LocalDate.of(2026, 12, 31));
-    assertThat(bu.isActive()).isFalse();
-
-    // Reactivate reopens the effective period: active again, effective_to back to the sentinel.
-    assertThat(bu.reactivate()).isTrue();
-    assertThat(bu.isActive()).isTrue();
-    assertThat(bu.getEffectiveTo()).isEqualTo(OrgUnit.OPEN_ENDED);
-
-    // A second reactivation is a no-op.
-    assertThat(bu.reactivate()).isFalse();
-  }
-
-  @Test
-  void orgUnitTypeEncodesTheLegalParents() {
-    assertThat(OrgUnitType.BUSINESS_UNIT.isRoot()).isTrue();
-    assertThat(OrgUnitType.OUTLET.allowedParentTypes()).containsExactly(OrgUnitType.BUSINESS_UNIT);
-    assertThat(OrgUnitType.TEAM.allowedParentTypes()).containsExactly(OrgUnitType.OUTLET);
-    assertThat(OrgUnitType.OUTLET.canBeChildOf(OrgUnitType.BUSINESS_UNIT)).isTrue();
-    assertThat(OrgUnitType.OUTLET.canBeChildOf(OrgUnitType.OUTLET)).isFalse();
-    assertThat(OrgUnitType.TEAM.canBeChildOf(OrgUnitType.BUSINESS_UNIT)).isFalse();
-    assertThat(OrgUnitType.from("business_unit")).isEqualTo(OrgUnitType.BUSINESS_UNIT);
-    assertThatThrownBy(() -> OrgUnitType.from("branch"))
-        .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> OrgUnitType.from("squad"))
-        .isInstanceOf(IllegalArgumentException.class);
+    // Already active — no state change.
+    assertThat(unit.reactivate()).isFalse();
   }
 }

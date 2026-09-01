@@ -39,12 +39,12 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
- * The payment-settings surface end-to-end at the service layer (ADR 0045, DIVISION-scope
- * amendment): upsert + effective resolution (outlet override → division override → company default
- * → implicit MANUAL, per-facet image fallback), the write-only server key (encrypted at rest, only
- * last4 ever readable), the owner role guard, and the untrusted-upload guards. Role simulation
- * mirrors loyalty's {@code EarnRuleAcceptanceTest} {@code setRoles} idiom (a {@link
- * MockHttpServletRequest} bound to {@link RequestContextHolder}).
+ * The payment-settings surface end-to-end at the service layer (ADR 0045; the DIVISION rung was
+ * removed with the division level itself in ADR 0070): upsert + effective resolution (outlet
+ * override → company default → implicit MANUAL, per-facet image fallback), the write-only server
+ * key (encrypted at rest, only last4 ever readable), the owner role guard, and the untrusted-upload
+ * guards. Role simulation mirrors loyalty's {@code EarnRuleAcceptanceTest} {@code setRoles} idiom
+ * (a {@link MockHttpServletRequest} bound to {@link RequestContextHolder}).
  */
 @SpringBootTest
 class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
@@ -52,7 +52,9 @@ class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
   private static final String TENANT = "77777777-7777-7777-7777-777777777777";
   private static final String ACTOR = "owner@example.co.id";
   private static final UUID OUTLET = UUID.fromString("b555d5b8-e17b-4990-a7dd-2c4be199d7a6");
-  private static final UUID DIVISION = UUID.fromString("c666d5b8-e17b-4990-a7dd-2c4be199d7a6");
+
+  /** A second outlet id — the per-unit rules must hold for every unit row, not just the first. */
+  private static final UUID OTHER_UNIT = UUID.fromString("c666d5b8-e17b-4990-a7dd-2c4be199d7a6");
 
   private static final byte[] PNG = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2};
   private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 9};
@@ -98,7 +100,7 @@ class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
         () -> {
           service.upsertCompanyDefault(modeOnly("STATIC"));
           // Mode before image: legal, but not yet available — the console falls back to MANUAL.
-          EffectiveSettingsResponse before = service.effective(OUTLET, null);
+          EffectiveSettingsResponse before = service.effective(OUTLET);
           assertThat(before.mode()).isEqualTo("STATIC");
           assertThat(before.staticQrAvailable()).isFalse();
 
@@ -106,10 +108,10 @@ class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
           assertThat(meta.contentType()).isEqualTo("image/png");
           assertThat(meta.byteSize()).isEqualTo(PNG.length);
 
-          EffectiveSettingsResponse after = service.effective(OUTLET, null);
+          EffectiveSettingsResponse after = service.effective(OUTLET);
           assertThat(after.staticQrAvailable()).isTrue();
 
-          QrImageContentResponse image = service.effectiveImage(OUTLET, null);
+          QrImageContentResponse image = service.effectiveImage(OUTLET);
           assertThat(image.contentType()).isEqualTo("image/png");
           assertThat(image.data()).isEqualTo(PNG);
           assertThat(image.sha256()).isEqualTo(meta.sha256().strip());
@@ -127,74 +129,34 @@ class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
           service.uploadStaticQr(null, "image/png", PNG);
           service.upsertUnitOverride(OUTLET, modeOnly("STATIC"));
 
-          EffectiveSettingsResponse effective = service.effective(OUTLET, null);
+          EffectiveSettingsResponse effective = service.effective(OUTLET);
           assertThat(effective.mode()).isEqualTo("STATIC");
           // The override row has no image of its own — the company image must fall back.
           assertThat(effective.staticQrAvailable()).isTrue();
-          assertThat(service.effectiveImage(OUTLET, null).data()).isEqualTo(PNG);
+          assertThat(service.effectiveImage(OUTLET).data()).isEqualTo(PNG);
 
           // A different outlet (no override) resolves the company default mode.
-          assertThat(service.effective(UUID.randomUUID(), null).mode()).isEqualTo("MANUAL");
+          assertThat(service.effective(UUID.randomUUID()).mode()).isEqualTo("MANUAL");
           return null;
         });
   }
 
   @Test
-  void divisionStaticWithImageIsInheritedByAnOutletWithNoOverrideOfItsOwn() throws Exception {
+  void anOutletOverrideBeatsTheCompanyDefault() throws Exception {
     TenantContext.callAs(
         TENANT,
         ACTOR,
         () -> {
-          service.upsertCompanyDefault(modeOnly("MANUAL"));
-          service.upsertUnitOverride(DIVISION, modeOnly("STATIC"));
-          service.uploadStaticQr(DIVISION, "image/png", PNG);
-
-          // (a) the outlet has no row of its own — mode + image both fall through to the
-          // division.
-          EffectiveSettingsResponse effective = service.effective(OUTLET, DIVISION);
-          assertThat(effective.mode()).isEqualTo("STATIC");
-          assertThat(effective.staticQrAvailable()).isTrue();
-          assertThat(service.effectiveImage(OUTLET, DIVISION).data()).isEqualTo(PNG);
-          return null;
-        });
-  }
-
-  @Test
-  void anOutletOverrideBeatsItsDivisionsOverride() throws Exception {
-    TenantContext.callAs(
-        TENANT,
-        ACTOR,
-        () -> {
-          service.upsertCompanyDefault(modeOnly("MANUAL"));
-          service.upsertUnitOverride(DIVISION, modeOnly("STATIC"));
-          service.uploadStaticQr(DIVISION, "image/png", PNG);
-          // (b) the outlet has its OWN row — it wins over the division, mode AND image.
+          service.upsertCompanyDefault(modeOnly("STATIC"));
+          service.uploadStaticQr(null, "image/png", PNG);
+          // The outlet has its OWN row — it wins over the company default, mode AND image.
           service.upsertUnitOverride(OUTLET, modeOnly("GATEWAY"));
           byte[] outletPng = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 9, 9};
           service.uploadStaticQr(OUTLET, "image/png", outletPng);
 
-          EffectiveSettingsResponse effective = service.effective(OUTLET, DIVISION);
+          EffectiveSettingsResponse effective = service.effective(OUTLET);
           assertThat(effective.mode()).isEqualTo("GATEWAY");
-          assertThat(service.effectiveImage(OUTLET, DIVISION).data()).isEqualTo(outletPng);
-          return null;
-        });
-  }
-
-  @Test
-  void aDivisionRowWithoutItsOwnImageFallsBackToTheCompanyImage() throws Exception {
-    TenantContext.callAs(
-        TENANT,
-        ACTOR,
-        () -> {
-          service.upsertCompanyDefault(modeOnly("MANUAL"));
-          service.uploadStaticQr(null, "image/png", PNG);
-          // (c) the division sets mode STATIC but carries no image of its own.
-          service.upsertUnitOverride(DIVISION, modeOnly("STATIC"));
-
-          EffectiveSettingsResponse effective = service.effective(OUTLET, DIVISION);
-          assertThat(effective.mode()).isEqualTo("STATIC");
-          assertThat(effective.staticQrAvailable()).isTrue();
-          assertThat(service.effectiveImage(OUTLET, DIVISION).data()).isEqualTo(PNG);
+          assertThat(service.effectiveImage(OUTLET).data()).isEqualTo(outletPng);
           return null;
         });
   }
@@ -233,7 +195,7 @@ class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
           assertThat(resaved.companyDefault().gateway().sandbox().serverKeyLast4())
               .isEqualTo("1234");
 
-          EffectiveSettingsResponse effective = service.effective(null, null);
+          EffectiveSettingsResponse effective = service.effective(null);
           assertThat(effective.gateway().connected()).isTrue();
           return null;
         });
@@ -389,7 +351,7 @@ class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
           service.upsertCompanyDefault(
               new UpsertSettingsRequest(
                   "GATEWAY", "MIDTRANS", "PRODUCTION", null, null, null, null));
-          EffectiveSettingsResponse effective = service.effective(null, null);
+          EffectiveSettingsResponse effective = service.effective(null);
           assertThat(effective.gateway().environment()).isEqualTo("PRODUCTION");
           assertThat(effective.gateway().connected()).isTrue();
           return null;
@@ -409,7 +371,7 @@ class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
               .isInstanceOf(SettingsForbiddenException.class);
           assertThatThrownBy(() -> service.list()).isInstanceOf(SettingsForbiddenException.class);
           // The till's reads stay open to POS roles.
-          assertThat(service.effective(OUTLET, null).mode()).isEqualTo("MANUAL");
+          assertThat(service.effective(OUTLET).mode()).isEqualTo("MANUAL");
           return null;
         });
   }
@@ -430,12 +392,12 @@ class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
                           new UpsertSettingsRequest(
                               "GATEWAY", "MIDTRANS", "SANDBOX", "key", null, null, null)))
               .isInstanceOf(SettingsValidationException.class);
-          // (e) Credentials on a DIVISION override are rejected identically — gateway
-          // credentials are company-level regardless of which kind of unit the row is for.
+          // ...and on ANY other unit row identically — gateway credentials are company-level
+          // regardless of which unit the row is for.
           assertThatThrownBy(
                   () ->
                       service.upsertUnitOverride(
-                          DIVISION,
+                          OTHER_UNIT,
                           new UpsertSettingsRequest(
                               "GATEWAY", "MIDTRANS", "SANDBOX", "key", null, null, null)))
               .isInstanceOf(SettingsValidationException.class);
@@ -467,14 +429,14 @@ class PaymentSettingsAcceptanceTest extends PostgresRlsTestBase {
           service.upsertCompanyDefault(modeOnly("STATIC"));
           service.uploadStaticQr(null, "image/png", PNG);
           service.upsertUnitOverride(OUTLET, modeOnly("MANUAL"));
-          assertThat(service.effective(OUTLET, null).mode()).isEqualTo("MANUAL");
+          assertThat(service.effective(OUTLET).mode()).isEqualTo("MANUAL");
 
           service.deleteUnitOverride(OUTLET);
-          assertThat(service.effective(OUTLET, null).mode()).isEqualTo("STATIC");
+          assertThat(service.effective(OUTLET).mode()).isEqualTo("STATIC");
 
           service.removeStaticQr(null);
-          assertThat(service.effective(OUTLET, null).staticQrAvailable()).isFalse();
-          assertThatThrownBy(() -> service.effectiveImage(OUTLET, null))
+          assertThat(service.effective(OUTLET).staticQrAvailable()).isFalse();
+          assertThatThrownBy(() -> service.effectiveImage(OUTLET))
               .isInstanceOf(PaymentSettingsNotFoundException.class);
           return null;
         });

@@ -116,10 +116,10 @@ public class SettingsService {
 
   /**
    * POS: the effective mode/availability for the till's outlet ({@code businessId}) and division
-   * ({@code divisionId}, both nullable). NOT owner-gated.
+   * (nullable). NOT owner-gated. ADR 0070 removed the division rung.
    */
-  public EffectiveSettingsResponse effective(UUID businessId, UUID divisionId) {
-    return reader.effective(businessId, divisionId);
+  public EffectiveSettingsResponse effective(UUID businessId) {
+    return reader.effective(businessId);
   }
 
   /**
@@ -128,8 +128,8 @@ public class SettingsService {
    * inline bytea and opportunistically flips to object-backed (read-through migration — never on
    * the critical path, failures swallowed in {@link QrObjectMigrationWriter}).
    */
-  public QrImageContentResponse effectiveImage(UUID businessId, UUID divisionId) {
-    QrImageView image = reader.effectiveImage(businessId, divisionId);
+  public QrImageContentResponse effectiveImage(UUID businessId) {
+    QrImageView image = reader.effectiveImage(businessId);
     byte[] data;
     if (image.getObjectKey() != null) {
       data = mediaStorage.get(image.getObjectKey()).data();

@@ -54,7 +54,7 @@ class CompanyControllerValidationTest {
   @MockitoBean private id.co.nativeapp.org.user.service.CompanyMembershipService membershipService;
 
   @Test
-  void missingFirstBusinessIsRejectedWithAProblemDetail() throws Exception {
+  void aMissingVerticalIsRejectedWithAProblemDetail() throws Exception {
     String body =
         """
             {"name":"Acme","baseCurrency":"IDR","defaultLanguage":"id"}
@@ -64,7 +64,7 @@ class CompanyControllerValidationTest {
         .andExpect(status().isBadRequest())
         .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/validation-failed"))
-        .andExpect(jsonPath("$.errors[0].field").value("firstBusiness"));
+        .andExpect(jsonPath("$.errors[0].field").value("verticalPresent"));
   }
 
   @Test

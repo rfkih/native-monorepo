@@ -2,18 +2,29 @@ package id.co.nativeapp.org.company.dto;
 
 import id.co.nativeapp.security.ApiExceptionHandler;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
 /**
- * Create-company request body. The company's {@code baseCurrency} (ISO-4217) and {@code
- * defaultLanguage} are set HERE, at creation — never toggled later (CLAUDE.md "Settings live at
- * creation"). {@code firstBusiness} is the first org unit (the business) created together with the
- * company.
+ * Create-company request body. The company's {@code baseCurrency} (ISO-4217), {@code
+ * defaultLanguage} and {@code vertical} are set HERE, at creation — never toggled later (CLAUDE.md
+ * "Settings live at creation").
  *
  * <p>The bean-validation constraints are checked by {@code @Valid} on the handler param: a
  * missing/blank field fails fast with a {@code 400} from {@link ApiExceptionHandler}.
+ *
+ * <p><strong>One name, not two (ADR 0070).</strong> The org tree is flat ({@code company >
+ * outlet}), so there is no "first business" to name separately from the company — the bootstrap
+ * seeds one outlet named after the company, which the owner renames on the Outlets page. The {@code
+ * vertical} moved to the TOP LEVEL of this body (it is a company attribute now, not an org-unit
+ * one).
+ *
+ * <p><strong>Backward compatibility.</strong> The old nested {@code firstBusiness} object is still
+ * ACCEPTED: its {@code name} is ignored, and its {@code vertical} is used when the top-level {@code
+ * vertical} is absent (see {@link #effectiveVertical()}). That keeps an in-flight old console tab
+ * working across the deploy — ADR 0062's version gate is a prompt, not a hard stop — rather than
+ * failing its create with a 400. New clients send only the top-level field.
  *
  * <p><strong>Currency is derived from country, not chosen (ADR 0025).</strong> The controller
  * derives {@code baseCurrency} from {@code country} via {@link
@@ -33,14 +44,18 @@ import jakarta.validation.constraints.Pattern;
  * @param defaultLanguage the company default language (e.g. {@code "en"}/{@code "id"})
  * @param country optional ISO 3166-1 alpha-2 country code (ADR 0025); {@code null} defaults to
  *     {@code "ID"} at the controller and DERIVES the base currency (ID → IDR, else USD)
- * @param firstBusiness the first business (a top-level org unit) to create with the company
+ * @param vertical the company's business vertical (lowercase {@code restaurant} | {@code carwash} |
+ *     {@code barbershop}); required — unless supplied via the legacy {@code firstBusiness} object
+ * @param firstBusiness DEPRECATED (ADR 0070) — the legacy nested first-business object. Its name is
+ *     ignored; its vertical is the fallback for a body that predates the top-level field.
  */
 public record CreateCompanyRequest(
     @NotBlank String name,
     String baseCurrency,
     @NotBlank String defaultLanguage,
     @Pattern(regexp = "[A-Z]{2}", message = "must be an ISO 3166-1 alpha-2 code") String country,
-    @NotNull @Valid BusinessRequest firstBusiness) {
+    @Pattern(regexp = "restaurant|carwash|barbershop", message = "unsupported vertical") String vertical,
+    @Valid BusinessRequest firstBusiness) {
 
   /**
    * Convenience constructor in the pre-country shape (kept so existing Java call sites don't
@@ -49,24 +64,45 @@ public record CreateCompanyRequest(
    * @param name the company name
    * @param baseCurrency the ISO-4217 base currency code
    * @param defaultLanguage the company default language
-   * @param firstBusiness the first business to create with the company
+   * @param vertical the company's business vertical
    */
   public CreateCompanyRequest(
-      String name, String baseCurrency, String defaultLanguage, BusinessRequest firstBusiness) {
-    this(name, baseCurrency, defaultLanguage, null, firstBusiness);
+      String name, String baseCurrency, String defaultLanguage, String vertical) {
+    this(name, baseCurrency, defaultLanguage, null, vertical, null);
   }
 
   /**
-   * The first-business payload nested in a create-company request (and the body of
-   * create-business). A business is ALWAYS created as a root {@code business_unit} with a seeded
-   * default outlet (ADR 0012), so there is no {@code type} field; an unknown {@code type} property
-   * in an old request body is ignored by deserialization, not rejected.
+   * The vertical to create the company with: the top-level field when present, else the legacy
+   * nested {@code firstBusiness.vertical}. Never blank once {@link #isVerticalPresent()} has
+   * passed.
+   */
+  public String effectiveVertical() {
+    if (vertical != null && !vertical.isBlank()) {
+      return vertical;
+    }
+    return firstBusiness == null ? null : firstBusiness.vertical();
+  }
+
+  /**
+   * Cross-field rule: a vertical must arrive by ONE of the two routes. Enforced here rather than
+   * with {@code @NotBlank} on the field, because either source is legitimate. Discovered by bean
+   * validation as the {@code verticalPresent} boolean property — which is also the {@code field}
+   * name an API client sees in the RFC-7807 error, so it is named to read sensibly there.
+   */
+  @AssertTrue(message = "vertical is required (restaurant | carwash | barbershop)")
+  public boolean isVerticalPresent() {
+    String effective = effectiveVertical();
+    return effective != null && !effective.isBlank();
+  }
+
+  /**
+   * DEPRECATED (ADR 0070) — the legacy nested first-business payload. Accepted so an old client's
+   * body still creates a company; only its {@code vertical} is read, and only as a fallback.
    *
-   * @param name the business / org-unit name
-   * @param vertical the business vertical (lowercase {@code restaurant} | {@code carwash} | {@code
-   *     barbershop}); required — drives which POS the unit's outlets get
+   * @param name IGNORED — the seeded outlet is named after the company
+   * @param vertical the business vertical, used when the top-level {@code vertical} is absent
    */
   public record BusinessRequest(
-      @NotBlank String name,
-      @NotBlank @Pattern(regexp = "restaurant|carwash|barbershop", message = "unsupported vertical") String vertical) {}
+      String name,
+      @Pattern(regexp = "restaurant|carwash|barbershop", message = "unsupported vertical") String vertical) {}
 }

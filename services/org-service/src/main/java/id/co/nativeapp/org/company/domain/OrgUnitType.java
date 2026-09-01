@@ -1,73 +1,41 @@
 package id.co.nativeapp.org.company.domain;
 
-import java.util.Set;
-
 /**
- * The kind of an {@link OrgUnit} in the company's self-referencing org tree, and the source of
- * truth for the <strong>allowed parent → child hierarchy</strong>.
+ * The kind of an {@link OrgUnit}. Since ADR 0070 there is exactly ONE: {@link #OUTLET} — a
+ * company's org "tree" is a flat list of physical selling locations hanging directly off the
+ * company, with no nesting at all ({@code company > outlet}).
  *
- * <p>The tree nests {@code business_unit > outlet > team} (ADR 0012 — the tree is flat: an outlet
- * IS the physical selling location; there is no intermediate branch level):
+ * <p><strong>Why the enum survives at all.</strong> A single-valued enum looks redundant, and it is
+ * — deliberately. The {@code org_unit.type} column and the {@code type} field on {@code
+ * OrgUnitCreated} / {@code OrgUnitChanged} / {@code OrgUnitDeleted} are load-bearing wire/state
+ * shape that downstream read models ({@code finance.org_unit_ref}, {@code
+ * employee.org_unit_projection}) already store. Keeping the type as a real value — always {@code
+ * "OUTLET"} — meant ADR 0070 changed NO event schema and needed NO consumer migration (rule 7).
+ * Removing it would be a breaking change bought for nothing.
  *
- * <ul>
- *   <li>{@link #BUSINESS_UNIT} — a top-level node; its parent MUST be {@code null}.
- *   <li>{@link #OUTLET} — hangs under a {@code BUSINESS_UNIT}.
- *   <li>{@link #TEAM} — hangs under an {@code OUTLET} (the leaf level).
- * </ul>
+ * <p><strong>What went away (ADR 0070).</strong> {@code BUSINESS_UNIT} (the console's "Division")
+ * and {@code TEAM}, along with the whole parent→child rule machinery this enum used to own — {@code
+ * allowedParentTypes} / {@code canBeChildOf} / {@code describeAllowedParents} / {@code isRoot}.
+ * With one level there is no hierarchy to validate: an outlet's parent is ALWAYS {@code null},
+ * enforced in the {@link OrgUnit} aggregate. Grouping outlets for reporting is served by
+ * multi-company ownership (ADR 0021) plus group consolidation, not by a tree level.
  *
- * <p>So a {@code TEAM} directly under a {@code BUSINESS_UNIT} is rejected — a team belongs to a
- * physical outlet. Persisted as its {@code name()} via {@code EnumType.STRING}, so the {@code
- * org_unit.type} column is human-readable and stable against reordering.
+ * <p>Persisted as its {@code name()} via {@code EnumType.STRING}, so the column stays
+ * human-readable and stable against reordering.
  */
 public enum OrgUnitType {
-  BUSINESS_UNIT,
-  OUTLET,
-  TEAM;
-
-  /**
-   * The legal parent types for this kind — empty for a root type ({@link #BUSINESS_UNIT}), which
-   * has no parent. This is the one place the nesting is encoded.
-   */
-  public Set<OrgUnitType> allowedParentTypes() {
-    return switch (this) {
-      case BUSINESS_UNIT -> Set.of();
-      case OUTLET -> Set.of(BUSINESS_UNIT);
-      case TEAM -> Set.of(OUTLET);
-    };
-  }
-
-  /** {@code true} if this is a top-level (root) type — i.e. it must have a {@code null} parent. */
-  public boolean isRoot() {
-    return allowedParentTypes().isEmpty();
-  }
-
-  /**
-   * Whether a node of this type may legally sit directly under a parent of {@code parentType} (or,
-   * when {@code parentType} is {@code null}, at the top level). Encapsulates the full parent→child
-   * rule so callers never re-derive it.
-   *
-   * @param parentType the prospective parent's type, or {@code null} for a top-level placement
-   */
-  public boolean canBeChildOf(OrgUnitType parentType) {
-    if (parentType == null) {
-      return isRoot();
-    }
-    return allowedParentTypes().contains(parentType);
-  }
-
-  /**
-   * A human-readable list of this type's legal parents (e.g. {@code "BUSINESS_UNIT"}) for error
-   * messages; callers must not invoke it on a root type.
-   */
-  public String describeAllowedParents() {
-    return String.join(" or ", allowedParentTypes().stream().map(Enum::name).sorted().toList());
-  }
+  /** A physical selling location, hanging directly off the company. The only kind there is. */
+  OUTLET;
 
   /**
    * Parses an {@code OrgUnitType} from a request string, accepting any case and trimming
    * whitespace.
    *
-   * @param raw the wire value (e.g. {@code "business_unit"} / {@code "OUTLET"})
+   * <p>Since ADR 0070 the only accepted value is {@code outlet}. A request still naming a removed
+   * level ({@code business_unit} / {@code team}) fails here with a {@code 400} rather than silently
+   * creating something else — an old client gets a clear error, not a surprise.
+   *
+   * @param raw the wire value (e.g. {@code "outlet"} / {@code "OUTLET"})
    * @throws IllegalArgumentException if {@code raw} is null/blank or not a known type (mapped to a
    *     {@code 400} by {@link id.co.nativeapp.security.ApiExceptionHandler})
    */
@@ -78,7 +46,8 @@ public enum OrgUnitType {
     try {
       return OrgUnitType.valueOf(raw.strip().toUpperCase(java.util.Locale.ROOT));
     } catch (IllegalArgumentException e) {
-      throw new IllegalArgumentException("Unknown org unit type: " + raw);
+      throw new IllegalArgumentException(
+          "Unknown org unit type: " + raw + " (the only type is 'outlet' — ADR 0070)");
     }
   }
 }

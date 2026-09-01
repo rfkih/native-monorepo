@@ -263,33 +263,6 @@ class DeviceCredentialAcceptanceTest {
   }
 
   @Test
-  void createForANonOutletTargetReturns400() throws Exception {
-    String token = tokenForOwner();
-    // createOutletUnderCompanyA also seeds the parent BUSINESS_UNIT (ADR 0012) — find it (type !=
-    // OUTLET) as the illegal target.
-    createOutletUnderCompanyA(token);
-    JsonNode units = getJson(token, "/api/v1/org-units");
-    String businessUnitId = null;
-    for (JsonNode unit : units) {
-      if (!"OUTLET".equals(unit.path("type").asString())) {
-        businessUnitId = unit.get("id").asString();
-      }
-    }
-    assertThat(businessUnitId).isNotNull();
-    String finalBusinessUnitId = businessUnitId;
-
-    assertThatThrownBy(() -> createDeviceCredential(token, finalBusinessUnitId))
-        .isInstanceOf(HttpClientErrorException.class)
-        .satisfies(
-            ex -> {
-              HttpClientErrorException e = (HttpClientErrorException) ex;
-              assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-              assertThat(e.getResponseBodyAsString())
-                  .contains("device-credential-target-not-outlet");
-            });
-  }
-
-  @Test
   void revealForAnOutletWithNoCredentialReturns404() throws Exception {
     String token = tokenForOwner();
     String outletId = createOutletUnderCompanyA(token);
@@ -389,10 +362,10 @@ class DeviceCredentialAcceptanceTest {
   }
 
   /**
-   * Creates a fresh BUSINESS_UNIT under company A (auto-seeding its default OUTLET, ADR 0012) and
-   * returns the seeded outlet's id. Each test's DB starts empty ({@code resetDatabase}), and
-   * org_unit carries no FK to {@code company} — creating org units directly, with no prior {@code
-   * POST /api/v1/companies}, is a legitimate path (mirrors the tenant-bootstrap-free org-tree tests
+   * Creates a fresh top-level OUTLET under company A (ADR 0070 — the tree is flat) and returns the
+   * seeded outlet's id. Each test's DB starts empty ({@code resetDatabase}), and org_unit carries
+   * no FK to {@code company} — creating org units directly, with no prior {@code POST
+   * /api/v1/companies}, is a legitimate path (mirrors the tenant-bootstrap-free org-tree tests
    * elsewhere in this service).
    */
   private String createOutletUnderCompanyA(String token) throws IOException {
@@ -404,21 +377,14 @@ class DeviceCredentialAcceptanceTest {
             .contentType(MediaType.APPLICATION_JSON)
             .body(
                 """
-                {"name": "Device Test BU %s", "type": "business_unit", "vertical": "restaurant"}
+                {"name": "Device Test Outlet %s"}
                 """
                     .formatted(java.util.UUID.randomUUID()))
             .retrieve()
             .body(String.class);
-    String businessUnitId = JSON.readValue(businessUnitBody, JsonNode.class).get("id").asString();
-
-    JsonNode units = getJson(token, "/api/v1/org-units");
-    for (JsonNode unit : units) {
-      if ("OUTLET".equals(unit.path("type").asString())
-          && businessUnitId.equals(unit.path("parentId").asString())) {
-        return unit.get("id").asString();
-      }
-    }
-    throw new IllegalStateException("Expected an auto-seeded outlet under " + businessUnitId);
+    // ADR 0070: POST /api/v1/org-units creates the OUTLET itself — there is no division to
+    // create and no auto-seeded child to go looking for.
+    return JSON.readValue(businessUnitBody, JsonNode.class).get("id").asString();
   }
 
   private JsonNode createDeviceCredential(String token, String outletId) throws IOException {

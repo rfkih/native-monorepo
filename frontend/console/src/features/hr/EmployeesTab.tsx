@@ -68,7 +68,6 @@ export interface GroupedEmployee {
 
 export function EmployeesTab({
   unit,
-  childOutlets,
   units,
   companyId,
   actor,
@@ -76,7 +75,6 @@ export function EmployeesTab({
   canManageLogins = true,
 }: {
   unit: OrgUnit
-  childOutlets: OrgUnit[]
   units: OrgUnit[]
   companyId: string
   actor: string
@@ -102,12 +100,8 @@ export function EmployeesTab({
         : null,
     )
 
-  // BU scope = the unit + its child outlets; an outlet scopes to itself only.
-  const unitIds = useMemo(
-    () =>
-      unit.type === 'BUSINESS_UNIT' ? [unit.id, ...childOutlets.map((o) => o.id)] : [unit.id],
-    [unit, childOutlets],
-  )
+  // ADR 0070: flat tree — a unit IS an outlet, so its scope is just itself.
+  const unitIds = useMemo(() => [unit.id], [unit])
   const query = useEmployees({ companyId, actor, orgUnitIds: unitIds, enabled: true })
 
   // Resolve each linked login's USERNAME (userId → username) so the list shows the login id inline —
@@ -172,18 +166,12 @@ export function EmployeesTab({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-ink-3">{t('hr.list.subtitle', { unit: unit.name })}</p>
-        {/* Create only at the business-unit level; an outlet assigns an EXISTING employee. */}
-        {unit.type === 'BUSINESS_UNIT' ? (
-          <Button type="button" onClick={() => setDialog({ kind: 'create' })}>
-            <Plus className="size-4" />
-            {t('hr.list.add')}
-          </Button>
-        ) : (
-          <Button type="button" onClick={() => setDialog({ kind: 'assignExisting' })}>
-            <Plus className="size-4" />
-            {t('hr.list.assignExisting')}
-          </Button>
-        )}
+        {/* ADR 0070: every unit is an outlet, so create is available on every unit — there is
+            no division tier that used to be the only place a new employee could be created. */}
+        <Button type="button" onClick={() => setDialog({ kind: 'create' })}>
+          <Plus className="size-4" />
+          {t('hr.list.add')}
+        </Button>
       </div>
 
       {!query.isLoading && !query.isError && grouped.length > 0 ? (
@@ -240,7 +228,6 @@ export function EmployeesTab({
       {dialog?.kind === 'create' || dialog?.kind === 'edit' ? (
         <EmployeeFormDialog
           unit={unit}
-          childOutlets={childOutlets}
           companyId={companyId}
           actor={actor}
           edit={dialog.kind === 'edit' ? dialog.employee : null}
@@ -251,7 +238,6 @@ export function EmployeesTab({
         <AssignDialog
           employee={dialog.employee}
           unit={unit}
-          childOutlets={childOutlets}
           companyId={companyId}
           actor={actor}
           onClose={closeDialog}

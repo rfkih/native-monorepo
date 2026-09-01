@@ -69,7 +69,8 @@ class GetCurrentCompanyControllerTest {
             LEGAL_EMPLOYER_ID,
             FIRST_BUSINESS_ID,
             "FULL",
-            "acme07");
+            "acme07",
+            "restaurant");
     when(companyService.getCurrentCompany()).thenReturn(stubResponse);
 
     TenantContext.callAs(

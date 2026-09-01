@@ -128,7 +128,7 @@ export function PayrollTab({
 
   // The completeness gate checks every ACTIVE business unit's period seal (company-wide run).
   const buIds = useMemo(
-    () => units.filter((u) => u.type === 'BUSINESS_UNIT' && u.active).map((u) => u.id),
+    () => units.filter((u) => u.active).map((u) => u.id),
     [units],
   )
   const allRuns = runsQuery.data ?? []

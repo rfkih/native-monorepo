@@ -79,11 +79,12 @@ export function RolePresetInput({
   )
 }
 
-/** Selectable org units for an assignment: the current unit + (on a BU) its active child outlets. */
-function unitOptions(unit: OrgUnit, childOutlets: OrgUnit[]): OrgUnit[] {
-  return unit.type === 'BUSINESS_UNIT'
-    ? [unit, ...childOutlets.filter((o) => o.active)]
-    : [unit]
+/**
+ * Selectable org units for an assignment. ADR 0070 flattened the tree, so a unit IS an outlet and
+ * has no children to offer alongside it — the only option is the unit itself.
+ */
+function unitOptions(unit: OrgUnit): OrgUnit[] {
+  return [unit]
 }
 
 // ---------------------------------------------------------------------------
@@ -97,14 +98,12 @@ function unitOptions(unit: OrgUnit, childOutlets: OrgUnit[]): OrgUnit[] {
  */
 export function EmployeeFormDialog({
   unit,
-  childOutlets,
   companyId,
   actor,
   edit,
   onClose,
 }: {
   unit: OrgUnit
-  childOutlets: OrgUnit[]
   companyId: string
   actor: string
   /** When set, the dialog PATCHes name/PTKP instead of running the create chain. */
@@ -112,7 +111,7 @@ export function EmployeeFormDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const options = unitOptions(unit, childOutlets)
+  const options = unitOptions(unit)
 
   const [fullName, setFullName] = useState(edit?.fullName ?? '')
   const [ptkpStatus, setPtkpStatus] = useState(edit?.ptkpStatus ?? 'TK0')
@@ -362,20 +361,18 @@ export function EmployeeFormDialog({
 export function AssignDialog({
   employee,
   unit,
-  childOutlets,
   companyId,
   actor,
   onClose,
 }: {
   employee: EmployeeListRow
   unit: OrgUnit
-  childOutlets: OrgUnit[]
   companyId: string
   actor: string
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const options = unitOptions(unit, childOutlets)
+  const options = unitOptions(unit)
   const [orgUnitId, setOrgUnitId] = useState(options[0]?.id ?? unit.id)
   const [role, setRole] = useState(employee.role ?? '')
   const [startDate, setStartDate] = useState(todayIso())

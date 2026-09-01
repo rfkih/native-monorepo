@@ -127,10 +127,8 @@ export function ServicePaymentModal({
 
   // ADR 0045: the QRIS mode this outlet actually resolves to — see PaymentModal's twin doc
   // (never fetched while offline; `currency` is the sale's own currency, rule 8). ADR 0045
-  // amendment: `divisionId` extends the resolution to outlet → division → company.
   const qrisEffectiveQuery = useQrisEffective(session, session.businessId, {
     enabled: !offline,
-    divisionId: session.divisionId,
   })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
   // ADR 0045 amendment: configured GATEWAY degraded to MANUAL — see PaymentModal's twin doc
@@ -452,13 +450,11 @@ function ServiceDigitalAttempt({
   }
 
   // ADR 0045: fetched once the PENDING ticket exists — the same businessId checkout used.
-  // ADR 0045 amendment: divisionId extends the fallback to outlet → division → company.
   const staticQr = useStaticQrImageUrl(
     session,
     session.businessId,
     showStaticQr && pendingTicket != null,
     0,
-    session.divisionId,
   )
   const staticQrSlot = showStaticQr ? (
     staticQr.status === 'ready' && staticQr.url ? (
@@ -485,7 +481,6 @@ function ServiceDigitalAttempt({
     paymentId: gatewayActive && pendingPayment ? pendingPayment.paymentId : null,
     referenceId: pendingTicket?.ticketId ?? null,
     businessId: session.businessId,
-    divisionId: session.divisionId,
     amountMinor: pendingPayment?.amountMinor ?? chargeMinor,
     currency,
   })

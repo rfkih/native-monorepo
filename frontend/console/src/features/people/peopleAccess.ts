@@ -24,14 +24,23 @@ export function visiblePeopleTabs(roles: readonly string[]): PeopleTabKey[] {
   return canPayroll(roles) ? ['employees', 'attendance', 'payroll'] : ['employees', 'attendance']
 }
 
-/** Every `BUSINESS_UNIT` row from the flat org-units list, in the order the server returned them. */
+/**
+ * Every OUTLET row from the org-units list, in the order the server returned them. Since ADR 0070
+ * that is every row — the tree is flat, so "the units a person can be scoped to" and "the outlets"
+ * are the same list. Kept as a named helper so callers read intent rather than an identity filter.
+ */
 export function businessUnitsOf(units: readonly OrgUnit[]): OrgUnit[] {
-  return units.filter((u) => u.type === 'BUSINESS_UNIT')
+  return units.filter((u) => u.type === 'OUTLET')
 }
 
 /** A business unit's direct `OUTLET` children — the same shape `OrgUnitDetail` passes its tabs. */
 export function childOutletsOf(units: readonly OrgUnit[], unitId: string): OrgUnit[] {
-  return units.filter((u) => u.parentId === unitId && u.type === 'OUTLET')
+  // ADR 0070: the tree is flat, so no outlet has children — this is always empty. Kept (rather
+  // than ripped out of every caller) because "the units nested under this one" is still the
+  // question callers are asking, and the honest answer is now "none".
+  void units
+  void unitId
+  return []
 }
 
 /**

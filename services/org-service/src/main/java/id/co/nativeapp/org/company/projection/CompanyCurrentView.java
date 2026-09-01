@@ -39,5 +39,8 @@ public interface CompanyCurrentView {
    * The id of the first business: the earliest-created {@code BUSINESS_UNIT} org unit with {@code
    * parent_id IS NULL} for this company, matching the selection the create-company flow inserts.
    */
+  /** The company's immutable business vertical (ADR 0070) — lowercase module-key value. */
+  String getVertical();
+
   UUID getFirstBusinessId();
 }

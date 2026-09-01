@@ -37,7 +37,7 @@ public record OrgUnitResponse(
         orgUnit.getId(),
         orgUnit.getName(),
         orgUnit.getType().name(),
-        orgUnit.getVertical() == null ? null : orgUnit.getVertical().key(),
+        null, // ADR 0070: the vertical lives on the company now; kept for wire compat
         orgUnit.getParentId(),
         orgUnit.getLegalEmployerId(),
         UUID.fromString(orgUnit.getCompanyId()),

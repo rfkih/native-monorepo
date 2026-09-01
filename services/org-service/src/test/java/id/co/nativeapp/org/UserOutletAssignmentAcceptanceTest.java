@@ -58,7 +58,7 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
   private TenantSetup bootstrap(String name) {
     var r =
         companyService.createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "restaurant", ACTOR));
+            new CreateCompanyCommand(name, "IDR", "id", "restaurant", ACTOR));
     return new TenantSetup(r.company().getId(), r.firstBusiness().getId());
   }
 
@@ -69,7 +69,7 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
         ACTOR,
         () -> {
           OrgUnit outlet =
-              orgUnitService.create(new CreateOrgUnitCommand(outletName, "outlet", t.rootId()));
+              orgUnitService.create(new CreateOrgUnitCommand(outletName, "outlet", null));
           return outlet.getId();
         });
   }
@@ -193,24 +193,6 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
   // -------------------------------------------------------------------------
   // Validation: assigning a non-OUTLET org unit returns 400
   // -------------------------------------------------------------------------
-
-  @Test
-  void assigningABusinessUnitReturns400() throws Exception {
-    TenantSetup t = bootstrap("AcmeNonOutlet400");
-    UUID businessUnitId = t.rootId();
-
-    assertThatThrownBy(
-            () ->
-                TenantContext.callAs(
-                    t.companyId().toString(),
-                    ACTOR,
-                    () -> {
-                      assignmentWriter.replaceAssignments(USER_A, List.of(businessUnitId));
-                      return null;
-                    }))
-        .isInstanceOf(InvalidOutletAssignmentException.class)
-        .hasMessageContaining(businessUnitId.toString());
-  }
 
   @Test
   void assigningAnInactiveOutletReturns400() throws Exception {

@@ -2,6 +2,7 @@ package id.co.nativeapp.org.company.domain;
 
 import id.co.nativeapp.tenant.Auditable;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -130,6 +131,25 @@ public class Company extends Auditable {
   @Column(name = "company_code", nullable = false, updatable = false, length = 6)
   private String companyCode;
 
+  /**
+   * The company's business vertical — WHAT KIND of business it runs, which drives the POS surface
+   * its outlets get. REQUIRED and IMMUTABLE, exactly like {@link #baseCurrency} / {@link #country}
+   * ("Settings live at creation"); mapped {@code updatable = false} with no setter.
+   *
+   * <p>ADR 0070 moved it HERE from {@code org_unit.vertical}: with the division (business-unit)
+   * level gone there is no node left to hold it, and one company = one vertical = N outlets. A
+   * mixed-vertical owner creates a second company (ADR 0021) — which a separate legal entity would
+   * need anyway.
+   *
+   * <p>Persisted LOWERCASE via {@link VerticalConverter} (never {@code @Enumerated}, which would
+   * silently store {@code RESTAURANT}) — see {@link Vertical} for the casing decision. The V14
+   * column is NULLABLE by design: the non-null invariant lives in this aggregate, not in a CHECK
+   * (the house rule), which also keeps V14 expand-only for the ADR 0057 rollback gate.
+   */
+  @Convert(converter = VerticalConverter.class)
+  @Column(name = "vertical", updatable = false, length = 32)
+  private Vertical vertical;
+
   protected Company() {
     // for JPA
   }
@@ -153,6 +173,8 @@ public class Company extends Auditable {
    * @param primaryInterest optional signup interest (nullable — funnel data)
    * @param companyCode the 6-char login-namespace code (ADR 0054); IMMUTABLE — minted + collision-
    *     checked by the create flow, validated here to {@code [a-z2-9]{6}}
+   * @param vertical the business vertical (ADR 0070); REQUIRED and IMMUTABLE — a null is rejected
+   *     with an {@link IllegalArgumentException} (→ 400), the same posture as the currency
    */
   public Company(
       UUID id,
@@ -164,7 +186,8 @@ public class Company extends Auditable {
       String phone,
       String companySize,
       String primaryInterest,
-      String companyCode) {
+      String companyCode,
+      Vertical vertical) {
     this.id = Objects.requireNonNull(id, "id");
     this.name = requireNonBlank(name, "name");
     this.baseCurrency = requireValidCurrency(baseCurrency);
@@ -178,6 +201,7 @@ public class Company extends Auditable {
     this.companySize = companySize;
     this.primaryInterest = primaryInterest;
     this.companyCode = requireValidCompanyCode(companyCode);
+    this.vertical = requireVertical(vertical);
   }
 
   /**
@@ -202,7 +226,8 @@ public class Company extends Auditable {
         null,
         null,
         null,
-        deriveCompanyCode(id));
+        deriveCompanyCode(id),
+        Vertical.RESTAURANT);
   }
 
   /**
@@ -210,6 +235,20 @@ public class Company extends Auditable {
    * not an amount). Returns the normalized upper-case code; the persistence column is {@code
    * CHAR(3)}.
    */
+  /**
+   * The business vertical is REQUIRED (ADR 0070). Rejects null with an {@link
+   * IllegalArgumentException} — the same 400-mapped posture as an unknown currency — rather than
+   * letting a vertical-less company reach the DB, where the nullable V14 column would accept it and
+   * the console would have no POS surface to pick.
+   */
+  private static Vertical requireVertical(Vertical vertical) {
+    if (vertical == null) {
+      throw new IllegalArgumentException(
+          "A company requires a vertical (restaurant | carwash | barbershop)");
+    }
+    return vertical;
+  }
+
   private static String requireValidCurrency(String baseCurrency) {
     Objects.requireNonNull(baseCurrency, "baseCurrency");
     String code = baseCurrency.strip().toUpperCase(java.util.Locale.ROOT);
@@ -311,6 +350,14 @@ public class Company extends Auditable {
    */
   public String getCompanyCode() {
     return companyCode;
+  }
+
+  /**
+   * The company's immutable business vertical (ADR 0070). Never null on a row written by this
+   * aggregate; a pre-V14 row backfilled by the migration is equally non-null.
+   */
+  public Vertical getVertical() {
+    return vertical;
   }
 
   /** The company's plan tier ({@code FREE} | {@code FULL}) — see {@link #PLAN_TIERS}. */

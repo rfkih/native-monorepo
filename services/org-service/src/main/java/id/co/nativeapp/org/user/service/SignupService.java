@@ -102,7 +102,8 @@ public class SignupService {
     try {
       keycloak.assignRealmRole(keycloakUserId, "owner");
 
-      // Step 4: create the company + first business (new tenant) under the pre-generated id. This
+      // Step 4: create the company + its seeded outlet (new tenant) under the pre-generated id.
+      // This
       // calls into CompanyService, which opens a TenantContext scope over that id and delegates to
       // a @Transactional CompanyWriter, exactly as the tenant bootstrap always does. The base
       // currency is the DERIVED one — never anything the client sent.
@@ -115,7 +116,6 @@ public class SignupService {
               blankToNull(request.phone()),
               request.companySize(),
               request.primaryInterest(),
-              request.firstBusinessName(),
               request.vertical(),
               request.ownerEmail() // actor = the signing-up owner's email
               ),

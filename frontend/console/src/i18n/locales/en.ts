@@ -199,6 +199,13 @@ export const en = {
         button: 'Change password',
         hint: 'Opens a secure Keycloak page — you’ll return here once it’s done.',
       },
+      privacy: {
+        title: 'Privacy & account deletion',
+        body: 'How we handle your data, and how to have your account erased.',
+        policy: 'Privacy policy',
+        delete: 'Delete your account',
+        hint: 'Deletion is handled by email request and completed within 30 days. Employee accounts are closed by your employer.',
+      },
     },
   },
   landing: {
@@ -312,7 +319,7 @@ export const en = {
     quoteText:
       'We built Native because closing the books each month should not mean three spreadsheets and an all-nighter.',
     quoteAuthor: 'The Native team',
-    quoteRole: 'PT Native Aplikasi Indonesia · Jakarta',
+    quoteRole: 'Native · Indonesia',
     outcome1Value: '1 source',
     outcome1Label: 'Till, payroll, and journal data are no longer copied between systems',
     outcome2Value: '5 modules',
@@ -327,8 +334,11 @@ export const en = {
     ctaSecondary: 'Try it free',
     demoMailSubject: 'Native demo request',
     // footer
-    footerCompany: 'PT Native Aplikasi Indonesia',
-    footerAddress: 'Jl. Kemang Raya 41, Jakarta Selatan 12730',
+    // Native is operated by an INDIVIDUAL, not a company. This line is published on the public
+    // landing and must match the operator identity in public/privacy.html and the name Google
+    // verifies on the Play developer account — a fabricated PT here is a Play misrepresentation.
+    footerCompany: 'Native',
+    footerAddress: 'Operated by Rifki · Indonesia',
     fProductHeading: 'Product',
     fPos: 'Point of sale',
     fPayroll: 'Payroll',
@@ -343,7 +353,10 @@ export const en = {
     fDocs: 'Documentation',
     fStatus: 'Service status',
     fSales: 'Talk to sales',
-    footerRights: '© {{year}} PT Native Aplikasi Indonesia',
+    fLegalHeading: 'Legal',
+    fPrivacy: 'Privacy policy',
+    fDeleteAccount: 'Delete your account',
+    footerRights: '© {{year}} Native',
     footerPhotoCredit: 'Photos: Unsplash · licenses listed in SOURCES.md',
   },
   common: {
@@ -617,10 +630,10 @@ export const en = {
         overrideSet: 'Outlet image set',
       },
       divisions: {
-        heading: 'Divisions',
+        heading: 'Outlets',
         hint:
-          'Each division can use its own QRIS mode and image, or follow the company default below. An outlet then follows its division automatically, unless it has its own setting.',
-        empty: 'No divisions yet.',
+          'Each outlet can use its own QRIS mode and image, or follow the company default below.',
+        empty: 'No outlets yet.',
       },
       division: {
         modeHeading: 'QRIS mode for {{division}}',
@@ -1620,7 +1633,7 @@ export const en = {
       employees: 'Employees',
       people: 'App access',
       net: 'Net this period',
-      parentUnit: 'Division',
+      parentUnit: 'Company',
     },
     overview: {
       revenue: 'Revenue',
@@ -2406,8 +2419,8 @@ export const en = {
     retry: 'Retry',
   },
   org: {
-    title: 'Org tree',
-    subtitle: 'The organisational hierarchy for this company.',
+    title: 'Outlets',
+    subtitle: 'The selling locations this company operates.',
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to manage its org tree.',
     empty: 'No org units yet',
@@ -2425,9 +2438,7 @@ export const en = {
     inactive: 'Inactive',
     active: 'Active',
     type: {
-      BUSINESS_UNIT: 'Division',
       OUTLET: 'Outlet',
-      TEAM: 'Team',
     },
     addDialog: {
       title: 'Add org unit',

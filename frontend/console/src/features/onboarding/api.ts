@@ -11,7 +11,8 @@ export interface CreateCompanyRequest {
    */
   baseCurrency: string
   defaultLanguage: string
-  firstBusiness: { name: string; vertical: string }
+  /** The company's business vertical (ADR 0070 moved it up from the org unit). */
+  vertical: string
 }
 
 export interface CompanyResponse {
@@ -20,6 +21,7 @@ export interface CompanyResponse {
   baseCurrency: string
   defaultLanguage: string
   legalEmployerId: string
+  /** The id of the outlet the bootstrap seeded (ADR 0070: exactly one). */
   firstBusinessId: string
   /** Optional — an older server (pre P1 tier-mode) omits this column; callers fail OPEN to FULL
    *  via `toPlanTier` (lib/featureTier.ts), never hiding a feature on a read gap. */

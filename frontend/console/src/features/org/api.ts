@@ -11,18 +11,6 @@ export type Vertical = 'restaurant' | 'carwash' | 'barbershop'
 export interface OutletSummary {
   id: string
   name: string
-  /**
-   * The parent business unit's vertical (an outlet inherits it). Optional/nullable for wire
-   * compat; consumers FAIL OPEN to 'restaurant' on null (never brick a POS on cache staleness).
-   */
-  vertical?: string | null
-  /**
-   * ADR 0045 amendment (division-layer QRIS resolution): the outlet's parent business-unit id.
-   * Optional/nullable for wire compat with an older server that omits the column — consumers
-   * treat an absent value as "no division context", which degrades payment-settings resolution
-   * to outlet → company exactly as before the amendment (never a hard failure).
-   */
-  divisionId?: string | null
 }
 
 /**
@@ -46,16 +34,21 @@ export function useOutlets(companyId: string | null, actor = '') {
   })
 }
 
-/** Org unit types as returned by the backend (ADR 0012 — flat tree, no branch level). */
-export type OrgUnitType = 'BUSINESS_UNIT' | 'OUTLET' | 'TEAM'
+/**
+ * Org unit types as returned by the backend. Since ADR 0070 there is exactly ONE: the tree is flat
+ * (`company > outlet`), the division (business-unit) and team levels are gone, and every org unit
+ * is a top-level outlet. Kept as a named type because the wire still carries the field.
+ */
+export type OrgUnitType = 'OUTLET'
 
 /** Mirror of org-service OrgUnitListResponse. */
 export interface OrgUnit {
   id: string
   name: string
   type: OrgUnitType
-  /** Lowercase vertical key — non-null only for a BUSINESS_UNIT. */
+  /** Always null since ADR 0070 — the vertical lives on the COMPANY now. */
   vertical: string | null
+  /** Always null since ADR 0070 — an outlet has no parent. */
   parentId: string | null
   active: boolean
 }
@@ -65,30 +58,29 @@ export interface OrgUnitResponse {
   id: string
   name: string
   type: OrgUnitType
+  /** Always null since ADR 0070 (see {@link OrgUnit}). */
   vertical: string | null
+  /** Always null since ADR 0070 (see {@link OrgUnit}). */
   parentId: string | null
   active: boolean
 }
 
-/** POST /api/v1/org-units body (mirrors CreateOrgUnitRequest). */
+/**
+ * POST /api/v1/org-units body (mirrors CreateOrgUnitRequest). ADR 0070: an outlet is the only kind
+ * and has no parent, so `name` is the whole payload — the server defaults the type and rejects a
+ * supplied `parentId` with a 400.
+ */
 export interface CreateOrgUnitBody {
   name: string
-  /** Must match a valid OrgUnitType string; validated by the domain. */
-  type: string
-  parentId: string | null
-  /** REQUIRED for a business_unit, omitted otherwise (the server rejects it on outlet/team). */
-  vertical?: string
 }
 
 /**
  * PATCH /api/v1/org-units/{id} body (mirrors PatchOrgUnitRequest).
  * All fields are optional; only set the ones needed for the specific operation.
- * Use `reparent: true` + `parentId` to move; omit `reparent` to leave the parent unchanged.
+ * ADR 0070 removed the move/reparent operation — a flat tree has nowhere to move an outlet to.
  */
 export interface PatchOrgUnitBody {
   name?: string
-  reparent?: boolean
-  parentId?: string | null
   deactivate?: boolean
   reactivate?: boolean
 }
@@ -134,8 +126,8 @@ export function useCreateOrgUnit(params: { companyId: string; actor: string }) {
 }
 
 /**
- * DELETE /api/v1/org-units/{id} — permanently remove an EMPTY unit (and, for a business unit, its
- * empty child outlets). The server rejects a unit that still has an assigned login with 409
+ * DELETE /api/v1/org-units/{id} — permanently remove an EMPTY outlet. The server rejects an outlet
+ * that still has an assigned login with 409
  * (`org-unit-has-data`) — deactivate it instead. This is the "remove a mistake" path; a unit with
  * real data must be deactivated (preserving history).
  */

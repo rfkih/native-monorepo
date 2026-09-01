@@ -60,7 +60,7 @@ Each entry: **Responsibility · Owns · Publishes · Consumes · Notes.**
 - **Notes:** Injects authenticated context downstream. Redis-backed token-bucket rate limit per `company_id` + user.
 
 ### org-service
-- **Responsibility:** the tenant structure — owner/account, company (legal employer), business unit, outlet, team, and the org tree ([ADR 0012](docs/adr/0012-flatten-org-tree-remove-branch.md): flat tree, an outlet IS the physical selling location; every new business unit seeds one default outlet).
+- **Responsibility:** the tenant structure — owner/account, company (legal employer, immutable base currency + country + **vertical**), and its outlets ([ADR 0070](docs/adr/0070-flatten-org-tree-to-company-outlet.md): the org "tree" is FLAT — `company > outlet`, an outlet IS the physical selling location; the division (business-unit) and team levels are gone, and the bootstrap seeds one outlet named after the company. Supersedes [ADR 0012](docs/adr/0012-flatten-org-tree-remove-branch.md)). One login owns N companies ([ADR 0021](docs/adr/0021-multi-company-ownership.md)) — a second business is a second company, not a nested node.
 - **Owns:** `account`, `company` (incl. `base_currency` **[immutable]** and `default_language`, both set at creation), `org_unit` (self-referencing: type = business_unit | outlet | team), `legal_employer`.
 - **Publishes:** `CompanyCreated`, `OrgUnitCreated`, `OrgUnitChanged`.
 - **Consumes:** —
@@ -144,8 +144,8 @@ Each entry: **Responsibility · Owns · Publishes · Consumes · Notes.**
 
 | Event | Producer | Consumers | Key fields |
 |---|---|---|---|
-| `CompanyCreated` | org-service | entitlement, finance, employee, verticals | company_id, legal_employer_id, base_currency, default_language |
-| `OrgUnitCreated/Changed` | org-service | employee, verticals, finance | org_unit_id, type, parent_id, company_id |
+| `CompanyCreated` | org-service | entitlement, finance, employee, verticals | company_id, legal_employer_id, base_currency, default_language, vertical |
+| `OrgUnitCreated/Changed/Deleted` | org-service | employee, verticals, finance | org_unit_id, type, parent_id, company_id |
 | `EntitlementGranted/Revoked` | entitlement | shell, all services | company_id, module_key |
 | `EmployeeChanged` | employee | verticals | employee_id, company_id, status |
 | `AssignmentChanged` | employee | verticals, finance | employee_id, org_unit_id, reporting_to, effective_from/to |

@@ -35,8 +35,7 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
   void aDeepOrgTreeBuiltUnderTenantAIsInvisibleToTenantB() throws Exception {
     UUID companyA =
         companyService
-            .createCompany(
-                new CreateCompanyCommand("Alpha", "IDR", "id", "A HQ", "restaurant", "a"))
+            .createCompany(new CreateCompanyCommand("Alpha", "IDR", "id", "restaurant", "a"))
             .company()
             .getId();
     UUID rootA =
@@ -45,32 +44,32 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
             "a",
             () ->
                 companyService.findOrgUnitsForCurrentTenant().stream()
-                    .filter(u -> "BUSINESS_UNIT".equals(u.getType()))
+                    .filter(u -> "OUTLET".equals(u.getType()))
                     .findFirst()
                     .orElseThrow()
                     .getId());
 
-    // A builds outlet > team under its root business unit.
+    // ADR 0070: flat tree — A just adds more top-level outlets alongside its bootstrap one.
     List<UUID> aUnitIds =
         TenantContext.callAs(
             companyA.toString(),
             "a",
             () -> {
               OrgUnit outlet =
-                  orgUnitService.create(new CreateOrgUnitCommand("Outlet", "outlet", rootA));
+                  orgUnitService.create(new CreateOrgUnitCommand("Outlet", "outlet", null));
               OrgUnit team =
-                  orgUnitService.create(new CreateOrgUnitCommand("Team", "team", outlet.getId()));
+                  orgUnitService.create(new CreateOrgUnitCommand("Team", "outlet", null));
               return List.of(rootA, outlet.getId(), team.getId());
             });
 
     UUID companyB =
         companyService
-            .createCompany(new CreateCompanyCommand("Beta", "USD", "en", "B HQ", "restaurant", "b"))
+            .createCompany(new CreateCompanyCommand("Beta", "USD", "en", "restaurant", "b"))
             .company()
             .getId();
 
-    // Inside B's scope: B sees only its own root business unit + its seeded default outlet
-    // (ADR 0012), none of A's tree.
+    // Inside B's scope: B sees only its own bootstrap outlet (ADR 0070 seeds exactly one),
+    // none of A's outlets.
     List<UUID> visibleToB =
         TenantContext.callAs(
             companyB.toString(),
@@ -79,7 +78,7 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
                 companyService.findOrgUnitsForCurrentTenant().stream()
                     .map(OrgUnitView::getId)
                     .toList());
-    assertThat(visibleToB).hasSize(2);
+    assertThat(visibleToB).hasSize(1);
     assertThat(visibleToB).doesNotContainAnyElementsOf(aUnitIds);
   }
 }

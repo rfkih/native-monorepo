@@ -22,26 +22,20 @@ import {
   type ReviewRow,
 } from './companyForm'
 
-/** Company step — company name, first business name, and the vertical. */
+/** Company step — the company name and its vertical (ADR 0070: one name, not two). */
 export function CompanyFields({
   companyName,
-  firstBusinessName,
   vertical,
   onCompanyName,
-  onFirstBusinessName,
   onVertical,
   companyNameError,
-  firstBusinessNameError,
   autoFocus = true,
 }: {
   companyName: string
-  firstBusinessName: string
   vertical: string
   onCompanyName: (value: string) => void
-  onFirstBusinessName: (value: string) => void
   onVertical: (value: string) => void
   companyNameError?: string
-  firstBusinessNameError?: string
   autoFocus?: boolean
 }) {
   const { t } = useTranslation()
@@ -60,18 +54,6 @@ export function CompanyFields({
           value={companyName}
           onChange={(e) => onCompanyName(e.target.value)}
           placeholder={t('signup.companyNamePlaceholder')}
-        />
-      </Field>
-      <Field
-        label={t('signup.firstBusinessName')}
-        htmlFor="bizName"
-        error={firstBusinessNameError}
-      >
-        <TextInput
-          id="bizName"
-          value={firstBusinessName}
-          onChange={(e) => onFirstBusinessName(e.target.value)}
-          placeholder={t('signup.firstBusinessNamePlaceholder')}
         />
       </Field>
       <Field label={t('signup.vertical')} hint={t('signup.verticalHint')}>
@@ -232,7 +214,6 @@ export function CompanyReview({
   const baseCurrency = derivedCurrency(basics.country)
   const rows: ReviewRow[] = [
     { label: t('signup.companyName'), value: basics.companyName, step: COMPANY_STEP },
-    { label: t('signup.firstBusinessName'), value: basics.firstBusinessName, step: COMPANY_STEP },
     {
       label: t('signup.vertical'),
       value: t(`vertical.${basics.vertical}` as Parameters<typeof t>[0]),

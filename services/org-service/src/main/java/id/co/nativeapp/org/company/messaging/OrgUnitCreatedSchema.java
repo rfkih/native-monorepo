@@ -55,9 +55,10 @@ public final class OrgUnitCreatedSchema {
         "parent_id", orgUnit.getParentId() == null ? null : orgUnit.getParentId().toString());
     record.put("legal_employer_id", orgUnit.getLegalEmployerId().toString());
     record.put("name", orgUnit.getName());
-    // LOWERCASE module-key value (Vertical.key()) — deliberately NOT the .name() casing 'type'
-    // uses; null for outlet/team nodes.
-    record.put("vertical", orgUnit.getVertical() == null ? null : orgUnit.getVertical().key());
+    // ADR 0070: the vertical moved to the COMPANY, so an org unit no longer carries one.
+    // The field stays on the wire (nullable, defaulted) so no consumer needed a migration;
+    // it is now always null. Consumers read the vertical from CompanyCreated instead.
+    record.put("vertical", null);
     return record;
   }
 

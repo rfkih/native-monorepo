@@ -140,7 +140,7 @@ class SignupAcceptanceTest {
 
     // Company row was persisted (root business unit + its seeded default outlet, ADR 0012).
     assertThat(rowCountAsAdmin("company")).isEqualTo(1L);
-    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(2L);
+    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(1L);
 
     // Country-derived defaults + funnel fields landed on the company row (ADR 0025).
     String companyId = node.get("companyId").asString();

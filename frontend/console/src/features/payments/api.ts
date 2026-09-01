@@ -254,14 +254,14 @@ const STATIC_QR_LOADING: StaticQrPreviewState = { url: null, status: 'loading' }
 
 /**
  * Fetches the static QRIS image as an object URL for an `<img>` preview — GET
- * /api/v1/payment-settings/static-qr/image, company-scoped when `businessId`/`divisionId` are
+ * /api/v1/payment-settings/static-qr/image, company-scoped when `businessId` is
  * both null/undefined, otherwise resolved outlet → division → company server-side (ADR 0045
  * amendment). Same object-URL/revoke lifecycle as `features/expenses/api.ts`'s
  * `useReceiptUrlAtPath` (reimplemented here rather than imported across features — a Blob's
  * object-URL lifetime needs an explicit revoke tied to THIS component instance).
  *
  * `version` is a caller-bumped counter (e.g. incremented after a successful upload/delete) that
- * forces a re-fetch even though `businessId`/`divisionId`/`enabled` did not change — the image
+ * forces a re-fetch even though `businessId`/`enabled` did not change — the image
  * byte content can change behind the same URL. A 404 (no image on file) resolves to `'none'`, not
  * `'error'`.
  */
@@ -272,7 +272,6 @@ export function useStaticQrImageUrl(
   version = 0,
   /** ADR 0045 amendment: the outlet's parent business-unit id, when known — omitted/undefined on
    *  a company-scoped preview or when no division context is available. */
-  divisionId?: string | null,
 ): StaticQrPreviewState {
   const [state, setState] = useState<StaticQrPreviewState>(STATIC_QR_LOADING)
 
@@ -289,7 +288,6 @@ export function useStaticQrImageUrl(
           tenant: tenantOf(session),
           query: {
             businessId: businessId ?? undefined,
-            divisionId: divisionId ?? undefined,
           },
         })
         if (cancelled) return
@@ -311,7 +309,7 @@ export function useStaticQrImageUrl(
     }
     // Keyed on session.companyId/session.actor (not the session object) — the useReceiptUrlAtPath idiom.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.companyId, session.actor, businessId, divisionId, enabled, version])
+  }, [session.companyId, session.actor, businessId, enabled, version])
 
   // Not enabled → the idle/loading sentinel, same value the initial render already has — never
   // reset via setState-in-effect (mirrors features/expenses/api.ts's useReceiptUrlAtPath, which
@@ -324,30 +322,29 @@ export function useStaticQrImageUrl(
 // ---------------------------------------------------------------------------
 
 /**
- * GET /api/v1/payment-settings/effective?businessId=<uuid>&divisionId=<uuid> — the till's read:
+ * GET /api/v1/payment-settings/effective?businessId=<uuid> — the till's read:
  * the resolved mode for this outlet (ADR 0045 amendment: per-facet resolution outlet → division →
  * company — mode and `staticQrAvailable` walk the chain; `gateway` comes from the company only),
  * whether a static image is actually available, and the gateway's connection state. Cached briefly
  * (60s) since a payment surface may re-render often within one checkout session; `options.enabled`
  * lets the caller gate the fetch (e.g. never fetch while offline — a digital mode is unreachable
- * anyway); `options.divisionId` is the outlet's parent business-unit id, when known — omitted
+ * anyway). ADR 0070 removed the division rung: settings resolve outlet -> company — omitted
  * degrades to outlet → company resolution exactly as before this amendment.
  */
 export function useQrisEffective(
   session: CompanySession,
   businessId: string,
-  options: { enabled?: boolean; divisionId?: string | null } = {},
+  options: { enabled?: boolean } = {},
 ) {
   const enabled = (options.enabled ?? true) && !!businessId
-  const divisionId = options.divisionId ?? undefined
   return useQuery({
-    queryKey: ['payment-settings-effective', session.companyId, businessId, divisionId ?? null],
+    queryKey: ['payment-settings-effective', session.companyId, businessId],
     enabled,
     staleTime: 60_000,
     queryFn: () =>
       apiFetch<EffectiveSettings>('/api/v1/payment-settings/effective', {
         tenant: tenantOf(session),
-        query: { businessId, divisionId },
+        query: { businessId },
       }),
   })
 }
@@ -394,7 +391,6 @@ export interface CreateChargeInput {
   businessId: string
   /** ADR 0045 amendment: the outlet's parent business-unit id (→ null on the wire when absent) —
    *  advisory only, used for the GATEWAY mode gate; the charge itself is always company-scoped. */
-  divisionId?: string | null
   /** The tender RESIDUAL the vertical checkout returned — integer minor units (rule 8). */
   amountMinor: number
   currency: string
@@ -410,12 +406,12 @@ export function createCharge(
   session: CompanySession,
   input: CreateChargeInput,
 ): Promise<ChargeResponse | null> {
-  const { idempotencyKey, referenceId, divisionId, ...rest } = input
+  const { idempotencyKey, referenceId, ...rest } = input
   return apiFetch<ChargeResponse>('/api/v1/payment-charges', {
     method: 'POST',
     tenant: tenantOf(session),
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: { ...rest, referenceId: referenceId ?? null, divisionId: divisionId ?? null },
+    body: { ...rest, referenceId: referenceId ?? null },
   })
 }
 

@@ -16,7 +16,6 @@ import { canOps, canPayroll } from '@/lib/rolePreset'
 import { useSession } from '@/lib/session'
 import {
   businessUnitsOf,
-  childOutletsOf,
   defaultBusinessUnitId,
   visiblePeopleTabs,
   type PeopleTabKey,
@@ -81,7 +80,6 @@ export function PeoplePage() {
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
   const unitId = selectedUnitId ?? defaultBusinessUnitId(businessUnits, company?.businessId ?? null)
   const unit = businessUnits.find((u) => u.id === unitId) ?? null
-  const childOutlets = unit ? childOutletsOf(units, unit.id) : []
 
   if (!company) {
     return <EmptyState title={t('people.noCompany')} hint={t('people.noCompanyHint')} />
@@ -154,7 +152,6 @@ export function PeoplePage() {
       {tab === 'employees' ? (
         <EmployeesTab
           unit={unit}
-          childOutlets={childOutlets}
           units={units}
           companyId={company.companyId}
           actor={company.actor}

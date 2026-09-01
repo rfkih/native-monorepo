@@ -89,8 +89,7 @@ export function BillPaymentModal({
 
   // ADR 0045: the QRIS mode this outlet actually resolves to — bills have no offline mode, so
   // always fetched while mounted (see PaymentModal's twin doc for the fetch/degrade rules). ADR
-  // 0045 amendment: `divisionId` extends the resolution to outlet → division → company.
-  const qrisEffectiveQuery = useQrisEffective(session, session.businessId, { divisionId: session.divisionId })
+  const qrisEffectiveQuery = useQrisEffective(session, session.businessId)
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, false, currency)
   // ADR 0045 extension (bills): a full-bill QRIS tender resolving to GATEWAY drives the SAME
   // two-step dynamic-QR flow the order modal has (BillGatewayDigitalAttempt, below) instead of the
@@ -106,7 +105,7 @@ export function BillPaymentModal({
   // keeps the pre-existing demo "pending provider" badge (unchanged, unsplit-check behavior).
   const degradedFromGateway =
     qrisEffectiveQuery.data?.mode === 'GATEWAY' && qrisMode !== 'GATEWAY' && currency === 'IDR'
-  const staticQr = useStaticQrImageUrl(session, session.businessId, showStaticQr, 0, session.divisionId)
+  const staticQr = useStaticQrImageUrl(session, session.businessId, showStaticQr, 0)
   const staticQrSlot = showStaticQr ? (
     staticQr.status === 'ready' && staticQr.url ? (
       <img
@@ -339,7 +338,6 @@ function BillGatewayDigitalAttempt({
     vertical: 'restaurant',
     paymentId: pendingPayment ? pendingPayment.paymentId : null,
     businessId: session.businessId,
-    divisionId: session.divisionId,
     amountMinor: pendingPayment?.amountMinor ?? chargeMinor,
     currency,
   })

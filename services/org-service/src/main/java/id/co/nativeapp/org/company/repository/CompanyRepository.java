@@ -54,12 +54,12 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
 
   /**
    * The single company visible to the bound tenant, projected to {@link CompanyCurrentView} —
-   * includes the {@code first_business_id}: the id of the earliest-created {@code BUSINESS_UNIT}
-   * org unit with {@code parent_id IS NULL}, matching the selection the create-company flow
-   * inserts. RLS constrains both the {@code company} and the joined {@code org_unit} to the bound
-   * tenant; no manual {@code WHERE company_id} is needed or written (rule 5). Returns {@link
-   * Optional#empty()} when no company exists for the bound tenant (e.g. the tenant GUC is set but
-   * the row has not been created yet).
+   * includes the {@code first_business_id}: the id of the earliest-created {@code OUTLET} org unit
+   * with {@code parent_id IS NULL}, matching the selection the create-company flow inserts. RLS
+   * constrains both the {@code company} and the joined {@code org_unit} to the bound tenant; no
+   * manual {@code WHERE company_id} is needed or written (rule 5). Returns {@link Optional#empty()}
+   * when no company exists for the bound tenant (e.g. the tenant GUC is set but the row has not
+   * been created yet).
    *
    * <p>The subquery selects the single first business by ordering all root {@code BUSINESS_UNIT}
    * nodes by {@code created_at} ascending and taking the first, replicating the implicit ordering
@@ -76,13 +76,13 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
                  c.legal_employer_id AS legal_employer_id,
                  c.plan_tier         AS plan_tier,
                  c.company_code      AS company_code,
+                 c.vertical          AS vertical,
                  fb.id               AS first_business_id
             FROM company c
-            JOIN (
+            LEFT JOIN (
                    SELECT ou.id
                      FROM org_unit ou
-                    WHERE ou.type      = 'BUSINESS_UNIT'
-                      AND ou.parent_id IS NULL
+                    WHERE ou.type = 'OUTLET'
                     ORDER BY ou.created_at ASC
                     LIMIT 1
                  ) fb ON true

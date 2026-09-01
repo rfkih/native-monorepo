@@ -157,7 +157,7 @@ class SecuredCompanyBootstrapTest {
     assertThat(body).contains("\"defaultLanguage\":\"id\"");
     assertThat(rowCountAsAdmin("company")).isEqualTo(1L);
     // Root business unit + its seeded default outlet (ADR 0012).
-    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(2L);
+    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(1L);
   }
 
   @Test

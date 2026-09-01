@@ -44,7 +44,7 @@ class CreateCompanyAcceptanceTest extends PostgresRlsTestBase {
   void creatingACompanyPersistsCurrencyAndLanguageAndWritesExactlyOneCompanyCreated()
       throws Exception {
     CreateCompanyCommand command =
-        new CreateCompanyCommand("Warung Padang", "IDR", "id", "Main Outlet", "restaurant", ACTOR);
+        new CreateCompanyCommand("Warung Padang", "IDR", "id", "restaurant", ACTOR);
 
     // No TenantContext scope here — create-company bootstraps its own tenant.
     CreateCompanyResult result = companyService.createCompany(command);
@@ -63,13 +63,14 @@ class CreateCompanyAcceptanceTest extends PostgresRlsTestBase {
 
     // The first business persisted as an org unit under the new tenant.
     assertThat(result.firstBusiness().getId()).isNotNull();
-    assertThat(result.firstBusiness().getName()).isEqualTo("Main Outlet");
+    assertThat(result.firstBusiness().getName()).isEqualTo("Warung Padang");
 
     // The rows landed under the new tenant (counted over the admin BYPASSRLS conn,
     // since company/org_unit are FORCE RLS and have no session GUC on a raw query).
     assertThat(rowCountAsAdmin("company")).isEqualTo(1L);
     // Root business unit + its seeded default outlet (ADR 0012).
-    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(2L);
+    // ADR 0070: the bootstrap seeds exactly ONE node — the company's first outlet.
+    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(1L);
 
     // EXACTLY ONE CompanyCreated in the outbox.
     List<Map<String, Object>> rows = outboxRows();

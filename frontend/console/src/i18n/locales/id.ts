@@ -194,6 +194,13 @@ export const id = {
         button: 'Ubah kata sandi',
         hint: 'Membuka halaman aman Keycloak — Anda akan kembali ke sini setelah selesai.',
       },
+      privacy: {
+        title: 'Privasi & penghapusan akun',
+        body: 'Cara kami menangani data Anda, dan cara meminta akun Anda dihapus.',
+        policy: 'Kebijakan privasi',
+        delete: 'Hapus akun Anda',
+        hint: 'Penghapusan diproses lewat permintaan email dan selesai dalam 30 hari. Akun karyawan ditutup oleh perusahaan Anda.',
+      },
     },
   },
   app: {
@@ -300,7 +307,7 @@ export const id = {
     quoteText:
       'Kami membangun Native karena tutup buku bulanan tidak seharusnya berarti tiga spreadsheet dan lembur di akhir bulan.',
     quoteAuthor: 'Tim Native',
-    quoteRole: 'PT Native Aplikasi Indonesia · Jakarta',
+    quoteRole: 'Native · Indonesia',
     outcome1Value: '1 sumber',
     outcome1Label: 'Data kasir, gaji, dan jurnal tidak lagi disalin antar sistem',
     outcome2Value: '5 modul',
@@ -313,8 +320,8 @@ export const id = {
     ctaPrimary: 'Jadwalkan demo',
     ctaSecondary: 'Coba gratis',
     demoMailSubject: 'Permintaan demo Native',
-    footerCompany: 'PT Native Aplikasi Indonesia',
-    footerAddress: 'Jl. Kemang Raya 41, Jakarta Selatan 12730',
+    footerCompany: 'Native',
+    footerAddress: 'Dioperasikan oleh Rifki · Indonesia',
     fProductHeading: 'Produk',
     fPos: 'Kasir',
     fPayroll: 'Payroll',
@@ -329,7 +336,10 @@ export const id = {
     fDocs: 'Dokumentasi',
     fStatus: 'Status layanan',
     fSales: 'Hubungi sales',
-    footerRights: '© {{year}} PT Native Aplikasi Indonesia',
+    fLegalHeading: 'Legal',
+    fPrivacy: 'Kebijakan privasi',
+    fDeleteAccount: 'Hapus akun Anda',
+    footerRights: '© {{year}} Native',
     footerPhotoCredit: 'Foto: Unsplash · lisensi tercantum di SOURCES.md',
   },
   common: {
@@ -603,10 +613,10 @@ export const id = {
         overrideSet: 'Gambar gerai diatur',
       },
       divisions: {
-        heading: 'Divisi',
+        heading: 'Gerai',
         hint:
-          'Setiap divisi dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah. Gerai kemudian otomatis mengikuti divisinya, kecuali punya pengaturan sendiri.',
-        empty: 'Belum ada divisi.',
+          'Setiap gerai dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah.',
+        empty: 'Belum ada gerai.',
       },
       division: {
         modeHeading: 'Mode QRIS untuk {{division}}',
@@ -1609,7 +1619,7 @@ export const id = {
       employees: 'Karyawan',
       people: 'Akses aplikasi',
       net: 'Neto periode ini',
-      parentUnit: 'Divisi',
+      parentUnit: 'Perusahaan',
     },
     overview: {
       revenue: 'Pendapatan',
@@ -2387,8 +2397,8 @@ export const id = {
     retry: 'Coba lagi',
   },
   org: {
-    title: 'Struktur organisasi',
-    subtitle: 'Hierarki organisasi untuk perusahaan ini.',
+    title: 'Gerai',
+    subtitle: 'Lokasi penjualan yang dioperasikan perusahaan ini.',
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk mengelola struktur organisasinya.',
     empty: 'Belum ada unit organisasi',
@@ -2406,9 +2416,7 @@ export const id = {
     inactive: 'Tidak aktif',
     active: 'Aktif',
     type: {
-      BUSINESS_UNIT: 'Divisi',
       OUTLET: 'Gerai',
-      TEAM: 'Tim',
     },
     addDialog: {
       title: 'Tambah unit organisasi',

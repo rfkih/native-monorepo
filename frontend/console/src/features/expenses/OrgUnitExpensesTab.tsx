@@ -31,13 +31,11 @@ const RECENT_SIZE = 5
 
 export function OrgUnitExpensesTab({
   unit,
-  childOutlets,
   companyId,
   actor,
   baseCurrency,
 }: {
   unit: OrgUnit
-  childOutlets: OrgUnit[]
   companyId: string
   actor: string
   baseCurrency: string
@@ -46,11 +44,8 @@ export function OrgUnitExpensesTab({
   const locale = localeOf(i18n.language)
   const [period, setPeriod] = useState(currentPeriod())
 
-  // BU scope = the unit + its child outlets; an outlet scopes to itself only (EmployeesTab idiom).
-  const unitIds = useMemo(
-    () => (unit.type === 'BUSINESS_UNIT' ? [unit.id, ...childOutlets.map((o) => o.id)] : [unit.id]),
-    [unit, childOutlets],
-  )
+  // ADR 0070: flat tree — a unit IS an outlet, so its scope is just itself.
+  const unitIds = useMemo(() => [unit.id], [unit])
   const scope = unitIds.join(',')
 
   const summary = useOrgUnitExpenseSummary({
