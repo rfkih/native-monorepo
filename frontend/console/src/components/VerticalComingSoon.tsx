@@ -1,6 +1,6 @@
 /**
  * VerticalComingSoon — the branded panel a POS surface shows when the effective outlet belongs
- * to a business unit whose vertical has no working POS yet (carwash / barbershop). Embeds the
+ * to a company whose vertical has no working POS yet (carwash / barbershop). Embeds the
  * OutletPicker so a user assigned to outlets of several verticals can switch to a restaurant
  * outlet without leaving the surface — never trapped.
  */

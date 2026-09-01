@@ -274,7 +274,7 @@ const EMPTY_MANAGER_PAGE: PageResponse<ExpenseClaimSummary> = {
  * SUBMITTED-first (pending work can never fall off the end of a page). `status` is an exact
  * {@link ClaimStatus} filter (omit for every status). `orgUnitId` is bound server-side to a
  * `List<UUID>` — the manager filter dropdown (ExpensesList) passes one id, but the org-unit hub's
- * recent-claims panel (OrgUnitExpensesTab) passes a comma-joined multi-id BU scope, the SAME
+ * recent-claims panel (OrgUnitExpensesTab) passes the outlet id as its scope, the SAME
  * `useEmployees` idiom {@link useOrgUnitExpenseSummary} also uses.
  */
 export function useClaims(
@@ -357,7 +357,7 @@ const EMPTY_SUMMARY: OrgUnitExpenseSummary = {
 /**
  * GET /api/v1/expense-claims/summary?orgUnitIds=&period= — the org-unit hub's Expenses tab rollup:
  * per-category spend (APPROVED/REIMBURSED only — the recognised subset), claim counts by status,
- * and the approved+reimbursed grand total. `orgUnitIds` follows the `useEmployees` BU-rollup idiom
+ * and the approved+reimbursed grand total. `orgUnitIds` follows the `useEmployees` scoping idiom
  * (features/hr/api.ts): the caller passes [buId, ...childOutletIds] from the org tree it already
  * has, joined into one comma-separated value the server's `List<UUID>` param binds transparently —
  * empty/omitted = the whole tenant. `period` is an optional `YYYY-MM` filter.

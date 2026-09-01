@@ -1,22 +1,14 @@
 /**
- * PaymentSettings — `/settings/payments`, OWNER-ONLY (ADR 0045; division layer added by the ADR
- * 0045 amendment). The QRIS payment-mode console.
+ * PaymentSettings — `/settings/payments`, OWNER-ONLY (ADR 0045). The QRIS payment-mode console.
  *
- * A company has ONE QRIS mode (MANUAL/STATIC/GATEWAY). Any org UNIT — a division (business unit)
- * or an outlet — may carry its own MODE override (mode only — gateway credentials are
- * company-level) and its own STATIC image override, resolved **outlet → division → company**: an
- * outlet without its own setting falls back to its division's, and a division without its own
- * falls back to the company's.
+ * A company has ONE QRIS mode (MANUAL/STATIC/GATEWAY). Any OUTLET may carry its own MODE override
+ * (ADR 0070 removed the division tier that used to sit between the two; mode only — credentials are
+ * company-level) and its own STATIC image override, resolved **outlet → company**: an outlet
+ * without its own setting falls back to the company default.
  *
- * DIVISION-FIRST layout (owner request, ADR 0045 amendment): the primary list is now grouped BY
- * DIVISION. Each division gets its own accordion editor (mode incl. an explicit "inherit company
- * default" choice, its own static image) with its outlets nested underneath — each outlet's own
- * editor is unchanged in shape, but its "inherit" choice and effective-state badge now reflect the
- * REAL three-level chain: falls back to the division's setting when the division has one, else the
- * company's. Divisions + outlet parentage come from the org tree (`useOrgUnits`, the same read the
- * org pages use — `features/org/OrgTree.tsx`), joined client-side against the owner settings rows
- * by `unitId`. The company mode/image/gateway cards stay at the bottom, framed as the fallback
- * every division (and, through it, every outlet) without its own setting ultimately uses.
+ * FLAT layout (ADR 0070): the list is simply every active outlet, each with its own accordion
+ * editor (mode incl. an explicit "inherit company default", plus its own static image). The
+ * company card below is the fallback every outlet without its own setting ultimately uses.
  *
  * Copies the exact idiom of `features/settings/FeaturesSettings.tsx`: its own minimal topbar
  * (this route is registered OUTSIDE the dashboard Shell in App.tsx, owner-gated), and the
@@ -75,7 +67,7 @@ import type { QrisMode } from './effectiveMode'
 const STATIC_MAX_BYTES = 2 * 1024 * 1024
 
 /** The human label for a QRIS mode ("Manual" / "Your own QRIS code" / "Payment gateway"), shared
- *  by the company mode picker and every division/outlet editor/badge. */
+ *  by the company mode picker and every outlet editor/badge. */
 function modeLabel(t: TFunction, mode: QrisMode): string {
   return t(`settings.payments.mode.${mode.toLowerCase()}` as Parameters<typeof t>[0])
 }
@@ -177,8 +169,8 @@ function PaymentSettingsLoaded({
 
   return (
     <>
-      {/* PRIMARY: every division, its effective QRIS state, and its nested outlets. */}
-      <DivisionsSection
+      {/* PRIMARY: every outlet and its effective QRIS state. */}
+      <OutletsSection
         session={session}
         companyMode={currentMode}
         companyGateway={gateway}
@@ -186,7 +178,7 @@ function PaymentSettingsLoaded({
         unitOverrides={data.outletOverrides}
       />
 
-      {/* FALLBACK: the company default every division (and, through it, every outlet) without its
+      {/* FALLBACK: the company default every outlet without its
           own setting uses. */}
       <div>
         <h2 className="font-display text-lg font-bold text-ink">{t('settings.payments.company.heading')}</h2>
@@ -200,10 +192,10 @@ function PaymentSettingsLoaded({
 }
 
 // ---------------------------------------------------------------------------
-// Divisions — the primary grouping (ADR 0045 amendment)
+// Outlets — the per-unit overrides
 // ---------------------------------------------------------------------------
 
-function DivisionsSection({
+function OutletsSection({
   session,
   companyMode,
   companyGateway,
@@ -232,8 +224,8 @@ function DivisionsSection({
   return (
     <Card className="flex flex-col gap-5 p-6">
       <div>
-        <h2 className="font-display text-lg font-bold text-ink">{t('settings.payments.divisions.heading')}</h2>
-        <p className="mt-1 text-sm text-ink-3">{t('settings.payments.divisions.hint')}</p>
+        <h2 className="font-display text-lg font-bold text-ink">{t('settings.payments.outlets.heading')}</h2>
+        <p className="mt-1 text-sm text-ink-3">{t('settings.payments.outlets.hint')}</p>
       </div>
 
       {outlets.length > 0 ? (
@@ -258,7 +250,7 @@ function DivisionsSection({
           <Skeleton className="h-16 rounded-2xl" />
         </div>
       ) : (
-        <p className="text-sm text-ink-3">{t('settings.payments.divisions.empty')}</p>
+        <p className="text-sm text-ink-3">{t('settings.payments.outlets.empty')}</p>
       )}
     </Card>
   )
@@ -522,7 +514,7 @@ function ModePickerCard({
   )
 }
 
-/** The company-level static-QR card — the fallback image every division/outlet without its own
+/** The company-level static-QR card — the fallback image every outlet without its own
  *  uses. */
 function CompanyStaticImageCard({
   session,
@@ -551,15 +543,12 @@ function CompanyStaticImageCard({
 
 /**
  * The static-QR preview + upload/replace/remove controls — shared by the company card and every
- * division/outlet editor.
+ * outlet editor.
  *
- * `unitId` is the PUT/DELETE target for upload/remove: null for the company, else the division or
- * outlet id being edited. `previewBusinessId`/`previewDivisionId` drive the GET preview's own
- * outlet → division → company resolution (ADR 0045 amendment) — for the company card both are
- * omitted (company-scoped); for a division editor only `previewDivisionId` (=`unitId`) is set; for
- * an outlet editor both are set (`previewBusinessId` = the outlet id, `previewDivisionId` = its
- * parent division id) so the preview shows exactly what the till would resolve, not just this
- * unit's own uploaded bytes.
+ * `unitId` is the PUT/DELETE target for upload/remove: null for the company, else the outlet id
+ * being edited. `previewBusinessId` drives the GET preview's own outlet → company resolution —
+ * omitted for the company card (company-scoped), set to the outlet id for an outlet editor, so the
+ * preview shows exactly what the till would resolve rather than just this unit's uploaded bytes.
  */
 function StaticImageEditor({
   session,
@@ -570,7 +559,6 @@ function StaticImageEditor({
   session: CompanySession
   unitId: string | null
   previewBusinessId?: string
-  previewDivisionId?: string | null
   hasImage: boolean
 }) {
   const { t } = useTranslation()

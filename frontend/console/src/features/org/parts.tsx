@@ -46,7 +46,7 @@ export function OrgUnitTypeBadge({ type }: { type: OrgUnitType }) {
 
 /**
  * Vertical badge pill — renders nothing for a null vertical (outlet/team nodes inherit their
- * business unit's). Restaurant gets the brand tone; other verticals the info tint.
+ * company's). Restaurant gets the brand tone; other verticals the info tint.
  */
 export function VerticalBadge({ vertical }: { vertical: string | null }) {
   const { t } = useTranslation()
@@ -315,9 +315,10 @@ export function ReactivateDialog({
 }
 
 /**
- * Ids of `rootId` and all its transitive descendants, from the flat org-unit list — the same
- * subtree the server cascade-deletes. A breadth-first walk over `parentId`; the tree is at most
- * three levels (business_unit > outlet > team, ADR 0012), so it terminates quickly.
+ * Ids of `rootId` and all its transitive descendants, from the flat org-unit list — the same scope
+ * the server deletes. Since ADR 0070 nothing nests (`parentId` is always null), so this is always
+ * just `[rootId]`; the walk is kept because it is the honest expression of "the delete scope" and
+ * costs nothing on a list this size.
  */
 function collectSubtreeIds(rootId: string, allUnits: OrgUnit[]): string[] {
   const ids = [rootId]
@@ -335,17 +336,16 @@ function collectSubtreeIds(rootId: string, allUnits: OrgUnit[]): string[] {
 }
 
 /**
- * Permanent-delete confirmation dialog. Hard-deletes an EMPTY unit and its subtree (a business
- * unit with its outlets, or an outlet with its teams — every BU seeds one outlet, ADR 0012). It first checks the unit is empty and, if
- * not, refuses and points the user to deactivate instead (which preserves history):
+ * Permanent-delete confirmation dialog. Hard-deletes an EMPTY outlet (ADR 0070: nothing nests, so
+ * there is no subtree to take with it). It first checks the outlet is empty and, if not, refuses
+ * and points the user to deactivate instead (which preserves history):
  *
  * <ul>
- *   <li><em>assigned logins</em> — read from {@code useUnitUsers} (for a BU this already spans its
- *       child outlets). The backend independently enforces this guard with a 409, so a race after
- *       the check is caught and surfaced.
- *   <li><em>employees</em> — read from {@code useEmployees} scoped to the unit and (for a BU) its
- *       child outlets. Employees live in another service, so this guard is console-only (no sync
- *       cross-service call, rule 2); deleting would orphan their HR assignment rows.
+ *   <li><em>assigned logins</em> — read from {@code useUnitUsers}. The backend independently
+ *       enforces this guard with a 409, so a race after the check is caught and surfaced.
+ *   <li><em>employees</em> — read from {@code useEmployees} scoped to the outlet. Employees live in
+ *       another service, so this guard is console-only (no sync cross-service call, rule 2);
+ *       deleting would orphan their HR assignment rows.
  * </ul>
  *
  * This is the "remove a mistake" path — a unit with real data is deactivated, never deleted.
@@ -366,10 +366,7 @@ export function DeletePermanentlyDialog({
   const { t } = useTranslation()
   const mutation = useDeleteOrgUnit({ companyId, actor })
 
-  // Deleting a unit cascades its entire subtree on the server, so the emptiness check spans the
-  // unit AND every descendant (a BU always has ≥1 child outlet — ADR 0012 — so "has children" is
-  // never a block on its own; only descendants that carry data are). Collect the subtree ids from
-  // the already-loaded flat tree, matching the server's cascade scope.
+  // The delete scope, matching the server's: since ADR 0070 that is the outlet alone.
   const scopeIds = collectSubtreeIds(unit.id, allUnits)
 
   const employeesQuery = useEmployees({ companyId, actor, orgUnitIds: scopeIds, enabled: true })

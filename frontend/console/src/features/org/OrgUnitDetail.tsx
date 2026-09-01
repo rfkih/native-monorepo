@@ -50,7 +50,7 @@ import {
 } from './parts'
 
 /**
- * Org-unit hub — the Odoo-style record detail page at /org/:unitId for a BUSINESS_UNIT or
+ * Outlet hub — the Odoo-style record detail page at /org/:unitId for an
  * OUTLET: breadcrumb trail, sheet header (name + type + status + actions), a smart-button row, and
  * notebook tabs (Overview P&L / Outlets / Employees / App access / Expenses / Attendance / Payroll).
  * All copy via i18n (rule 9); money via formatMoney minor units + Intl.
@@ -153,7 +153,7 @@ export function OrgUnitDetail() {
     actor: company?.actor ?? '',
     enabled: !!company && isDetailType,
   })
-  // HR headcount for the smart tile — BU scope = the unit + its child outlets (client rollup).
+  // HR headcount for the smart tile — scope is the outlet itself (ADR 0070: nothing nests).
   const hrUnitIds = isBu ? [unitId ?? '', ...childOutlets.map((o) => o.id)] : [unitId ?? '']
   const hrQuery = useEmployees({
     companyId: company?.companyId ?? '',
@@ -643,7 +643,7 @@ function ContributionRow({
 }
 
 // ---------------------------------------------------------------------------
-// Outlets tab (BU only)
+// Outlets tab
 // ---------------------------------------------------------------------------
 
 function OutletsTab({
@@ -784,7 +784,7 @@ function PeopleTab({
     )
   }
 
-  // Group assignment rows by user; a user may span several outlets under a BU.
+  // Group assignment rows by user; a user may be assigned to several outlets.
   const byUser = new Map<string, { outlets: string[] }>()
   for (const row of rows) {
     const entry = byUser.get(row.userId) ?? { outlets: [] }

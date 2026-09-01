@@ -10,11 +10,16 @@
  *  - Change password: Keycloak owns the credential entirely — the button just opens Keycloak's
  *    own secure change-password page via `auth.changePassword()` (no form, no password field ever
  *    touches this app).
+ *  - Privacy & account deletion: Google Play requires an app that lets users create an account to
+ *    expose a deletion route from INSIDE the app as well as on the public web. This screen is that
+ *    route for both shells. Both targets are STATIC files served by the CONSOLE image, so they
+ *    are plain <a> (not react-router <Link>) pointed at the absolute PRIVACY_URL /
+ *    DELETE_ACCOUNT_URL — see lib/config.ts for why relative would break in the Employee app.
  */
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { KeyRound, Lock, LogOut } from 'lucide-react'
+import { KeyRound, Lock, LogOut, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, TextInput } from '@/components/ui/Field'
@@ -22,7 +27,7 @@ import { Wordmark } from '@/components/Wordmark'
 import { ScreenHeader } from '@/components/mobile/ScreenHeader'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useAuth } from '@/lib/authContext'
-import { AUTH_MODE } from '@/lib/config'
+import { AUTH_MODE, DELETE_ACCOUNT_URL, PRIVACY_URL } from '@/lib/config'
 import { useSetMyOperatorPin } from './api'
 
 const PIN_PATTERN = /^[0-9]{4,6}$/
@@ -72,6 +77,7 @@ export function MeAccount() {
         <div className="mt-6 flex flex-col gap-5 max-sm:mt-4">
           <ChangePinCard companyId={companyId} actor={actor} />
           <ChangePasswordCard />
+          <PrivacyCard />
         </div>
       </main>
     </div>
@@ -198,6 +204,38 @@ function ChangePasswordCard() {
           {t('me.account.password.hint')}
         </p>
       </div>
+    </Card>
+  )
+}
+
+function PrivacyCard() {
+  const { t } = useTranslation()
+  const link =
+    'rounded-xl px-3 py-2 text-sm font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-emerald'
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-tint text-emerald-2">
+          <ShieldCheck className="size-5" aria-hidden="true" />
+        </span>
+        <div>
+          <h2 className="font-display text-base font-semibold text-ink">
+            {t('me.account.privacy.title')}
+          </h2>
+          <p className="text-xs text-ink-3">{t('me.account.privacy.body')}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-1">
+        <a className={link} href={PRIVACY_URL}>
+          {t('me.account.privacy.policy')}
+        </a>
+        <a className={link} href={DELETE_ACCOUNT_URL}>
+          {t('me.account.privacy.delete')}
+        </a>
+      </div>
+      <p className="mt-2.5 text-xs leading-relaxed text-ink-3">{t('me.account.privacy.hint')}</p>
     </Card>
   )
 }

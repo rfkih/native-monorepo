@@ -4,7 +4,7 @@
  * breakdown (a simple bar list — mirrors OrgUnitDetail's `ContributionRow`; no chart library is
  * used anywhere in the org hub, so this doesn't introduce one), the 5 most recent claims scoped to
  * this unit (reusing the E7 manager list hook, `useClaims`), and a link to the full `/expenses`
- * console. BU scope = the unit + its child outlets — the SAME org-unit descendant-ids composition
+ * console. Scope = the outlet itself (ADR 0070: nothing nests) — the SAME org-unit id composition
  * `EmployeesTab`/`PayrollTab` already use (features/hr/EmployeesTab.tsx).
  */
 

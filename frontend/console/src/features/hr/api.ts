@@ -240,7 +240,7 @@ interface TenantParams {
 // ---------------------------------------------------------------------------
 
 /**
- * GET /api/v1/employees?orgUnitIds= — the unit-scoped HR list. The BU rollup is CLIENT-computed:
+ * GET /api/v1/employees?orgUnitIds= — the outlet-scoped HR list. The scope is CLIENT-computed:
  * the caller passes [buId, ...childOutletIds] from the org tree it already has (the projection has
  * no parent_id). Empty orgUnitIds = the whole tenant.
  */

@@ -439,7 +439,7 @@ export const id = {
   shell: {
     switchCompany: 'Ganti perusahaan',
     yourBusinesses: 'Perusahaan Anda',
-    addBusiness: 'Tambah perusahaan atau divisi',
+    addBusiness: 'Tambah perusahaan',
   },
   dashboardPhone: {
     perOutlet: 'Per outlet',
@@ -612,19 +612,6 @@ export const id = {
         usingCompany: 'Memakai gambar perusahaan',
         overrideSet: 'Gambar gerai diatur',
       },
-      divisions: {
-        heading: 'Gerai',
-        hint:
-          'Setiap gerai dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah.',
-        empty: 'Belum ada gerai.',
-      },
-      division: {
-        modeHeading: 'Mode QRIS untuk {{division}}',
-        gatewayHint: 'Transaksi divisi ini memakai koneksi Midtrans perusahaan:',
-        inheritConfirmMessage:
-          'Kembali ke default perusahaan? Gambar QRIS khusus divisi ini akan dihapus.',
-        imageOwnSet: 'Gambar divisi diatur',
-      },
       outlets: {
         heading: 'Gerai',
         hint: 'Setiap gerai dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah.',
@@ -633,18 +620,14 @@ export const id = {
       outlet: {
         effectiveOwn: 'Mode sendiri: {{mode}}',
         effectiveInherits: 'Mengikuti default perusahaan ({{mode}})',
-        effectiveInheritsDivision: 'Mengikuti default divisi ({{mode}})',
         modeHeading: 'Mode QRIS untuk {{outlet}}',
         inheritOption: 'Ikuti default perusahaan',
         inheritDesc: 'Mengikuti default perusahaan, saat ini {{mode}}.',
-        inheritOptionDivision: 'Ikuti default divisi',
-        inheritDescDivision: 'Mengikuti default divisi, saat ini {{mode}}.',
         inheritConfirmMessage:
           'Kembali ke default perusahaan? Gambar QRIS khusus outlet ini akan dihapus.',
         inheritConfirmYes: 'Ya, kembali ke default',
         gatewayHint: 'Transaksi gerai ini memakai koneksi Midtrans perusahaan:',
         imageHeading: 'Gambar QRIS',
-        imageInheritsDivision: 'Memakai gambar divisi',
       },
       company: {
         heading: 'Default perusahaan',
@@ -729,21 +712,10 @@ export const id = {
   onboarding: {
     title: 'Buat perusahaan',
     addTitle: 'Tambah perusahaan baru',
-    chooser: {
-      title: 'Apa yang ingin Anda tambahkan?',
-      subtitle:
-        'Perusahaan membayar pajaknya sendiri dan memiliki pembukuan sendiri. Divisi beroperasi di dalam perusahaan yang sudah ada — pembukuan dan pelaporan pajaknya menyatu.',
-      companyOption: 'Perusahaan terpisah',
-      companyOptionHint: 'Badan usaha sendiri (NPWP sendiri) — pembukuan, pajak, dan laporan terpisah.',
-      divisionOption: 'Divisi dari {{company}}',
-      divisionOptionHint:
-        'Badan usaha yang sama — pembukuan dan pajak menyatu; punya gerai dan laporan laba-ruginya sendiri.',
-    },
     subtitle:
-      'Mata uang dasar dan bahasa ditetapkan sekarang — keduanya dikunci saat pembuatan dan tidak dapat diubah lagi.',
+      'Mata uang, bahasa, dan jenis bisnis ditetapkan sekarang — keduanya dikunci saat pembuatan dan tidak dapat diubah lagi.',
     stepCompany: 'Perusahaan',
     stepSettings: 'Pengaturan',
-    stepBusiness: 'Divisi pertama',
     stepReview: 'Tinjau',
     companyName: 'Nama perusahaan',
     companyNamePlaceholder: 'mis. Nusantara Holdings',
@@ -755,8 +727,6 @@ export const id = {
       'Pembukuan Anda memakai {{currency}} — ditentukan oleh negara Anda dan dikunci saat pembuatan.',
     defaultLanguage: 'Bahasa bawaan',
     defaultLanguageHint: 'Bawaan untuk anggota tim baru. Tiap pengguna bisa menggantinya sendiri.',
-    firstBusinessName: 'Nama divisi',
-    firstBusinessNamePlaceholder: 'mis. Restoran Jakarta',
     vertical: 'Jenis bisnis apa ini?',
     verticalHint: 'Menentukan point of sale yang dipakai gerainya. Tidak dapat diubah nanti.',
     reviewHint: 'Perusahaan dan bisnis pertamanya dibuat bersamaan, dalam satu langkah.',
@@ -764,6 +734,7 @@ export const id = {
     creating: 'Membuat…',
     createdTitle: 'Perusahaan dibuat',
     createdBody: 'Ruang kerja Anda siap.',
+    createdOutlet: 'Gerai pertama Anda dinamai sesuai perusahaan — ganti namanya kapan saja di Gerai.',
     goToDashboard: 'Buka dasbor',
     fixedNote: 'Dikunci saat pembuatan',
     errorTitle: 'Tidak dapat membuat perusahaan',
@@ -784,8 +755,7 @@ export const id = {
   },
   dashboard: {
     title: 'Posisi terkonsolidasi',
-    scopeAllUnits: 'Posisi terkonsolidasi · semua divisi perusahaan ini',
-    unitContribution: 'Kontribusi divisi',
+    scopeAllUnits: 'Posisi terkonsolidasi · semua gerai perusahaan ini',
     openUnitPnl: 'Buka L/R unit',
     period: 'Periode',
     prevPeriod: 'Periode sebelumnya',
@@ -845,7 +815,7 @@ export const id = {
     noCompanyHint: 'Buat perusahaan untuk melihat posisi terkonsolidasinya.',
   },
   statements: {
-    scopeAllUnits: 'semua divisi',
+    scopeAllUnits: 'semua gerai',
     incomeTitle: 'Laporan laba rugi',
     incomeSubtitle: 'Pendapatan, beban, dan laba bersih untuk periode ini.',
     balanceTitle: 'Neraca',
@@ -1637,7 +1607,7 @@ export const id = {
     outletsTab: {
       add: 'Tambah gerai',
       empty: 'Belum ada gerai',
-      emptyHint: 'Tambahkan gerai pertama untuk mulai berjualan di bawah divisi ini.',
+      emptyHint: 'Tambahkan gerai pertama untuk mulai berjualan.',
     },
     people: {
       empty: 'Belum ada yang ditugaskan di unit ini',
@@ -1675,7 +1645,7 @@ export const id = {
     },
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk melihat data SDM-nya.',
-    noBusinessUnit: {
+    noOutlet: {
       title: 'Belum ada bisnis yang dibuat',
       hint: 'Buat unit bisnis dari menu Organisasi untuk mulai menambah karyawan.',
     },
@@ -2098,10 +2068,10 @@ export const id = {
     },
     assignExisting: {
       title: 'Tugaskan ke {{unit}}',
-      subtitle: 'Pilih karyawan yang sudah ada di perusahaan ini. Karyawan baru ditambahkan di divisi.',
+      subtitle: 'Pilih karyawan yang sudah ada di perusahaan ini.',
       employee: 'Karyawan',
       pick: 'Pilih karyawan…',
-      empty: 'Tidak ada karyawan untuk ditugaskan. Tambahkan dulu di divisi.',
+      empty: 'Tidak ada karyawan untuk ditugaskan. Tambahkan karyawan dulu.',
       submit: 'Tugaskan',
     },
     endAssignment: {
@@ -2385,7 +2355,7 @@ export const id = {
   posVertical: {
     badge: 'Segera hadir',
     title: 'Point of sale {{vertical}} segera hadir',
-    body: 'Gerai ini milik divisi {{vertical}}. Penjualan, menu, dan tiket dapur saat ini hanya mendukung gerai restoran, cuci mobil, dan barbershop.',
+    body: 'Perusahaan ini adalah bisnis {{vertical}}. Penjualan, menu, dan tiket dapur saat ini hanya mendukung gerai restoran, cuci mobil, dan barbershop.',
     switchHint: 'Layani di gerai lain',
   },
   outletGate: {
@@ -2402,10 +2372,9 @@ export const id = {
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk mengelola struktur organisasinya.',
     empty: 'Belum ada unit organisasi',
-    emptyHint: 'Tambahkan divisi tingkat atas untuk memulai.',
+    emptyHint: 'Tambahkan gerai pertama untuk memulai.',
     error: 'Tidak dapat memuat struktur organisasi.',
     addUnit: 'Tambah unit',
-    addChild: 'Tambah anak',
     expand: 'Buka',
     collapse: 'Tutup',
     rename: 'Ubah nama',
@@ -2422,11 +2391,6 @@ export const id = {
       title: 'Tambah unit organisasi',
       nameLabel: 'Nama',
       namePlaceholder: 'mis. Gerai Jakarta',
-      verticalLabel: 'Vertikal bisnis',
-      typeLabel: 'Jenis',
-      parentLabel: 'Induk',
-      noParent: 'Tidak ada (tingkat atas)',
-      noChildAllowed: 'Tim adalah tingkat terbawah — tidak ada yang bisa dibuat di bawahnya.',
       submit: 'Buat',
       submitting: 'Membuat…',
       errorTitle: 'Tidak dapat membuat unit',
@@ -2457,7 +2421,6 @@ export const id = {
       checking: 'Memeriksa apakah unit ini kosong…',
       verifyError: 'Tidak dapat memeriksa apakah unit ini kosong, jadi belum bisa dihapus sekarang. Tutup dan coba lagi.',
       body: 'Hapus "{{name}}" secara permanen? Ini menghapusnya untuk selamanya dan tidak dapat dibatalkan. Gunakan hanya untuk menghapus unit yang dibuat karena kesalahan.',
-      bodyBu: 'Hapus "{{name}}" beserta gerai kosongnya secara permanen? Ini menghapusnya untuk selamanya dan tidak dapat dibatalkan. Gunakan hanya untuk menghapus unit yang dibuat karena kesalahan.',
       blockedIntro: '"{{name}}" masih memiliki data, jadi hanya dapat dinonaktifkan (yang menjaga riwayatnya):',
       blockedLogins: 'Login yang ditugaskan: {{count}}',
       blockedEmployees: 'Karyawan yang ditugaskan: {{count}}',

@@ -456,7 +456,7 @@ export const en = {
   shell: {
     switchCompany: 'Switch company',
     yourBusinesses: 'Your companies',
-    addBusiness: 'Add company or division',
+    addBusiness: 'Add company',
   },
   dashboardPhone: {
     perOutlet: 'By outlet',
@@ -629,19 +629,6 @@ export const en = {
         usingCompany: 'Using company image',
         overrideSet: 'Outlet image set',
       },
-      divisions: {
-        heading: 'Outlets',
-        hint:
-          'Each outlet can use its own QRIS mode and image, or follow the company default below.',
-        empty: 'No outlets yet.',
-      },
-      division: {
-        modeHeading: 'QRIS mode for {{division}}',
-        gatewayHint: "Charges for this division use the company's Midtrans connection:",
-        inheritConfirmMessage:
-          "Revert to the company default? This division's own QRIS image will be removed.",
-        imageOwnSet: 'Division image set',
-      },
       outlets: {
         heading: 'Outlets',
         hint: 'Each outlet can use its own QRIS mode and image, or follow the company default below.',
@@ -650,18 +637,14 @@ export const en = {
       outlet: {
         effectiveOwn: 'Own mode: {{mode}}',
         effectiveInherits: 'Inherits company default ({{mode}})',
-        effectiveInheritsDivision: 'Inherits division default ({{mode}})',
         modeHeading: 'QRIS mode for {{outlet}}',
         inheritOption: 'Inherit company default',
         inheritDesc: 'Follows the company default, currently {{mode}}.',
-        inheritOptionDivision: 'Inherit division default',
-        inheritDescDivision: 'Follows the division default, currently {{mode}}.',
         inheritConfirmMessage:
           "Revert to the company default? This outlet's own QRIS image will be removed.",
         inheritConfirmYes: 'Yes, revert',
         gatewayHint: "Charges for this outlet use the company's Midtrans connection:",
         imageHeading: 'QRIS image',
-        imageInheritsDivision: 'Using division image',
       },
       company: {
         heading: 'Company default',
@@ -746,21 +729,10 @@ export const en = {
   onboarding: {
     title: 'Create a company',
     addTitle: 'Add another company',
-    chooser: {
-      title: 'What are you adding?',
-      subtitle:
-        'A company files its own taxes and keeps its own books. A division operates inside an existing company and shares its books and tax filing.',
-      companyOption: 'A separate company',
-      companyOptionHint: 'Its own legal entity (own NPWP) — separate books, taxes, and statements.',
-      divisionOption: 'A division of {{company}}',
-      divisionOptionHint:
-        'Same legal entity — shares the books and tax filing; adds its own outlets and P&L view.',
-    },
     subtitle:
-      'The base currency and language are set now — they are fixed at creation and cannot be changed later.',
+      'The currency, language, and kind of business are set now — all fixed at creation and cannot be changed later.',
     stepCompany: 'Company',
     stepSettings: 'Settings',
-    stepBusiness: 'First division',
     stepReview: 'Review',
     companyName: 'Company name',
     companyNamePlaceholder: 'e.g. Nusantara Holdings',
@@ -772,15 +744,14 @@ export const en = {
       'Your books will be kept in {{currency}} — set by your country and fixed at creation.',
     defaultLanguage: 'Default language',
     defaultLanguageHint: 'The default for new teammates. Each user can override their own.',
-    firstBusinessName: 'Division name',
-    firstBusinessNamePlaceholder: 'e.g. Jakarta Restaurant',
     vertical: 'What kind of business is it?',
     verticalHint: 'Sets which point of sale its outlets use. It cannot be changed later.',
-    reviewHint: 'The company and its first business are created together, in one step.',
+    reviewHint: 'The company and its first outlet are created together, in one step.',
     create: 'Create company',
     creating: 'Creating…',
     createdTitle: 'Company created',
     createdBody: 'Your workspace is ready.',
+    createdOutlet: 'Your first outlet is named after your company — rename it any time from Outlets.',
     goToDashboard: 'Go to dashboard',
     fixedNote: 'Fixed at creation',
     errorTitle: 'Could not create the company',
@@ -801,8 +772,7 @@ export const en = {
   },
   dashboard: {
     title: 'Consolidated position',
-    scopeAllUnits: 'Consolidated position · all divisions of this company',
-    unitContribution: 'Division contribution',
+    scopeAllUnits: 'Consolidated position · all outlets of this company',
     openUnitPnl: 'Open unit P&L',
     period: 'Period',
     prevPeriod: 'Previous period',
@@ -860,7 +830,7 @@ export const en = {
     noCompanyHint: 'Create a company to see its consolidated position.',
   },
   statements: {
-    scopeAllUnits: 'all divisions',
+    scopeAllUnits: 'all outlets',
     incomeTitle: 'Income statement',
     incomeSubtitle: 'Revenue, expense and net for the period.',
     balanceTitle: 'Balance sheet',
@@ -1650,7 +1620,7 @@ export const en = {
     outletsTab: {
       add: 'Add outlet',
       empty: 'No outlets yet',
-      emptyHint: 'Add the first outlet to start selling under this division.',
+      emptyHint: 'Add the first outlet to start selling.',
     },
     people: {
       empty: 'No one is assigned under this unit yet',
@@ -1690,9 +1660,9 @@ export const en = {
     },
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to see its people.',
-    noBusinessUnit: {
-      title: 'No business set up yet',
-      hint: 'Create a business unit from Organization to start adding employees.',
+    noOutlet: {
+      title: 'No outlet set up yet',
+      hint: 'Add an outlet from Outlets to start adding employees.',
     },
     error: 'Could not load the businesses for this company.',
   },
@@ -2109,10 +2079,10 @@ export const en = {
     },
     assignExisting: {
       title: 'Assign to {{unit}}',
-      subtitle: 'Pick an existing employee of this company. New employees are added at the division.',
+      subtitle: 'Pick an existing employee of this company.',
       employee: 'Employee',
       pick: 'Select an employee…',
-      empty: 'No employees available to assign. Add them at the division first.',
+      empty: 'No employees available to assign. Add an employee first.',
       submit: 'Assign',
     },
     endAssignment: {
@@ -2407,7 +2377,7 @@ export const en = {
   posVertical: {
     badge: 'Coming soon',
     title: 'The {{vertical}} point of sale is coming soon',
-    body: 'This outlet belongs to a {{vertical}} division. Sales, menus, and kitchen tickets currently support restaurant, car wash, and barbershop outlets only.',
+    body: 'This company is a {{vertical}} business. Sales, menus, and kitchen tickets currently support restaurant, car wash, and barbershop outlets only.',
     switchHint: 'Ring on another outlet',
   },
   outletGate: {
@@ -2424,10 +2394,9 @@ export const en = {
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to manage its org tree.',
     empty: 'No org units yet',
-    emptyHint: 'Add a top-level division to get started.',
+    emptyHint: 'Add your first outlet to get started.',
     error: 'Could not load the org tree.',
     addUnit: 'Add unit',
-    addChild: 'Add child',
     expand: 'Expand',
     collapse: 'Collapse',
     rename: 'Rename',
@@ -2444,11 +2413,6 @@ export const en = {
       title: 'Add org unit',
       nameLabel: 'Name',
       namePlaceholder: 'e.g. Jakarta Outlet',
-      verticalLabel: 'Business vertical',
-      typeLabel: 'Type',
-      parentLabel: 'Parent',
-      noParent: 'None (top-level)',
-      noChildAllowed: 'A team is the leaf level — nothing can be created under it.',
       submit: 'Create',
       submitting: 'Creating…',
       errorTitle: 'Could not create unit',
@@ -2479,7 +2443,6 @@ export const en = {
       checking: 'Checking whether this unit is empty…',
       verifyError: 'Couldn’t check whether this unit is empty, so it can’t be deleted right now. Close this and try again.',
       body: 'Permanently delete "{{name}}"? This removes it for good and cannot be undone. Only use this to remove a unit created by mistake.',
-      bodyBu: 'Permanently delete "{{name}}" and its empty outlets? This removes them for good and cannot be undone. Only use this to remove a unit created by mistake.',
       blockedIntro: '"{{name}}" still has data, so it can only be deactivated (which keeps its history):',
       blockedLogins: 'Assigned logins: {{count}}',
       blockedEmployees: 'Assigned employees: {{count}}',

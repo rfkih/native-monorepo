@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/Button'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useAuth } from '@/lib/authContext'
+import { DELETE_ACCOUNT_URL, PRIVACY_URL } from '@/lib/config'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
@@ -49,8 +50,13 @@ import { Photo } from './Photo'
 import { ctaPhoto, heroPhoto, posPhoto } from './photos'
 import { MOCK_REVENUE, money } from './mock'
 
-/** Demo-request mail target — the product's contact address (demonstration build). */
-const CONTACT_EMAIL = 'halo@native.id'
+/**
+ * Public contact address — demo requests, support, and the Play Store listing's required contact.
+ * It MUST be a mailbox that is actually read: Google Play emails it during review, and the account
+ * deletion page (public/delete-account.html) routes deletion requests here. The old halo@native.id
+ * was a domain we do not own, which would have failed both.
+ */
+const CONTACT_EMAIL = 'rfkih23@gmail.com'
 
 /**
  * Android POS app download — ALWAYS the PROD app. Absolute on purpose: this same console build also
@@ -728,6 +734,13 @@ function Footer() {
         { label: t('landing.fDocs'), href: '#' },
         { label: t('landing.fStatus'), href: '#' },
         { label: t('landing.fSales'), href: salesMailto },
+      ],
+    },
+    {
+      heading: t('landing.fLegalHeading'),
+      links: [
+        { label: t('landing.fPrivacy'), href: PRIVACY_URL },
+        { label: t('landing.fDeleteAccount'), href: DELETE_ACCOUNT_URL },
       ],
     },
   ]

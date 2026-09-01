@@ -15,8 +15,8 @@ import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { canOps, canPayroll } from '@/lib/rolePreset'
 import { useSession } from '@/lib/session'
 import {
-  businessUnitsOf,
-  defaultBusinessUnitId,
+  outletsOf,
+  defaultOutletId,
   visiblePeopleTabs,
   type PeopleTabKey,
 } from './peopleAccess'
@@ -76,10 +76,10 @@ export function PeoplePage() {
     enabled: !!company,
   })
   const units = unitsQuery.data ?? []
-  const businessUnits = businessUnitsOf(units)
+  const outlets = outletsOf(units)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
-  const unitId = selectedUnitId ?? defaultBusinessUnitId(businessUnits, company?.businessId ?? null)
-  const unit = businessUnits.find((u) => u.id === unitId) ?? null
+  const unitId = selectedUnitId ?? defaultOutletId(outlets, company?.businessId ?? null)
+  const unit = outlets.find((u) => u.id === unitId) ?? null
 
   if (!company) {
     return <EmptyState title={t('people.noCompany')} hint={t('people.noCompanyHint')} />
@@ -104,7 +104,7 @@ export function PeoplePage() {
   }
 
   if (!unit) {
-    return <EmptyState title={t('people.noBusinessUnit.title')} hint={t('people.noBusinessUnit.hint')} />
+    return <EmptyState title={t('people.noOutlet.title')} hint={t('people.noOutlet.hint')} />
   }
 
   const tabOptions = [
@@ -122,7 +122,7 @@ export function PeoplePage() {
         <p className="mt-1.5 text-sm text-ink-3">{t('people.subtitle')}</p>
       </div>
 
-      {businessUnits.length > 1 ? (
+      {outlets.length > 1 ? (
         <div className="max-w-sm space-y-1.5">
           <label htmlFor="people-unit" className="block text-sm font-medium text-ink">
             {t('people.unitPicker.label')}
@@ -133,7 +133,7 @@ export function PeoplePage() {
             onChange={(e) => setSelectedUnitId(e.target.value)}
             className={SELECT_CLASSES}
           >
-            {businessUnits.map((u) => (
+            {outlets.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
               </option>

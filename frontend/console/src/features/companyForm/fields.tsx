@@ -215,9 +215,12 @@ export function CompanyReview({
   const rows: ReviewRow[] = [
     { label: t('signup.companyName'), value: basics.companyName, step: COMPANY_STEP },
     {
+      // Immutable since ADR 0070 moved the vertical onto the COMPANY (it decides which POS the
+      // company's outlets get) — flagged `fixed` for the same reason country/currency are.
       label: t('signup.vertical'),
       value: t(`vertical.${basics.vertical}` as Parameters<typeof t>[0]),
       step: COMPANY_STEP,
+      fixed: true,
     },
     {
       // The country is immutable (ADR 0025); its edit pencil jumps to Region.

@@ -365,7 +365,7 @@ export function useNavGroups(): {
           heading: t('nav.groupPeople'),
           icon: IdCard,
           // HR (owner/manager/hr) — employee records + payroll + leave/overtime. `/people` mounts the
-          // standalone PeoplePage (which resolves its own default business unit via useOrgUnits and
+          // standalone PeoplePage (which resolves its own default outlet via useOrgUnits and
           // never calls the OPS-gated /users). Payroll is additionally gated PAYROLL (owner/hr only)
           // so a manager sees People-minus-payroll, matching the gateway exactly.
           items: hrOk

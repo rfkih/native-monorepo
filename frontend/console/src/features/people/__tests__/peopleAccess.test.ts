@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { OrgUnit } from '@/features/org/api'
 import {
-  businessUnitsOf,
-  childOutletsOf,
-  defaultBusinessUnitId,
+  outletsOf,
+  defaultOutletId,
   visiblePeopleTabs,
 } from '../peopleAccess'
 
@@ -45,7 +44,7 @@ describe('visiblePeopleTabs — capability gating (mirrors rolePreset exactly)',
   })
 })
 
-describe('businessUnitsOf / childOutletsOf — ADR 0070 flat tree', () => {
+describe('outletsOf — ADR 0070 flat tree', () => {
   // Every org unit is a top-level OUTLET now; parentId is always null on the wire.
   const units: OrgUnit[] = [
     unit({ id: 'out-1', type: 'OUTLET', name: 'Cafe Sudirman' }),
@@ -53,41 +52,31 @@ describe('businessUnitsOf / childOutletsOf — ADR 0070 flat tree', () => {
     unit({ id: 'out-3', type: 'OUTLET', name: 'Laundromat Menteng' }),
   ]
 
-  it('businessUnitsOf returns every outlet, in server order', () => {
-    expect(businessUnitsOf(units).map((u) => u.id)).toEqual(['out-1', 'out-2', 'out-3'])
-  })
-
-  it('childOutletsOf returns only OUTLET rows whose parentId matches, excluding TEAM', () => {
-    // ADR 0070: nothing nests any more, so there are never child outlets.
-    expect(childOutletsOf(units, 'out-1')).toEqual([])
-    expect(childOutletsOf(units, 'out-2')).toEqual([])
-  })
-
-  it('childOutletsOf returns empty for a unit with no outlets', () => {
-    expect(childOutletsOf(units, 'unknown')).toEqual([])
+  it('returns every outlet, in server order', () => {
+    expect(outletsOf(units).map((u) => u.id)).toEqual(['out-1', 'out-2', 'out-3'])
   })
 })
 
-describe('defaultBusinessUnitId', () => {
-  const businessUnits: OrgUnit[] = [
-    unit({ id: 'bu-1', type: 'OUTLET' }),
-    unit({ id: 'bu-2', type: 'OUTLET' }),
+describe('defaultOutletId', () => {
+  const outlets: OrgUnit[] = [
+    unit({ id: 'out-1', type: 'OUTLET' }),
+    unit({ id: 'out-2', type: 'OUTLET' }),
   ]
 
-  it('picks the session business id when it IS one of the business units', () => {
-    expect(defaultBusinessUnitId(businessUnits, 'bu-2')).toBe('bu-2')
+  it('picks the session outlet id when it IS one of the outlets', () => {
+    expect(defaultOutletId(outlets, 'out-2')).toBe('out-2')
   })
 
-  it('falls back to the first business unit when the session id is not a business unit here', () => {
-    expect(defaultBusinessUnitId(businessUnits, 'some-outlet-id')).toBe('bu-1')
+  it('falls back to the first outlet when the session id is not a outlet here', () => {
+    expect(defaultOutletId(outlets, 'some-outlet-id')).toBe('out-1')
   })
 
-  it('falls back to the first business unit when the session id is null', () => {
-    expect(defaultBusinessUnitId(businessUnits, null)).toBe('bu-1')
+  it('falls back to the first outlet when the session id is null', () => {
+    expect(defaultOutletId(outlets, null)).toBe('out-1')
   })
 
-  it('returns null when there are no business units at all (fresh/mid-onboarding tenant)', () => {
-    expect(defaultBusinessUnitId([], 'bu-1')).toBeNull()
-    expect(defaultBusinessUnitId([], null)).toBeNull()
+  it('returns null when there are no outlets at all (fresh/mid-onboarding tenant)', () => {
+    expect(defaultOutletId([], 'out-1')).toBeNull()
+    expect(defaultOutletId([], null)).toBeNull()
   })
 })

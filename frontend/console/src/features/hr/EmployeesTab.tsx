@@ -1,7 +1,7 @@
 /**
  * Employees tab — the Odoo-style HR list scoped to the current unit. Reused by both the org-unit
  * hub (`OrgUnitDetail`, owner/manager) and the standalone People page (`PeoplePage`, ADR 0052 —
- * owner/manager/hr). The BU rollup is CLIENT-computed: a business unit's scope is [itself,
+ * owner/manager/hr). The scope is CLIENT-computed: since ADR 0070 an outlet's scope is [itself,
  * ...its child outlets] from the org tree the hub already has (employee-service's projection holds
  * no parent_id). Employees are HR RECORDS, deliberately separate from the Team page's login users.
  * No PII renders here — the list endpoint never returns NIK / bank account / amounts.

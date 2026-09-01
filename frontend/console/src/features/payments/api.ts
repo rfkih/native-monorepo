@@ -5,8 +5,8 @@
  * useStaticQrImageUrl}, reimplemented locally rather than imported across features).
  *
  * A company has ONE QRIS mode (MANUAL/STATIC/GATEWAY) with an optional per-unit MODE override —
- * ADR 0045 amendment: a "unit" is a generic org-unit scope, either a division (business unit) or
- * an outlet, resolved outlet → division → company (never a per-unit gateway credential — those
+ * A "unit" is an OUTLET scope, resolved outlet → company (ADR 0070 removed the division rung with
+ * the division level itself; never a per-unit gateway credential — those
  * are company-level only). A unit may also override just the STATIC image while inheriting its
  * resolved mode. `QrisMode`/`EffectiveSettings` live in `./effectiveMode` (a fetch-free pure
  * module) and are re-exported here for convenience.
@@ -57,7 +57,7 @@ export interface GatewaySettings {
 /** One row of the owner settings response — either the company default or a unit override. */
 export interface PaymentSettingsRow {
   id: string
-  /** Null for the company default row; otherwise a generic org-unit id — a division (business
+  /** Null for the company default row; otherwise an outlet id (ADR 0070: the only kind of org
    *  unit) or an outlet (ADR 0045 amendment; RENAMED from `outletId`). */
   unitId: string | null
   mode: QrisMode
@@ -161,7 +161,7 @@ export function useVerifyGateway(session: CompanySession) {
 }
 
 /** PUT /api/v1/payment-settings/units/{unitId} — OWNER only; mode-only (gateway fields 422).
- *  `unitId` is a division or an outlet id (ADR 0045 amendment; RENAMED from `outlets/{outletId}`). */
+ *  `unitId` is an outlet id (RENAMED from `outlets/{outletId}` by the ADR 0045 amendment). */
 export function useUpsertUnitOverride(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -177,7 +177,7 @@ export function useUpsertUnitOverride(session: CompanySession) {
 }
 
 /** DELETE /api/v1/payment-settings/units/{unitId} — OWNER only; removes the mode override (the
- *  unit falls back to inheriting its resolved parent — division default, else company default). */
+ *  unit falls back to inheriting the company default). */
 export function useDeleteUnitOverride(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -212,7 +212,7 @@ function staticQrUploadPath(unitId?: string) {
  * POST /api/v1/payment-settings/static-qr (or the unit variant) — OWNER only, multipart `file`
  * (jpeg/png/webp, ≤ 2 MiB; the caller pre-checks size client-side to avoid a round trip for the
  * common case, but the server is the source of truth — 413/422 on a bad upload). `unitId` is a
- * division or an outlet id (ADR 0045 amendment; RENAMED from `outletId`).
+ * an outlet id (RENAMED from `outletId` by the ADR 0045 amendment).
  */
 export function useUploadStaticQr(session: CompanySession) {
   const qc = useQueryClient()
@@ -255,7 +255,7 @@ const STATIC_QR_LOADING: StaticQrPreviewState = { url: null, status: 'loading' }
 /**
  * Fetches the static QRIS image as an object URL for an `<img>` preview — GET
  * /api/v1/payment-settings/static-qr/image, company-scoped when `businessId` is
- * both null/undefined, otherwise resolved outlet → division → company server-side (ADR 0045
+ * null/undefined, otherwise resolved outlet → company server-side (ADR 0045
  * amendment). Same object-URL/revoke lifecycle as `features/expenses/api.ts`'s
  * `useReceiptUrlAtPath` (reimplemented here rather than imported across features — a Blob's
  * object-URL lifetime needs an explicit revoke tied to THIS component instance).
@@ -271,7 +271,7 @@ export function useStaticQrImageUrl(
   enabled: boolean,
   version = 0,
   /** ADR 0045 amendment: the outlet's parent business-unit id, when known — omitted/undefined on
-   *  a company-scoped preview or when no division context is available. */
+   *  a company-scoped preview. */
 ): StaticQrPreviewState {
   const [state, setState] = useState<StaticQrPreviewState>(STATIC_QR_LOADING)
 
@@ -323,8 +323,8 @@ export function useStaticQrImageUrl(
 
 /**
  * GET /api/v1/payment-settings/effective?businessId=<uuid> — the till's read:
- * the resolved mode for this outlet (ADR 0045 amendment: per-facet resolution outlet → division →
- * company — mode and `staticQrAvailable` walk the chain; `gateway` comes from the company only),
+ * the resolved mode for this outlet (per-facet resolution outlet → company since ADR 0070 removed
+ * the division rung — mode and `staticQrAvailable` walk the chain; `gateway` is company-only),
  * whether a static image is actually available, and the gateway's connection state. Cached briefly
  * (60s) since a payment surface may re-render often within one checkout session; `options.enabled`
  * lets the caller gate the fetch (e.g. never fetch while offline — a digital mode is unreachable

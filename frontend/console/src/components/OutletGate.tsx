@@ -10,9 +10,9 @@
  * coming-soon panel when `requiredVertical` is set and the effective outlet belongs to a
  * DIFFERENT vertical (e.g. this gate requires 'restaurant' but the effective outlet is a
  * carwash/barbershop one — each of those has its own POS, just not behind THIS gate), and
- * otherwise hands its children a session whose businessId IS the effective outlet id (and,
- * ADR 0070: the tree is flat, so the resolved outlet is the whole story — there is no division
- * unknown, which every payments hook treats as "no division context").
+ * otherwise hands its children a session whose businessId IS the effective outlet id. ADR 0070:
+ * the tree is flat, so the resolved outlet is the whole story — there is no level above it to
+ * thread alongside.
  */
 
 import type { ReactNode } from 'react'

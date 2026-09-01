@@ -167,7 +167,7 @@ function OrgNode({
         </Link>
 
         {/* type + vertical badges + status dot as ONE shrink-0 cluster — keeps the name's width and
-            stops the row overlapping at phone width (vertical renders only on business units) */}
+            stops the row overlapping at phone width */}
         <div className="flex shrink-0 items-center gap-2">
           <OrgUnitTypeBadge type={unit.type} />
           <VerticalBadge vertical={unit.vertical} />

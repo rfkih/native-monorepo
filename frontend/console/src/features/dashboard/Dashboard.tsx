@@ -13,7 +13,6 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatPercent } from '@/lib/money'
 import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { EmptyState, PeriodNav } from '@/features/_shared/financeUi'
-import { useOrgUnits, type OrgUnit } from '@/features/org/api'
 import { useOpeningBalance, isOpeningBalanceNotRecorded } from '@/features/openingBalances/api'
 import { usePnl, usePnlTrend, useOutletRevenue, type OutletRow } from './api'
 import { readFigures, monthShort } from './figures'
@@ -70,12 +69,6 @@ export function Dashboard() {
     enabled: !!company,
   })
 
-  // The org tree, for rolling outlet revenue up to its parent BUSINESS_UNIT (multi-BU clarity).
-  const unitsQuery = useOrgUnits({
-    companyId: company?.companyId ?? '',
-    actor: company?.actor ?? '',
-    enabled: !!company,
-  })
 
   // Whether an opening balance sheet was ever recorded — a settled 404 (not-recorded) on a
   // fresh-books tenant surfaces the opening-balances shortcut inside the first-sale prompt:
@@ -139,17 +132,9 @@ export function Dashboard() {
     return acc == null || p.fig.net > acc.net ? { period: p.period, net: p.fig.net } : acc
   }, null)
 
-  // Business-unit rollup of the outlet revenue rows. The BU panel only appears for a company with
-  // 2+ business units — with one BU it would duplicate the outlet panel; the scope line in the
-  // header already says what the figures cover. FREE (P1 tier-mode) hides it outright — a
-  // multi-company/multi-BU concern that does not belong in the lean UMKM summary.
-  const units = unitsQuery.data ?? []
-  const unitById = new Map(units.map((u) => [u.id, u]))
-  // ADR 0070 removed the division level, so there is nothing to roll outlets UP into — the
-  // per-outlet figures below are already the finest and the coarsest view there is. The panel
-  // stays wired but permanently off; a cross-company rollup is group consolidation's job.
-  const buRows = groupByBusinessUnit(outletQuery.data?.outlets ?? null, unitById)
-  const showBuPanel = false
+  // ADR 0070: outlets hang directly off the company, so there is no level to roll them UP into —
+  // the per-outlet panel below is both the finest and the coarsest view there is. Rolling several
+  // COMPANIES together is group consolidation's job, not the dashboard's.
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -328,20 +313,6 @@ export function Dashboard() {
           {/* Outlet contribution + at a glance / ready-to-close */}
           <div className="grid gap-[18px] lg:grid-cols-[1.5fr_1fr]">
             <div className="flex flex-col gap-[18px]">
-              {/* Which business unit earned what — only for multi-BU companies. */}
-              {showBuPanel ? (
-                <BusinessUnitContributionPanel
-                  title={t('dashboard.unitContribution')}
-                  rows={buRows ?? []}
-                  currency={outletQuery.data?.currency ?? company.baseCurrency}
-                  locale={locale}
-                  postedLabel={t('dashboard.postedToLedger')}
-                  ofRevenueKey={(pct) => t('dashboard.ofRevenueShare', { pct })}
-                  openLabel={t('dashboard.openUnitPnl')}
-                  verticalLabel={(v) => t(`vertical.${v}` as Parameters<typeof t>[0])}
-                />
-              ) : null}
-
               {/* Outlet contribution — real POSTED figures only (audit finding 15). */}
               <OutletContributionPanel
                 title={t('dashboard.outletContribution')}
@@ -658,141 +629,6 @@ function OutletContributionPanel({
           </div>
         </div>
       )}
-    </Card>
-  )
-}
-
-/** One business unit's rolled-up revenue (outlets summed into their parent BUSINESS_UNIT). */
-interface BuRow {
-  unitId: string
-  name: string | null
-  vertical: string | null
-  revenueMinor: number
-}
-
-/**
- * Rolls the per-outlet revenue rows up to their parent business unit via the org tree. An id that
- * is itself a BUSINESS_UNIT (pre-ADR-0012 rows) counts as its own group; an id missing from the
- * org tree falls back to a group of its own so no revenue is silently dropped.
- */
-function groupByBusinessUnit(
-  outlets: OutletRow[] | null,
-  unitById: Map<string, OrgUnit>,
-): BuRow[] | null {
-  if (!outlets) return null
-  const groups = new Map<string, BuRow>()
-  for (const o of outlets) {
-    const unit = unitById.get(o.businessId)
-    const bu =
-      unit?.type === 'OUTLET' && unit.parentId ? (unitById.get(unit.parentId) ?? unit) : unit
-    const key = bu?.id ?? o.businessId
-    const row = groups.get(key) ?? {
-      unitId: key,
-      name: bu?.name ?? o.outletName,
-      vertical: bu?.vertical ?? null,
-      revenueMinor: 0,
-    }
-    row.revenueMinor += o.revenueMinor
-    groups.set(key, row)
-  }
-  return [...groups.values()].sort((a, b) => b.revenueMinor - a.revenueMinor)
-}
-
-/**
- * The "Business unit contribution" panel (multi-BU companies only): each row is one business unit's
- * share of the period's posted revenue, linking to that unit's existing P&L page (/org/:unitId).
- * Same visual grammar as the outlet panel — monogram tile, mono amount, share sub-line, progress
- * bar against the LARGEST unit.
- */
-function BusinessUnitContributionPanel({
-  title,
-  rows,
-  currency,
-  locale,
-  postedLabel,
-  ofRevenueKey,
-  openLabel,
-  verticalLabel,
-}: {
-  title: string
-  rows: BuRow[]
-  currency: string
-  locale: string
-  postedLabel: string
-  ofRevenueKey: (pct: string) => string
-  openLabel: string
-  verticalLabel: (vertical: string) => string
-}) {
-  const maxRevenue = Math.max(...rows.map((r) => r.revenueMinor))
-  const totalRevenue = rows.reduce((acc, r) => acc + r.revenueMinor, 0)
-
-  return (
-    <Card className="p-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
-        <span className="text-[13px] text-ink-3">{postedLabel}</span>
-      </div>
-
-      <div>
-        {rows.map((row, idx) => {
-          const isLast = idx === rows.length - 1
-          const barWidth = maxRevenue > 0 ? (row.revenueMinor / maxRevenue) * 100 : 0
-          const shareOfTotal = totalRevenue > 0 ? row.revenueMinor / totalRevenue : 0
-          const initials = outletInitials(row.name, row.unitId)
-
-          return (
-            <Link
-              key={row.unitId}
-              to={`/org/${row.unitId}`}
-              aria-label={`${row.name ?? row.unitId} — ${openLabel}`}
-              className={cn('group block py-3.5', !isLast && 'border-b border-ink-50')}
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className="grid size-[34px] shrink-0 place-items-center rounded-xl bg-emerald-tint font-mono text-[11px] font-bold text-emerald-2"
-                  aria-hidden="true"
-                >
-                  {initials}
-                </span>
-
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold text-ink group-hover:text-emerald-2">
-                    {row.name ?? (
-                      <span className="font-mono text-[13px] text-ink-3">
-                        {row.unitId.slice(0, 8)}
-                      </span>
-                    )}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-ink-3">
-                    {row.vertical ? verticalLabel(row.vertical) : '—'}
-                    <span className="opacity-0 transition-opacity group-hover:opacity-100">
-                      {' '}
-                      · {openLabel} →
-                    </span>
-                  </span>
-                </span>
-
-                <span className="shrink-0 text-right">
-                  <span className="tnum block font-mono text-[14px] font-semibold text-ink">
-                    {formatMoney(row.revenueMinor, currency, locale)}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] font-semibold text-emerald-2">
-                    {ofRevenueKey(formatPercent(shareOfTotal, locale))}
-                  </span>
-                </span>
-              </div>
-
-              <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-ink-50">
-                <div
-                  className="h-full rounded-full bg-emerald motion-safe:transition-[width] motion-safe:duration-500"
-                  style={{ width: `${barWidth.toFixed(1)}%` }}
-                  role="presentation"
-                />
-              </div>
-            </Link>
-          )
-        })}
-      </div>
     </Card>
   )
 }

@@ -283,6 +283,9 @@ function SuccessPanel({
           {t('onboarding.createdTitle')}
         </h2>
         <p className="mt-1.5 text-sm text-ink-3">{t('onboarding.createdBody')}</p>
+        {/* ADR 0070: the bootstrap seeds ONE outlet named after the company. Saying so here stops
+            the owner hunting for a "create your first outlet" step that no longer exists. */}
+        <p className="mt-1 text-sm text-ink-3">{t('onboarding.createdOutlet')}</p>
 
         {/* Company summary pill */}
         <div className="mx-auto mt-6 max-w-xs rounded-xl border border-line bg-paper px-4 py-3 text-left">

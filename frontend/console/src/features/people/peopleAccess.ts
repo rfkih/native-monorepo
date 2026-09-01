@@ -25,35 +25,25 @@ export function visiblePeopleTabs(roles: readonly string[]): PeopleTabKey[] {
 }
 
 /**
- * Every OUTLET row from the org-units list, in the order the server returned them. Since ADR 0070
- * that is every row — the tree is flat, so "the units a person can be scoped to" and "the outlets"
- * are the same list. Kept as a named helper so callers read intent rather than an identity filter.
+ * The outlets a person can be scoped to, in the order the server returned them. Since ADR 0070 the
+ * org structure is flat (`company > outlet`), so that is simply every active org unit — kept as a
+ * named helper so callers read intent rather than an identity filter.
  */
-export function businessUnitsOf(units: readonly OrgUnit[]): OrgUnit[] {
+export function outletsOf(units: readonly OrgUnit[]): OrgUnit[] {
   return units.filter((u) => u.type === 'OUTLET')
 }
 
-/** A business unit's direct `OUTLET` children — the same shape `OrgUnitDetail` passes its tabs. */
-export function childOutletsOf(units: readonly OrgUnit[], unitId: string): OrgUnit[] {
-  // ADR 0070: the tree is flat, so no outlet has children — this is always empty. Kept (rather
-  // than ripped out of every caller) because "the units nested under this one" is still the
-  // question callers are asking, and the honest answer is now "none".
-  void units
-  void unitId
-  return []
-}
-
 /**
- * The business unit the picker should default to: the session's own business unit when it IS one
- * of the company's business units, else the first business unit (server order), else `null` (no
- * business unit exists yet — a fresh/mid-onboarding tenant).
+ * The outlet the picker should default to: the session's own outlet when it IS one of the
+ * company's outlets, else the first outlet (server order), else `null` (no outlet exists yet — a
+ * fresh/mid-onboarding tenant).
  */
-export function defaultBusinessUnitId(
-  businessUnits: readonly OrgUnit[],
-  sessionBusinessId: string | null,
+export function defaultOutletId(
+  outlets: readonly OrgUnit[],
+  sessionOutletId: string | null,
 ): string | null {
-  if (sessionBusinessId && businessUnits.some((u) => u.id === sessionBusinessId)) {
-    return sessionBusinessId
+  if (sessionOutletId && outlets.some((u) => u.id === sessionOutletId)) {
+    return sessionOutletId
   }
-  return businessUnits[0]?.id ?? null
+  return outlets[0]?.id ?? null
 }

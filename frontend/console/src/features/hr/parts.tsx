@@ -466,7 +466,7 @@ export function AssignExistingDialog({
 }) {
   const { t } = useTranslation()
 
-  // The pool is the parent business unit's employees (the BU + all its outlets) — the "employees of
+  // The pool is the company's employees — the "employees of
   // this business". Outlets assign from that pool; they never create.
   const parentBu = units.find((u) => u.id === outlet.parentId)
   const buScope = parentBu
