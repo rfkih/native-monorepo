@@ -183,7 +183,9 @@ class GoodsReceiptIdempotencyTest extends PostgresRlsTestBase {
     //    the winner's receipt under a DIFFERENT ingredient_id → a legitimate 409 conflict (the
     //    same-key/different-payload contract), so 1 result + 1 conflict error.
     if (errors.isEmpty()) {
-      assertThat(results).as("true race: both calls recovered via the unique-index re-read").hasSize(2);
+      assertThat(results)
+          .as("true race: both calls recovered via the unique-index re-read")
+          .hasSize(2);
     } else {
       assertThat(results).as("serialized: the winner returned, the loser conflicted").hasSize(1);
       assertThat(errors)

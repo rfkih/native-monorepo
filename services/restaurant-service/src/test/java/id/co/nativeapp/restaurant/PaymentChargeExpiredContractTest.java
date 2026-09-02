@@ -52,7 +52,8 @@ class PaymentChargeExpiredContractTest {
   void schemaParsesFromClasspathWithExpectedShape() {
     Schema schema = PaymentChargeExpiredConsumerSchema.schema();
 
-    assertThat(schema.getFullName()).isEqualTo("id.co.nativeapp.events.payment.PaymentChargeExpired");
+    assertThat(schema.getFullName())
+        .isEqualTo("id.co.nativeapp.events.payment.PaymentChargeExpired");
     assertThat(schema.getField("charge_id")).isNotNull();
     assertThat(schema.getField("company_id")).isNotNull();
     assertThat(schema.getField("vertical")).isNotNull();

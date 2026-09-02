@@ -55,7 +55,8 @@ class BillPendingReservationTtlTest extends PostgresRlsTestBase {
     // Cash pay used to be locked out ("reserved by an in-flight gateway payment") forever; with
     // the reservation expired it is auto-abandoned and the cash check claims the lines.
     BillResponse paid =
-        TenantContext.callAs(TENANT, ACTOR, () -> billService.payBill(billId, new PayBillRequest()));
+        TenantContext.callAs(
+            TENANT, ACTOR, () -> billService.payBill(billId, new PayBillRequest()));
     assertThat(paid.status()).isEqualTo("PAID");
   }
 
@@ -84,11 +85,14 @@ class BillPendingReservationTtlTest extends PostgresRlsTestBase {
             ACTOR,
             () ->
                 menuService
-                    .createItem(new CreateMenuItemRequest(BUSINESS, itemName, "MAIN", 30_000L, "IDR"))
+                    .createItem(
+                        new CreateMenuItemRequest(BUSINESS, itemName, "MAIN", 30_000L, "IDR"))
                     .id());
     BillResponse opened =
         TenantContext.callAs(
-            TENANT, ACTOR, () -> billService.open(new OpenBillRequest(BUSINESS, null, "TTL Guest")));
+            TENANT,
+            ACTOR,
+            () -> billService.open(new OpenBillRequest(BUSINESS, null, "TTL Guest")));
     TenantContext.callAs(
         TENANT,
         ACTOR,

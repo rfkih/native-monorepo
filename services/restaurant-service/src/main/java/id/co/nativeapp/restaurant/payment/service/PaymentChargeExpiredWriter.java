@@ -19,13 +19,13 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Owns the single {@code @Transactional} unit of work that applies a consumed {@code
  * PaymentChargeExpired} event (ADR 0045) — the un-happy-path counterpart of {@link
- * PaymentChargeSucceededWriter}. When a dynamic-QRIS gateway charge terminated WITHOUT settling, the
- * PENDING tender restaurant-service was holding for it must be RELEASED so the sale can be paid some
- * other way (cash, or a fresh QR). No money moves; no {@code SaleRecorded}.
+ * PaymentChargeSucceededWriter}. When a dynamic-QRIS gateway charge terminated WITHOUT settling,
+ * the PENDING tender restaurant-service was holding for it must be RELEASED so the sale can be paid
+ * some other way (cash, or a fresh QR). No money moves; no {@code SaleRecorded}.
  *
  * <p>A distinct bean from {@link PaymentChargeExpiredService} so the method is invoked through the
- * Spring proxy (the {@code @Transactional} advice + the {@code RlsAutoApplyAspect} tenant GUC engage
- * — rule 5). The caller binds the tenant from the event's {@code company_id}.
+ * Spring proxy (the {@code @Transactional} advice + the {@code RlsAutoApplyAspect} tenant GUC
+ * engage — rule 5). The caller binds the tenant from the event's {@code company_id}.
  *
  * <p><strong>Idempotency (rule 3 / HR-3).</strong> The dedupe claim and the release run in ONE
  * transaction via {@link ProcessedEventStore#processOnce}: a re-delivered event is a clean no-op.
@@ -49,10 +49,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class PaymentChargeExpiredWriter {
 
-  /** Only events for this vertical are ours; carwash/barbershop events are skipped (still marked). */
+  /**
+   * Only events for this vertical are ours; carwash/barbershop events are skipped (still marked).
+   */
   static final String RESTAURANT_VERTICAL = "restaurant";
 
-  /** The order status a digital tender awaits capture in — the only state a release reverts from. */
+  /**
+   * The order status a digital tender awaits capture in — the only state a release reverts from.
+   */
   private static final String AWAITING_PAYMENT = "AWAITING_PAYMENT";
 
   static final String UNKNOWN_PAYMENT_SOURCE = "restaurant.payment-charge-expired.unknown-payment";
@@ -81,8 +85,8 @@ public class PaymentChargeExpiredWriter {
   }
 
   /**
-   * Applies the event exactly once per event id. Must be called inside a {@link TenantContext} scope
-   * bound to the event's {@code company_id}.
+   * Applies the event exactly once per event id. Must be called inside a {@link TenantContext}
+   * scope bound to the event's {@code company_id}.
    *
    * @return {@code true} if this delivery applied (first delivery), {@code false} if skipped as a
    *     duplicate (re-delivery)
@@ -162,12 +166,16 @@ public class PaymentChargeExpiredWriter {
       return;
     }
 
-    // Validate the order state BEFORE any mutation (read-only), so the divergence/park decision does
-    // not depend on write ordering. The order was loaded fresh above, so its status is the committed
+    // Validate the order state BEFORE any mutation (read-only), so the divergence/park decision
+    // does
+    // not depend on write ordering. The order was loaded fresh above, so its status is the
+    // committed
     // truth at that point.
     if (!AWAITING_PAYMENT.equals(order.getStatus())) {
-      // The order is not AWAITING_PAYMENT. Distinguish the benign race from a real divergence with a
-      // FRESH read of the payment status: `payment` above was loaded at the top of this method, so a
+      // The order is not AWAITING_PAYMENT. Distinguish the benign race from a real divergence with
+      // a
+      // FRESH read of the payment status: `payment` above was loaded at the top of this method, so
+      // a
       // concurrent capture (the cashier's manual mark-as-paid won: payment → CAPTURED, order →
       // COMPLETED) may have committed since — that is a no-op, not a park. Only a payment that is
       // STILL PENDING while its order is not AWAITING_PAYMENT is a genuine divergence for a human.
@@ -197,7 +205,8 @@ public class PaymentChargeExpiredWriter {
       return;
     }
 
-    // LOCK ORDER (ADR 0069 discipline extended to the order path): write the PAYMENT row first, then
+    // LOCK ORDER (ADR 0069 discipline extended to the order path): write the PAYMENT row first,
+    // then
     // the ORDER row — the SAME order PaymentCaptureWriter.capture takes (payment → order). The
     // previous order-first sequencing inverted it against a concurrent manual capture and could
     // deadlock. Safe: the order state was validated read-only above; a concurrent capture that

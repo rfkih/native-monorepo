@@ -78,12 +78,12 @@ public class BillPaymentWriter {
 
   /**
    * System-initiated release of a bill's PENDING gateway reservation when its charge DIED — the
-   * {@code PaymentChargeExpired} consumer ({@code payment.service.PaymentChargeExpiredWriter}) drives
-   * this, joining the consumer's transaction (propagation {@code MANDATORY}).
+   * {@code PaymentChargeExpired} consumer ({@code payment.service.PaymentChargeExpiredWriter})
+   * drives this, joining the consumer's transaction (propagation {@code MANDATORY}).
    *
-   * <p><strong>Skips the outlet-access guard on purpose.</strong> {@link OutletAccessGuard} scopes a
-   * CASHIER's actions to their assigned outlet; this release runs on a Kafka consumer thread from an
-   * authenticated payment-service event — a system actor with no operator session and no {@code
+   * <p><strong>Skips the outlet-access guard on purpose.</strong> {@link OutletAccessGuard} scopes
+   * a CASHIER's actions to their assigned outlet; this release runs on a Kafka consumer thread from
+   * an authenticated payment-service event — a system actor with no operator session and no {@code
    * X-Roles} (so {@code isOwnerOrManager()} is false and the guard would wrongly throw {@code
    * OutletNotAssignedException} for any outlet-scoping tenant). There is no cashier to scope: the
    * charge death is the authority for releasing the hold. Every other step (bill-row lock, fresh
@@ -91,8 +91,8 @@ public class BillPaymentWriter {
    * #abandonInCurrentTx}.
    *
    * @throws IllegalArgumentException if the payment is not found or is not a bill payment
-   * @throws IllegalStateException if the payment is not currently PENDING (a benign "already settled"
-   *     outcome the caller treats as a no-op)
+   * @throws IllegalStateException if the payment is not currently PENDING (a benign "already
+   *     settled" outcome the caller treats as a no-op)
    */
   @Transactional(propagation = Propagation.MANDATORY)
   public PaymentResponse abandonForExpiredChargeInCurrentTx(UUID paymentId) {
@@ -117,7 +117,8 @@ public class BillPaymentWriter {
     // touching it — without this, a cashier at outlet X could abandon outlet Y's reservation
     // (cross-outlet grief, or a window for a double-charge if the released lines then get paid
     // some other way while the original QRIS payment is still live). Mirrors payBill/
-    // initiatePendingPayment's "Phase 5 enforcement at the money moment" guard. Skipped only for the
+    // initiatePendingPayment's "Phase 5 enforcement at the money moment" guard. Skipped only for
+    // the
     // system-initiated expired-charge release, which has no cashier to scope (see
     // abandonForExpiredChargeInCurrentTx).
     if (enforceOutlet) {

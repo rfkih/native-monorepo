@@ -38,14 +38,14 @@ import org.springframework.boot.test.context.SpringBootTest;
  * <p>{@code Bill.cancel()}'s paid/reserved-line guard is a READ of child rows, and a PARTIAL
  * split-pay ({@code markLinesPaidForCash}) or a gateway reservation ({@code reserveUnpaidLines})
  * mutates {@code bill_line} via native UPDATEs that never dirty the parent {@code bill} row — so
- * optimistic {@code @Version} alone cannot arbitrate cancel vs. those writers, and before the fix
- * a cancel racing a partial split-pay could commit a CANCELLED bill with a recorded sale stranded
- * on it (or a live PSP reservation, the H1 variant). The fix makes every such path load the bill
+ * optimistic {@code @Version} alone cannot arbitrate cancel vs. those writers, and before the fix a
+ * cancel racing a partial split-pay could commit a CANCELLED bill with a recorded sale stranded on
+ * it (or a live PSP reservation, the H1 variant). The fix makes every such path load the bill
  * {@code FOR UPDATE} ({@code BillRepository#findWithLockById}); these races then serialize on the
  * bill row and the loser fails with the CORRECT domain exception.
  *
- * <p>Mirrors {@link BillGatewayConcurrencyTest}'s barrier/executor harness: the invariant must
- * hold on EVERY interleaving, so each race is repeated.
+ * <p>Mirrors {@link BillGatewayConcurrencyTest}'s barrier/executor harness: the invariant must hold
+ * on EVERY interleaving, so each race is repeated.
  */
 @SpringBootTest
 class BillCancelRaceTest extends PostgresRlsTestBase {
@@ -67,10 +67,7 @@ class BillCancelRaceTest extends PostgresRlsTestBase {
     UUID itemB = seedItem("Es Jeruk");
     UUID billId = openBillWithLines(itemA, itemB);
     UUID lineAId =
-        TenantContext.callAs(TENANT, ACTOR, () -> billService.getById(billId))
-            .lines()
-            .get(0)
-            .id();
+        TenantContext.callAs(TENANT, ACTOR, () -> billService.getById(billId)).lines().get(0).id();
 
     CyclicBarrier barrier = new CyclicBarrier(2);
 
@@ -227,9 +224,7 @@ class BillCancelRaceTest extends PostgresRlsTestBase {
     List<OrderLineRequest> lines =
         java.util.Arrays.stream(itemIds).map(id -> new OrderLineRequest(id, 1)).toList();
     TenantContext.callAs(
-        TENANT,
-        ACTOR,
-        () -> billService.appendLines(opened.id(), new AppendLinesRequest(lines)));
+        TENANT, ACTOR, () -> billService.appendLines(opened.id(), new AppendLinesRequest(lines)));
     return opened.id();
   }
 
@@ -254,8 +249,7 @@ class BillCancelRaceTest extends PostgresRlsTestBase {
   }
 
   private long paidLineCountAsAdmin(UUID billId) throws Exception {
-    return countAsAdmin(
-        "SELECT count(*) FROM bill_line WHERE bill_id = ? AND paid = true", billId);
+    return countAsAdmin("SELECT count(*) FROM bill_line WHERE bill_id = ? AND paid = true", billId);
   }
 
   private long reservedLineCountAsAdmin(UUID billId) throws Exception {

@@ -136,8 +136,10 @@ public class BillWriter {
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
   private final ActorRolesProvider actorRoles;
+
   /** Audit #3: age after which a PENDING gateway reservation is considered leaked (self-healed). */
   private final Duration pendingReservationTtl;
+
   private final SalesChannelRepository salesChannelRepository;
   private final CashWindowLock cashWindowLock;
   private final PaymentWriter paymentWriter;
@@ -198,8 +200,8 @@ public class BillWriter {
   }
 
   /**
-   * Open-bill lockdown (owner rule): destructive open-bill mutations require {@code
-   * owner}/{@code manager}. Empty-roles-pass semantics shared with {@link
+   * Open-bill lockdown (owner rule): destructive open-bill mutations require {@code owner}/{@code
+   * manager}. Empty-roles-pass semantics shared with {@link
    * id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard} — a headerless caller
    * (gateway-less dev recipe / direct service-layer test) is trusted; a real cashier token is
    * denied.
@@ -741,8 +743,7 @@ public class BillWriter {
    *
    * @throws BillNotFoundException if the bill is not found
    * @throws BillNotOpenException if the bill is not OPEN
-   * @throws BillMutationForbiddenException if the bill has lines and the actor is not
-   *     owner/manager
+   * @throws BillMutationForbiddenException if the bill has lines and the actor is not owner/manager
    * @throws id.co.nativeapp.restaurant.bill.domain.BillHasPaidLinesException if any line is paid
    * @throws id.co.nativeapp.restaurant.bill.domain.BillLineReservedException if any line is
    *     reserved

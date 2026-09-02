@@ -7,8 +7,8 @@ import org.springframework.stereotype.Service;
 /**
  * Orchestrates applying a consumed {@code PaymentChargeExpired} event (ADR 0045).
  *
- * <p><strong>The inbound tenant comes from the event, not a request.</strong> There is no JWT on the
- * consumer path, so this service binds the tenant scope from the event's {@code company_id} via
+ * <p><strong>The inbound tenant comes from the event, not a request.</strong> There is no JWT on
+ * the consumer path, so this service binds the tenant scope from the event's {@code company_id} via
  * {@link TenantContext#callAs} with a fixed {@code "restaurant-payment-charge-expired-consumer"}
  * actor (which lands in the Auditable {@code created_by}), then delegates to the proxied {@link
  * PaymentChargeExpiredWriter} so the {@code @Transactional} advice and the auto-RLS aspect engage

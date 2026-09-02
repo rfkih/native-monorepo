@@ -11,8 +11,8 @@ import java.util.UUID;
  * net (total − refunds) over its {@code [openedAt, closedAt)} window. All money is integer minor
  * units in {@code currency} (rule 8); formatting is the client's job.
  *
- * <p>Mapping from the repository projection lives in {@code RegisterSessionWriter} — a dto must
- * not depend on the projection layer (LayeredArchitectureTest).
+ * <p>Mapping from the repository projection lives in {@code RegisterSessionWriter} — a dto must not
+ * depend on the projection layer (LayeredArchitectureTest).
  */
 public record ClosedSessionSummaryResponse(
     UUID sessionId,

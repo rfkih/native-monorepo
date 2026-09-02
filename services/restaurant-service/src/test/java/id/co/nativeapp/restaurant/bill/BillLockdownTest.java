@@ -29,8 +29,8 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
- * Open-bill lockdown (owner request 2026-08-31): once a bill is open the flow must end in payment
- * — it cannot be freely voided or trimmed by the cashier.
+ * Open-bill lockdown (owner request 2026-08-31): once a bill is open the flow must end in payment —
+ * it cannot be freely voided or trimmed by the cashier.
  *
  * <ul>
  *   <li>Cancel: a bill WITH lines requires {@code owner}/{@code manager}; an EMPTY bill (wrong

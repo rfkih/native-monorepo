@@ -4,8 +4,8 @@ import java.util.UUID;
 
 /**
  * Thrown when a remove is attempted on a bill line that is already PAID — its sale is recorded;
- * removing it would silently detach money from the bill (the frontend never offers this, the
- * server refuses it regardless). Maps to {@code 409 Conflict} via {@link
+ * removing it would silently detach money from the bill (the frontend never offers this, the server
+ * refuses it regardless). Maps to {@code 409 Conflict} via {@link
  * id.co.nativeapp.restaurant.bill.controller.BillExceptionHandler}.
  */
 public class BillLinePaidException extends RuntimeException {

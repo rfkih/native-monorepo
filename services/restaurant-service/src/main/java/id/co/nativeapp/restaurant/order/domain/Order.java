@@ -331,8 +331,8 @@ public class Order extends Auditable {
    * digital tender it was waiting on will never settle (the gateway charge EXPIRED/CANCELED/FAILED,
    * driven by the {@code PaymentChargeExpired} consumer). The order becomes payable again (cash, or
    * a fresh QR); no sale was ever recorded (ADR 0006 revenue-at-capture), so nothing is reversed.
-   * Reverting to {@code PENDING} rather than {@code PARKED} is deliberate — the order returns to the
-   * plain open/payable state regardless of whether it reached AWAITING_PAYMENT from checkout
+   * Reverting to {@code PENDING} rather than {@code PARKED} is deliberate — the order returns to
+   * the plain open/payable state regardless of whether it reached AWAITING_PAYMENT from checkout
    * ({@code PENDING}) or from {@code /pay} of a parked cart ({@code PARKED}).
    *
    * <p>Legal source state: {@code AWAITING_PAYMENT}.

@@ -37,8 +37,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * consumer of a dynamic-QRIS gateway charge that terminated WITHOUT settling. The un-happy-path
  * counterpart of {@link PaymentChargeSucceededConsumeAcceptanceTest} / {@link
  * BillPaymentChargeSucceededTest}: it proves the release, not a capture. Real Kafka + Postgres via
- * {@link KafkaPostgresRedisTestBase}; the distinct-marker technique proves a same-partition delivery
- * has drained before each PENDING/CAPTURED assertion.
+ * {@link KafkaPostgresRedisTestBase}; the distinct-marker technique proves a same-partition
+ * delivery has drained before each PENDING/CAPTURED assertion.
  */
 @SpringBootTest
 class PaymentChargeExpiredConsumeAcceptanceTest extends KafkaPostgresRedisTestBase {
@@ -113,11 +113,19 @@ class PaymentChargeExpiredConsumeAcceptanceTest extends KafkaPostgresRedisTestBa
     EventFixtures.publishPaymentChargeExpired(KAFKA.getBootstrapServers(), TENANT, eventId, event);
     EventFixtures.publishPaymentChargeExpired(KAFKA.getBootstrapServers(), TENANT, eventId, event);
 
-    // A distinct marker on payment2, published after the duplicate — once it releases, the duplicate
+    // A distinct marker on payment2, published after the duplicate — once it releases, the
+    // duplicate
     // for payment1 has necessarily drained (same company_id key → same partition → in order).
     GenericRecord marker =
         EventFixtures.paymentChargeExpired(
-            UUID.randomUUID(), TENANT, "restaurant", payment2, BUSINESS, amount2, "IDR", "CANCELED");
+            UUID.randomUUID(),
+            TENANT,
+            "restaurant",
+            payment2,
+            BUSINESS,
+            amount2,
+            "IDR",
+            "CANCELED");
     EventFixtures.publishPaymentChargeExpired(
         KAFKA.getBootstrapServers(), TENANT, UUID.randomUUID(), marker);
 
@@ -270,7 +278,8 @@ class PaymentChargeExpiredConsumeAcceptanceTest extends KafkaPostgresRedisTestBa
 
     // Force the divergence the RELEASE_FAILED branch guards against: the payment stays PENDING but
     // its order is moved OUT of AWAITING_PAYMENT (a state that normal flows keep in lock-step). The
-    // release must NOT touch the payment — it parks for a human, since fresh payment status is still
+    // release must NOT touch the payment — it parks for a human, since fresh payment status is
+    // still
     // PENDING (so this is a real divergence, not the benign capture-won race).
     updateOrderStatusAsAdmin(checkout.order().orderId(), "PENDING");
 
@@ -285,8 +294,7 @@ class PaymentChargeExpiredConsumeAcceptanceTest extends KafkaPostgresRedisTestBa
         .pollInterval(Duration.ofMillis(200))
         .untilAsserted(
             () ->
-                assertThat(
-                        errorLogCountAsAdmin("restaurant.payment-charge-expired.release-failed"))
+                assertThat(errorLogCountAsAdmin("restaurant.payment-charge-expired.release-failed"))
                     .isEqualTo(1L));
 
     // The tender is left untouched (PENDING) for the human to reconcile.

@@ -13,10 +13,11 @@ import org.springframework.stereotype.Component;
 /**
  * Consumes {@code PaymentChargeExpired} off Kafka (produced by payment-service when a dynamic-QRIS
  * gateway charge terminates without settling, ADR 0045) and routes it to {@link
- * PaymentChargeExpiredService}, which filters on {@code vertical} and RELEASES the PENDING tender the
- * charge was holding: a bill payment's {@code bill_line} reservation is released and the payment
- * abandoned; an order is reverted out of {@code AWAITING_PAYMENT} and its payment abandoned. No
- * money moves — the counterpart of {@link PaymentChargeSucceededListener} on the un-happy path.
+ * PaymentChargeExpiredService}, which filters on {@code vertical} and RELEASES the PENDING tender
+ * the charge was holding: a bill payment's {@code bill_line} reservation is released and the
+ * payment abandoned; an order is reverted out of {@code AWAITING_PAYMENT} and its payment
+ * abandoned. No money moves — the counterpart of {@link PaymentChargeSucceededListener} on the
+ * un-happy path.
  *
  * <p><strong>Raw Avro bytes / idempotency by event id / DLT on decode-or-missing-header.</strong>
  * Identical mechanics to {@link PaymentChargeSucceededListener}: the value is the payment-service

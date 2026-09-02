@@ -101,8 +101,7 @@ class RefundCashWindowLockConcurrencyTest extends PostgresRlsTestBase {
                         ACTOR,
                         () ->
                             voidRefundService.refund(
-                                paymentId,
-                                Money.ofMinor(checkoutPayment.amountMinor(), "IDR")));
+                                paymentId, Money.ofMinor(checkoutPayment.amountMinor(), "IDR")));
                 refundResult.set(response);
               } catch (Throwable t) {
                 refundError.set(t);

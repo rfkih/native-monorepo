@@ -4,11 +4,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Decoded view of a {@code PaymentChargeExpired} event (ADR 0045) — the un-happy-path counterpart of
- * {@link PaymentChargeSucceededEvent}: payment-service's dynamic-QRIS gateway charge terminated
+ * Decoded view of a {@code PaymentChargeExpired} event (ADR 0045) — the un-happy-path counterpart
+ * of {@link PaymentChargeSucceededEvent}: payment-service's dynamic-QRIS gateway charge terminated
  * WITHOUT settling (expired / canceled / failed after its QR was issued). Every vertical consumes
- * the one topic and filters on {@link #vertical()}; only events whose vertical is {@code restaurant}
- * are applied here.
+ * the one topic and filters on {@link #vertical()}; only events whose vertical is {@code
+ * restaurant} are applied here.
  *
  * <p>Consumed by {@link PaymentChargeExpiredListener} and applied, idempotently, by {@code
  * payment.service.PaymentChargeExpiredWriter}, which RELEASES the PENDING tender this charge was

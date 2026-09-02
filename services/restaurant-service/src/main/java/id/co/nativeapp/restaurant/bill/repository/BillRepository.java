@@ -27,9 +27,9 @@ public interface BillRepository extends JpaRepository<Bill, UUID> {
    * C1/H1 fix). {@code Bill.cancel()}'s paid/reserved-line guard is a read of child rows, and a
    * PARTIAL split-pay / gateway reservation mutates {@code bill_line} via native UPDATEs WITHOUT
    * dirtying the parent {@code bill} row — so optimistic {@code @Version} alone cannot serialize a
-   * cancel against them (TOCTOU: cancel's line snapshot goes stale, its version check still
-   * passes, and a recorded sale or live PSP reservation is stranded on a CANCELLED bill). Every
-   * mutating path that either changes line paid/reserved state or judges it (cancelBill, payBill,
+   * cancel against them (TOCTOU: cancel's line snapshot goes stale, its version check still passes,
+   * and a recorded sale or live PSP reservation is stranded on a CANCELLED bill). Every mutating
+   * path that either changes line paid/reserved state or judges it (cancelBill, payBill,
    * initiatePendingPayment, BillPaymentCaptureWriter.capture) MUST load the bill through this
    * finder, making the bill row the common lock; the canonical lock order is bill → bill_line →
    * payment (see BillPaymentWriter#doAbandon for the payment-side ordering).

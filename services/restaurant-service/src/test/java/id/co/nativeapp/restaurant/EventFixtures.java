@@ -105,9 +105,9 @@ public final class EventFixtures {
   }
 
   /**
-   * Builds a {@code PaymentChargeExpired} record (ADR 0045) the way payment-service + Debezium would
-   * emit it when a QR_ISSUED charge terminated without settling. {@code referenceId} is {@code null}
-   * for the restaurant shape (its release key is {@code paymentId}).
+   * Builds a {@code PaymentChargeExpired} record (ADR 0045) the way payment-service + Debezium
+   * would emit it when a QR_ISSUED charge terminated without settling. {@code referenceId} is
+   * {@code null} for the restaurant shape (its release key is {@code paymentId}).
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public static GenericRecord paymentChargeExpired(

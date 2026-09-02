@@ -5,8 +5,8 @@ import java.util.UUID;
 /**
  * Thrown when a caller without the {@code owner}/{@code manager} role attempts a destructive
  * open-bill mutation (cancelling a bill that has lines, or removing a line) — the open-bill
- * lockdown: once a bill holds items its flow must end in payment unless a manager intervenes.
- * Maps to {@code 403 Forbidden} via {@link
+ * lockdown: once a bill holds items its flow must end in payment unless a manager intervenes. Maps
+ * to {@code 403 Forbidden} via {@link
  * id.co.nativeapp.restaurant.bill.controller.BillExceptionHandler}.
  *
  * <p>Same role source and empty-roles-pass semantics as {@link
