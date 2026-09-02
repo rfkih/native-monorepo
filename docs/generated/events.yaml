@@ -152,6 +152,19 @@ events:
       - { name: change_kind, type: "string" }
       - { name: effective_from, type: "date" }
       - { name: effective_to, type: "date" }
+  - name: JournalEntryPosted
+    namespace: id.co.nativeapp.events.finance
+    schema: libs/contracts/src/main/resources/avro/JournalEntryPosted.avsc
+    fields:
+      - { name: journal_entry_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "null|string" }
+      - { name: period, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+      - { name: currency, type: "string" }
+      - { name: posting_role, type: "string" }
+      - { name: source_event_id, type: "string" }
+      - { name: lines, type: "array<record:JournalEntryLine>" }
   - name: LaborCostAllocated
     namespace: id.co.nativeapp.events.employee
     schema: libs/contracts/src/main/resources/avro/LaborCostAllocated.avsc

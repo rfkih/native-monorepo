@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
@@ -51,7 +52,10 @@ class PlatformSettlementPostingTest {
         new PlatformSettlementWriter(
             mock(PlatformSettlementRepository.class),
             new GeneralLedgerWriter(
-                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             resolver,
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));

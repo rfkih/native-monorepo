@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.empexpense.domain.EmployeeExpenseClaimLedger;
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimVoidedEvent;
@@ -29,6 +31,7 @@ import id.co.nativeapp.finance.revenue.domain.PostingType;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -75,7 +78,11 @@ class ExpenseClaimVoidWriterTest {
             glAccountResolver,
             pnlReadModel,
             journalPostingService,
-            new GeneralLedgerWriter(journalEntryRepository, journalLineRepository),
+            new GeneralLedgerWriter(
+                journalEntryRepository,
+                journalLineRepository,
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             claimLedgerRepository);
   }
 

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
@@ -17,6 +18,7 @@ import id.co.nativeapp.finance.opening.domain.OpeningBalanceSide;
 import id.co.nativeapp.finance.opening.dto.OpeningBalanceLine;
 import id.co.nativeapp.finance.opening.repository.CompanyOpeningBalanceRepository;
 import id.co.nativeapp.finance.opening.service.OpeningBalanceWriter;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -40,7 +42,10 @@ class OpeningBalancePostingTest {
     return new OpeningBalanceWriter(
         mock(CompanyOpeningBalanceRepository.class),
         new GeneralLedgerWriter(
-            mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
+            mock(JournalEntryRepository.class),
+            mock(JournalLineRepository.class),
+            mock(OutboxWriter.class),
+            Clock.systemUTC()),
         resolver,
         mock(JdbcTemplate.class));
   }

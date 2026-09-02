@@ -1,10 +1,15 @@
 package id.co.nativeapp.finance.gl.service;
 
+import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
+import id.co.nativeapp.finance.gl.messaging.JournalEntryPostedSchema;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import java.time.Clock;
 import java.util.Objects;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,8 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
  * PayrollSettlementWriter} all legitimately READ those repositories (prior-entry lookups for
  * supersession, trial-balance aggregation), and forbidding that would be wrong. So "a posting
  * writer that does not go through this door" is not merely detected — it does not survive the test
- * gate. That structural guarantee, not a numeric assertion, is what makes a future {@code
- * JournalEntryPosted} emission (ADR 0071) complete by construction.
+ * gate. That structural guarantee, not a numeric assertion, is what makes the {@code
+ * JournalEntryPosted} emission below (ADR 0071 P1) complete by construction: every persisted entry
+ * emits exactly one event, because there is exactly one place an entry can be persisted.
  *
  * <p><strong>Transaction.</strong> {@link Propagation#MANDATORY} — this never opens its own
  * transaction; it joins the calling {@code *Writer}'s, which is where {@code RlsAutoApplyAspect}
@@ -45,22 +51,36 @@ public class GeneralLedgerWriter {
 
   private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
+  private final OutboxWriter outboxWriter;
+  private final Clock clock;
 
   public GeneralLedgerWriter(
-      JournalEntryRepository journalEntryRepository, JournalLineRepository journalLineRepository) {
+      JournalEntryRepository journalEntryRepository,
+      JournalLineRepository journalLineRepository,
+      OutboxWriter outboxWriter,
+      Clock clock) {
     this.journalEntryRepository =
         Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
     this.journalLineRepository =
         Objects.requireNonNull(journalLineRepository, "journalLineRepository");
+    this.outboxWriter = Objects.requireNonNull(outboxWriter, "outboxWriter");
+    this.clock = Objects.requireNonNull(clock, "clock");
   }
 
   /**
-   * Stamps the tenant onto the entry and its lines and persists both, in the caller's transaction.
+   * Stamps the tenant onto the entry and its lines, persists both, and emits {@code
+   * JournalEntryPosted} — all in the caller's transaction.
    *
    * <p>The entry is {@code saveAndFlush}ed before the lines so the FK {@code journal_line.entry_id
    * → journal_entry.id} has its target in the database — {@link JournalEntry#getLines()} is a
    * {@code @Transient} list assembled in memory by {@link JournalPostingService}, so the lines are
    * not cascaded and must be saved explicitly.
+   *
+   * <p>The outbox row (rule 3) rides the same commit as the entry: either both exist or neither
+   * does, which is what lets {@code GlOutboxCompletenessTest} assert entry-count == event-count as
+   * an invariant rather than a hope. One entry, one event — a supersession (ADR 0064) posts its
+   * contra and its re-post as two entries and therefore two events, each carrying its own {@code
+   * posting_role}.
    *
    * @param entry the balanced entry to persist (typically from {@link JournalPostingService})
    * @param companyId the bound tenant, stamped on the entry and every line
@@ -76,5 +96,13 @@ public class GeneralLedgerWriter {
       line.setCompanyId(companyId);
       journalLineRepository.save(line);
     }
+    outboxWriter.write(
+        JournalEntryPostedSchema.AGGREGATE_TYPE,
+        companyId,
+        JournalEntryPostedSchema.EVENT_TYPE,
+        AvroSerde.serialize(JournalEntryPostedSchema.toRecord(entry, companyId)),
+        null,
+        UUID.fromString(companyId),
+        clock.instant());
   }
 }

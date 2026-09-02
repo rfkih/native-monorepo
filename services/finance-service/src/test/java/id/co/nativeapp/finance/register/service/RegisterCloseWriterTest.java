@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import id.co.nativeapp.errorinbox.ErrorInboxWriter;
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
@@ -19,6 +20,7 @@ import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.register.messaging.RegisterSessionClosedEvent;
 import id.co.nativeapp.finance.register.messaging.RegisterSessionClosedEvent.TenderReconciliation;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -45,7 +47,11 @@ class RegisterCloseWriterTest {
       new RegisterCloseWriter(
           mock(ProcessedEventStore.class),
           journalEntryRepository,
-          new GeneralLedgerWriter(journalEntryRepository, journalLineRepository),
+          new GeneralLedgerWriter(
+              journalEntryRepository,
+              journalLineRepository,
+              mock(OutboxWriter.class),
+              Clock.systemUTC()),
           journalLineRepository,
           resolver,
           mock(LedgerPostingRepository.class),

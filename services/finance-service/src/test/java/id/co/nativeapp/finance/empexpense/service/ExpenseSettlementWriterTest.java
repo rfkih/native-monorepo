@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.empexpense.domain.EmployeeExpenseClaimLedger;
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseReimbursementSettledEvent;
@@ -22,6 +24,7 @@ import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -69,7 +72,11 @@ class ExpenseSettlementWriterTest {
             // A real GeneralLedgerWriter around the SAME mocks, so the existing
             // verify(journalEntryRepository)/verifyNoInteractions assertions still observe the
             // writes — the door delegates straight through (ADR 0071).
-            new GeneralLedgerWriter(journalEntryRepository, journalLineRepository));
+            new GeneralLedgerWriter(
+                journalEntryRepository,
+                journalLineRepository,
+                mock(OutboxWriter.class),
+                Clock.systemUTC()));
   }
 
   private static ExpenseReimbursementSettledEvent directEvent(UUID eventId, long amountMinor) {

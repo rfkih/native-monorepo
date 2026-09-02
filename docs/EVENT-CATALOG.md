@@ -75,6 +75,7 @@ has landed yet — the status names the phases that will land them.
 | **`GroupMembershipChanged`** | **org-service** | **finance** | **group_id, member_company_id, change_kind, effective_from, effective_to** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
 | **`TrialBalancePublished`** | **finance** (member within-company close) | **finance** (group consolidation) | **company_id, group_id, period, base_currency, reconciled, uses_illustrative_rules, lines[]** | **LIVE (CONSUMER P3d SEAM 2 group_trial_balance ingest; PRODUCER P3d SEAM 4a within-company close)** |
 | **`ConsolidationClosed`** | **finance** (within-company + group close) | **shell, notification** | **company_id (or group_id), period** | **LIVE (PRODUCER P3d SEAM 4a; notification consumer #22)** |
+| **`JournalEntryPosted`** | **finance** (the `GeneralLedgerWriter.post` choke point — every GL posting) | **analytics-service (ADR 0071 P2+, not yet built)** | **journal_entry_id, company_id, business_id?, period, occurred_at, currency, posting_role, source_event_id, lines[]** | **PRODUCER LIVE (ADR 0071 P1) — emitted for every persisted journal entry, atomic via the outbox; no consumer yet** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 | **`PaymentChargeSucceeded`** | **payment-service** | **restaurant-service, carwash-service, barbershop-service** (each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, provider, provider_txn_id?, succeeded_at** | **LIVE (ADR 0045): producer (webhook + sync settlement transitions, outbox, Debezium `payment-outbox-connector`) AND all three vertical consumers built — each runs its existing idempotent capture writer** |
 | **`PaymentChargeExpired`** | **payment-service** | **restaurant-service** (carwash/barbershop when built — each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, reason, occurred_at** | **LIVE (ADR 0045): the un-happy-path counterpart of `PaymentChargeSucceeded` — producer emits when a QR_ISSUED charge terminates without settling (EXPIRED/CANCELED/FAILED, outbox, same Debezium connector); restaurant consumer RELEASES the PENDING tender (bill reservation → abandon; order → revert AWAITING_PAYMENT). No money moves** |
@@ -416,7 +417,7 @@ amount_minor`. This SUPERSEDES the Phase 2 identity above (Phase 2 is the specia
     {"name": "gift_card_id", "type": ["null", "string"], "default": null, "doc": "Phase 4 (ADR 0027): the gift card (UUID as string) redeemed against this sale as a TENDER, or null when no gift card was used. Distinct from loyalty_member_id -- a gift card redemption is a liability settlement, not a discount."},
     {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the amount of stored value redeemed from the gift card, in the sale currency's minor units. A TENDER-SETTLEMENT amount (like tender_type), NOT a deduction from revenue -- it must be <= amount_minor. Finance splits the clearing debit: Dr GIFT_CARD_LIABILITY for this amount, Dr the tender-clearing account (resolved from tender_type) for the residual (amount_minor - gift_card_redeemed_minor). Null (treated as 0) when no gift card was used."},
     {"name": "channel", "type": ["null", "string"], "default": null, "doc": "Phase B (ADR 0036): the sales-channel code for an ONLINE-tender sale (e.g. GOFOOD, GRABFOOD) -- a company-managed sales_channel.code, IMMUTABLE once created. Null for every non-ONLINE tender (and for producers older than this field). Finance routes the ONLINE clearing debit to PLATFORM_RECEIVABLE and accumulates a per-channel receivable sub-ledger under this code; an ONLINE sale with a null channel accumulates under UNKNOWN (with a warning) rather than dropping money. Additive backward-compatible field -- appended LAST with default null (rule 7)."},
-    {"name": "sold_by_user_id", "type": ["null", "string"], "default": null, "doc": "ADR 0049 P0: the seller (operator's Keycloak sub) captured at ring time -- for audit/reporting only; commission attribution keys off MetricPublished.subject_id (unchanged), not this field. Null until ADR 0049 P2 (the PIN / operator-session flow) starts populating it -- every producer today sends null. Additive backward-compatible field -- appended LAST with default null (rule 7)."}
+    {"name": "sold_by_user_id", "type": ["null", "string"], "default": null, "doc": "ADR 0049: the seller (operator's Keycloak sub) captured at ring time -- for audit/reporting only; commission attribution keys off MetricPublished.subject_id (an employee_id -- a DIFFERENT id space, no event bridges the two), not this field. POPULATED since ADR 0049 P4 for restaurant operator-PIN sales (PaymentWriter stamps the ring-time operator); null for non-operator sales and for the carwash/barbershop producers, which never set it. Additive backward-compatible field -- appended LAST with default null (rule 7)."}
   ]
 }
 ```
@@ -1891,6 +1892,112 @@ to the DLT (non-retryable). Money is integer minor units + an ISO-4217 currency,
 without a default, never remove/rename a field or change a type. The finance
 `TrialBalancePublishedContractTest` enforces the triad (parse + `AvroSerde` round-trip +
 add-optional-compatible / new-required-broken).
+
+---
+
+### `JournalEntryPosted`
+
+Emitted by finance-service for **every balanced journal entry the GL persists** (ADR 0071 P1), from
+the single `gl.service.GeneralLedgerWriter.post` choke point — the GL's one persistence door. The
+`onlyTheGeneralLedgerWriterPersistsJournals` ArchUnit rule forbids any other class from writing
+`journal_entry`/`journal_line`, so a posting path that skips the emission is *unrepresentable*, not
+merely detected: this is the structural answer to the ADR 0065 anti-pattern (a hand-picked set of
+writers silently diverging from the ledger). `GlOutboxCompletenessTest` is the numeric belt to that
+suspenders — entry-count == event-count, wire lines faithful and balanced.
+
+Consumed (ADR 0071 P2+) by **analytics-service** to build `fact_gl_day`. **Consumer-side
+idempotency MUST key on `journal_entry_id`** (a claim table), not the outbox event id — a
+replayed/synthesized event carries a *new* outbox id, and that claim key is what makes backfill
+possible. A `REVERSAL` entry (ADR 0064 close-correction supersession) arrives as its own event and
+must be modelled as an additive contra row, never a delete. The append-only GL can regenerate this
+stream from its own tables to inception, so `fact_gl_day` is fully recoverable.
+
+- **Producer:** `finance-service` (`GeneralLedgerWriter.post`) — **LIVE (ADR 0071 P1)**.
+- **Consumers:** `analytics-service` (`fact_gl_day` ingest) — **planned, ADR 0071 P2+**.
+- **Aggregate type / partition key:** `journal_entry` / `company_id` (one tenant's GL stream is
+  totally ordered — a REVERSAL contra is never consumed before the entry it supersedes).
+- **Outbox `event_type`:** `JournalEntryPosted`
+- **Schema (single source of truth):** `libs/contracts/src/main/resources/avro/JournalEntryPosted.avsc`
+  — the producer (`gl.messaging.JournalEntryPostedSchema.toRecord`) and every future consumer read
+  this one `.avsc`; raw Avro bytes via `libs/events AvroSerde` (no Schema Registry serde). The
+  finance `JournalEntryPostedContractTest` asserts back-compat (rule 7).
+- **Full name:** `id.co.nativeapp.events.finance.JournalEntryPosted`
+
+`period` is the entry's **authoritative accounting period carried verbatim** — it is *not* always
+derivable from `occurred_at` (payroll runs post into their run period). `business_id` is `null`
+until ADR 0071 P5 threads the outlet through the choke point; consumers must render `null` as
+"unallocated" (company-level postings — depreciation, bank fees, AR/AP, payroll, tax — carry no
+outlet by domain design), never spread or hide it. Money is integer minor units + an ISO-4217
+currency, **never a float** (rule 8); no PII (rule 6).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `journal_entry_id` | `string` | The `journal_entry` primary key (UUID as string); the consumer-side idempotency/claim key |
+| `company_id` | `string` | The owning tenant (UUID as string); the partition key + RLS dimension |
+| `business_id` | `["null","string"]` (default `null`) | The outlet this entry is attributable to, or null for a company-level entry (null until ADR 0071 P5) |
+| `period` | `string` | The entry's accounting period (`YYYY-MM`), carried verbatim from the entry |
+| `occurred_at` | `long` (`timestamp-millis`) | The entry's book timestamp, epoch millis (UTC) |
+| `currency` | `string` | The entry's ISO-4217 transaction currency; every line is in this currency |
+| `posting_role` | `string` | `PRIMARY` for a first posting; `REVERSAL` for a contra entry (ADR 0064) |
+| `source_event_id` | `string` | The consumed event that produced this entry (UUID as string); joins `ledger_posting.source_event_id` |
+| `lines` | `array<JournalEntryLine>` | The entry's balanced double-entry lines (≥2, Σdebit == Σcredit) |
+| `lines[].line_no` | `int` | The line's 1-based position within the entry |
+| `lines[].account_code` | `string` | The `chart_of_account` account code (the GL dimension) |
+| `lines[].debit_minor` | `long` | Debit amount in minor units (exactly one of debit/credit is zero; the other strictly positive) |
+| `lines[].credit_minor` | `long` | Credit amount in minor units (exactly one of debit/credit is zero; the other strictly positive) |
+| `lines[].currency` | `string` | The line's ISO-4217 currency code; always equals the entry's currency |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "JournalEntryPosted",
+  "namespace": "id.co.nativeapp.events.finance",
+  "fields": [
+    {"name": "journal_entry_id", "type": "string"},
+    {"name": "company_id", "type": "string"},
+    {"name": "business_id", "type": ["null", "string"], "default": null},
+    {"name": "period", "type": "string"},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "currency", "type": "string"},
+    {"name": "posting_role", "type": "string"},
+    {"name": "source_event_id", "type": "string"},
+    {
+      "name": "lines",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "JournalEntryLine",
+          "fields": [
+            {"name": "line_no", "type": "int"},
+            {"name": "account_code", "type": "string"},
+            {"name": "debit_minor", "type": "long"},
+            {"name": "credit_minor", "type": "long"},
+            {"name": "currency", "type": "string"}
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+(The registered `.avsc` additionally carries `doc` strings on the record and every field; `doc` is
+ignored by Avro resolution, so the two are resolution-identical.)
+
+**Compatibility.** Backward-compatible only: add fields with a default (P5 stamps the existing
+optional `business_id`, so it needs no schema change at all), never add a required field without a
+default, never remove/rename a field or change a type. The finance `JournalEntryPostedContractTest`
+enforces the triad (parse + `AvroSerde` round-trip + add-required-broken).
+
+**Volume note.** This roughly doubles finance's outbox write volume (one row per posted entry, and
+finance posts on every sale). The outbox retention policy that pays for it ships alongside (ADR
+0071 §retention): the nightly VPS maintenance prunes relayed rows older than the retention window,
+guarded on the Debezium connector actually running — see `docs/adr/0071-analytics-star-schema.md`.
 
 ---
 

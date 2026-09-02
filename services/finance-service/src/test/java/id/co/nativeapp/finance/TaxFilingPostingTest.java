@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
@@ -65,7 +66,10 @@ class TaxFilingPostingTest {
             roleResolver,
             mock(TaxFilingRepository.class),
             new GeneralLedgerWriter(
-                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             mock(JdbcTemplate.class),
             clock);
     settlementWriter =
@@ -73,7 +77,10 @@ class TaxFilingPostingTest {
             mock(TaxFilingRepository.class),
             roleResolver,
             new GeneralLedgerWriter(
-                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             mock(JdbcTemplate.class),
             clock);
   }
@@ -113,7 +120,10 @@ class TaxFilingPostingTest {
             illustrativeResolver,
             mock(TaxFilingRepository.class),
             new GeneralLedgerWriter(
-                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));
 
@@ -210,7 +220,10 @@ class TaxFilingPostingTest {
             mock(TaxFilingRepository.class),
             illustrativeResolver,
             new GeneralLedgerWriter(
-                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));
     TaxFiling payable = payableFiling(660_000L);

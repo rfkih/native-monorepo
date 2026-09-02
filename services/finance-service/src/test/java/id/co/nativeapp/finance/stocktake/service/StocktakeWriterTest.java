@@ -7,12 +7,14 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import id.co.nativeapp.errorinbox.ErrorInboxWriter;
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
@@ -29,6 +31,7 @@ import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
 import id.co.nativeapp.finance.stocktake.messaging.StocktakeCompletedEvent;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -77,7 +80,11 @@ class StocktakeWriterTest {
   private StocktakeWriter writer() {
     return new StocktakeWriter(
         processedEvents,
-        new GeneralLedgerWriter(journalEntryRepository, journalLineRepository),
+        new GeneralLedgerWriter(
+            journalEntryRepository,
+            journalLineRepository,
+            mock(OutboxWriter.class),
+            Clock.systemUTC()),
         resolver,
         perpetualInventoryReader,
         ledgerRepository,
