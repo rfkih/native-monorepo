@@ -1,5 +1,68 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-02 — the GL gets one persistence door: `GeneralLedgerWriter` (ADR 0071 P0)
+
+Groundwork for the analytics module, but it stands on its own. `JournalPostingService` centralised
+how a journal entry is *built* (`buildEntry`, `buildEntryForSale`, `buildEntryFromBreakdown`);
+nothing centralised how it is *written*. So **29 call sites across 28 writer classes** each repeated
+the identical incantation — stamp the tenant on the entry, `saveAndFlush` it (forcing the FK target
+down before the lines, which are `@Transient` and therefore not cascaded), then stamp and save each
+line. Five lines, copy-pasted 29 times.
+
+That is the [ADR 0065](adr/0065-gl-derived-dashboard-pnl.md) anti-pattern one level down. ADR 0065's
+lesson was that a figure assembled by a hand-picked set of writers diverges silently as writers are
+added; here the same shape blocks the thing analytics needs most — a per-entry `JournalEntryPosted`
+event. Emitting it would mean copy-pasting the emit 29 times, and the 30th posting writer would
+forget. **All five lines now collapse to `generalLedgerWriter.post(entry, companyId)`.**
+
+**The guarantee is structural, not a numeric test.** A new ArchUnit rule
+(`onlyTheGeneralLedgerWriterPersistsJournals`) forbids every class except `GeneralLedgerWriter`
+from calling a Spring Data WRITE method (`save*`/`delete*`/`flush`) on `JournalEntryRepository` /
+`JournalLineRepository`. It is deliberately a **write-side** rule rather than a no-dependency rule:
+`GlTrialBalanceReader`, `BalanceSheetReader`, `RegisterCloseWriter`, `ReversalPostingWriter`,
+`PayrollLiabilityWriter` and `PayrollSettlementWriter` all legitimately READ those repositories
+(trial-balance aggregation; prior-entry lookups for ADR 0064 supersession), and forbidding that
+would be wrong. So the 30th posting writer cannot bypass the door — that is not detected after the
+fact, it does not survive the test gate.
+
+`post` is `@Transactional(propagation = MANDATORY)` — it never opens its own transaction, it joins
+the calling `*Writer`'s, which is where `RlsAutoApplyAspect` has bound the tenant GUC.
+`ReversalPostingWriter` already used MANDATORY, so the shape has precedent; the aspect re-applies
+the GUC across suspend/resume, so the added proxy changes nothing.
+
+**Three traps, and the third is the one to remember.**
+
+1. A regex that consumes the `setCompanyId` line preceding a save will happily eat one belonging to
+   a *different* object — audited by diffing every removed `setCompanyId` and confirming all 35 were
+   on the entry (`entry`/`glEntry`/`contra`) or the line variable.
+2. A "is this dependency now dead?" scan keyed on `repo.method(` **misses line-wrapped calls**:
+   `PayrollSettlementWriter` uses `journalEntryRepository\n.findById(...)`, was misread as dead, and
+   had a live dependency removed — caught only because the restored-then-compiled signature
+   disagreed. Grep-based deadness is not deadness; the compiler is.
+3. **The guard was silently vacuous on the first attempt, and passing tests looked like proof.**
+   It was written as `noClasses().that(…).should(customCondition)`. ArchUnit **negates** a
+   `noClasses()` condition — it flags a class when the condition reports *satisfied* — so a custom
+   `ArchCondition` that only ever emits `SimpleConditionEvent.violated(...)` can never fire there.
+   The rule went green against a fully-migrated codebase and would have gone green against a
+   completely unmigrated one. Caught by **deliberately pointing the excluded class name at a
+   non-existent class**: the rule still passed, which it could only do if it were vacuous. Fixed by
+   using `classes()` (the form this file's other custom conditions already use); re-checked, it now
+   reports 2 violations with the intended message. **Vacuity-check every new ArchUnit rule by
+   inverting its premise — a structural guarantee you have not seen fail is not yet a guarantee.**
+
+In tests, writers are now constructed with a **real** `GeneralLedgerWriter` wrapping the *same*
+mock repositories, so existing `verify(journalEntryRepository).saveAndFlush(…)` and
+`verifyNoInteractions(…)` assertions keep observing the writes unchanged — the door delegates
+straight through.
+
+**Deliberately NOT in this change:** the outbox retention job. `@Scheduled` turns out to be against
+a documented fleet convention (`OrderWriter:546` — *"no @Scheduled job in this fleet — see ADR
+0029"*, the lazy-sweep idiom), and there is a hard ordering hazard: the new finance connector's
+`snapshot.mode: initial` replays the unrelayed outbox backlog to repair `group_trial_balance`, so
+pruning finance's outbox before that snapshot runs in prod destroys the repair permanently. It
+belongs with `JournalEntryPosted` (the change that actually inflates the outbox), with the design
+chosen rather than guessed.
+
 ## 2026-09-02 — finance-service had no Debezium connector: two "live" events never reached Kafka
 
 Found while designing the analytics module, not by a failing test — which is the point. finance-service

@@ -9,8 +9,7 @@ import id.co.nativeapp.finance.bank.repository.BankStatementLineRepository;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -65,8 +64,7 @@ public class ReconciliationWriter {
 
   private final BankStatementLineRepository statementLineRepository;
   private final RoleAccountResolver roleAccountResolver;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
 
@@ -74,17 +72,13 @@ public class ReconciliationWriter {
   public ReconciliationWriter(
       BankStatementLineRepository statementLineRepository,
       RoleAccountResolver roleAccountResolver,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.statementLineRepository =
         Objects.requireNonNull(statementLineRepository, "statementLineRepository");
     this.roleAccountResolver = Objects.requireNonNull(roleAccountResolver, "roleAccountResolver");
-    this.journalEntryRepository =
-        Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
-    this.journalLineRepository =
-        Objects.requireNonNull(journalLineRepository, "journalLineRepository");
+    this.generalLedgerWriter = Objects.requireNonNull(generalLedgerWriter, "generalLedgerWriter");
     this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
     this.clock = Objects.requireNonNull(clock, "clock");
   }
@@ -337,11 +331,7 @@ public class ReconciliationWriter {
   private void persistEntry(JournalEntry entry, String companyId) {
     entry.setCompanyId(companyId);
     // saveAndFlush forces the journal_entry INSERT before the FK'd line INSERTs (same tx).
-    journalEntryRepository.saveAndFlush(entry);
-    for (var journalLine : entry.getLines()) {
-      journalLine.setCompanyId(companyId);
-      journalLineRepository.save(journalLine);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   /**

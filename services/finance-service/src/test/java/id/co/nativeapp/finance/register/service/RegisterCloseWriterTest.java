@@ -14,6 +14,7 @@ import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.register.messaging.RegisterSessionClosedEvent;
 import id.co.nativeapp.finance.register.messaging.RegisterSessionClosedEvent.TenderReconciliation;
@@ -33,11 +34,19 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class RegisterCloseWriterTest {
 
   private final RoleAccountResolver resolver = mock(RoleAccountResolver.class);
+
+  // RegisterCloseWriter keeps both journal repositories for its READ path (prior-entry lookup on
+  // an ADR 0064 close correction) and additionally takes the GeneralLedgerWriter for the WRITE
+  // path (ADR 0071). The writer wraps these same mocks, so both paths observe one set of stubs.
+  private final JournalEntryRepository journalEntryRepository = mock(JournalEntryRepository.class);
+  private final JournalLineRepository journalLineRepository = mock(JournalLineRepository.class);
+
   private final RegisterCloseWriter writer =
       new RegisterCloseWriter(
           mock(ProcessedEventStore.class),
-          mock(JournalEntryRepository.class),
-          mock(JournalLineRepository.class),
+          journalEntryRepository,
+          new GeneralLedgerWriter(journalEntryRepository, journalLineRepository),
+          journalLineRepository,
           resolver,
           mock(LedgerPostingRepository.class),
           mock(ErrorInboxWriter.class),

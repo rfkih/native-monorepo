@@ -5,8 +5,7 @@ import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.inventory.messaging.StockReceivedEvent;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
@@ -62,8 +61,7 @@ public class StockReceivedWriter {
   private static final Logger log = LoggerFactory.getLogger(StockReceivedWriter.class);
 
   private final ProcessedEventStore processedEvents;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final PerpetualInventoryReader perpetualInventoryReader;
   private final LedgerPostingRepository ledgerRepository;
@@ -73,16 +71,14 @@ public class StockReceivedWriter {
   @SuppressWarnings("checkstyle:ParameterNumber")
   public StockReceivedWriter(
       ProcessedEventStore processedEvents,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       PerpetualInventoryReader perpetualInventoryReader,
       LedgerPostingRepository ledgerRepository,
       ErrorInboxWriter errorInbox,
       JdbcTemplate jdbcTemplate) {
     this.processedEvents = processedEvents;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.roleAccountResolver = roleAccountResolver;
     this.perpetualInventoryReader = perpetualInventoryReader;
     this.ledgerRepository = ledgerRepository;
@@ -153,12 +149,7 @@ public class StockReceivedWriter {
 
     UUID entryId = UUID.randomUUID();
     JournalEntry entry = buildEntry(event, entryId, period);
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
 
     log.info("Capitalized goods receipt {} to inventory (entry {})", event.receiptId(), entryId);
   }

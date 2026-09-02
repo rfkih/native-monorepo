@@ -6,6 +6,7 @@ import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.labor.domain.LiabilityState;
 import id.co.nativeapp.finance.labor.domain.NegativeLiabilityBucketException;
@@ -99,6 +100,7 @@ public class PayrollSettlementWriter {
   private final PayrollSettlementRepository settlementRepository;
   private final RoleAccountResolver roleAccountResolver;
   private final JournalEntryRepository journalEntryRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final JournalLineRepository journalLineRepository;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
@@ -109,15 +111,17 @@ public class PayrollSettlementWriter {
       PayrollSettlementRepository settlementRepository,
       RoleAccountResolver roleAccountResolver,
       JournalEntryRepository journalEntryRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       JournalLineRepository journalLineRepository,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.runLedgerRepository = Objects.requireNonNull(runLedgerRepository, "runLedgerRepository");
+    this.journalEntryRepository =
+        Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
+    this.generalLedgerWriter = Objects.requireNonNull(generalLedgerWriter, "generalLedgerWriter");
     this.settlementRepository =
         Objects.requireNonNull(settlementRepository, "settlementRepository");
     this.roleAccountResolver = Objects.requireNonNull(roleAccountResolver, "roleAccountResolver");
-    this.journalEntryRepository =
-        Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
     this.journalLineRepository =
         Objects.requireNonNull(journalLineRepository, "journalLineRepository");
     this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
@@ -327,12 +331,7 @@ public class PayrollSettlementWriter {
   }
 
   private void persistEntry(JournalEntry entry, String companyId) {
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   private void requireConsistentGlCurrency(String period, Money amount) {

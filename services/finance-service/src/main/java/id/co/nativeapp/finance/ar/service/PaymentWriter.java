@@ -9,8 +9,7 @@ import id.co.nativeapp.finance.ar.repository.InvoicePaymentRepository;
 import id.co.nativeapp.finance.ar.repository.InvoiceRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -40,8 +39,7 @@ public class PaymentWriter {
   private final InvoiceRepository invoiceRepository;
   private final InvoicePaymentRepository invoicePaymentRepository;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
 
@@ -50,15 +48,13 @@ public class PaymentWriter {
       InvoiceRepository invoiceRepository,
       InvoicePaymentRepository invoicePaymentRepository,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.invoiceRepository = invoiceRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.invoicePaymentRepository = invoicePaymentRepository;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
     this.jdbcTemplate = jdbcTemplate;
     this.clock = clock;
   }
@@ -125,12 +121,7 @@ public class PaymentWriter {
             "AR payment received",
             false,
             amounts);
-    glEntry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(glEntry);
-    for (var line : glEntry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(glEntry, companyId);
 
     InvoicePayment payment =
         InvoicePayment.of(invoiceId, amount, now, method, glEntry.getId(), idempotencyKey);

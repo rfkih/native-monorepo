@@ -5,8 +5,7 @@ import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.inventory.messaging.SaleCogsRecordedEvent;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
@@ -69,8 +68,7 @@ public class SaleCogsRecordedWriter {
   private static final Logger log = LoggerFactory.getLogger(SaleCogsRecordedWriter.class);
 
   private final ProcessedEventStore processedEvents;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final PerpetualInventoryReader perpetualInventoryReader;
   private final LedgerPostingRepository ledgerRepository;
@@ -80,16 +78,14 @@ public class SaleCogsRecordedWriter {
   @SuppressWarnings("checkstyle:ParameterNumber")
   public SaleCogsRecordedWriter(
       ProcessedEventStore processedEvents,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       PerpetualInventoryReader perpetualInventoryReader,
       LedgerPostingRepository ledgerRepository,
       ErrorInboxWriter errorInbox,
       JdbcTemplate jdbcTemplate) {
     this.processedEvents = processedEvents;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.roleAccountResolver = roleAccountResolver;
     this.perpetualInventoryReader = perpetualInventoryReader;
     this.ledgerRepository = ledgerRepository;
@@ -162,12 +158,7 @@ public class SaleCogsRecordedWriter {
 
     UUID entryId = UUID.randomUUID();
     JournalEntry entry = buildEntry(event, entryId, period);
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
 
     // Dimensional posting (§1): the per-outlet P&L rollup reads ledger_posting — the dashboard P&L
     // is GL-derived (ADR 0065), so the journal debit above already reaches the beranda AND the

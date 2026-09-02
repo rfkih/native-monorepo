@@ -10,8 +10,7 @@ import id.co.nativeapp.finance.assets.repository.FixedAssetRepository;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -55,8 +54,7 @@ public class AssetDisposalWriter {
 
   private final FixedAssetRepository assetRepository;
   private final AmortizationRunRepository runRepository;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
@@ -65,17 +63,13 @@ public class AssetDisposalWriter {
   public AssetDisposalWriter(
       FixedAssetRepository assetRepository,
       AmortizationRunRepository runRepository,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.assetRepository = Objects.requireNonNull(assetRepository, "assetRepository");
+    this.generalLedgerWriter = Objects.requireNonNull(generalLedgerWriter, "generalLedgerWriter");
     this.runRepository = Objects.requireNonNull(runRepository, "runRepository");
-    this.journalEntryRepository =
-        Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
-    this.journalLineRepository =
-        Objects.requireNonNull(journalLineRepository, "journalLineRepository");
     this.roleAccountResolver = Objects.requireNonNull(roleAccountResolver, "roleAccountResolver");
     this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
     this.clock = Objects.requireNonNull(clock, "clock");
@@ -333,11 +327,7 @@ public class AssetDisposalWriter {
   private void persistEntry(JournalEntry entry, String companyId) {
     entry.setCompanyId(companyId);
     // saveAndFlush forces the journal_entry INSERT before the FK'd line INSERTs (same tx).
-    journalEntryRepository.saveAndFlush(entry);
-    for (var line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   /**

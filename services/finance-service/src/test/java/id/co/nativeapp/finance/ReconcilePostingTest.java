@@ -16,6 +16,7 @@ import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import java.time.Clock;
 import java.time.Instant;
@@ -56,8 +57,8 @@ class ReconcilePostingTest {
         new ReconciliationWriter(
             mock(BankStatementLineRepository.class),
             roleResolver,
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));
   }
@@ -93,8 +94,8 @@ class ReconcilePostingTest {
         new ReconciliationWriter(
             mock(BankStatementLineRepository.class),
             illustrativeResolver,
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));
 
@@ -167,9 +168,12 @@ class ReconcilePostingTest {
 
   @Test
   void depositQrisClearingWithFeeDebitsBankAndFeeCreditsGrossToQrisClearing() {
-    // QRIS_FEE_EXPENSE (5720) was seeded illustrative (V52) and superseded official by V55 (bucket A
-    // of the go-live SME review) — prod no longer badges a QRIS-fee reconciliation provisional. This
-    // test keeps RoleAccountResolver mocked (unit test, no DB), so it independently proves the writer
+    // QRIS_FEE_EXPENSE (5720) was seeded illustrative (V52) and superseded official by V55 (bucket
+    // A
+    // of the go-live SME review) — prod no longer badges a QRIS-fee reconciliation provisional.
+    // This
+    // test keeps RoleAccountResolver mocked (unit test, no DB), so it independently proves the
+    // writer
     // still DERIVES uses_illustrative_rules from whatever the resolver reports (rather than
     // hardcoding it) by forcing the illustrative branch here; see PerpetualInventoryGlConfigTest /
     // GlConfigOfficialiseTest for the real-DB provenance assertion against the live V55 data.

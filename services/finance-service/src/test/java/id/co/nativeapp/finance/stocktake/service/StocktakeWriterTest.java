@@ -19,6 +19,7 @@ import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.inventory.service.PerpetualInventoryReader;
 import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
@@ -76,8 +77,7 @@ class StocktakeWriterTest {
   private StocktakeWriter writer() {
     return new StocktakeWriter(
         processedEvents,
-        journalEntryRepository,
-        journalLineRepository,
+        new GeneralLedgerWriter(journalEntryRepository, journalLineRepository),
         resolver,
         perpetualInventoryReader,
         ledgerRepository,

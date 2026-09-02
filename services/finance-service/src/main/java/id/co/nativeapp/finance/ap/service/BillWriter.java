@@ -15,8 +15,7 @@ import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.inventory.service.PerpetualInventoryReader;
@@ -98,8 +97,7 @@ public class BillWriter {
   private final BillLineRepository billLineRepository;
   private final VendorRepository vendorRepository;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final PerpetualInventoryReader perpetualInventoryReader;
   private final JdbcTemplate jdbcTemplate;
@@ -111,18 +109,16 @@ public class BillWriter {
       BillLineRepository billLineRepository,
       VendorRepository vendorRepository,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       PerpetualInventoryReader perpetualInventoryReader,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.billRepository = billRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.billLineRepository = billLineRepository;
     this.vendorRepository = vendorRepository;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
     this.roleAccountResolver = roleAccountResolver;
     this.perpetualInventoryReader = perpetualInventoryReader;
     this.jdbcTemplate = jdbcTemplate;
@@ -382,11 +378,7 @@ public class BillWriter {
   private void persistEntry(JournalEntry entry, String companyId) {
     entry.setCompanyId(companyId);
     // saveAndFlush forces the journal_entry INSERT before the FK'd line INSERTs (same tx).
-    journalEntryRepository.saveAndFlush(entry);
-    for (var line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   private Bill requireBill(UUID billId) {

@@ -9,6 +9,7 @@ import id.co.nativeapp.finance.gl.projection.JournalEntrySaleView;
 import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
@@ -116,6 +117,7 @@ public class ReversalPostingWriter {
   private final PnlReadModelWriter pnlReadModel;
   private final JournalPostingService journalPostingService;
   private final JournalEntryRepository journalEntryRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final JournalLineRepository journalLineRepository;
   private final RoleAccountResolver roleAccountResolver;
   private final PlatformReceivableWriter platformReceivable;
@@ -130,11 +132,13 @@ public class ReversalPostingWriter {
       PnlReadModelWriter pnlReadModel,
       JournalPostingService journalPostingService,
       JournalEntryRepository journalEntryRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       JournalLineRepository journalLineRepository,
       RoleAccountResolver roleAccountResolver,
       PlatformReceivableWriter platformReceivable,
       PendingSaleReversalRepository pendingReversalRepository) {
     this.ledgerRepository = ledgerRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
     this.glAccountResolver = glAccountResolver;
@@ -677,15 +681,7 @@ public class ReversalPostingWriter {
   }
 
   private void saveEntryAndLines(JournalEntry glEntry, String companyId) {
-    glEntry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(glEntry);
-    glEntry
-        .getLines()
-        .forEach(
-            line -> {
-              line.setCompanyId(companyId);
-              journalLineRepository.save(line);
-            });
+    generalLedgerWriter.post(glEntry, companyId);
   }
 
   /**

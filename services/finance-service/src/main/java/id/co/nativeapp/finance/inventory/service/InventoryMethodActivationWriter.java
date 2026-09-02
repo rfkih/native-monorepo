@@ -3,8 +3,7 @@ package id.co.nativeapp.finance.inventory.service;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.inventory.domain.InventoryMethodAlreadyActiveException;
 import id.co.nativeapp.finance.inventory.domain.InventoryMethodConfig;
@@ -59,8 +58,7 @@ public class InventoryMethodActivationWriter {
   private static final Pattern CUTOVER_PERIOD = Pattern.compile("^\\d{4}-(0[1-9]|1[0-2])$");
 
   private final InventoryMethodConfigRepository configRepository;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final LedgerPostingRepository ledgerPostingRepository;
   private final JdbcTemplate jdbcTemplate;
@@ -69,15 +67,13 @@ public class InventoryMethodActivationWriter {
   @SuppressWarnings("checkstyle:ParameterNumber")
   public InventoryMethodActivationWriter(
       InventoryMethodConfigRepository configRepository,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       LedgerPostingRepository ledgerPostingRepository,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.configRepository = configRepository;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.roleAccountResolver = roleAccountResolver;
     this.ledgerPostingRepository = ledgerPostingRepository;
     this.jdbcTemplate = jdbcTemplate;
@@ -213,12 +209,7 @@ public class InventoryMethodActivationWriter {
   }
 
   private void persistEntry(JournalEntry entry, String companyId) {
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   /** Fail loud on an unmapped role (V53/V55 seed both, effective 2000-01-01 — internal fault). */

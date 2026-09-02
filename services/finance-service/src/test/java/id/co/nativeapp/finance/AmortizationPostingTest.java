@@ -20,6 +20,7 @@ import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.money.Money;
 import java.time.Clock;
@@ -66,16 +67,16 @@ class AmortizationPostingTest {
     assetWriter =
         new FixedAssetWriter(
             mock(FixedAssetRepository.class),
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             resolver,
             mock(JdbcTemplate.class),
             clock);
     deferralWriter =
         new DeferralWriter(
             mock(DeferralRepository.class),
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             resolver,
             mock(JdbcTemplate.class),
             clock);
@@ -85,8 +86,8 @@ class AmortizationPostingTest {
             mock(DeferralRepository.class),
             mock(AmortizationRunRepository.class),
             mock(AmortizationRunLineRepository.class),
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             resolver,
             mock(JdbcTemplate.class),
             clock);
@@ -94,8 +95,8 @@ class AmortizationPostingTest {
         new AssetDisposalWriter(
             mock(FixedAssetRepository.class),
             mock(AmortizationRunRepository.class),
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             resolver,
             mock(JdbcTemplate.class),
             clock);
@@ -126,8 +127,8 @@ class AmortizationPostingTest {
     FixedAssetWriter illustrativeWriter =
         new FixedAssetWriter(
             mock(FixedAssetRepository.class),
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             illustrativeResolver,
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));
@@ -169,8 +170,8 @@ class AmortizationPostingTest {
     DeferralWriter illustrativeWriter =
         new DeferralWriter(
             mock(DeferralRepository.class),
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             illustrativeResolver,
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));
@@ -237,8 +238,8 @@ class AmortizationPostingTest {
             mock(DeferralRepository.class),
             mock(AmortizationRunRepository.class),
             mock(AmortizationRunLineRepository.class),
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             illustrativeResolver,
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));
@@ -329,8 +330,8 @@ class AmortizationPostingTest {
         new AssetDisposalWriter(
             mock(FixedAssetRepository.class),
             mock(AmortizationRunRepository.class),
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
             illustrativeResolver,
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));

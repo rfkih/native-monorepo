@@ -18,6 +18,7 @@ import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
@@ -65,8 +66,10 @@ class ExpenseSettlementWriterTest {
             processedEvents,
             claimLedgerRepository,
             journalPostingService,
-            journalEntryRepository,
-            journalLineRepository);
+            // A real GeneralLedgerWriter around the SAME mocks, so the existing
+            // verify(journalEntryRepository)/verifyNoInteractions assertions still observe the
+            // writes — the door delegates straight through (ADR 0071).
+            new GeneralLedgerWriter(journalEntryRepository, journalLineRepository));
   }
 
   private static ExpenseReimbursementSettledEvent directEvent(UUID eventId, long amountMinor) {

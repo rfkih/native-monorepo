@@ -21,6 +21,7 @@ import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.mapping.domain.GlAccountResolution;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
@@ -80,8 +81,7 @@ class ExpenseClaimPostingWriterTest {
             glAccountResolver,
             pnlReadModel,
             journalPostingService,
-            journalEntryRepository,
-            journalLineRepository,
+            new GeneralLedgerWriter(journalEntryRepository, journalLineRepository),
             claimLedgerRepository);
   }
 

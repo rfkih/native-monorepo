@@ -11,6 +11,7 @@ import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.opening.domain.OpeningBalanceSide;
 import id.co.nativeapp.finance.opening.dto.OpeningBalanceLine;
@@ -38,8 +39,8 @@ class OpeningBalancePostingTest {
   private OpeningBalanceWriter writer(RoleAccountResolver resolver) {
     return new OpeningBalanceWriter(
         mock(CompanyOpeningBalanceRepository.class),
-        mock(JournalEntryRepository.class),
-        mock(JournalLineRepository.class),
+        new GeneralLedgerWriter(
+            mock(JournalEntryRepository.class), mock(JournalLineRepository.class)),
         resolver,
         mock(JdbcTemplate.class));
   }

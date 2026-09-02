@@ -8,6 +8,7 @@ import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.labor.messaging.ReversalEventIds;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
@@ -51,6 +52,7 @@ public class RegisterCloseWriter {
 
   private final ProcessedEventStore processedEvents;
   private final JournalEntryRepository journalEntryRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final JournalLineRepository journalLineRepository;
   private final RoleAccountResolver roleAccountResolver;
   private final LedgerPostingRepository ledgerRepository;
@@ -60,12 +62,14 @@ public class RegisterCloseWriter {
   public RegisterCloseWriter(
       ProcessedEventStore processedEvents,
       JournalEntryRepository journalEntryRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       JournalLineRepository journalLineRepository,
       RoleAccountResolver roleAccountResolver,
       LedgerPostingRepository ledgerRepository,
       ErrorInboxWriter errorInbox,
       JdbcTemplate jdbcTemplate) {
     this.processedEvents = processedEvents;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.journalEntryRepository = journalEntryRepository;
     this.journalLineRepository = journalLineRepository;
     this.roleAccountResolver = roleAccountResolver;
@@ -152,12 +156,7 @@ public class RegisterCloseWriter {
 
     UUID entryId = UUID.randomUUID();
     JournalEntry entry = buildEntry(event, entryId, period);
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
     log.info(
         "Posted register close variance for session {} across {} tender(s) (entry {}, seq {})",
         event.sessionId(),
@@ -242,12 +241,7 @@ public class RegisterCloseWriter {
             event.closedAt(),
             event.currency(),
             usesIllustrative);
-    contra.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(contra);
-    for (JournalLine line : contra.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(contra, companyId);
     log.info(
         "Reversed superseded register-close variance (prior entry {}) for correction {} (contra {})",
         priorEntryId.get(),
