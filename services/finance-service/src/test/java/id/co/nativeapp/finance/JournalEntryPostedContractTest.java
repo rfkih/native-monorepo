@@ -73,6 +73,7 @@ class JournalEntryPostedContractTest {
     assertThat(schema.getField("business_id")).isNotNull();
     assertThat(schema.getField("period")).isNotNull();
     assertThat(schema.getField("occurred_at")).isNotNull();
+    assertThat(schema.getField("currency")).isNotNull();
     assertThat(schema.getField("posting_role")).isNotNull();
     assertThat(schema.getField("source_event_id")).isNotNull();
     assertThat(schema.getField("lines")).isNotNull();

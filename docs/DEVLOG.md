@@ -10,7 +10,10 @@ supersession's contra and re-post each carrying their own `posting_role` (`PRIMA
 Catalog entry added. `JournalEntryPostedContractTest` proves the rule-7 triad;
 **`GlOutboxCompletenessTest`** is the numeric belt to the ArchUnit suspenders: it drives the
 revenue AND expense flows (two independent writers) and reconciles `journal_entry` against the
-outbox — count equality, faithful lines, balanced on the wire. The consumer contract that matters
+outbox — count equality, faithful lines, balanced on the wire. **`GlPostingAtomicityTest`** proves
+the rollback half (ENGINEERING-STANDARDS §3.2): a throw AFTER the outbox write rolls entry, lines
+and event back together — via a test-only `@Transactional` harness, since the door itself is
+MANDATORY-propagation. The consumer contract that matters
 later: **idempotency keys on `journal_entry_id` (a claim table), never the outbox event id** — a
 replayed event carries a fresh id.
 

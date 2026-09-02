@@ -1915,7 +1915,11 @@ stream from its own tables to inception, so `fact_gl_day` is fully recoverable.
 - **Producer:** `finance-service` (`GeneralLedgerWriter.post`) — **LIVE (ADR 0071 P1)**.
 - **Consumers:** `analytics-service` (`fact_gl_day` ingest) — **planned, ADR 0071 P2+**.
 - **Aggregate type / partition key:** `journal_entry` / `company_id` (one tenant's GL stream is
-  totally ordered — a REVERSAL contra is never consumed before the entry it supersedes).
+  totally ordered — a REVERSAL contra is never consumed before the entry it supersedes). **Ops
+  note:** this deliberately diverges from the fleet norm of `aggregate_id` = the aggregate's own
+  id — here `aggregate_id` holds the COMPANY (the ordering key), so "which outbox row carried
+  journal entry X" is answered by decoding payloads for `journal_entry_id`, never by querying
+  `aggregate_id`.
 - **Outbox `event_type`:** `JournalEntryPosted`
 - **Schema (single source of truth):** `libs/contracts/src/main/resources/avro/JournalEntryPosted.avsc`
   — the producer (`gl.messaging.JournalEntryPostedSchema.toRecord`) and every future consumer read

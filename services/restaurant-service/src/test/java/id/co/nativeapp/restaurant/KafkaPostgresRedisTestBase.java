@@ -43,7 +43,9 @@ public abstract class KafkaPostgresRedisTestBase {
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
           // Same connection-slot headroom as PostgresRlsTestBase (see its POSTGRES javadoc):
           // cached @SpringBootTest contexts each pin a Hikari pool against this container.
-          .withCommand("postgres", "-c", "max_connections=500");
+          // withCommand REPLACES the constructor's command, so fsync=off (Testcontainers' own
+          // default, a large test-time speedup) must be restated alongside it.
+          .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=500");
 
   @SuppressWarnings("resource") // reaped by the Testcontainers/Ryuk shutdown hook at JVM exit
   public static final KafkaContainer KAFKA =

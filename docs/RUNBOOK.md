@@ -41,7 +41,8 @@ for f in docker/debezium/*.json; do
     --data-binary @- "http://localhost:8083/connectors/$name/config" >/dev/null
 done
 # every task must be RUNNING, and the count must match the number of files:
-curl -fsS http://localhost:8083/connectors | jq 'length'   # expect: 9
+test "$(curl -fsS http://localhost:8083/connectors | jq length)" = "$(ls docker/debezium/*.json | wc -l)" \
+  && echo "connector count OK" || echo "MISSING CONNECTOR(S) — diff the two lists"
 for c in $(curl -fsS http://localhost:8083/connectors | jq -r '.[]'); do
   echo "$c $(curl -fsS "http://localhost:8083/connectors/$c/status" | jq -r '.tasks[].state')"
 done
@@ -300,7 +301,7 @@ Public edge = two Cloudflare **quick tunnels** (EPHEMERAL URLs; current values i
 | **Tunnels died / new URLs** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-bootstrap.sh $(cat LAST_GOOD)'` — re-discovers URLs, rewrites prod.env, re-patches Keycloak. |
 | **Backups** | Nightly cron 02:10 WIB → `backups/nightly/*.enc` (AES-256; 11 DBs + MinIO + prod.env; keep 14). Offsite: Windows task `NativeProdBackupPull` pulls to `%USERPROFILE%\native-prod-backups` daily 04:00 (keep 30). Passphrase: `BACKUP_PASSPHRASE` in prod.env + `%USERPROFILE%\.native-prod-backup-passphrase.txt` — ALSO keep it in a password manager. |
 | **Restore drill (monthly)** | `ssh <vps> 'bash ~/native-prod/scripts/prod-restore-drill.sh'` — decrypts the newest archive, restores finance_service into a throwaway postgres, asserts the schema. |
-| **Watchdog** | `ops-watch.yml` once a day at 20:00 UTC (03:00 WIB, just after the 19:10 UTC nightly backup): disk (fail >82%, warn >70%), container health, Debezium connector **tasks** RUNNING, backup freshness (<26 h), external tunnel probes. A failed run = GitHub notification. Detection latency is up to 24 h by design — run it on demand after a deploy or a suspected outage: `gh workflow run ops-watch.yml`. |
+| **Watchdog** | `ops-watch.yml` every 6 h (02/08/14/20 UTC; the 20:00 slot = 03:00 WIB lands just after the 19:10 UTC nightly backup+outbox-prune): disk (fail >82%, warn >70%), container health, Debezium connector **tasks** RUNNING, backup freshness (<26 h), external tunnel probes. A failed run = GitHub notification. Detection latency is up to 6 h by design — run it on demand after a deploy or a suspected outage: `gh workflow run ops-watch.yml`. |
 | **Manual deploy (no CI)** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-deploy.sh vX.Y.Z'` — requires `releases/vX.Y.Z.images.yml` (digest-pinned) present. |
 | **Android app (prod)** | Served at `https://<prod-origin>/native-app-latest.apk` + `/native-employee-app-latest.apk` from the `docker/prod/downloads` edge mount (ADR 0058). Prod is a SEPARATE app from UAT (`id.co.nativeapp.till` "Native" vs `…​.till.uat` "Native UAT", amber badge). **DEFERRED until a stable domain**: the origin is baked into the APK, so build (`npm run build:prod` in `frontend/native-till`) only against the named tunnel/domain, not an ephemeral quick-tunnel URL — the wrapper refuses the latter. Until then the prod link 404s by design. |
 

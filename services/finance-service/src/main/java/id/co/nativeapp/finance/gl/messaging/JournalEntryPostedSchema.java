@@ -68,6 +68,15 @@ public final class JournalEntryPostedSchema {
    * @param companyId the bound tenant the entry was stamped with
    */
   public static GenericRecord toRecord(JournalEntry entry, String companyId) {
+    if (entry.getLines().isEmpty()) {
+      // getLines() is @Transient — a DB-loaded entry (findById) has an EMPTY list, and emitting
+      // lines: [] would silently violate the schema's documented >= 2 invariant. Unreachable from
+      // the production path (every caller passes a freshly built entry); the ADR 0071 P9 replay
+      // path must re-hydrate lines before reusing this method, and this makes that structural.
+      throw new IllegalStateException(
+          "JournalEntryPosted requires the entry's transient lines to be populated: "
+              + entry.getId());
+    }
     GenericRecord record = new GenericData.Record(SCHEMA);
     record.put("journal_entry_id", entry.getId().toString());
     record.put("company_id", companyId);

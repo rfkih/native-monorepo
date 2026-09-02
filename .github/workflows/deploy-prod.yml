@@ -63,7 +63,7 @@ jobs:
   verify-ci:
     name: verify ci ${{ github.event.inputs.tag || github.ref_name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 55
     steps:
       - name: Checkout the release tag
         uses: actions/checkout@v5
@@ -87,7 +87,7 @@ jobs:
           # match on head_sha only (not on trigger/event), so a same-SHA branch/PR ci run
           # that already succeeded counts too — belt and braces, and it means a re-tag of an
           # already-green commit passes on the very first check below.
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 50); do
             RUNS=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=20" --jq '.workflow_runs')
             COUNT=$(echo "$RUNS" | jq 'length')
             if [ "$COUNT" -gt 0 ]; then
@@ -95,18 +95,18 @@ jobs:
                 echo "ci green for $SHA — proceeding to the deploy approval gate"
                 exit 0
               fi
-              if echo "$RUNS" | jq -e '(all(.[]; .status == "completed")) and (any(.[]; .conclusion != "success"))' > /dev/null; then
+              if [ "$attempt" -ge 3 ] && echo "$RUNS" | jq -e '(all(.[]; .status == "completed")) and (any(.[]; .conclusion != "success"))' > /dev/null; then
                 echo "::error::every known ci run for $SHA completed without success — refusing to deploy"
                 echo "$RUNS" | jq -r '.[] | "  run \(.id): status=\(.status) conclusion=\(.conclusion) \(.html_url)"'
                 exit 1
               fi
-              echo "attempt $attempt/30 — ci run(s) found for $SHA still in progress, waiting 60s"
+              echo "attempt $attempt/50 — ci run(s) found for $SHA still in progress, waiting 60s"
             else
-              echo "attempt $attempt/30 — no ci run found yet for $SHA, waiting 60s"
+              echo "attempt $attempt/50 — no ci run found yet for $SHA, waiting 60s"
             fi
             sleep 60
           done
-          echo "::error::timed out after 30 minutes waiting for a green ci run on $SHA — refusing to deploy"
+          echo "::error::timed out after 50 minutes waiting for a green ci run on $SHA — refusing to deploy"
           exit 1
 
   deploy:
@@ -196,8 +196,12 @@ jobs:
           rsync -az -e "$SSH" \
             docker/compose.prod.yml docker/prod docker/postgres docker/keycloak docker/minio docker/debezium \
             "$PROD_USER@$PROD_HOST:~/$PROD_DIR/"
+          # prod-backup.sh + prod-outbox-prune.sh ride along so the nightly cron always runs
+          # the repo's current maintenance (the outbox prune, ADR 0071 P1, would otherwise
+          # never reach the VPS — the backup script only got there by hand historically).
           rsync -az -e "$SSH" \
             scripts/prod-deploy.sh scripts/prod-rollback.sh \
+            scripts/prod-backup.sh scripts/prod-outbox-prune.sh \
             "$PROD_USER@$PROD_HOST:~/$PROD_DIR/scripts/"
           rsync -az -e "$SSH" compose.prod.images.yml \
             "$PROD_USER@$PROD_HOST:~/$PROD_DIR/releases/$TAG.images.yml"

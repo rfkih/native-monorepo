@@ -120,8 +120,10 @@ prefetch warmer.
 - A 12th JVM costs +512m on the prod VPS — **verify free RAM before P2 ships** (the host co-hosts
   Blackheart and has taken a disk-full outage; this is the likeliest reason to revisit the
   separate-service decision).
-- finance's outbox volume roughly doubles; retention (above) bounds it, and the backup archives
-  keep the full history.
+- finance's outbox volume roughly doubles; retention (above) bounds it. A pruned row stays
+  recoverable from the encrypted backups for ~30 days after pruning (14 nightly local + 30
+  offsite), i.e. ~60 days from creation — NOT forever; the durable history is the append-only GL
+  itself, which regenerates the event stream to inception.
 - Every future posting writer feeds analytics automatically; every future GL-word figure keeps
   exactly one source (finance). The invariant tests that keep this honest ship with their phases
   (`FactGlDayMatchesTrialBalanceTest`, `OutletContributionSumsToCompanyTest`).

@@ -62,6 +62,40 @@ class GlAutoPostingIdempotencyTest extends KafkaPostgresTestBase {
 
     // The single journal entry must be balanced.
     assertJournalEntryIsBalancedAsAdmin(eventId);
+
+    // Rule 3 + ADR 0071 P1: the duplicate produced no extra JournalEntryPosted either — exactly
+    // one outbox event per persisted journal entry. Asserted as COUNT EQUALITY between the two
+    // tables (not a literal) because the shared long-lived Kafka listeners may drain an earlier
+    // class's stragglers into this window — such pollution inserts an entry and its event in the
+    // SAME transaction, so equality is the invariant that holds under it.
+    assertThat(outboxEventCountAsAdmin("JournalEntryPosted"))
+        .as("exactly one JournalEntryPosted per journal_entry (the duplicate emitted none)")
+        .isEqualTo(journalEntryTotalCountAsAdmin());
+  }
+
+  private long outboxEventCountAsAdmin(String eventType) throws Exception {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            admin.prepareStatement("SELECT count(*) FROM outbox WHERE event_type = ?")) {
+      ps.setString(1, eventType);
+      try (ResultSet rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getLong(1);
+      }
+    }
+  }
+
+  private long journalEntryTotalCountAsAdmin() throws Exception {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        java.sql.Statement st = admin.createStatement();
+        ResultSet rs = st.executeQuery("SELECT count(*) FROM journal_entry")) {
+      rs.next();
+      return rs.getLong(1);
+    }
   }
 
   private long journalEntryCountForEventAsAdmin(UUID eventId) throws Exception {

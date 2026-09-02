@@ -78,6 +78,11 @@ class GlOutboxCompletenessTest extends PostgresRlsTestBase {
 
     // Completeness: one event per entry, no extras, no dupes.
     assertThat(events).hasSize(entries.size());
+
+    // The routing contract the catalog promises: aggregate_type = journal_entry, aggregate_id =
+    // the COMPANY (the per-tenant ordering key — deliberately NOT the entry id; an entry's row is
+    // found via the payload's journal_entry_id), company_id column = the tenant UUID.
+    assertThat(outboxRoutingRowCountAsAdmin(company)).isEqualTo((long) entries.size());
     Map<String, GenericRecord> byEntryId = new HashMap<>();
     for (GenericRecord event : events) {
       assertThat(byEntryId.put(event.get("journal_entry_id").toString(), event))
@@ -167,6 +172,23 @@ class GlOutboxCompletenessTest extends PostgresRlsTestBase {
       }
     }
     return rows;
+  }
+
+  private long outboxRoutingRowCountAsAdmin(UUID company) throws Exception {
+    try (Connection admin = adminConnection();
+        Statement st = admin.createStatement();
+        ResultSet rs =
+            st.executeQuery(
+                "SELECT count(*) FROM outbox WHERE event_type = 'JournalEntryPosted'"
+                    + " AND aggregate_type = 'journal_entry'"
+                    + " AND aggregate_id = '"
+                    + company
+                    + "' AND company_id = '"
+                    + company
+                    + "'")) {
+      rs.next();
+      return rs.getLong(1);
+    }
   }
 
   private List<GenericRecord> decodeOutbox(String eventType, org.apache.avro.Schema schema)

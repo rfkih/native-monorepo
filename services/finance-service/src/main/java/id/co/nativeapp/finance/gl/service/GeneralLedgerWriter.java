@@ -90,6 +90,19 @@ public class GeneralLedgerWriter {
     Objects.requireNonNull(entry, "entry");
     Objects.requireNonNull(companyId, "companyId");
 
+    // outbox.company_id is a UUID column (V10) while the tenant rides as a string everywhere
+    // else, so the parse is unavoidable — fail with a message that names the money path rather
+    // than a bare "Invalid UUID string" from the middle of every posting flow.
+    final UUID tenantUuid;
+    try {
+      tenantUuid = UUID.fromString(companyId);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalStateException(
+          "GL posting requires a UUID tenant for the JournalEntryPosted outbox row, got: "
+              + companyId,
+          e);
+    }
+
     entry.setCompanyId(companyId);
     journalEntryRepository.saveAndFlush(entry);
     for (JournalLine line : entry.getLines()) {
@@ -102,7 +115,7 @@ public class GeneralLedgerWriter {
         JournalEntryPostedSchema.EVENT_TYPE,
         AvroSerde.serialize(JournalEntryPostedSchema.toRecord(entry, companyId)),
         null,
-        UUID.fromString(companyId),
+        tenantUuid,
         clock.instant());
   }
 }

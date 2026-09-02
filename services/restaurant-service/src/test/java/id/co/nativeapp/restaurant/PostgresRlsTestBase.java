@@ -47,7 +47,9 @@ public abstract class PostgresRlsTestBase {
   @SuppressWarnings("resource") // reaped by the Testcontainers/Ryuk shutdown hook at JVM exit
   protected static final PostgreSQLContainer<?> POSTGRES =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-          .withCommand("postgres", "-c", "max_connections=500");
+          // withCommand REPLACES the constructor's command (it does not append), so fsync=off —
+          // Testcontainers' own default, a large test-time speedup — must be restated here.
+          .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=500");
 
   static {
     POSTGRES.start();
