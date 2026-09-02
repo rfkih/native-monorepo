@@ -1,5 +1,53 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-02 — finance-service had no Debezium connector: two "live" events never reached Kafka
+
+Found while designing the analytics module, not by a failing test — which is the point. finance-service
+has wired an `OutboxWriter` since the group-consolidation work (`config/EventsConfig.java:58`), and
+two writers use it: `withinclose/WithinCompanyCloseWriter` emits **`ConsolidationClosed`**
+(`group_id = NULL`, the within-company kind) plus one **`TrialBalancePublished`** per group the
+company is active in, and `consolidation/GroupCloseWriter` emits `ConsolidationClosed` at group
+scope. `docs/EVENT-CATALOG.md` lists both as live on both sides. But `docker/debezium/` held **eight**
+connectors — barbershop, carwash, employee, entitlement, loyalty, org, restaurant, payment — and
+**none for `finance_service`**. The rows were written to a table and relayed nowhere, in every
+environment including prod.
+
+The consequence is quietest where it hurts most: `TrialBalancePublished` is consumed by **finance
+itself** (the `grouptb` ingest that fills `group_trial_balance`), so group consolidation has been
+assembling a consolidated trial balance from a read model that was never fed — the SEAM-2 ingest had
+no input, and `GET /api/v1/groups/{id}/consolidation` returned its "no close" 204 for a company that
+had genuinely closed. `ConsolidationClosed` never reached notification-service either.
+
+**Why nothing caught it.** Every CDC guard we have — `prod-deploy.sh`'s `recover_cdc`, the ops-watch
+"connector TASKS running" job — enumerates the connectors Kafka Connect **already has registered**
+and asserts their tasks are RUNNING. A connector that was never registered has no task to be
+un-RUNNING, so it is invisible to all of them. ops-watch even errors on *zero* connectors, which
+made eight-out-of-nine look like health. The missing assertion is **declared vs registered**: every
+`docker/debezium/*.json` should exist in `GET /connectors`. Left as a follow-up here only because
+`.github/workflows/ops-watch.yml` has in-flight edits.
+
+**The fix** is `docker/debezium/finance-outbox-connector.json`, structurally identical to the other
+eight (verified key-by-key) — only `database.{user,password,dbname}`, `topic.prefix`, `slot.name`
+and `publication.name` differ. `finance_service` already had `REPLICATION` on its role
+(`docker/postgres/init/01-init-databases.sql:32`), so no DB change was needed. Both registration
+paths glob `debezium/*.json` (`scripts/prod-bootstrap.sh` §6, `scripts/uat-up.ps1` §9), so the file
+is picked up with no script change.
+
+**`snapshot.mode: initial` is load-bearing here, and means something different than it does on the
+other eight.** They were registered against empty outbox tables; finance's has been accumulating
+unrelayed rows this whole time (nothing prunes the outbox). The initial snapshot therefore **replays
+that backlog**, which is the repair — it backfills `group_trial_balance` from every historical close.
+Safe on both consumers: the `grouptb` ingest is `processOnce`-idempotent, and notification-service
+sends through `StubNotificationSender` (synthetic receipts, no real email/SMS), so replayed
+`ConsolidationClosed` rows cannot deliver stale messages to a human.
+
+**Deploy note.** `prod-deploy.sh` only *restarts* connectors it finds already registered; it never
+registers new ones from disk. A running prod therefore needs `prod-bootstrap.sh`'s §6 (idempotent
+PUT) or a manual `PUT /connectors/finance-outbox-connector/config` — a rolling deploy alone will not
+pick this up. Replication headroom was also raised **10 → 20** (`max_replication_slots`,
+`max_wal_senders`) across dev/uat/prod: eight slots were in use of ten, finance makes nine, and
+that ceiling is a Postgres restart to change — better done now than mid-incident.
+
 ## 2026-09-01 — ADR 0070: the org tree is flat (`company > outlet`); the division level is gone
 
 The tree was `company > business_unit > outlet > team`, but only the OUTLET level ever did anything.

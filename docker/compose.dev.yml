@@ -31,9 +31,12 @@ services:
       - -c
       - wal_level=logical          # required for Debezium logical decoding (CDC)
       - -c
-      - max_wal_senders=10
+      # One replication slot per Debezium connector = one per event-producing service DB.
+      # 9 in use (org, restaurant, carwash, barbershop, loyalty, employee, entitlement,
+      # payment, finance); raised 10 -> 20 so adding a producer is not a Postgres restart.
+      - max_wal_senders=20
       - -c
-      - max_replication_slots=10
+      - max_replication_slots=20
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
