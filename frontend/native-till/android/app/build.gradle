@@ -22,9 +22,12 @@ android {
         // 7 = @capacitor/splash-screen plugin (cold-start splash);
         // 8 = @capgo/capacitor-updater OTA plugin (ADR 0051 P3, dormant until NATIVE_TILL_UPDATE_URL);
         // 9 = allowNavigation auth-host whitelist (login must stay in the WebView — config is native);
-        // 10 = NativeShell plugin v2 (minimize for the back-guard exit + saveFile Downloads + printPage).
-        versionCode 10
-        versionName "1.8"
+        // 10 = NativeShell plugin v2 (minimize for the back-guard exit + saveFile Downloads + printPage);
+        // 11 = brand launcher icons at EVERY density. mipmap-anydpi-v26 (the adaptive icon) is only
+        //      read on API 26+, so the API 24-25 floor fell back to mipmap-<density>/ic_launcher.png
+        //      — still Capacitor's stock blue logo. Regenerate with scripts/render-launcher-icons.mjs.
+        versionCode 11
+        versionName "1.9"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

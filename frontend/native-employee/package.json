@@ -12,7 +12,9 @@
     "build:prod": "node scripts/build-app.mjs --env prod",
     "aab:prod": "node scripts/build-app.mjs --env prod --format aab",
     "aab:uat": "node scripts/build-app.mjs --env uat --format aab",
-    "store:assets": "node scripts/render-store-assets.mjs"
+    "store:assets": "node scripts/render-store-assets.mjs",
+    "store:shots": "node scripts/frame-store-shots.mjs",
+    "icons": "node scripts/render-launcher-icons.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",

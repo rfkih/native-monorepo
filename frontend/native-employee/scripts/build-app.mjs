@@ -10,8 +10,8 @@
 // --format apk (default) → an installable/sideloadable .apk. --format aab → an Android App Bundle
 // for Google Play upload (Play no longer accepts APKs for new apps). Both are signed by the release
 // signingConfig when android/keystore.properties is present; without it the artifact is UNSIGNED.
-// NOTE: this app has NO keystore.properties yet — generate its OWN upload key (NEVER reuse the Till
-// app's key) before an AAB can be uploaded to Play. See the app README / RUNBOOK.
+// This app has its OWN upload key (minted 2026-08-31, NEVER the Till app's) wired via
+// android/keystore.properties, so release artifacts come out signed. See the app README / RUNBOOK.
 //
 // Usage (PowerShell):
 //   npm run build:uat                                   # → UAT employee origin default (APK)

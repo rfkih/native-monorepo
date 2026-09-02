@@ -3,9 +3,12 @@
 //   store-assets/feature-1024x500.jpg    — 1024×500 feature graphic (opaque, JPEG = no alpha)
 //
 // Mirrors native-till/scripts/render-store-assets.mjs — SAME brand family (one Native identity) so the
-// two apps read as siblings on Play; only the wordmark ("Native Karyawan"), tagline, and URL differ.
+// two apps read as siblings on Play. What differs: the wordmark ("Native Karyawan"), the tagline, the
+// URL, and the GLYPH — this app uses a person mark where the Business app uses the trend mark, so the
+// two listings (and the two launcher icons on a phone that has both) are tellable apart. Keep the
+// glyph in step with android/app/src/main/res/drawable/ic_launcher_fg_employee.xml.
 // Brand truth (frontend/console/src/index.css @theme + components/Wordmark.tsx):
-//   cyan ramp 500 #0e8fab → 800 #064654, mark path "M4 18 L10 10 L14 14 L20 5", font Plus Jakarta Sans.
+//   cyan ramp 500 #0e8fab → 800 #064654, font Plus Jakarta Sans.
 // Renders with playwright-core driving the system Chrome (no extra download). Run from
 // frontend/native-employee:  node scripts/render-store-assets.mjs   (or: npm run store:assets)
 
@@ -28,9 +31,15 @@ const fontPath = resolve(app, '../console/src/assets/fonts/PlusJakartaSans-var-l
 const fontB64 = readFileSync(fontPath).toString('base64')
 const fontFace = `@font-face{font-family:'Plus Jakarta Sans';font-weight:200 800;font-style:normal;src:url(data:font/woff2;base64,${fontB64}) format('woff2');}`
 
-// The brand glyph — the upward trend line, white stroke, rounded caps (Wordmark.tsx BrandMark).
+// The shared brand glyph — the upward trend line (Wordmark.tsx BrandMark). Used for the faint
+// background motif, which is family branding rather than app identity.
 const mark = (size, stroke = 2.5) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 L10 10 L14 14 L20 5"/></svg>`
+
+// THIS app's identity glyph — lucide `user`, the same mark the /me profile header shows. It carries
+// the app icon and the feature-graphic tile; the Business app uses `mark()` in both those places.
+const person = (size, stroke = 2.5) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
 
 const ICON_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
   *{margin:0;padding:0;box-sizing:border-box}
@@ -42,7 +51,7 @@ const ICON_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
     background:radial-gradient(120% 120% at 22% 18%, rgba(255,255,255,.22), rgba(255,255,255,0) 55%)}
   .mark{position:relative;filter:drop-shadow(0 8px 22px rgba(0,0,0,.22))}
 </style></head><body>
-  <div class="icon"><div class="mark">${mark(300, 2.6)}</div></div>
+  <div class="icon"><div class="mark">${person(270, 2.4)}</div></div>
 </body></html>`
 
 // Feature graphic — "Native Karyawan" is a two-word lockup, so the name is set smaller than the
@@ -67,7 +76,7 @@ const FEATURE_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
     <div class="motif"><svg width="620" height="560" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 L10 10 L14 14 L20 5"/></svg></div>
     <div class="lockup">
       <div class="row">
-        <div class="tile">${mark(54, 2.5)}</div>
+        <div class="tile">${person(50, 2.4)}</div>
         <div class="name">Native Karyawan</div>
       </div>
       <div class="tag">Slip Gaji · Cuti · Komisi</div>

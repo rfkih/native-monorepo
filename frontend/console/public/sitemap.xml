@@ -19,4 +19,19 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+  <!-- Legal pages. Listed so they are independently indexable and verifiably live: Google Play
+       fetches both URLs during review (privacy policy + Data safety "Data deletion"), and a
+       reviewer must be able to reach the deletion page without signing in. -->
+  <url>
+    <loc>https://app.native-app.my.id/privacy.html</loc>
+    <lastmod>2026-09-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://app.native-app.my.id/delete-account.html</loc>
+    <lastmod>2026-09-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
 </urlset>

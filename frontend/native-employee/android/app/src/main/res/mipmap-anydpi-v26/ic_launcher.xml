@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Employee adaptive icon: the SHARED brand tile background, but the app's own person glyph — the
+     Business app keeps the trend mark. See drawable/ic_launcher_fg_employee.xml for why. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_bg_brand"/>
-    <foreground android:drawable="@drawable/ic_launcher_fg_brand"/>
+    <foreground android:drawable="@drawable/ic_launcher_fg_employee"/>
 </adaptive-icon>

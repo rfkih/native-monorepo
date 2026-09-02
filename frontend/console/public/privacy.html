@@ -11,12 +11,20 @@
       the SPA is not — Google Play requires a publicly reachable privacy-policy URL for a login-gated
       app that handles personal + financial data. Language is chosen by ?lng=id|en (default: browser).
 
-      BEFORE PUBLISHING, replace the [BRACKETED] placeholders with real legal values:
-        [OPERATOR]  = the legal entity operating Native (PT / CV / perorangan)
-        [EMAIL]     = the privacy/support contact email
-        [ADDRESS]   = the business address (optional but recommended)
-      and confirm the "Last updated" date. This template is a starting point, not legal advice —
-      have it reviewed against Indonesia's PDP Law (UU 27/2022) and Google Play policies.
+      OPERATOR IDENTITY — Native is operated by an INDIVIDUAL (perorangan), not a company. The
+      operator name below MUST match, character for character, the legal name Google verifies and
+      publishes on the Play developer account: a mismatch between the listing's developer name and
+      this policy is a Play "Misrepresentation" rejection. It appears in exactly two places, both
+      tagged <!--OPERATOR--> (the ID intro and the EN intro) plus the two Contact blocks. The
+      contact email (rfkih23@gmail.com) must stay a mailbox that is actually read — Google writes
+      to it and users send deletion requests there.
+
+      Account deletion lives in its own page, delete-account.html, and is linked from §7 of both
+      languages. That URL is what goes in Play Console → Data safety → "Data deletion" — Play
+      requires it for any app that lets users create an account (Native does: /signup is public).
+
+      This is a starting point, not legal advice — have it reviewed against Indonesia's PDP Law
+      (UU 27/2022) and Google Play policies.
     -->
     <style>
       :root {
@@ -70,12 +78,12 @@
       <!-- ============================ BAHASA INDONESIA ============================ -->
       <div data-lng="id">
         <h1>Kebijakan Privasi</h1>
-        <p class="meta">Berlaku efektif: 16 Agustus 2026 · Terakhir diperbarui: 16 Agustus 2026</p>
+        <p class="meta">Berlaku efektif: 16 Agustus 2026 · Terakhir diperbarui: 1 September 2026</p>
         <p>
-          Kebijakan ini menjelaskan bagaimana <strong>[OPERATOR]</strong> ("Native", "kami")
+          Kebijakan ini menjelaskan bagaimana <strong><!--OPERATOR-->Rifki</strong> ("Native", "kami")
           mengumpulkan, menggunakan, dan melindungi data pada aplikasi <strong>Native</strong> dan
           <strong>Native Karyawan</strong> (bersama-sama, "Aplikasi") serta layanan terkait di
-          native-app.my.id. Native adalah perangkat lunak Point of Sale (POS), akuntansi, dan HR
+          app.native-app.my.id. Native adalah perangkat lunak Point of Sale (POS), akuntansi, dan HR
           untuk pelaku usaha.
         </p>
         <p>
@@ -137,7 +145,13 @@
           Sesuai UU Pelindungan Data Pribadi (UU No. 27 Tahun 2022), Anda berhak mengakses,
           memperbaiki, dan menghapus data pribadi Anda. Untuk data karyawan, permintaan biasanya
           disampaikan melalui pemberi kerja (Pengendali Data). Hubungi kami di
-          <a href="mailto:[EMAIL]">[EMAIL]</a>.
+          <a href="mailto:rfkih23@gmail.com">rfkih23@gmail.com</a>.
+        </p>
+        <p>
+          <strong>Penghapusan akun.</strong> Anda dapat meminta penghapusan akun Native beserta data
+          terkait kapan saja — lihat
+          <a href="delete-account.html?lng=id">Penghapusan Akun &amp; Data</a> untuk langkah, cakupan
+          data yang dihapus, dan data yang wajib kami simpan karena kewajiban pajak.
         </p>
 
         <h2>8. Anak-anak</h2>
@@ -151,20 +165,19 @@
 
         <h2>11. Kontak</h2>
         <p>
-          <strong>[OPERATOR]</strong><br />
-          Email: <a href="mailto:[EMAIL]">[EMAIL]</a><br />
-          [ADDRESS]
+          <strong><!--OPERATOR-->Rifki</strong><br />
+          Email: <a href="mailto:rfkih23@gmail.com">rfkih23@gmail.com</a>
         </p>
       </div>
 
       <!-- ================================ ENGLISH ================================ -->
       <div data-lng="en">
         <h1>Privacy Policy</h1>
-        <p class="meta">Effective: 16 August 2026 · Last updated: 16 August 2026</p>
+        <p class="meta">Effective: 16 August 2026 · Last updated: 1 September 2026</p>
         <p>
-          This policy explains how <strong>[OPERATOR]</strong> ("Native", "we") collects, uses, and
+          This policy explains how <strong><!--OPERATOR-->Rifki</strong> ("Native", "we") collects, uses, and
           protects data in the <strong>Native</strong> and <strong>Native Karyawan</strong> apps
-          (together, the "Apps") and related services at native-app.my.id. Native is Point of Sale
+          (together, the "Apps") and related services at app.native-app.my.id. Native is Point of Sale
           (POS), accounting, and HR software for businesses.
         </p>
         <p>
@@ -225,7 +238,13 @@
         <p>
           Under Indonesia's Personal Data Protection Law (Law No. 27 of 2022) you may access, correct,
           and delete your personal data. For employee data, requests are usually made through the
-          employer (Data Controller). Contact us at <a href="mailto:[EMAIL]">[EMAIL]</a>.
+          employer (Data Controller). Contact us at <a href="mailto:rfkih23@gmail.com">rfkih23@gmail.com</a>.
+        </p>
+        <p>
+          <strong>Account deletion.</strong> You can ask us to delete your Native account and its
+          associated data at any time — see
+          <a href="delete-account.html?lng=en">Account &amp; Data Deletion</a> for the steps, exactly
+          what is erased, and what we must retain to meet tax obligations.
         </p>
 
         <h2>8. Children</h2>
@@ -239,14 +258,13 @@
 
         <h2>11. Contact</h2>
         <p>
-          <strong>[OPERATOR]</strong><br />
-          Email: <a href="mailto:[EMAIL]">[EMAIL]</a><br />
-          [ADDRESS]
+          <strong><!--OPERATOR-->Rifki</strong><br />
+          Email: <a href="mailto:rfkih23@gmail.com">rfkih23@gmail.com</a>
         </p>
       </div>
 
       <hr />
-      <footer>© 2026 Native · native-app.my.id</footer>
+      <footer>© 2026 Native · app.native-app.my.id</footer>
     </div>
 
     <script>
