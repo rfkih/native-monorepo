@@ -1,6 +1,56 @@
 # DEVLOG — history, key decisions, current status
 
-## 2026-09-02 — the GL gets one persistence door: `GeneralLedgerWriter` (ADR 0071 P0)
+## 2026-09-02 — `JournalEntryPosted` ships from the door (ADR 0071 P1), and the outbox finally gets retention
+
+With the door in place (P0 below), P1 is small by construction: `GeneralLedgerWriter.post` now
+builds a `JournalEntryPosted` record (`gl/messaging/JournalEntryPostedSchema`, schema in
+`libs/contracts/avro/JournalEntryPosted.avsc`) and writes it to the outbox **in the same
+transaction** as the entry and its lines — partition key `company_id`, one event per entry, a
+supersession's contra and re-post each carrying their own `posting_role` (`PRIMARY`/`REVERSAL`).
+Catalog entry added. `JournalEntryPostedContractTest` proves the rule-7 triad;
+**`GlOutboxCompletenessTest`** is the numeric belt to the ArchUnit suspenders: it drives the
+revenue AND expense flows (two independent writers) and reconciles `journal_entry` against the
+outbox — count equality, faithful lines, balanced on the wire. The consumer contract that matters
+later: **idempotency keys on `journal_entry_id` (a claim table), never the outbox event id** — a
+replayed event carries a fresh id.
+
+**The retention decision (deferred from P0) is made: option (b), and the ordering is the design.**
+`scripts/prod-outbox-prune.sh` runs from `prod-backup.sh` **after** a successful nightly backup, so
+every pruned row already exists in tonight's encrypted archive. It prunes a service's outbox only
+while that service's **Debezium connector task is RUNNING** (a missing connector may mean unrelayed
+rows — exactly the finance-backlog failure shape P0 fixed), and only rows older than
+`OUTBOX_KEEP_DAYS` (30). No `@Scheduled` job enters the fleet (ADR 0029 convention holds), nothing
+lands on the outbox's hot write path, and the finance initial-snapshot hazard is closed by the
+RUNNING guard rather than by hoping about deploy order.
+
+Also in this pass: the stale `sold_by_user_id` docs (`SaleRecorded.avsc`, its catalog copy,
+`SaleRecordedSchema`) now state the truth — populated since ADR 0049 P4 for operator-PIN sales,
+never set by carwash/barbershop, and `MetricPublished.subject_id` is a *different id space* (no
+bridging event). **ADR 0071 written** (`docs/adr/0071-analytics-star-schema.md`) and the ADR index
+repaired — 0067/0068/0069 were missing from `docs/adr/README.md`.
+
+## 2026-09-02 — prod tags are no longer CI-ungated, and the restaurant suite stops eating its own Postgres
+
+Two CI holes closed:
+
+1. **Release tags never ran CI** — `ci.yml` triggered on master only, tags are cut from
+   `feat/business-employee-apps`, so v0.1.34 shipped while the branch was red. Now `ci.yml` also
+   fires on `v*` tag pushes (tag refs escalate to the FULL build — a tag has no paths-filter base),
+   and `deploy-prod.yml` gained a **`verify-ci` job ahead of the approval gate**: it resolves the
+   tag's SHA and polls for a successful `ci` run on that exact SHA (accepting an already-green
+   branch/PR run — no forced double build), failing the deploy if CI failed and waiting up to 30
+   min if it is still running. Caveat: tags predating this change have no CI run to find, so a
+   `workflow_dispatch` REDEPLOY of an old tag needs a manual `ci.yml` dispatch on that tag first
+   (the VPS-side `prod-rollback.sh` path is unaffected).
+2. **The 3 "failing restaurant tests" were never about their subjects.** `SelfOrderSweepTest`,
+   `StocktakeAtomicityTest`, `StocktakeLineRlsIsolationTest` died on
+   `FATAL: remaining connection slots are reserved for roles with the SUPERUSER attribute`: ~90
+   test classes share one Postgres container, Spring's context cache keeps up to 32 distinct
+   contexts alive, and Hikari's default `minimumIdle == maximumPoolSize == 10` pins 10 idle
+   connections per cached context — the suite finally crossed `max_connections=100`. Fix in both
+   container bases: `max_connections=500` on the container + `maximum-pool-size=8` /
+   `minimum-idle=2` per context. Full suite green locally (818 tests). The same time bomb ticks in
+   every service's copy of these bases as their suites grow — copy the fix when it fires.
 
 Groundwork for the analytics module, but it stands on its own. `JournalPostingService` centralised
 how a journal entry is *built* (`buildEntry`, `buildEntryForSale`, `buildEntryFromBreakdown`);
