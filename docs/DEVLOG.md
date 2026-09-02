@@ -1,5 +1,41 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-03 — the test-Postgres time bomb disarmed fleet-wide, and a phantom submodule removed
+
+**The trap was still armed in 9 services.** The 2026-09-02 entry below fixed restaurant (and
+finance followed) but closed with "copy the fix when it fires" — and it was about to.
+Ranking the remaining services by test-class count put **employee-service at 94, already past the
+~90 that killed restaurant**; org 54, carwash 50, barbershop 44, then the small ones. Because the
+failure presents as three *unrelated* tests failing on their own subjects, hitting it again would
+have cost another debugging session to reach the same answer, so all 13 remaining Testcontainers
+Postgres declarations now carry both halves of the fix:
+`postgres -c fsync=off -c max_connections=500` on the container, and
+`maximum-pool-size=8` / `minimum-idle=2` on each `@DynamicPropertySource`.
+
+**`fsync=off` is restated deliberately, and that is the subtle part.** `withCommand` *replaces* the
+constructor's command rather than appending to it, so a fix that passes only `max_connections`
+silently drops Testcontainers' own `fsync=off` default and slows every suite for the rest of time.
+The first cut of the restaurant fix had exactly that shape before it was corrected.
+
+Verified: **employee 619 tests green** (the one at the threshold) and restaurant **818 green**
+(confirming the original fix holds). org-service's five *standalone* container declarations
+(DeviceCredential / MultiCompanyMembership / SecuredCompanyBootstrap / Signup / UserManagement
+acceptance tests) were patched too — each starts its own container for a single class so none is
+at risk today, but they are the same declaration, and drift between copies is what armed this in
+the first place. `gateway` has no Postgres container and needs nothing.
+
+**A phantom submodule was in the tree.** `.claude/worktrees/agent-accbb693f5a9ef84a` had been
+committed as a **mode-160000 gitlink** — an agent worktree (a nested git repo) captured by accident,
+and the only gitlink in the repo. With no `.gitmodules` to describe it, a fresh clone gets a
+submodule it cannot resolve. Removed from the index and the path is now gitignored.
+
+It arrived inside a commit whose message read *"Add unit tests for OrderTotal functionality in
+restaurant service"* — a description of work it did not contain (`OrderTotalTest.java` was added in
+`bbc04860`, long before). What it actually held was 67 files of Play-Store publishing work: store
+assets and screenshots, launcher icons across every mipmap density for both Android shells,
+`delete-account.html` / `privacy.html` / `sitemap.xml`, and the e2e lockfile. The commit was
+unpushed, so it was reworded to say what it is rather than left as a false record.
+
 ## 2026-09-02 — `JournalEntryPosted` ships from the door (ADR 0071 P1), and the outbox finally gets retention
 
 With the door in place (P0 below), P1 is small by construction: `GeneralLedgerWriter.post` now
@@ -54,6 +90,8 @@ Two CI holes closed:
    container bases: `max_connections=500` on the container + `maximum-pool-size=8` /
    `minimum-idle=2` per context. Full suite green locally (818 tests). The same time bomb ticks in
    every service's copy of these bases as their suites grow — copy the fix when it fires.
+
+## 2026-09-02 — the GL gets one persistence door: `GeneralLedgerWriter` (ADR 0071 P0)
 
 Groundwork for the analytics module, but it stands on its own. `JournalPostingService` centralised
 how a journal entry is *built* (`buildEntry`, `buildEntryForSale`, `buildEntryFromBreakdown`);

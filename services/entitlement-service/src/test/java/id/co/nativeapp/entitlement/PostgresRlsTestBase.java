@@ -32,7 +32,14 @@ abstract class PostgresRlsTestBase {
 
   @SuppressWarnings("resource") // reaped by the Testcontainers/Ryuk shutdown hook at JVM exit
   static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+          // withCommand REPLACES the constructor's command (it does not append), so fsync=off —
+          // Testcontainers' own default and a large test-time speedup — must be restated here.
+          // max_connections is raised from Postgres's default 100 because cached @SpringBootTest
+          // contexts each pin a Hikari pool against this one container; restaurant-service died
+          // mid-run at ~90 sharing classes with "FATAL: remaining connection slots are reserved
+          // for roles with the SUPERUSER attribute" (48ac4add). The cap below is the other half.
+          .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=500");
 
   static {
     POSTGRES.start();
@@ -68,6 +75,11 @@ abstract class PostgresRlsTestBase {
     registry.add("spring.datasource.username", () -> APP_USER);
     registry.add("spring.datasource.password", () -> APP_PASSWORD);
     registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+    // Hikari defaults to minimumIdle == maximumPoolSize == 10, so every CACHED test context
+    // pins 10 idle connections for the rest of the run. Cap the pool and let idle connections
+    // drain so cached contexts stay well under the container's max_connections (see above).
+    registry.add("spring.datasource.hikari.maximum-pool-size", () -> "8");
+    registry.add("spring.datasource.hikari.minimum-idle", () -> "2");
   }
 
   private static void provisionAppRole() {
