@@ -31,11 +31,20 @@ NATIVE_DEV_TENANT_FILTER_ENABLED=true \
   "$JAVA25" -jar services/<svc>/build/libs/<svc>-0.1.0-SNAPSHOT.jar
 
 # 3) register the Debezium outbox connectors (after the producing service has migrated its outbox
-#    table) — ONE PER SERVICE DB: outbox-connector.json (restaurant), org-outbox-connector.json,
-#    employee-outbox-connector.json (payroll -> finance labor cost NEVER flows without it):
-curl -fsS -X POST http://localhost:8083/connectors -H 'Content-Type: application/json' \
-  -d @docker/debezium/outbox-connector.json
-curl -fsS http://localhost:8083/connectors/restaurant-outbox-connector/status   # task must be RUNNING
+#    table) — ONE PER SERVICE DB. Register ALL of them, not a hand-picked subset: a producer whose
+#    connector is missing writes outbox rows that reach nobody, and NO health check catches it
+#    (recover_cdc / ops-watch only assert that ALREADY-REGISTERED connectors have RUNNING tasks —
+#    that is exactly how finance-service shipped with no connector at all, see DEVLOG 2026-09-02).
+for f in docker/debezium/*.json; do
+  name=$(jq -r '.name' "$f")
+  jq '.config' "$f" | curl -fsS -X PUT -H 'Content-Type: application/json' \
+    --data-binary @- "http://localhost:8083/connectors/$name/config" >/dev/null
+done
+# every task must be RUNNING, and the count must match the number of files:
+curl -fsS http://localhost:8083/connectors | jq 'length'   # expect: 9
+for c in $(curl -fsS http://localhost:8083/connectors | jq -r '.[]'); do
+  echo "$c $(curl -fsS "http://localhost:8083/connectors/$c/status" | jq -r '.tasks[].state')"
+done
 ```
 > **One-command restart:** `.\scripts\start-dev-services.ps1 [-JarRoot C:\some-worktree] [-Only a,b]`
 > checks all eight host-service ports, launches only what's dead (detached; logs in
@@ -291,7 +300,7 @@ Public edge = two Cloudflare **quick tunnels** (EPHEMERAL URLs; current values i
 | **Tunnels died / new URLs** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-bootstrap.sh $(cat LAST_GOOD)'` — re-discovers URLs, rewrites prod.env, re-patches Keycloak. |
 | **Backups** | Nightly cron 02:10 WIB → `backups/nightly/*.enc` (AES-256; 11 DBs + MinIO + prod.env; keep 14). Offsite: Windows task `NativeProdBackupPull` pulls to `%USERPROFILE%\native-prod-backups` daily 04:00 (keep 30). Passphrase: `BACKUP_PASSPHRASE` in prod.env + `%USERPROFILE%\.native-prod-backup-passphrase.txt` — ALSO keep it in a password manager. |
 | **Restore drill (monthly)** | `ssh <vps> 'bash ~/native-prod/scripts/prod-restore-drill.sh'` — decrypts the newest archive, restores finance_service into a throwaway postgres, asserts the schema. |
-| **Watchdog** | `ops-watch.yml` every 30 min: disk (fail >88%), container health, backup freshness, external tunnel probes. A failed run = GitHub notification. Manual: `gh workflow run ops-watch.yml`. |
+| **Watchdog** | `ops-watch.yml` once a day at 20:00 UTC (03:00 WIB, just after the 19:10 UTC nightly backup): disk (fail >82%, warn >70%), container health, Debezium connector **tasks** RUNNING, backup freshness (<26 h), external tunnel probes. A failed run = GitHub notification. Detection latency is up to 24 h by design — run it on demand after a deploy or a suspected outage: `gh workflow run ops-watch.yml`. |
 | **Manual deploy (no CI)** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-deploy.sh vX.Y.Z'` — requires `releases/vX.Y.Z.images.yml` (digest-pinned) present. |
 | **Android app (prod)** | Served at `https://<prod-origin>/native-app-latest.apk` + `/native-employee-app-latest.apk` from the `docker/prod/downloads` edge mount (ADR 0058). Prod is a SEPARATE app from UAT (`id.co.nativeapp.till` "Native" vs `…​.till.uat` "Native UAT", amber badge). **DEFERRED until a stable domain**: the origin is baked into the APK, so build (`npm run build:prod` in `frontend/native-till`) only against the named tunnel/domain, not an ephemeral quick-tunnel URL — the wrapper refuses the latter. Until then the prod link 404s by design. |
 

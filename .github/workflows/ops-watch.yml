@@ -1,6 +1,6 @@
 # Native PROD ops watch (ADR 0053 §5 / ADR 0057 Phase 6) — the external watchdog.
 #
-# Every hour, from OUTSIDE the VPS (a GitHub runner = the external uptime check):
+# Once a day, from OUTSIDE the VPS (a GitHub runner = the external uptime check):
 #   1. VPS reachable over SSH; disk usage (fail > 82%, warn > 70% — small shared 78 GB host, so alert
 #      EARLY: the 88/80 thresholds let it reach 100% before anyone acted (2026-08-13 login outage));
 #      every native-prod container running+healthy; nightly backup fresh (< 26 h).
@@ -15,12 +15,15 @@ name: ops-watch
 
 on:
   schedule:
-    # Hourly (was */30). Halves the scheduled-run count (48→24/day) — the single largest recurring
-    # GitHub Actions consumer — while keeping meaningful external outage detection. Drop to
-    # "0 */2 * * *" (every 2h, 75% fewer) if cost matters more than detection latency, or raise it
-    # back if prod grows and needs tighter SLA. The alert channel is unchanged (a failed run emails
-    # the owner); workflow_dispatch stays for on-demand checks.
-    - cron: "0 * * * *"
+    # Once a day (was hourly, before that */30): 24→1 scheduled run/day — this was the single
+    # largest recurring GitHub Actions consumer, and the owner does not need hourly paging.
+    # 20:00 UTC = 03:00 WIB, i.e. ~50 min AFTER the VPS nightly backup cron (19:10 UTC,
+    # scripts/prod-backup.sh), so a broken backup surfaces the same night and stays well inside
+    # the 26 h freshness assertion below. Trade-off accepted: outage detection latency is now up
+    # to 24 h — run it on demand (workflow_dispatch) after any deploy or suspected outage, and
+    # raise the frequency back if prod ever needs a tighter SLA. Alert channel unchanged (a failed
+    # run notifies the repo owner).
+    - cron: "0 20 * * *"
   workflow_dispatch:
 
 concurrency:
