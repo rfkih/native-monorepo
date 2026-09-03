@@ -28,4 +28,11 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // Gradle's default test-executor heap is 512m. Spring caches up to 32 @SpringBootTest
+    // contexts per executor, and the big suites (finance 840+, restaurant 820+ tests) grew to the
+    // cliff edge — finance OOM'd ("Java heap space") on 2026-09-03 when one more context landed.
+    // 1g = 2x headroom fleet-wide; kept modest so CI's parallel per-module executors still fit
+    // the runner. The connection-slot analogue of this same creep was fixed in the test bases
+    // (max_connections=500) — when THIS limit is hit next, raise it here, not per-module.
+    maxHeapSize = "1g"
 }

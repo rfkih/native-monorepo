@@ -39,9 +39,16 @@ class IngredientWriterTest {
   private final OutboxWriter outboxWriter = mock(OutboxWriter.class);
   private final OutletAccessGuard guard = mock(OutletAccessGuard.class);
   // No deactivation guards in the unit pins — the ADR 0050 recipe veto is integration-tested.
+  // The applier is REAL and wraps the same mocks, so the existing verify()/verifyNoInteractions()
+  // assertions keep observing the receive/receipt/outbox writes unchanged (the ADR 0071
+  // GeneralLedgerWriter test-construction precedent).
   private final IngredientWriter writer =
       new IngredientWriter(
-          repository, goodsReceiptRepository, outboxWriter, guard, java.util.List.of());
+          repository,
+          goodsReceiptRepository,
+          new PricedReceiveApplier(repository, goodsReceiptRepository, outboxWriter),
+          guard,
+          java.util.List.of());
 
   private static <T> T asTenant(java.util.concurrent.Callable<T> action) {
     try {
