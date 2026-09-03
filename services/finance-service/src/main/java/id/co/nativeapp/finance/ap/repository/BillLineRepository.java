@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.ap.repository;
 
 import id.co.nativeapp.finance.ap.domain.BillLine;
+import id.co.nativeapp.finance.ap.projection.BillLineIngredientView;
 import id.co.nativeapp.finance.ap.projection.BillLineNetView;
 import java.util.List;
 import java.util.UUID;
@@ -21,4 +22,18 @@ public interface BillLineRepository extends JpaRepository<BillLine, UUID> {
               + " FROM bill_line WHERE bill_id = :billId",
       nativeQuery = true)
   List<BillLineNetView> findNetViewsByBillId(UUID billId);
+
+  /**
+   * The ingredient-linked lines of one bill (ADR 0072 P4) — the rows that ride the {@code
+   * InventoryPurchaseRecorded} event on post. Ordered by line number so the wire order is stable.
+   */
+  @Query(
+      value =
+          "SELECT id AS id, ingredient_id AS ingredient_id,"
+              + " ingredient_qty_base AS ingredient_qty_base,"
+              + " line_total_minor AS line_total_minor"
+              + " FROM bill_line WHERE bill_id = :billId AND ingredient_id IS NOT NULL"
+              + " ORDER BY line_no",
+      nativeQuery = true)
+  List<BillLineIngredientView> findIngredientViewsByBillId(UUID billId);
 }

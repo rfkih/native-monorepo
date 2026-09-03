@@ -115,9 +115,16 @@ class BillInventoryRoutingTest extends PostgresRlsTestBase {
     assertThat(billId).isNotNull();
   }
 
+  /**
+   * ADR 0072 §3 — DELIBERATELY REWRITTEN (the owner's periodic-HPP decision, 2026-09-03). Before
+   * this ADR the flag was GL-inert for a non-activated tenant (everything rode the 5000 template);
+   * now the inventory net posts {@code Dr 5100 HPP} under the periodic default too, and only a bill
+   * with NO inventory-flagged lines keeps the template path byte-identical ({@code
+   * BillPostingUnaffectedByV53Test} pins that half).
+   */
   @Test
-  void aNonActivatedTenantIgnoresTheInventoryFlagAndStaysByteIdentical() throws Exception {
-    // NO inventory_method_config row for INACTIVE_TENANT — the Phase B DORMANT state.
+  void aPeriodicTenantRoutesTheInventoryNetToHpp() throws Exception {
+    // NO inventory_method_config row for INACTIVE_TENANT — the periodic default.
     UUID billId =
         TenantContext.callAs(
             INACTIVE_TENANT,
@@ -143,13 +150,47 @@ class BillInventoryRoutingTest extends PostgresRlsTestBase {
     Map<String, Long> credit = accountAmountsAsAdmin(billId, "credit_minor");
 
     assertThat(debit)
-        .as("EVERYTHING routes to EXPENSE (5000) — the flag is ignored, today's V28 shape")
-        .containsExactlyInAnyOrderEntriesOf(Map.of("5000", 1_000_000L, "1300", 110_000L));
+        .as("Dr 5000 (expenseNet) + Dr 5100 HPP (inventoryNet) + Dr 1300 (tax) — ADR 0072 §3")
+        .containsExactlyInAnyOrderEntriesOf(
+            Map.of("5000", 600_000L, "5100", 400_000L, "1300", 110_000L));
     assertThat(credit).containsExactlyInAnyOrderEntriesOf(Map.of("2000", 1_110_000L));
     assertThat(debit.keySet())
-        .as("2050 GRNI Clearing must NEVER appear for a non-activated tenant")
+        .as("2050 GRNI Clearing must NEVER appear under periodic — only perpetual capitalizes")
         .doesNotContain("2050");
     assertThat(debit.keySet()).doesNotContain("9999");
+  }
+
+  /** The periodic contra mirrors the 5000/5100 split (ADR 0072 §3). */
+  @Test
+  void aPeriodicVoidMirrorsTheHppSplit() throws Exception {
+    UUID billId =
+        TenantContext.callAs(
+            INACTIVE_TENANT,
+            ACTOR,
+            () -> {
+              VendorResponse vendor =
+                  vendorWriter.create("Acme Periodic Void", "ap@periodic-void.test", null);
+              UUID id =
+                  billWriter.createDraft(
+                      vendor.id(),
+                      "IDR",
+                      true,
+                      List.of(
+                          new BillLineInput("Office supplies", 2, 300_000L, false),
+                          new BillLineInput("Raw ingredients", 1, 400_000L, true)));
+              billWriter.post(id, 30);
+              billWriter.voidBill(id);
+              return id;
+            });
+
+    UUID voidEntryId = voidEntryIdAsAdmin(INACTIVE_TENANT);
+    Map<String, Long> debit = accountAmountsForEntryAsAdmin(voidEntryId, "debit_minor");
+    Map<String, Long> credit = accountAmountsForEntryAsAdmin(voidEntryId, "credit_minor");
+    assertThat(debit).containsExactlyInAnyOrderEntriesOf(Map.of("2000", 1_110_000L));
+    assertThat(credit)
+        .containsExactlyInAnyOrderEntriesOf(
+            Map.of("5000", 600_000L, "5100", 400_000L, "1300", 110_000L));
+    assertThat(billId).isNotNull();
   }
 
   /**

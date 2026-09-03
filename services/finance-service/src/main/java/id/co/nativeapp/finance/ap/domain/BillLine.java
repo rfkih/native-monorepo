@@ -64,6 +64,23 @@ public class BillLine extends Auditable {
   @Column(name = "is_inventory", nullable = false, updatable = false)
   private boolean inventory;
 
+  /**
+   * ADR 0072 P4 — the restaurant ingredient this inventory line purchases (opaque cross-service
+   * reference, V59). Non-null ONLY on an inventory-flagged line, always paired with {@code
+   * ingredient_qty_base}; a posted bill carrying it rides the {@code InventoryPurchaseRecorded}
+   * event ({@code line_id} = this row's id) so restaurant receives the stock.
+   */
+  @Column(name = "ingredient_id", updatable = false)
+  private UUID ingredientId;
+
+  /** Display-name snapshot for finance-side lists (finance may not join restaurant's DB). */
+  @Column(name = "ingredient_name", updatable = false, length = 255)
+  private String ingredientName;
+
+  /** Quantity purchased, in the ingredient's BASE unit (integer — ADR 0046). */
+  @Column(name = "ingredient_qty_base", updatable = false)
+  private Long ingredientQtyBase;
+
   protected BillLine() {
     // for JPA
   }
@@ -109,6 +126,33 @@ public class BillLine extends Auditable {
     return line;
   }
 
+  /**
+   * Builds an inventory line carrying its ingredient linkage (ADR 0072 P4). Delegates to {@link
+   * #of} for the money math and invariants; the ingredient triple obeys the V59 CHECKs: linkage
+   * only on an inventory-flagged line, id and qty together, qty strictly positive.
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public static BillLine ofIngredient(
+      UUID billId,
+      int lineNo,
+      String description,
+      int quantity,
+      Money unitPrice,
+      UUID ingredientId,
+      String ingredientName,
+      long ingredientQtyBase) {
+    Objects.requireNonNull(ingredientId, "ingredientId");
+    if (ingredientQtyBase <= 0) {
+      throw new IllegalArgumentException(
+          "ingredientQtyBase must be strictly positive: " + ingredientQtyBase);
+    }
+    BillLine line = of(billId, lineNo, description, quantity, unitPrice, true);
+    line.ingredientId = ingredientId;
+    line.ingredientName = ingredientName == null ? "" : ingredientName.strip();
+    line.ingredientQtyBase = ingredientQtyBase;
+    return line;
+  }
+
   private static String requireDescription(String description) {
     Objects.requireNonNull(description, "description");
     String trimmed = description.strip();
@@ -149,6 +193,18 @@ public class BillLine extends Auditable {
   }
 
   /** See the class docs (ADR 0067 Phase B, §3). */
+  public UUID getIngredientId() {
+    return ingredientId;
+  }
+
+  public String getIngredientName() {
+    return ingredientName;
+  }
+
+  public Long getIngredientQtyBase() {
+    return ingredientQtyBase;
+  }
+
   public boolean isInventory() {
     return inventory;
   }

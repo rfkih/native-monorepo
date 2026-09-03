@@ -15,4 +15,12 @@ public interface BillLineView {
   long getUnitPriceMinor();
 
   long getLineTotalMinor();
+
+  boolean getIsInventory();
+
+  java.util.UUID getIngredientId();
+
+  String getIngredientName();
+
+  Long getIngredientQtyBase();
 }

@@ -1,5 +1,7 @@
 package id.co.nativeapp.finance.ap.service;
 
+import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.finance.ap.domain.Bill;
 import id.co.nativeapp.finance.ap.domain.BillLine;
 import id.co.nativeapp.finance.ap.domain.BillNotFoundException;
@@ -7,10 +9,12 @@ import id.co.nativeapp.finance.ap.domain.BillStateException;
 import id.co.nativeapp.finance.ap.domain.BillStatus;
 import id.co.nativeapp.finance.ap.domain.Vendor;
 import id.co.nativeapp.finance.ap.domain.VendorNotFoundException;
+import id.co.nativeapp.finance.ap.projection.BillLineIngredientView;
 import id.co.nativeapp.finance.ap.projection.BillLineNetView;
 import id.co.nativeapp.finance.ap.repository.BillLineRepository;
 import id.co.nativeapp.finance.ap.repository.BillRepository;
 import id.co.nativeapp.finance.ap.repository.VendorRepository;
+import id.co.nativeapp.finance.companyexpense.messaging.InventoryPurchaseRecordedSchema;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
@@ -100,6 +104,7 @@ public class BillWriter {
   private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final PerpetualInventoryReader perpetualInventoryReader;
+  private final OutboxWriter outboxWriter;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
 
@@ -112,6 +117,7 @@ public class BillWriter {
       GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       PerpetualInventoryReader perpetualInventoryReader,
+      OutboxWriter outboxWriter,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.billRepository = billRepository;
@@ -121,6 +127,7 @@ public class BillWriter {
     this.journalPostingService = journalPostingService;
     this.roleAccountResolver = roleAccountResolver;
     this.perpetualInventoryReader = perpetualInventoryReader;
+    this.outboxWriter = outboxWriter;
     this.jdbcTemplate = jdbcTemplate;
     this.clock = clock;
   }
@@ -165,14 +172,38 @@ public class BillWriter {
     int lineNo = 1;
     for (BillLineInput input : lineInputs) {
       Money unitPrice = Money.ofMinor(input.unitPriceMinor(), currency);
-      BillLine line =
-          BillLine.of(
-              bill.getId(),
-              lineNo++,
-              input.description(),
-              input.quantity(),
-              unitPrice,
-              input.inventory());
+      BillLine line;
+      if (input.ingredientId() != null || input.ingredientQtyBase() != null) {
+        // ADR 0072 P4 — ingredient linkage: flagged-only, id and qty together (the V59 CHECKs,
+        // enforced here so the client gets a 400 instead of a constraint violation).
+        if (!input.inventory()) {
+          throw new IllegalArgumentException(
+              "ingredient fields are only valid on an inventory-flagged line");
+        }
+        if (input.ingredientId() == null || input.ingredientQtyBase() == null) {
+          throw new IllegalArgumentException(
+              "ingredientId and ingredientQtyBase must both be present or both absent");
+        }
+        line =
+            BillLine.ofIngredient(
+                bill.getId(),
+                lineNo++,
+                input.description(),
+                input.quantity(),
+                unitPrice,
+                input.ingredientId(),
+                input.ingredientName(),
+                input.ingredientQtyBase());
+      } else {
+        line =
+            BillLine.of(
+                bill.getId(),
+                lineNo++,
+                input.description(),
+                input.quantity(),
+                unitPrice,
+                input.inventory());
+      }
       line.setCompanyId(companyId);
       billLineRepository.save(line);
     }
@@ -212,18 +243,13 @@ public class BillWriter {
     // ADR 0067 Phase B, §3: perpetual-active companies split EXPENSE_NET/INVENTORY_NET via an
     // ad-hoc entry (never the posting-template path — see the class docs). Every tenant in Phase B
     // takes the INACTIVE branch, byte-identical to pre-ADR-0067.
-    JournalEntry glEntry =
-        perpetualInventoryReader.isActiveFor(period)
-            ? buildSplitBillEntry(bill, now, period, "AP bill posted", false)
-            : journalPostingService.buildEntryFromBreakdown(
-                EventKind.BILL_POSTED,
-                period,
-                now,
-                bill.getId(),
-                "AP bill posted",
-                bill.isUsesIllustrativeRules(),
-                postAmounts(bill));
+    JournalEntry glEntry = buildPostingEntry(bill, now, period, "AP bill posted", false);
     persistEntry(glEntry, companyId);
+
+    // ADR 0072 P4 — a posted bill with ingredient-linked lines instructs the stock receive in the
+    // SAME transaction as the money (rule 3): one InventoryPurchaseRecorded, line_id =
+    // bill_line.id (the restaurant goods_receipt idempotency anchor), value = the NET line total.
+    emitInventoryPurchase(bill, companyId, now);
 
     String number = nextBillNumber(companyId);
     bill.post(number, billDate, dueDate, glEntry.getId());
@@ -253,17 +279,9 @@ public class BillWriter {
       // Same single-base-currency guard as post (mirroring AR's code-review W-1): the void contra
       // posts in the current period, which may differ from the post period.
       requireConsistentGlCurrency(period, bill.total());
-      JournalEntry contra =
-          perpetualInventoryReader.isActiveFor(period)
-              ? buildSplitBillEntry(bill, now, period, "AP bill voided", true)
-              : journalPostingService.buildEntryFromBreakdown(
-                  EventKind.BILL_VOID,
-                  period,
-                  now,
-                  UUID.randomUUID(),
-                  "AP bill voided",
-                  bill.isUsesIllustrativeRules(),
-                  postAmounts(bill));
+      // The contra mirrors the routing post used; NO stock event on void (money-side only, ADR
+      // 0072 §4 — stock is corrected via opname/adjust).
+      JournalEntry contra = buildPostingEntry(bill, now, period, "AP bill voided", true);
       persistEntry(contra, companyId);
     }
     bill.voidBill();
@@ -281,7 +299,72 @@ public class BillWriter {
   }
 
   /**
-   * ADR 0067 Phase B, §3 — builds (but does not persist) the perpetual-active split entry directly
+   * Chooses the posting shape (ADR 0067 §3 + ADR 0072 §3). Perpetual-active: the GRNI split.
+   * Periodic with an inventory net &gt; 0: the SAME split shape with {@link AccountRole#COGS} in
+   * GRNI's place — the owner's periodic purchases-as-HPP decision; this is the ADR 0072 behavior
+   * change for inventory-flagged lines (GL-inert before). Periodic with NO inventory net: the
+   * pre-0072 template path, byte-identical ({@code BillPostingUnaffectedByV53Test}).
+   */
+  private JournalEntry buildPostingEntry(
+      Bill bill, Instant occurredAt, String period, String description, boolean contra) {
+    if (perpetualInventoryReader.isActiveFor(period)) {
+      return buildSplitBillEntry(
+          bill, occurredAt, period, description, contra, AccountRole.GRNI_CLEARING);
+    }
+    NetSplit split = computeNetSplit(bill.getId(), Currency.getInstance(bill.getCurrency()));
+    if (!split.inventoryNet().isZero()) {
+      return buildSplitBillEntry(bill, occurredAt, period, description, contra, AccountRole.COGS);
+    }
+    return journalPostingService.buildEntryFromBreakdown(
+        contra ? EventKind.BILL_VOID : EventKind.BILL_POSTED,
+        period,
+        occurredAt,
+        contra ? UUID.randomUUID() : bill.getId(),
+        description,
+        bill.isUsesIllustrativeRules(),
+        postAmounts(bill));
+  }
+
+  /**
+   * Writes the {@code InventoryPurchaseRecorded} outbox row for a posted bill's ingredient-linked
+   * lines (ADR 0072 P4) — nothing when the bill carries none. Same transaction as the GL entry.
+   */
+  private void emitInventoryPurchase(Bill bill, String companyId, Instant occurredAt) {
+    List<BillLineIngredientView> ingredientLines =
+        billLineRepository.findIngredientViewsByBillId(bill.getId());
+    if (ingredientLines.isEmpty()) {
+      return;
+    }
+    List<InventoryPurchaseRecordedSchema.Line> wireLines = new ArrayList<>(ingredientLines.size());
+    for (BillLineIngredientView line : ingredientLines) {
+      wireLines.add(
+          new InventoryPurchaseRecordedSchema.Line(
+              line.getId(),
+              line.getIngredientId(),
+              line.getIngredientQtyBase(),
+              line.getLineTotalMinor()));
+    }
+    outboxWriter.write(
+        InventoryPurchaseRecordedSchema.AGGREGATE_TYPE,
+        bill.getId().toString(),
+        InventoryPurchaseRecordedSchema.EVENT_TYPE,
+        AvroSerde.serialize(
+            InventoryPurchaseRecordedSchema.toRecord(
+                bill.getId(),
+                InventoryPurchaseRecordedSchema.SOURCE_BILL,
+                companyId,
+                bill.getCurrency(),
+                occurredAt,
+                wireLines)),
+        null,
+        UUID.fromString(companyId),
+        clock.instant());
+  }
+
+  /**
+   * ADR 0067 Phase B, §3 (+ ADR 0072 §3) — builds (but does not persist) the split entry directly,
+   * with {@code inventoryRole} carrying the inventory net: {@code GRNI_CLEARING} when
+   * perpetual-active, {@code COGS} for the periodic HPP routing. Originally the perpetual-only path
    * via {@link RoleAccountResolver}, NEVER the {@link JournalPostingService} posting-template path
    * (see the class docs for why). {@code expenseNet + inventoryNet == bill.subtotal()} exactly (the
    * lines partition the SAME sum {@link Bill#subtotal()} was computed from), so the entry balances
@@ -295,8 +378,14 @@ public class BillWriter {
    * EXPENSE(expenseNet) / Cr GRNI_CLEARING(inventoryNet) / Cr VAT_INPUT(tax)} — the same line
    * ordering V53's registered (but inert) BILL_VOID v3 template documents.
    */
+  @SuppressWarnings("checkstyle:ParameterNumber")
   private JournalEntry buildSplitBillEntry(
-      Bill bill, Instant occurredAt, String period, String description, boolean contra) {
+      Bill bill,
+      Instant occurredAt,
+      String period,
+      String description,
+      boolean contra,
+      AccountRole inventoryRole) {
     UUID sourceEventId = contra ? UUID.randomUUID() : bill.getId();
     UUID entryId = UUID.randomUUID();
     Currency currency = Currency.getInstance(bill.getCurrency());
@@ -305,7 +394,7 @@ public class BillWriter {
     Money gross = bill.total();
 
     String expenseCode = requireMapped(AccountRole.EXPENSE, occurredAt);
-    String grniCode = requireMapped(AccountRole.GRNI_CLEARING, occurredAt);
+    String grniCode = requireMapped(inventoryRole, occurredAt);
     String taxCode = requireMapped(AccountRole.VAT_INPUT, occurredAt);
     String apCode = requireMapped(AccountRole.AP, occurredAt);
 

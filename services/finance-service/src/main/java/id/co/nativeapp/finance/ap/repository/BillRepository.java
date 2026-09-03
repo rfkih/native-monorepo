@@ -59,7 +59,9 @@ public interface BillRepository extends JpaRepository<Bill, UUID> {
   @Query(
       value =
           "SELECT line_no AS line_no, description, quantity, unit_price_minor AS unit_price_minor,"
-              + " line_total_minor AS line_total_minor"
+              + " line_total_minor AS line_total_minor, is_inventory AS is_inventory,"
+              + " ingredient_id AS ingredient_id, ingredient_name AS ingredient_name,"
+              + " ingredient_qty_base AS ingredient_qty_base"
               + " FROM bill_line WHERE bill_id = :billId ORDER BY line_no",
       nativeQuery = true)
   List<BillLineView> findLines(UUID billId);

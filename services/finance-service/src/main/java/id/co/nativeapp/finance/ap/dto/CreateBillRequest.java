@@ -37,5 +37,8 @@ public record CreateBillRequest(
       @NotBlank @Size(max = 500) String description,
       @Positive int quantity,
       @Positive long unitPriceMinor,
-      Boolean inventory) {}
+      Boolean inventory,
+      UUID ingredientId,
+      @Size(max = 255) String ingredientName,
+      Long ingredientQtyBase) {}
 }
