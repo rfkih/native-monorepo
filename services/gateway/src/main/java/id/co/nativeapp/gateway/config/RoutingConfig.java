@@ -1712,8 +1712,8 @@ public class RoutingConfig {
   /**
    * Company expenses under {@code /api/v1/company-expenses/**} (finance-service, ADR 0072) —
    * owner/accountant only, mirroring AP: recording an expense posts the GL and (for an INVENTORY
-   * submit) instructs the stock receive. Distinct from the employee expense-claims routes
-   * ({@code /api/v1/expense-claims/**} → employee-service).
+   * submit) instructs the stock receive. Distinct from the employee expense-claims routes ({@code
+   * /api/v1/expense-claims/**} → employee-service).
    */
   @Bean
   RouterFunction<ServerResponse> companyExpensesRoute(
