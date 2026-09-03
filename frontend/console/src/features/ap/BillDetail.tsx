@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -8,6 +9,10 @@ import { Badge } from '@/components/ui/Badge'
 import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, KpiTile } from '@/features/_shared/financeUi'
+import { useOrgUnits } from '@/features/org/api'
+import { formatShownQty, shownUnit, type UnitBearing } from '@/features/inventory/lib/units'
+import type { Ingredient } from '@/features/inventory/ingredientApi'
+import { apiFetch } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
@@ -17,9 +22,59 @@ import {
   useRecordPayment,
   useVoidBill,
   type BillDetail as BillDetailDto,
+  type BillLine,
 } from './api'
 import { formatDate, billErrorKey } from './format'
-import { DialogOverlay, BillStatusBadge } from './parts'
+import { DialogOverlay, BillStatusBadge, SELECT_CLASSES } from './parts'
+
+/**
+ * ADR 0072 P4 — resolves a linked line's `ingredientQtyBase` into the ingredient's DISPLAY unit
+ * (mirrors `NewCompanyExpense.tsx`'s identically-named local hook exactly). A bill carries no
+ * outlet column at all, so BillDetail cannot know which outlet a linked ingredient lives in on its
+ * own — `businessId` here is a console-only RESOLVER filter the viewer optionally picks (the
+ * "Show quantities for outlet" select inside `BillDetail`'s line-items Card), never sent anywhere.
+ * Unresolved (no outlet picked, or the id isn't in the chosen outlet's catalog) falls back to the
+ * plain base-unit count.
+ */
+function useIngredientsForOutlet(params: {
+  companyId: string
+  actor: string
+  businessId: string
+  enabled: boolean
+}) {
+  const { companyId, actor, businessId, enabled } = params
+  return useQuery({
+    enabled: enabled && !!businessId,
+    queryKey: ['apBillIngredients', companyId, businessId],
+    queryFn: async () => {
+      const result = await apiFetch<Ingredient[]>('/api/v1/ingredients', {
+        tenant: { companyId, actor },
+        query: { businessId },
+      })
+      return result ?? []
+    },
+  })
+}
+
+/** The ADR 0072 P4 linkage snapshot for a line, formatted for display — the ingredient name plus
+ *  either the resolved DISPLAY-unit quantity (e.g. "1.5 kg", when `resolved` matches by id) or the
+ *  plain BASE-unit count (e.g. "1500 (satuan dasar)") when it doesn't resolve. `null` for a plain
+ *  or inventory-flagged-but-unlinked line (`ingredientId` absent). */
+function ingredientLinkLabel(
+  line: Pick<BillLine, 'ingredientId' | 'ingredientName' | 'ingredientQtyBase'>,
+  resolved: UnitBearing | null,
+  locale: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string | null {
+  if (!line.ingredientId || line.ingredientQtyBase == null) return null
+  const name = line.ingredientName || line.ingredientId
+  if (resolved) {
+    return `${name} · ${formatShownQty(line.ingredientQtyBase, resolved, locale)} ${shownUnit(resolved)}`
+  }
+  return `${name} · ${t('ap.detail.ingredientQtyBaseUnit', {
+    qty: new Intl.NumberFormat(locale).format(line.ingredientQtyBase),
+  })}`
+}
 
 /**
  * Bill detail (/bills/:id) — header (number, vendor, status, dates), KPI tiles (total/
@@ -34,12 +89,26 @@ export function BillDetail() {
   const { id } = useParams<{ id: string }>()
   const locale = localeOf(i18n.language)
   const [dialog, setDialog] = useState<'post' | 'payment' | 'void' | null>(null)
+  // ADR 0072 P4 — an OPTIONAL, console-only outlet pick that resolves any linked line's
+  // ingredientQtyBase into a display-unit quantity (e.g. "1.5 kg") — never sent anywhere; a bill
+  // has no outlet column to send it to. Unresolved lines fall back to the plain base-unit count.
+  const [resolveOutletId, setResolveOutletId] = useState('')
+
+  const companyId = company?.companyId ?? ''
+  const actor = company?.actor ?? ''
 
   const query = useBill({
-    companyId: company?.companyId ?? '',
-    actor: company?.actor ?? '',
+    companyId,
+    actor,
     id: id ?? '',
     enabled: !!company && !!id,
+  })
+  const outletsQuery = useOrgUnits({ companyId, actor, enabled: !!company })
+  const resolveIngredientsQuery = useIngredientsForOutlet({
+    companyId,
+    actor,
+    businessId: resolveOutletId,
+    enabled: !!company,
   })
 
   if (!company) {
@@ -77,6 +146,13 @@ export function BillDetail() {
   const canPost = bill.status === 'DRAFT'
   const canRecordPayment = bill.status === 'POSTED' || bill.status === 'PARTIALLY_PAID'
   const canVoid = (bill.status === 'DRAFT' || bill.status === 'POSTED') && bill.paidMinor === 0
+
+  // ADR 0072 P4 — the ingredient-linkage display bits.
+  const resolveOutlets = (outletsQuery.data ?? []).filter((u) => u.active)
+  const resolvedIngredients = resolveIngredientsQuery.data ?? []
+  const resolveIngredient = (ingredientId: string): UnitBearing | null =>
+    resolvedIngredients.find((i) => i.id === ingredientId) ?? null
+  const anyLinkedLine = bill.lines.some((l) => !!l.ingredientId)
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -164,6 +240,34 @@ export function BillDetail() {
         <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
           {t('ap.detail.lines')}
         </h2>
+
+        {/* ADR 0072 P4 — an OPTIONAL, console-only resolver: a bill has no outlet column, so
+            picking one here only lets the console show a linked line's quantity in the
+            ingredient's DISPLAY unit instead of the plain base-unit count. Never sent anywhere. */}
+        {anyLinkedLine ? (
+          <div className="mb-3 max-w-xs">
+            <Field
+              label={t('ap.detail.resolveOutletLabel')}
+              htmlFor="bill-resolve-outlet"
+              hint={t('ap.detail.resolveOutletHint')}
+            >
+              <select
+                id="bill-resolve-outlet"
+                className={SELECT_CLASSES}
+                value={resolveOutletId}
+                onChange={(e) => setResolveOutletId(e.target.value)}
+              >
+                <option value="">{t('ap.detail.resolveOutletPlaceholder')}</option>
+                {resolveOutlets.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        ) : null}
+
         {bill.lines.length === 0 ? (
           <p className="py-2 text-sm text-ink-3">{t('ap.detail.noLines')}</p>
         ) : (
@@ -177,18 +281,38 @@ export function BillDetail() {
               </tr>
             </thead>
             <tbody>
-              {bill.lines.map((line) => (
-                <tr key={line.lineNo} className="border-b border-ink-50 last:border-0">
-                  <td className="py-2.5 text-ink-2">{line.description}</td>
-                  <td className="tnum py-2.5 text-right font-mono text-ink-2">{line.quantity}</td>
-                  <td className="tnum py-2.5 text-right font-mono text-ink-2">
-                    {formatMoney(line.unitPriceMinor, bill.currency, locale)}
-                  </td>
-                  <td className="tnum py-2.5 text-right font-mono text-ink">
-                    {formatMoney(line.lineTotalMinor, bill.currency, locale)}
-                  </td>
-                </tr>
-              ))}
+              {bill.lines.map((line) => {
+                const linkLabel = ingredientLinkLabel(
+                  line,
+                  line.ingredientId ? resolveIngredient(line.ingredientId) : null,
+                  locale,
+                  t,
+                )
+                return (
+                  <tr key={line.lineNo} className="border-b border-ink-50 last:border-0">
+                    <td className="py-2.5 text-ink-2">
+                      <div>{line.description}</div>
+                      {/* ADR 0067/0072 — the "Persediaan" indicator + (when linked) the ingredient
+                          snapshot; a plain line renders unchanged. */}
+                      {line.inventory ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <Badge tone="info">{t('ap.detail.inventoryBadge')}</Badge>
+                          {linkLabel ? (
+                            <span className="text-xs text-ink-3">{linkLabel}</span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="tnum py-2.5 text-right font-mono text-ink-2">{line.quantity}</td>
+                    <td className="tnum py-2.5 text-right font-mono text-ink-2">
+                      {formatMoney(line.unitPriceMinor, bill.currency, locale)}
+                    </td>
+                    <td className="tnum py-2.5 text-right font-mono text-ink">
+                      {formatMoney(line.lineTotalMinor, bill.currency, locale)}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t-[1.5px] border-line-strong">

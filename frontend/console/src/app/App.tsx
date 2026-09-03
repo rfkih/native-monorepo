@@ -116,6 +116,7 @@ function PrefetchRouteChunks({
         void import('@/features/bank/BankAccounts')
         void import('@/features/tax/TaxReport')
         void import('@/features/assets/FixedAssets')
+        void import('@/features/expenses/NewCompanyExpense')
       }
     }
     const w = window as Window & {
@@ -237,6 +238,11 @@ const ExpensesHub = lazy(() =>
 )
 const CategoriesAdmin = lazy(() =>
   import('@/features/expenses/CategoriesAdmin').then((m) => ({ default: m.CategoriesAdmin })),
+)
+// ADR 0072 P3 — the company-expense input ("Catat pengeluaran"); FINANCE-gated (see
+// `financeAllowed` below), unlike the HR-gated ExpensesHub/CategoriesAdmin above.
+const NewCompanyExpense = lazy(() =>
+  import('@/features/expenses/NewCompanyExpense').then((m) => ({ default: m.NewCompanyExpense })),
 )
 const Customers = lazy(() =>
   import('@/features/ar/Customers').then((m) => ({ default: m.Customers })),
@@ -760,6 +766,15 @@ export function App() {
               <Route
                 path="/expenses/categories"
                 element={company ? <CategoriesAdmin /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {/* ADR 0072 P3 — "Catat pengeluaran". FINANCE-gated (owner/accountant), not
+                `expensesAllowed` (hr-reachable) — mirrors `/api/v1/company-expenses/**`'s
+                FINANCE_ROLES gate at the gateway. */}
+            {financeAllowed && (
+              <Route
+                path="/expenses/record"
+                element={company ? <NewCompanyExpense /> : <Navigate to="/onboarding" replace />}
               />
             )}
             {financeAllowed && (

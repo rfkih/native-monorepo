@@ -120,6 +120,13 @@ export interface BillLine {
   quantity: number
   unitPriceMinor: number
   lineTotalMinor: number
+  /** ADR 0067 Phase B, §3. */
+  inventory: boolean
+  /** ADR 0072 P4 — the ingredient linkage snapshot; all three null together for a plain or
+   *  inventory-flagged-but-unlinked line (see `CreateBillLineBody`'s doc for the wire contract). */
+  ingredientId: string | null
+  ingredientName: string | null
+  ingredientQtyBase: number | null
 }
 
 export interface BillPayment {
@@ -177,6 +184,20 @@ export interface CreateBillLineBody {
    *  (ignored otherwise — ADR 0067 Phase D). Optional; an old client that omits it behaves exactly
    *  like `false` (backward compatible with the pre-ADR-0067 request shape). */
   inventory?: boolean
+  /**
+   * ADR 0072 P4 — the optional ingredient this inventory line purchases: `ingredientId` +
+   * `ingredientQtyBase` (the ingredient's BASE unit — convert a display-unit input via
+   * `features/inventory/lib/units.ts`, exactly like the company-expense form) go together (both or
+   * neither — the server 400s a half-filled trio), and are only VALID on an `inventory: true` line.
+   * `ingredientName` is a display-name snapshot (finance cannot validate it against
+   * restaurant-service, rule 1 — the console picker keeps garbage out). Omitted entirely = a plain
+   * (or inventory-flagged-but-unlinked) line, unchanged from before. A POSTED bill carrying a
+   * linked line auto-receives stock in restaurant-service (`goods_receipt` keyed on the bill line's
+   * id) — no separate Terima step needed.
+   */
+  ingredientId?: string
+  ingredientName?: string
+  ingredientQtyBase?: number
 }
 
 /** POST /api/v1/ap/bills body. */

@@ -1,14 +1,21 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
+import { useOrgUnits } from '@/features/org/api'
+import { apiFetch } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
+import { allowsFraction, shownUnit, type UnitBearing } from '@/features/inventory/lib/units'
+import type { Ingredient } from '@/features/inventory/ingredientApi'
+import { parseIngredientLink } from './lib/ingredientLink'
 import { useCreateBill, useVendors, type CreateBillLineBody } from './api'
 import { SELECT_CLASSES } from './parts'
 
@@ -22,6 +29,15 @@ interface DraftLine {
   /** ADR 0067 Phase B, §3 — flags this line as a capitalizable inventory purchase. Defaults false;
    *  the backend ignores it unless the company has activated perpetual inventory accounting. */
   inventory: boolean
+  /**
+   * ADR 0072 P4 — the OPTIONAL ingredient linkage, meaningful only when `inventory` is ticked (the
+   * checkbox's `onChange` clears these on untick, so stale hidden state never resurfaces on a
+   * re-tick). `ingredientQtyInput` is typed in the ingredient's DISPLAY unit — converted to the
+   * BASE unit at submit via `parseIngredientLink`, exactly like the company-expense form.
+   */
+  ingredientId: string
+  ingredientName: string
+  ingredientQtyInput: string
 }
 
 function newLine(): DraftLine {
@@ -31,13 +47,50 @@ function newLine(): DraftLine {
     quantity: '1',
     unitPriceMajor: '',
     inventory: false,
+    ingredientId: '',
+    ingredientName: '',
+    ingredientQtyInput: '',
   }
 }
 
-/** A line is submittable once it has a description, a positive integer quantity, and a positive unit price. */
+/**
+ * The outlet's ingredient catalog, scoped to the linkage picker below (ADR 0072 P4) — mirrors
+ * `features/expenses/NewCompanyExpense.tsx`'s identically-named local hook exactly (not
+ * `ingredientApi.ts`'s `useIngredients`, which has no `enabled` gate). `businessId` here is a
+ * console-only FILTER on the picker — a bill carries no outlet column at all (see
+ * `CreateBillLineBody`'s doc), so it is NEVER sent on submit.
+ */
+function useIngredientsForOutlet(params: {
+  companyId: string
+  actor: string
+  businessId: string
+  enabled: boolean
+}) {
+  const { companyId, actor, businessId, enabled } = params
+  return useQuery({
+    enabled: enabled && !!businessId,
+    queryKey: ['apBillIngredients', companyId, businessId],
+    queryFn: async () => {
+      const result = await apiFetch<Ingredient[]>('/api/v1/ingredients', {
+        tenant: { companyId, actor },
+        query: { businessId },
+      })
+      return result ?? []
+    },
+  })
+}
+
+/**
+ * A line is submittable once it has a description, a positive integer quantity, and a positive
+ * unit price. ADR 0072 P4 — when `inventory` is ticked, an OPTIONAL ingredient linkage is also
+ * parsed via `parseIngredientLink`: nothing entered stays a plain inventory-flagged line; a
+ * PARTIAL entry (e.g. an ingredient picked with no quantity) invalidates the WHOLE line rather
+ * than silently dropping the half-entered linkage.
+ */
 function parseLine(
   line: DraftLine,
   exponent: number,
+  ingredientOf: (id: string) => UnitBearing | null,
 ): { body: CreateBillLineBody; lineTotalMinor: number } | null {
   const description = line.description.trim()
   const quantity = Number(line.quantity)
@@ -47,17 +100,34 @@ function parseLine(
   if (!Number.isFinite(unitPriceMajor) || unitPriceMajor <= 0) return null
   const unitPriceMinor = Math.round(unitPriceMajor * 10 ** exponent)
   if (unitPriceMinor <= 0) return null
-  return {
-    body: { description, quantity, unitPriceMinor, inventory: line.inventory },
-    lineTotalMinor: quantity * unitPriceMinor,
+
+  const body: CreateBillLineBody = { description, quantity, unitPriceMinor, inventory: line.inventory }
+  if (line.inventory) {
+    const linked = parseIngredientLink(
+      {
+        ingredientId: line.ingredientId,
+        ingredientName: line.ingredientName,
+        qtyInput: line.ingredientQtyInput,
+      },
+      ingredientOf(line.ingredientId),
+    )
+    if (!linked.valid) return null
+    if (linked.link) {
+      body.ingredientId = linked.link.ingredientId
+      body.ingredientName = linked.link.ingredientName
+      body.ingredientQtyBase = linked.link.ingredientQtyBase
+    }
   }
+
+  return { body, lineTotalMinor: quantity * unitPriceMinor }
 }
 
 /**
- * New bill — pick a vendor, toggle tax, edit line items (add/remove rows), and see a
- * client-side live preview of subtotal/tax/total. The server recomputes and is authoritative;
- * this preview is a convenience only. Currency is always the company's base currency (rule: no
- * currency toggle in the dashboard).
+ * New bill — pick a vendor, toggle tax, edit line items (add/remove rows), optionally link an
+ * inventory-flagged line to an ingredient (ADR 0072 P4 — the linked line auto-receives stock once
+ * the bill is POSTED, no separate Terima step), and see a client-side live preview of subtotal/
+ * tax/total. The server recomputes and is authoritative; this preview is a convenience only.
+ * Currency is always the company's base currency (rule: no currency toggle in the dashboard).
  */
 export function NewBill() {
   const { t, i18n } = useTranslation()
@@ -68,13 +138,35 @@ export function NewBill() {
   const [vendorId, setVendorId] = useState('')
   const [taxable, setTaxable] = useState(false)
   const [lines, setLines] = useState<DraftLine[]>([newLine()])
+  // ADR 0072 P4 — filters the ingredient picker ONLY; a bill carries no outlet, so this never
+  // reaches the request body.
+  const [ingredientOutletId, setIngredientOutletId] = useState('')
 
-  const vendorsQuery = useVendors({
-    companyId: company?.companyId ?? '',
-    actor: company?.actor ?? '',
+  // A new outlet invalidates every picked ingredient (a different outlet's catalog) — clear every
+  // line's linkage rather than leaving a stale id that would silently fail to resolve. Adjusted
+  // DURING render (the React-endorsed "adjusting state when a prop changes" pattern), not inside a
+  // `useEffect`, which would cause an extra cascading render for the same result — mirrors
+  // `NewCompanyExpense.tsx`'s identical `linesResetForOutlet` idiom.
+  const [linesResetForOutlet, setLinesResetForOutlet] = useState(ingredientOutletId)
+  if (ingredientOutletId !== linesResetForOutlet) {
+    setLinesResetForOutlet(ingredientOutletId)
+    setLines((prev) =>
+      prev.map((l) => ({ ...l, ingredientId: '', ingredientName: '', ingredientQtyInput: '' })),
+    )
+  }
+
+  const companyId = company?.companyId ?? ''
+  const actor = company?.actor ?? ''
+
+  const vendorsQuery = useVendors({ companyId, actor, enabled: !!company })
+  const outletsQuery = useOrgUnits({ companyId, actor, enabled: !!company })
+  const ingredientsQuery = useIngredientsForOutlet({
+    companyId,
+    actor,
+    businessId: ingredientOutletId,
     enabled: !!company,
   })
-  const mutation = useCreateBill({ companyId: company?.companyId ?? '', actor: company?.actor ?? '' })
+  const mutation = useCreateBill({ companyId, actor })
 
   if (!company) {
     return <EmptyState title={t('ap.bills.noCompany')} hint={t('ap.bills.noCompanyHint')} />
@@ -85,8 +177,12 @@ export function NewBill() {
   // Zero-decimal currencies (e.g. IDR) only accept whole units; others step by their minor unit.
   const unitPriceStep = exponent === 0 ? '1' : (1 / 10 ** exponent).toString()
   const vendors = vendorsQuery.data ?? []
+  const outlets = (outletsQuery.data ?? []).filter((u) => u.active)
+  const ingredients = ingredientsQuery.data ?? []
+  const ingredientOf = (id: string): UnitBearing | null =>
+    ingredients.find((i) => i.id === id) ?? null
 
-  const parsedLines = lines.map((l) => ({ draft: l, parsed: parseLine(l, exponent) }))
+  const parsedLines = lines.map((l) => ({ draft: l, parsed: parseLine(l, exponent, ingredientOf) }))
   const validLineBodies = parsedLines
     .map((p) => p.parsed?.body)
     .filter((b): b is CreateBillLineBody => !!b)
@@ -95,6 +191,7 @@ export function NewBill() {
   const totalMinor = subtotalMinor + taxMinor
 
   const canSubmit = !!vendorId && validLineBodies.length > 0 && !mutation.isPending
+  const anyInventoryLine = lines.some((l) => l.inventory)
 
   function updateLine(key: string, patch: Partial<DraftLine>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -187,9 +284,45 @@ export function NewBill() {
             </Button>
           </div>
 
+          {/* ADR 0072 P4 — the ingredient picker's outlet FILTER; console-only, never sent (a bill
+              has no outlet column). Only shown once a line is flagged inventory, to keep the
+              common (no-linkage) case uncluttered. */}
+          {anyInventoryLine ? (
+            <div className="mb-3">
+              <Field
+                label={t('ap.newBill.ingredientOutletLabel')}
+                htmlFor="bill-ingredient-outlet"
+                hint={t('ap.newBill.ingredientOutletHint')}
+              >
+                <select
+                  id="bill-ingredient-outlet"
+                  className={SELECT_CLASSES}
+                  value={ingredientOutletId}
+                  onChange={(e) => setIngredientOutletId(e.target.value)}
+                >
+                  <option value="">{t('ap.newBill.ingredientOutletPlaceholder')}</option>
+                  {outlets.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-3">
             {lines.map((line, idx) => {
-              const parsed = parseLine(line, exponent)
+              const parsed = parseLine(line, exponent, ingredientOf)
+              const lineIngredient = ingredientOf(line.ingredientId)
+              const linkResult = parseIngredientLink(
+                {
+                  ingredientId: line.ingredientId,
+                  ingredientName: line.ingredientName,
+                  qtyInput: line.ingredientQtyInput,
+                },
+                lineIngredient,
+              )
               return (
                 <div
                   key={line.key}
@@ -239,12 +372,20 @@ export function NewBill() {
                   </button>
                   {/* ADR 0067 Phase B, §3 — per-line inventory flag. Shows unconditionally (the
                       backend ignores it until the company activates perpetual inventory
-                      accounting), so the form stays ready ahead of activation. */}
+                      accounting), so the form stays ready ahead of activation. Unticking clears any
+                      ingredient linkage below it (ADR 0072 P4) so stale state never resurfaces. */}
                   <label className="flex cursor-pointer items-center gap-2 sm:col-span-5">
                     <input
                       type="checkbox"
                       checked={line.inventory}
-                      onChange={(e) => updateLine(line.key, { inventory: e.target.checked })}
+                      onChange={(e) =>
+                        updateLine(line.key, {
+                          inventory: e.target.checked,
+                          ...(e.target.checked
+                            ? {}
+                            : { ingredientId: '', ingredientName: '', ingredientQtyInput: '' }),
+                        })
+                      }
                       className="size-4 accent-emerald"
                     />
                     <span className="text-xs font-medium text-ink-2">
@@ -252,6 +393,79 @@ export function NewBill() {
                     </span>
                     <span className="text-xs text-ink-3">{t('ap.newBill.inventoryHint')}</span>
                   </label>
+
+                  {/* ADR 0072 P4 — the OPTIONAL ingredient linkage, only for an inventory-flagged
+                      line. Reveals a picker (scoped to the outlet filter above) + a qty input in
+                      the ingredient's DISPLAY unit; a linked line auto-receives stock once the
+                      bill is POSTED. */}
+                  {line.inventory ? (
+                    <div className="rounded-xl border border-dashed border-line-strong bg-paper p-3 sm:col-span-5">
+                      <p className="text-xs text-ink-3">{t('ap.newBill.ingredientLinkNote')}</p>
+                      {!ingredientOutletId ? (
+                        <p className="mt-2 text-xs text-ink-3">
+                          {t('ap.newBill.ingredientLinkPickOutlet')}
+                        </p>
+                      ) : ingredientsQuery.isLoading ? (
+                        <Skeleton className="mt-2 h-[52px] rounded-xl" />
+                      ) : ingredientsQuery.isError ? (
+                        <p className="mt-2 text-xs text-loss">{t('ap.newBill.ingredientLinkError')}</p>
+                      ) : ingredients.length === 0 ? (
+                        <p className="mt-2 text-xs text-ink-3">{t('ap.newBill.ingredientLinkNone')}</p>
+                      ) : (
+                        <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                          <Field label={t('ap.newBill.ingredientLabel')} htmlFor={`line-ing-${line.key}`}>
+                            <select
+                              id={`line-ing-${line.key}`}
+                              className={SELECT_CLASSES}
+                              value={line.ingredientId}
+                              onChange={(e) => {
+                                const chosen = ingredients.find((i) => i.id === e.target.value)
+                                updateLine(line.key, {
+                                  ingredientId: e.target.value,
+                                  ingredientName: chosen?.name ?? '',
+                                  // A different ingredient may carry a different unit/factor — the
+                                  // previously typed quantity would silently mean something else.
+                                  ingredientQtyInput: '',
+                                })
+                              }}
+                            >
+                              <option value="">{t('ap.newBill.ingredientNone')}</option>
+                              {ingredients.map((i) => (
+                                <option key={i.id} value={i.id}>
+                                  {i.name}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                          <Field
+                            label={t('ap.newBill.ingredientQtyLabel', {
+                              unit: lineIngredient ? shownUnit(lineIngredient) : '',
+                            })}
+                            htmlFor={`line-ing-qty-${line.key}`}
+                          >
+                            <TextInput
+                              id={`line-ing-qty-${line.key}`}
+                              type="number"
+                              min="0"
+                              step={lineIngredient && allowsFraction(lineIngredient) ? 'any' : '1'}
+                              inputMode={
+                                lineIngredient && allowsFraction(lineIngredient) ? 'decimal' : 'numeric'
+                              }
+                              value={line.ingredientQtyInput}
+                              onChange={(e) =>
+                                updateLine(line.key, { ingredientQtyInput: e.target.value })
+                              }
+                              placeholder="0"
+                              disabled={!line.ingredientId}
+                            />
+                          </Field>
+                        </div>
+                      )}
+                      {!linkResult.valid ? (
+                        <p className="mt-2 text-xs text-loss">{t('ap.newBill.ingredientLinkInvalid')}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               )
             })}

@@ -8,8 +8,15 @@
  * optional and entered in MAJOR units of the company base currency (converted exponent-aware
  * via parseDiscountInput, rendered via formatMoney — rule 8); an uncosted ingredient is
  * counted at opname but never posts to the books.
+ *
+ * ADR 0072 §5 — the Terima ("receive") dialog's PRICED path is demoted: it no longer accepts a
+ * price (the costless quantity adjust is unchanged). A purchase WITH a payment is now recorded
+ * once, in full, via the company-expense form (`/expenses/record`) — the ONLY priced entry
+ * surface — which posts the money AND applies the stock receive together (finance's
+ * `InventoryPurchaseRecorded` → this same `Ingredient.receive` machinery). This prevents the same
+ * purchase being entered twice. The backend still accepts a priced call (backward compatible).
  */
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ClipboardList, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-react'
@@ -24,6 +31,8 @@ import { ListSkeleton } from '@/components/ui/Skeleton'
 import { OutletGate } from '@/components/OutletGate'
 import { OutletPicker } from '@/components/OutletPicker'
 import { ApiError } from '@/lib/api'
+import { effectiveRoles, useAuth } from '@/lib/authContext'
+import { canFinance } from '@/lib/rolePreset'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
@@ -214,7 +223,6 @@ function IngredientManagementInner({
       {receiving ? (
         <ReceiveDialog
           session={session}
-          baseCurrency={baseCurrency}
           ingredient={receiving}
           locale={locale}
           onClose={() => setReceiving(null)}
@@ -644,13 +652,11 @@ function IngredientFormDialog({
 
 function ReceiveDialog({
   session,
-  baseCurrency,
   ingredient,
   locale,
   onClose,
 }: {
   session: CompanySession
-  baseCurrency: string
   ingredient: Ingredient
   locale: string
   onClose: () => void
@@ -658,14 +664,13 @@ function ReceiveDialog({
   useBackDismiss(onClose)
   useScrollLock()
   const { t } = useTranslation()
+  const { roles, elevatedRoles } = useAuth()
+  // ADR 0072 §5 — the priced Terima path is demoted (double-entry mitigation: the new company-
+  // expense form is the only priced entry surface now). The hint pointing there is FINANCE-gated
+  // (owner/accountant) so it never links a non-finance login to a route that would 403 for them.
+  const financeOk = canFinance(effectiveRoles(roles, elevatedRoles))
   const add = useAddIngredientStock(session)
-  // ADR 0067 Phase D1 — the Idempotency-Key for THIS receive attempt. Minted once per dialog (a ref,
-  // not per click) so a MANUAL retry after a lost response reuses the SAME key and the backend
-  // dedupes the goods_receipt / Dr 1100 posting (a fresh key per click would double-post real money).
-  // A new dialog = a new receive = a new key.
-  const receiveKeyRef = useRef<string>(crypto.randomUUID())
   const [amountInput, setAmountInput] = useState('')
-  const [priceInput, setPriceInput] = useState('')
   // The delta is typed in the SHOWN unit (kg/liter allow decimals; a negative value is a correction)
   // and sent to the API in the BASE unit. parseShownQtyInput forbids fractions/negatives, so this
   // path validates and converts by hand to keep the negative-correction affordance.
@@ -678,32 +683,12 @@ function ReceiveDialog({
   const valid = amountValid && amount !== 0
   const isReceive = amountValid && amount > 0
 
-  // Total-paid → per-SHOWN-unit hint, live as the owner types (divide the total by the shown qty, not
-  // the base qty). Costless (not a receive, or no price) shows nothing — both guards below.
-  const amountPaidMinor =
-    isReceive && priceInput.trim() !== '' ? parseDiscountInput(priceInput, baseCurrency) : null
-  const unitPriceHint =
-    amountPaidMinor != null && amountDisplay > 0
-      ? formatMoney(Math.round(amountPaidMinor / amountDisplay), baseCurrency, locale)
-      : null
-
   function handleSubmit() {
     if (!valid) return
-    // ADR 0067 Phase D1 — the stable per-attempt Idempotency-Key (receiveKeyRef, not minted here),
-    // only on the PRICED path (the backend dedupes goods_receipt by this key; a costless delta has no
-    // receipt row to dedupe). Mirrors features/ap/api.ts's useRecordPayment.
-    add.mutate(
-      amountPaidMinor != null
-        ? {
-            id: ingredient.id,
-            amount,
-            amountPaidMinor,
-            costCurrency: baseCurrency,
-            idempotencyKey: receiveKeyRef.current,
-          }
-        : { id: ingredient.id, amount },
-      { onSuccess: onClose },
-    )
+    // ADR 0072 §5 — always the costless path now (no price input here — see the module doc). The
+    // backend still accepts a priced call (backward compatible; InventoryPurchaseRecorded now feeds
+    // the same `Ingredient.receive` machinery from the company-expense form instead).
+    add.mutate({ id: ingredient.id, amount }, { onSuccess: onClose })
   }
 
   return (
@@ -727,26 +712,13 @@ function ReceiveDialog({
             placeholder="0"
           />
         </Field>
-        {isReceive ? (
-          <Field
-            label={t('inventory.receivePriceLabel', { currency: baseCurrency })}
-            htmlFor="ing-recv-price"
-            hint={
-              unitPriceHint != null
-                ? t('inventory.receiveUnitPriceHint', { price: unitPriceHint, unit: shownUnit(ingredient) })
-                : t('inventory.receivePriceHint')
-            }
-          >
-            <TextInput
-              id="ing-recv-price"
-              type="number"
-              min="0"
-              inputMode="numeric"
-              value={priceInput}
-              onChange={(e) => setPriceInput(e.target.value)}
-              placeholder={t('inventory.costPlaceholder')}
-            />
-          </Field>
+        {isReceive && financeOk ? (
+          <p className="rounded-xl bg-tint-info px-3.5 py-3 text-xs leading-relaxed text-ink-2">
+            {t('inventory.receivePricedHint')}{' '}
+            <Link to="/expenses/record" className="font-semibold text-brand-700 hover:underline">
+              {t('inventory.receivePricedHintLink')}
+            </Link>
+          </p>
         ) : null}
         {add.isError ? (
           <p className="text-xs text-loss" role="alert">
