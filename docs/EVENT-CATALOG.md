@@ -76,6 +76,7 @@ has landed yet — the status names the phases that will land them.
 | **`TrialBalancePublished`** | **finance** (member within-company close) | **finance** (group consolidation) | **company_id, group_id, period, base_currency, reconciled, uses_illustrative_rules, lines[]** | **LIVE (CONSUMER P3d SEAM 2 group_trial_balance ingest; PRODUCER P3d SEAM 4a within-company close)** |
 | **`ConsolidationClosed`** | **finance** (within-company + group close) | **shell, notification** | **company_id (or group_id), period** | **LIVE (PRODUCER P3d SEAM 4a; notification consumer #22)** |
 | **`JournalEntryPosted`** | **finance** (the `GeneralLedgerWriter.post` choke point — every GL posting) | **analytics-service (ADR 0071 P2+, not yet built)** | **journal_entry_id, company_id, business_id?, period, occurred_at, currency, posting_role, source_event_id, lines[]** | **PRODUCER LIVE (ADR 0071 P1) — emitted for every persisted journal entry, atomic via the outbox; no consumer yet** |
+| **`InventoryPurchaseRecorded`** | **finance** (company-expense INVENTORY submit + posted AP bills with ingredient lines) | **restaurant-service** (priced goods receipt per line) | **purchase_id, source, company_id, currency, occurred_at, lines[{line_id, ingredient_id, qty_base, value_minor}]** | **ADR 0072 — the fleet's first finance→vertical event; per-line idempotency via `goods_receipt.idempotency_key = line_id`** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 | **`PaymentChargeSucceeded`** | **payment-service** | **restaurant-service, carwash-service, barbershop-service** (each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, provider, provider_txn_id?, succeeded_at** | **LIVE (ADR 0045): producer (webhook + sync settlement transitions, outbox, Debezium `payment-outbox-connector`) AND all three vertical consumers built — each runs its existing idempotent capture writer** |
 | **`PaymentChargeExpired`** | **payment-service** | **restaurant-service** (carwash/barbershop when built — each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, reason, occurred_at** | **LIVE (ADR 0045): the un-happy-path counterpart of `PaymentChargeSucceeded` — producer emits when a QR_ISSUED charge terminates without settling (EXPIRED/CANCELED/FAILED, outbox, same Debezium connector); restaurant consumer RELEASES the PENDING tender (bill reservation → abandon; order → revert AWAITING_PAYMENT). No money moves** |
@@ -2002,6 +2003,69 @@ enforces the triad (parse + `AvroSerde` round-trip + add-required-broken).
 finance posts on every sale). The outbox retention policy that pays for it ships alongside (ADR
 0071 §retention): the nightly VPS maintenance prunes relayed rows older than the retention window,
 guarded on the Debezium connector actually running — see `docs/adr/0071-analytics-star-schema.md`.
+
+---
+
+### `InventoryPurchaseRecorded`
+
+Emitted by **finance-service** when a company purchase whose money is posted to the GL carries
+ingredient lines ([ADR 0072](adr/0072-purchase-linked-inventory-and-periodic-cogs-routing.md)) —
+from the **company-expense** writer (an `INVENTORY`-kind submit) and from **`BillWriter.post`**
+(a posted AP bill with ingredient-linked `is_inventory` lines). The outbox row rides the same
+transaction as the money's journal entry: money and the stock instruction commit together or not
+at all (rule 3).
+
+Consumed by **restaurant-service**, which applies each line as a **priced goods receipt** through
+the existing ADR 0056 machinery — `Ingredient.receive` (moving-average HPP) + a `goods_receipt`
+row + the `StockReceived` outbox event — with **`goods_receipt.idempotency_key = line_id`**, so a
+redelivered event or a duplicated line can never double-add stock. Lines apply independently: a
+business anomaly (unknown/deleted ingredient, currency mismatch against the ingredient's cost
+currency, qty overflow, same-key-different-payload) **parks in the error inbox** and the remaining
+lines still apply — money is already safely in the books; stock is corrected operationally. Only
+an undecodable payload or a missing `id` header routes to `InventoryPurchaseRecorded.DLT`.
+
+This is the fleet's **first finance→vertical event** — a deliberate direction reversal (the money
+document is where authorization and the accounting decision live; the stock ledger derives from
+it), still via the transactional outbox. The accounting treatment stays finance-local: periodic
+(default) posts the inventory money to `5100 HPP` at input; perpetual-active posts `2050 GRNI` at
+input and the resulting `StockReceived` clears it (`Dr 1100 / Cr 2050`).
+
+- **Producer:** `finance-service` (`companyexpense.service.CompanyExpenseWriter`,
+  `ap.service.BillWriter`).
+- **Consumers:** `restaurant-service` (`inventory.service.InventoryPurchaseApplyWriter`).
+- **Aggregate type / partition key:** `inventory_purchase` / `purchase_id` (the company_expense or
+  bill id).
+- **Outbox `event_type`:** `InventoryPurchaseRecorded`
+- **Schema (single source of truth):**
+  `libs/contracts/src/main/resources/avro/InventoryPurchaseRecorded.avsc` — raw Avro bytes via
+  `libs/events AvroSerde` (no Schema Registry serde); `InventoryPurchaseRecordedContractTest`
+  (both sides) asserts back-compat (rule 7).
+- **Full name:** `id.co.nativeapp.events.finance.InventoryPurchaseRecorded`
+
+The event carries **no `business_id`**: the stock-side outlet truth is `ingredient.business_id`
+(what the goods receipt stamps), and `bill` has no outlet column. `source` is a plain string
+(`EXPENSE` | `BILL`); consumers MUST tolerate unknown future values by skip-and-log. `value_minor`
+is **net of recoverable VAT** (VAT is input tax, never inventory value). Money is integer minor
+units + an ISO-4217 currency, **never a float** (rule 8); no PII (rule 6).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `purchase_id` | `string` | The source aggregate id (company_expense or bill, UUID as string); the partition key |
+| `source` | `string` | `EXPENSE` \| `BILL`; unknown future values are skip-and-log for consumers |
+| `company_id` | `string` | The owning tenant (UUID as string); the RLS dimension the consumer binds |
+| `currency` | `string` | ISO-4217 code of every line's `value_minor` |
+| `occurred_at` | `long` (`timestamp-millis`) | The money-posting instant, epoch millis (UTC) |
+| `lines` | `array<InventoryPurchaseLine>` | One entry per ingredient line, applied independently and idempotently |
+| `lines[].line_id` | `string` | The purchase line id (UUID as string) — the `goods_receipt.idempotency_key` |
+| `lines[].ingredient_id` | `string` | The restaurant ingredient to receive into (UUID as string); unknown → error inbox |
+| `lines[].qty_base` | `long` | Quantity in the ingredient's BASE unit (integer; ADR 0046 no-decimals rule) |
+| `lines[].value_minor` | `long` | The exact amount paid for this line (net of VAT), minor units |
+
+**Compatibility.** Backward-compatible only: add fields with a default, appended LAST, never a
+required field without a default, never remove/rename or retype. The two
+`InventoryPurchaseRecordedContractTest`s enforce the triad.
 
 ---
 

@@ -152,6 +152,16 @@ events:
       - { name: change_kind, type: "string" }
       - { name: effective_from, type: "date" }
       - { name: effective_to, type: "date" }
+  - name: InventoryPurchaseRecorded
+    namespace: id.co.nativeapp.events.finance
+    schema: libs/contracts/src/main/resources/avro/InventoryPurchaseRecorded.avsc
+    fields:
+      - { name: purchase_id, type: "string" }
+      - { name: source, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: currency, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+      - { name: lines, type: "array<record:InventoryPurchaseLine>" }
   - name: JournalEntryPosted
     namespace: id.co.nativeapp.events.finance
     schema: libs/contracts/src/main/resources/avro/JournalEntryPosted.avsc

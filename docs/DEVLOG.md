@@ -1,5 +1,26 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-03 — ADR 0072: one-submit purchases (expense input ⇔ inventory), contract first
+
+The owner's ask — "expense input linked with inventory: a purchase updates stock automatically,
+synchronized" — turned out to expose two facts worth recording. First, **there is no company
+expense input at all**: the "Pengeluaran" page is employee claims; `ExpenseRecorded` has a finance
+consumer and *no producer anywhere*; the only money entry for purchases is the AP bill. Second,
+nearly all the stock-side machinery already exists dormant behind the ADR 0068 periodic gate
+(priced `goods_receipt` + moving-average + `StockReceived`, `bill_line.is_inventory`, the GRNI
+split in `BillWriter`).
+
+ADR 0072 (owner decisions 2026-09-03): a NEW finance `companyexpense` feature is the primary
+entry; AP bills with ingredient-linked inventory lines join in the same program; under periodic,
+ingredient purchases post **5100 HPP** (not 5000 — makes HPP meaningful in the periodic P&L). The
+seam is **`InventoryPurchaseRecorded`** — the fleet's first finance→vertical event: emitted in the
+same tx as the money's journal entry, consumed by restaurant as one priced goods receipt per line
+with `goods_receipt.idempotency_key = line_id` (no redelivery can double-add stock; business
+anomalies park in the error inbox, money already safely posted). Void is money-side only
+(fix-forward); the priced "Terima" path gets demoted in the console so the form is the only
+priced entry (the human double-entry mitigation). P0 ships the `.avsc` + catalog entry + both
+contract tests; the feature phases follow.
+
 ## 2026-09-03 — the test-Postgres time bomb disarmed fleet-wide, and a phantom submodule removed
 
 **The trap was still armed in 9 services.** The 2026-09-02 entry below fixed restaurant (and
