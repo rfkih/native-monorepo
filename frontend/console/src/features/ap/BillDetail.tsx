@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, TriangleAlert } from 'lucide-react'
+import { ChevronRight, Info, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -545,6 +545,14 @@ function PaymentDialog({
   )
 }
 
+/**
+ * Code-review W3 (ADR 0072 P4) — a POSTED bill with ingredient-linked lines auto-received stock on
+ * posting; voiding only reverses the MONEY (mirrors the company-expense void's fix-forward
+ * posture, `CompanyExpensesList.tsx`'s `VoidCompanyExpenseDialog`). When any line carries an
+ * `ingredientId`, this dialog shows the stock guidance BOTH before confirming (so the voider knows
+ * what voiding will and won't undo) and after — stock is never auto-reverted; "Atur jumlah" or a
+ * stock opname is the fix-forward path.
+ */
 function VoidDialog({
   bill,
   companyId,
@@ -558,9 +566,43 @@ function VoidDialog({
 }) {
   const { t } = useTranslation()
   const mutation = useVoidBill({ companyId, actor, id: bill.id })
+  const [voided, setVoided] = useState(false)
+  const anyLinkedLine = bill.lines.some((l) => !!l.ingredientId)
 
   function handleConfirm() {
-    mutation.mutate(undefined, { onSuccess: () => onClose() })
+    mutation.mutate(undefined, { onSuccess: () => setVoided(true) })
+  }
+
+  if (voided) {
+    return (
+      <DialogOverlay onClose={onClose}>
+        <div className="space-y-4">
+          <h2 className="font-display text-lg font-semibold text-ink">
+            {t('ap.detail.voidDialog.doneTitle')}
+          </h2>
+          <p className="text-sm text-ink-2">{t('ap.detail.voidDialog.doneBody')}</p>
+          {anyLinkedLine ? (
+            <div className="flex items-start gap-2 rounded-xl bg-tint-warning px-3.5 py-3 text-sm text-ink-2">
+              <Info className="mt-0.5 size-4 shrink-0 text-amber-2" aria-hidden="true" />
+              <div>
+                <p>{t('ap.detail.voidDialog.stockGuidance')}</p>
+                <Link
+                  to="/inventory"
+                  className="mt-1 inline-block font-semibold text-brand-700 hover:underline"
+                >
+                  {t('ap.detail.voidDialog.stockGuidanceLink')}
+                </Link>
+              </div>
+            </div>
+          ) : null}
+          <div className="flex justify-end">
+            <Button type="button" onClick={onClose}>
+              {t('common.close')}
+            </Button>
+          </div>
+        </div>
+      </DialogOverlay>
+    )
   }
 
   return (
@@ -572,6 +614,11 @@ function VoidDialog({
         <p className="text-sm text-ink-2">
           {t('ap.detail.voidDialog.body', { number: bill.billNumber })}
         </p>
+        {anyLinkedLine ? (
+          <p className="rounded-xl bg-tint-warning px-3.5 py-3 text-sm text-ink-2">
+            {t('ap.detail.voidDialog.stockGuidanceNote')}
+          </p>
+        ) : null}
         {mutation.isError ? (
           <p className="text-sm text-loss">{t(billErrorKey(mutation.error))}</p>
         ) : null}

@@ -113,6 +113,12 @@ class InventoryPurchaseRecordedContractTest {
   }
 
   @Test
+  void classpathSchemaIsBackwardCompatibleWithTheRegisteredProducerSchema() {
+    Schema producer = new Schema.Parser().parse(PRODUCER_SCHEMA_JSON);
+    assertThat(AvroSerde.isBackwardCompatible(producer, classpathSchema())).isTrue();
+  }
+
+  @Test
   void addingARequiredFieldWithoutDefaultBreaksBackwardCompatibility() {
     Schema producer = new Schema.Parser().parse(PRODUCER_SCHEMA_JSON);
     Schema incompatible =

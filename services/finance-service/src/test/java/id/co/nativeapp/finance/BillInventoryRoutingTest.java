@@ -158,6 +158,63 @@ class BillInventoryRoutingTest extends PostgresRlsTestBase {
         .as("2050 GRNI Clearing must NEVER appear under periodic — only perpetual capitalizes")
         .doesNotContain("2050");
     assertThat(debit.keySet()).doesNotContain("9999");
+    assertThat(usesIllustrativeAsAdmin(billId))
+        .as(
+            "V51/V55 officialised every role here — a hardcoded illustrative flag would sticky-flip"
+                + " the trial-balance badge fleet-wide (ADR 0072 review C1)")
+        .isFalse();
+  }
+
+  /**
+   * ADR 0072 review W2 — the void contra MIRRORS the STORED post entry: activating perpetual
+   * inventory between post and void must not change which accounts the contra credits (the post
+   * debited 5100 under periodic; a recomputed contra would credit 2050 and the money would never
+   * unwind).
+   */
+  @Test
+  void aVoidAfterPerpetualActivationStillMirrorsThePeriodicPost() throws Exception {
+    String tenant = UUID.randomUUID().toString();
+    UUID billId =
+        TenantContext.callAs(
+            tenant,
+            ACTOR,
+            () -> {
+              VendorResponse vendor =
+                  vendorWriter.create("Acme Crossover", "ap@crossover.test", null);
+              UUID id =
+                  billWriter.createDraft(
+                      vendor.id(),
+                      "IDR",
+                      true,
+                      List.of(
+                          new BillLineInput("Office supplies", 2, 300_000L, false),
+                          new BillLineInput("Raw ingredients", 1, 400_000L, true)));
+              billWriter.post(id, 30);
+              return id;
+            });
+
+    activatePerpetualInventory(tenant);
+    TenantContext.callAs(tenant, ACTOR, () -> billWriter.voidBill(billId));
+
+    UUID voidEntryId = voidEntryIdAsAdmin(tenant);
+    Map<String, Long> credit = accountAmountsForEntryAsAdmin(voidEntryId, "credit_minor");
+    assertThat(credit)
+        .as("the contra credits what the post debited — 5100, never a recomputed 2050")
+        .containsExactlyInAnyOrderEntriesOf(
+            Map.of("5000", 600_000L, "5100", 400_000L, "1300", 110_000L));
+  }
+
+  private boolean usesIllustrativeAsAdmin(UUID sourceEventId) throws Exception {
+    try (Connection admin = admin();
+        PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT uses_illustrative_rules FROM journal_entry WHERE source_event_id = ?")) {
+      ps.setObject(1, sourceEventId);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertThat(rs.next()).isTrue();
+        return rs.getBoolean(1);
+      }
+    }
   }
 
   /** The periodic contra mirrors the 5000/5100 split (ADR 0072 §3). */

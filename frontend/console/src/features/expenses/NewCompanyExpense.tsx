@@ -50,8 +50,21 @@ import {
 } from './lib/companyExpenseForm'
 import { useRecordCompanyExpense, type CompanyExpenseKind } from './companyExpenseApi'
 
+/**
+ * Today's date in the DEVICE's LOCAL calendar (YYYY-MM-DD) — feeds the "record another"/initial
+ * `dateInput` default, which `dateOnlyToInstant` (`./lib/companyExpenseForm.ts`) then reads as
+ * LOCAL midnight. `toISOString().slice(0, 10)` would read the UTC calendar day instead: in
+ * Asia/Jakarta (UTC+7), any local time before 07:00 is still "yesterday" in UTC, so the sealed-
+ * period check (this date drives the GL period) would silently default to the wrong day. `en-CA`
+ * formats as `YYYY-MM-DD` (mirrors `features/inventory/ingredientApi.ts`'s `usageDayKey` trick),
+ * with NO `timeZone` override so it reads the runtime's own local zone, not a hardcoded one.
+ */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
 }
 
 function emptyLine(): InventoryLineDraft {

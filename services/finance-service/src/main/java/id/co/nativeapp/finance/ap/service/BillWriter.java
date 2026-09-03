@@ -19,6 +19,9 @@ import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
+import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
+import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
+import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
@@ -104,6 +107,8 @@ public class BillWriter {
   private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final PerpetualInventoryReader perpetualInventoryReader;
+  private final JournalEntryRepository journalEntryRepository;
+  private final JournalLineRepository journalLineRepository;
   private final OutboxWriter outboxWriter;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
@@ -117,6 +122,8 @@ public class BillWriter {
       GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       PerpetualInventoryReader perpetualInventoryReader,
+      JournalEntryRepository journalEntryRepository,
+      JournalLineRepository journalLineRepository,
       OutboxWriter outboxWriter,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
@@ -127,6 +134,8 @@ public class BillWriter {
     this.journalPostingService = journalPostingService;
     this.roleAccountResolver = roleAccountResolver;
     this.perpetualInventoryReader = perpetualInventoryReader;
+    this.journalEntryRepository = journalEntryRepository;
+    this.journalLineRepository = journalLineRepository;
     this.outboxWriter = outboxWriter;
     this.jdbcTemplate = jdbcTemplate;
     this.clock = clock;
@@ -279,9 +288,12 @@ public class BillWriter {
       // Same single-base-currency guard as post (mirroring AR's code-review W-1): the void contra
       // posts in the current period, which may differ from the post period.
       requireConsistentGlCurrency(period, bill.total());
-      // The contra mirrors the routing post used; NO stock event on void (money-side only, ADR
-      // 0072 §4 — stock is corrected via opname/adjust).
-      JournalEntry contra = buildPostingEntry(bill, now, period, "AP bill voided", true);
+      // The contra is the EXACT MIRROR of the STORED post entry (swap debit <-> credit -- the
+      // JournalLineReversalView idiom: finance never recomputes reversals), so a role remap or a
+      // perpetual activation landing between post and void can never unwind different accounts
+      // than the post debited (ADR 0072 review W2). NO stock event on void (money-side only,
+      // §4 -- stock is corrected via opname/adjust).
+      JournalEntry contra = buildStoredEntryMirror(bill, now, period);
       persistEntry(contra, companyId);
     }
     bill.voidBill();
@@ -323,6 +335,53 @@ public class BillWriter {
         description,
         bill.isUsesIllustrativeRules(),
         postAmounts(bill));
+  }
+
+  /**
+   * The void contra: reads the STORED post entry's lines and swaps debit <-> credit into a {@link
+   * JournalEntry#reversal} (posting role REVERSAL) carrying the ORIGINAL's illustrative flag --
+   * never a recomputation, so it unwinds exactly what was posted regardless of any role remap or
+   * inventory-method change since (ADR 0072 review W2; the {@code CompanyExpenseWriter.voidExpense}
+   * idiom).
+   */
+  private JournalEntry buildStoredEntryMirror(Bill bill, Instant occurredAt, String period) {
+    UUID originalEntryId = bill.getJournalEntryId();
+    List<JournalLineReversalView> originalLines =
+        journalLineRepository.findLinesByEntryId(originalEntryId);
+    if (originalLines.isEmpty()) {
+      throw new IllegalStateException("stored journal entry has no lines: " + originalEntryId);
+    }
+    boolean originalIllustrative =
+        journalEntryRepository.findUsesIllustrativeRulesById(originalEntryId).orElse(false);
+    UUID contraEntryId = UUID.randomUUID();
+    Currency currency = Currency.getInstance(bill.getCurrency());
+    List<JournalLine> contraLines = new ArrayList<>(originalLines.size());
+    for (JournalLineReversalView original : originalLines) {
+      if (original.getDebitMinor() > 0) {
+        contraLines.add(
+            JournalLine.credit(
+                contraEntryId,
+                original.getLineNo(),
+                original.getAccountCode(),
+                Money.ofMinor(original.getDebitMinor(), currency)));
+      } else {
+        contraLines.add(
+            JournalLine.debit(
+                contraEntryId,
+                original.getLineNo(),
+                original.getAccountCode(),
+                Money.ofMinor(original.getCreditMinor(), currency)));
+      }
+    }
+    return JournalEntry.reversal(
+        contraEntryId,
+        period,
+        occurredAt,
+        "AP bill voided",
+        bill.getCurrency(),
+        UUID.randomUUID(),
+        originalIllustrative,
+        contraLines);
   }
 
   /**
@@ -424,6 +483,17 @@ public class BillWriter {
       }
     }
 
+    // DERIVED, never hardcoded (ADR 0072 review C1): V51/V55 officialised every role used here,
+    // and this path now runs for every periodic tenant with an inventory line -- a literal `true`
+    // would sticky-flip the trial balance's and balance sheet's "illustrative" badge fleet-wide.
+    boolean usesIllustrative =
+        bill.isUsesIllustrativeRules()
+            || roleAccountResolver.anyIllustrative(
+                occurredAt,
+                AccountRole.EXPENSE,
+                inventoryRole,
+                AccountRole.VAT_INPUT,
+                AccountRole.AP);
     return JournalEntry.balanced(
         entryId,
         period,
@@ -431,7 +501,7 @@ public class BillWriter {
         description,
         currency.getCurrencyCode(),
         sourceEventId,
-        true, // GRNI_CLEARING/EXPENSE/VAT_INPUT/AP mappings are all illustrative-seeded today
+        usesIllustrative,
         lines);
   }
 

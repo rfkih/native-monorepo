@@ -39,28 +39,37 @@ public class CompanyExpenseService {
     this.clock = clock;
   }
 
+  /** The submit outcome: the expense id plus whether it was an idempotent replay (review m2). */
+  public record RecordResult(UUID id, boolean replayed) {}
+
   /**
    * Records the expense (or replays an identical keyed retry).
    *
    * @return the expense id — new, or the existing one on a replay
    */
   public UUID record(RecordCompanyExpenseRequest request, String idempotencyKey) {
+    return recordWithOutcome(request, idempotencyKey).id();
+  }
+
+  /** As {@link #record}, reporting whether the submit was a replay (201 vs 200 at the edge). */
+  public RecordResult recordWithOutcome(
+      RecordCompanyExpenseRequest request, String idempotencyKey) {
     CompanyExpenseWriter.RecordCommand command = toCommand(request, idempotencyKey);
     if (idempotencyKey != null) {
       Optional<UUID> replayed = replayReader.findReplay(command);
       if (replayed.isPresent()) {
-        return replayed.get();
+        return new RecordResult(replayed.get(), true);
       }
     }
     try {
-      return writer.record(command);
+      return new RecordResult(writer.record(command), false);
     } catch (DataIntegrityViolationException e) {
       // Two same-key submits raced past the probe; the partial-unique index serialized them.
       // Recover by re-reading the winner in a fresh tx — same payload replays, different conflicts.
       if (idempotencyKey != null) {
         Optional<UUID> winner = replayReader.findReplay(command);
         if (winner.isPresent()) {
-          return winner.get();
+          return new RecordResult(winner.get(), true);
         }
       }
       throw e;

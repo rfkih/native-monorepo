@@ -26,8 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
  * beyond int range, a line_id already recorded with a DIFFERENT payload) is recorded to the {@code
  * error_log} inbox IN THIS SAME TRANSACTION and the loop continues with the remaining lines — the
  * money is already safely posted in finance; stock for the parked line is corrected operationally
- * (the {@code PaymentChargeExpiredWriter} idiom). This method never throws for business anomalies;
- * redelivery cannot fix them, so throwing would only spin the partition.
+ * (the {@code PaymentChargeExpiredWriter} idiom). Business anomalies never throw; a flush-time DB
+ * fault (which poisons the transaction, taking any in-tx park down with it) DOES propagate so the
+ * container retries — the per-line replay probe makes the retry converge (review W4).
  *
  * <p><strong>No {@code OutletAccessGuard} here, deliberately.</strong> The guard authorizes HTTP
  * actors from the {@code X-Roles} header, which does not exist on a Kafka thread; authorization for
@@ -129,7 +130,13 @@ public class InventoryPurchaseApplyWriter {
         return;
       }
       pricedReceiveWriter.apply(
-          ingredient.get(), qty, line.valueMinor(), event.currency(), lineKey, companyId);
+          ingredient.get(),
+          qty,
+          line.valueMinor(),
+          event.currency(),
+          lineKey,
+          companyId,
+          event.occurredAt());
     } catch (GoodsReceiptIdempotencyKeyConflictException conflict) {
       park(
           KEY_CONFLICT_SOURCE,
@@ -139,8 +146,13 @@ public class InventoryPurchaseApplyWriter {
               + event.purchaseId()
               + ": line_id already recorded a DIFFERENT goods receipt — investigate before"
               + " adjusting stock");
-    } catch (RuntimeException failure) {
-      // e.g. currency ≠ the ingredient's cost currency, or another receive invariant.
+    } catch (IllegalArgumentException failure) {
+      // Pre-write domain rejections only (currency ≠ the ingredient's cost currency, a receive
+      // invariant): the transaction is still CLEAN, so the park commits with the claim. A
+      // flush-time DB fault (constraint race, optimistic-lock loss) poisons the transaction —
+      // parking inside it would be lost with the rollback — so those PROPAGATE (review W4 /
+      // ENGINEERING-STANDARDS §2.5): the container retries the event, the per-line
+      // goods_receipt replay probe absorbs whatever committed, and the retry self-heals.
       park(
           APPLY_FAILED_SOURCE,
           "line " + lineKey + " of purchase " + event.purchaseId() + ": " + failure.getMessage());

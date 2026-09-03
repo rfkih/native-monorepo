@@ -55,6 +55,31 @@ class CompanyExpenseIdempotencyTest extends PostgresRlsTestBase {
             () -> TenantContext.callAs(tenant, ACTOR, () -> service.record(different, key)))
         .isInstanceOf(CompanyExpenseIdempotencyConflictException.class);
     assertThat(countAsAdmin("company_expense", tenant)).isEqualTo(1L);
+
+    // Review W1: edited LINES with an UNCHANGED total must also conflict — the amount is the
+    // server-computed line sum, so a total-only compare would replay silently and receive the
+    // OLD lines' stock.
+    RecordCompanyExpenseRequest sameTotalDifferentLines =
+        new RecordCompanyExpenseRequest(
+            "INVENTORY",
+            outlet,
+            null,
+            "Belanja idempoten",
+            null,
+            "IDR",
+            OCCURRED,
+            List.of(
+                new RecordCompanyExpenseRequest.LineRequest(
+                    UUID.fromString("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+                    "Garam kasar",
+                    2_000L,
+                    40_000L)));
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    tenant, ACTOR, () -> service.record(sameTotalDifferentLines, key)))
+        .isInstanceOf(CompanyExpenseIdempotencyConflictException.class);
+    assertThat(countAsAdmin("company_expense", tenant)).isEqualTo(1L);
   }
 
   @Test

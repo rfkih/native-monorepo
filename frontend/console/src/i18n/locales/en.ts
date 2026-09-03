@@ -3586,6 +3586,15 @@ export const en = {
         body: 'Void bill {{number}}? This cannot be undone.',
         confirm: 'Void bill',
         submitting: 'Voiding…',
+        // Code-review W3 (ADR 0072 P4) — shown when the bill has any ingredient-linked line
+        // (mirrors expenses.company.voidDialog's stock-guidance copy).
+        stockGuidanceNote:
+          'This bill has ingredient-linked lines that already received stock — voiding only reverses the money. Stock will not be reverted.',
+        doneTitle: 'Bill voided',
+        doneBody: 'The money-side entry has been reversed.',
+        stockGuidance:
+          'Stock was NOT reverted — this was a money-only correction. Adjust the quantity via "Set quantity" or a stock opname if needed.',
+        stockGuidanceLink: 'Go to Inventory',
       },
       errors: {
         invalidState:

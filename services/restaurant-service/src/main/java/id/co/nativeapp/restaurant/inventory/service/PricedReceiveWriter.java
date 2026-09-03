@@ -92,6 +92,12 @@ public class PricedReceiveWriter {
    * Ingredient#receive}), the {@link GoodsReceipt} anchor row, and the {@code StockReceived} outbox
    * event. The caller has already resolved {@link ReplayOutcome#NEW} for {@code key}.
    *
+   * <p>{@code receivedAt} is the caller's authoritative receive instant: the HTTP path passes now;
+   * the {@code InventoryPurchaseRecorded} consumer passes the event's {@code occurred_at} so the
+   * receipt (and its {@code StockReceived}) lands in the SAME period the money posted in — without
+   * it, a back-dated purchase straddling a perpetual activation would double-count into both COGS
+   * and Inventory (review W6).
+   *
    * @return the saved ingredient (post-receive state)
    * @throws IllegalArgumentException from {@link Ingredient#receive} (non-positive qty, negative
    *     value, invalid or mismatched currency)
@@ -102,11 +108,11 @@ public class PricedReceiveWriter {
       long valueMinor,
       String currency,
       @Nullable String key,
-      String companyId) {
+      String companyId,
+      Instant receivedAt) {
     ingredient.receive(qty, valueMinor, currency);
     Ingredient saved = ingredientRepository.saveAndFlush(ingredient);
 
-    Instant receivedAt = Instant.now();
     GoodsReceipt receipt =
         GoodsReceipt.of(
             saved.getId(), saved.getBusinessId(), qty, valueMinor, currency, receivedAt, key);

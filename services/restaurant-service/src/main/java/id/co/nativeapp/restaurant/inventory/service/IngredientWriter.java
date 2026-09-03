@@ -210,7 +210,13 @@ public class IngredientWriter {
       }
       Ingredient saved =
           pricedReceiveWriter.apply(
-              ingredient, amount, amountPaidMinor, costCurrency, key, companyId);
+              ingredient,
+              amount,
+              amountPaidMinor,
+              costCurrency,
+              key,
+              companyId,
+              java.time.Instant.now());
       return IngredientResponse.from(saved);
     } else {
       ingredient.addStock(amount);

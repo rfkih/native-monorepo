@@ -7,6 +7,8 @@ import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseKind;
 import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseLine;
 import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseNotFoundException;
 import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseSealedPeriodException;
+import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseStateException;
+import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseStatus;
 import id.co.nativeapp.finance.companyexpense.domain.InvalidCompanyExpenseException;
 import id.co.nativeapp.finance.companyexpense.domain.InvalidGlHintException;
 import id.co.nativeapp.finance.companyexpense.domain.UnknownBusinessUnitException;
@@ -17,6 +19,7 @@ import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
+import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
@@ -88,6 +91,7 @@ public class CompanyExpenseWriter {
   private final CompanyExpenseLineRepository lineRepository;
   private final OrgUnitRefRepository orgUnitRefRepository;
   private final LedgerPostingRepository ledgerPostingRepository;
+  private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
   private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
@@ -104,6 +108,7 @@ public class CompanyExpenseWriter {
       CompanyExpenseLineRepository lineRepository,
       OrgUnitRefRepository orgUnitRefRepository,
       LedgerPostingRepository ledgerPostingRepository,
+      JournalEntryRepository journalEntryRepository,
       JournalLineRepository journalLineRepository,
       GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
@@ -117,6 +122,7 @@ public class CompanyExpenseWriter {
     this.lineRepository = lineRepository;
     this.orgUnitRefRepository = orgUnitRefRepository;
     this.ledgerPostingRepository = ledgerPostingRepository;
+    this.journalEntryRepository = journalEntryRepository;
     this.journalLineRepository = journalLineRepository;
     this.generalLedgerWriter = generalLedgerWriter;
     this.roleAccountResolver = roleAccountResolver;
@@ -158,7 +164,14 @@ public class CompanyExpenseWriter {
     String actor = TenantContext.require().actor();
 
     UUID businessId = command.businessId();
-    if (orgUnitRefRepository.findById(businessId).isEmpty()) {
+    boolean validOutlet =
+        orgUnitRefRepository
+            .findById(businessId)
+            // type is UPPERCASE in org_unit_ref; a company-level or deactivated ref is not a
+            // valid P&L dimension for a new expense (review m10).
+            .map(ref -> ref.isActive() && "OUTLET".equals(ref.getType()))
+            .orElse(false);
+    if (!validOutlet) {
       throw new UnknownBusinessUnitException(businessId);
     }
 
@@ -207,7 +220,9 @@ public class CompanyExpenseWriter {
               PostingType.EXPENSE, businessId, period, amount, debit.accountCode(), expenseId);
       posting.setCompanyId(companyId);
       ledgerPostingRepository.save(posting);
-      pnlReadModel.addExpense(period, amount, companyId, actor);
+      // The 5-arg overload: the accumulator's sticky illustrative flag mirrors the journal's
+      // DERIVED provenance (review m8) instead of a hardcoded false.
+      pnlReadModel.addExpense(period, amount, companyId, actor, usesIllustrative);
     }
 
     // 3) The aggregate + its lines.
@@ -282,6 +297,12 @@ public class CompanyExpenseWriter {
         expenseRepository
             .findById(expenseId)
             .orElseThrow(() -> new CompanyExpenseNotFoundException(expenseId));
+    if (expense.getStatus() != CompanyExpenseStatus.POSTED) {
+      // Guard FIRST (review m11): the transaction would roll a later failure back anyway, but a
+      // status check after posting the contra reads as a hazard.
+      throw new CompanyExpenseStateException(
+          "only a POSTED company expense can be voided; current status=" + expense.getStatus());
+    }
     String companyId = TenantContext.require().companyId();
     String actor = TenantContext.require().actor();
 
@@ -320,6 +341,10 @@ public class CompanyExpenseWriter {
                 Money.ofMinor(original.getCreditMinor(), currency)));
       }
     }
+    boolean originalIllustrative =
+        journalEntryRepository
+            .findUsesIllustrativeRulesById(expense.getJournalEntryId())
+            .orElse(false);
     JournalEntry contra =
         JournalEntry.reversal(
             contraEntryId,
@@ -328,7 +353,7 @@ public class CompanyExpenseWriter {
             "Company expense voided",
             expense.getCurrency(),
             UUID.randomUUID(),
-            false,
+            originalIllustrative,
             contraLines);
     generalLedgerWriter.post(contra, companyId);
 

@@ -11,6 +11,7 @@ import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import org.slf4j.MDC;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -62,6 +63,22 @@ public class CompanyExpenseAdvice {
     problem.setType(URI.create(TYPE_BASE + "company-expense-invalid"));
     problem.setTitle("Unprocessable Entity");
     problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  /**
+   * A database-level collision the service could not recover (an unkeyed duplicate racing a
+   * constraint, an optimistic-lock loss) → 409, matching {@code ApAdvice} (review m4).
+   */
+  @ExceptionHandler({
+    DataIntegrityViolationException.class,
+    org.springframework.orm.ObjectOptimisticLockingFailureException.class
+  })
+  public ProblemDetail handleDataConflict(RuntimeException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+    problem.setType(URI.create(TYPE_BASE + "company-expense-conflict"));
+    problem.setTitle("Conflict");
+    problem.setDetail("The request conflicted with a concurrent change; retry the operation.");
     return decorate(problem, request);
   }
 

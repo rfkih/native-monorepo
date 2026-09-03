@@ -5,10 +5,12 @@ import id.co.nativeapp.finance.companyexpense.dto.RecordCompanyExpenseRequest;
 import id.co.nativeapp.finance.companyexpense.service.CompanyExpenseReader;
 import id.co.nativeapp.finance.companyexpense.service.CompanyExpenseService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -26,6 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/company-expenses")
+@Tag(
+    name = "Company Expenses",
+    description =
+        "First-party company expenses (ADR 0072): money posts at submit; an INVENTORY submit also"
+            + " instructs the stock receive.")
 public class CompanyExpenseController {
 
   private final CompanyExpenseService service;
@@ -44,11 +50,17 @@ public class CompanyExpenseController {
               + " the inventory method) and, for INVENTORY, instructs the stock receive via"
               + " InventoryPurchaseRecorded (ADR 0072). Idempotency-Key replays the same submit.")
   @PostMapping
-  @ResponseStatus(HttpStatus.CREATED)
-  public Map<String, UUID> record(
+  public ResponseEntity<Map<String, UUID>> record(
       @RequestBody RecordCompanyExpenseRequest request,
       @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
-    return Map.of("id", service.record(request, normalizeKey(idempotencyKey)));
+    CompanyExpenseService.RecordResult result =
+        service.recordWithOutcome(request, normalizeKey(idempotencyKey));
+    Map<String, UUID> body = Map.of("id", result.id());
+    if (result.replayed()) {
+      // An idempotent retry is 200, not a second 201 (ENGINEERING-STANDARDS §1.1).
+      return ResponseEntity.ok(body);
+    }
+    return ResponseEntity.created(URI.create("/api/v1/company-expenses/" + result.id())).body(body);
   }
 
   /** Recent expenses, newest first. */

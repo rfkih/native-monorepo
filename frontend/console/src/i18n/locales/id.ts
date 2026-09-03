@@ -3545,6 +3545,13 @@ export const id = {
         body: 'Batalkan tagihan {{number}}? Tindakan ini tidak dapat dibatalkan.',
         confirm: 'Batalkan tagihan',
         submitting: 'Membatalkan…',
+        stockGuidanceNote:
+          'Tagihan ini memiliki baris yang terkait bahan dan sudah menerima stok — pembatalan hanya membalik sisi uang. Stok tidak akan dikembalikan.',
+        doneTitle: 'Tagihan dibatalkan',
+        doneBody: 'Entri sisi uang telah dibalik.',
+        stockGuidance:
+          'Stok TIDAK dikembalikan — ini hanya koreksi sisi uang. Sesuaikan jumlah lewat "Atur jumlah" atau stock opname bila perlu.',
+        stockGuidanceLink: 'Buka Inventori',
       },
       errors: {
         invalidState:
