@@ -29,13 +29,13 @@ import org.springframework.stereotype.Service;
 public class CompanyExpenseService {
 
   private final CompanyExpenseWriter writer;
-  private final CompanyExpenseReplayProbe replayProbe;
+  private final CompanyExpenseReplayReader replayReader;
   private final Clock clock;
 
   public CompanyExpenseService(
-      CompanyExpenseWriter writer, CompanyExpenseReplayProbe replayProbe, Clock clock) {
+      CompanyExpenseWriter writer, CompanyExpenseReplayReader replayReader, Clock clock) {
     this.writer = writer;
-    this.replayProbe = replayProbe;
+    this.replayReader = replayReader;
     this.clock = clock;
   }
 
@@ -47,7 +47,7 @@ public class CompanyExpenseService {
   public UUID record(RecordCompanyExpenseRequest request, String idempotencyKey) {
     CompanyExpenseWriter.RecordCommand command = toCommand(request, idempotencyKey);
     if (idempotencyKey != null) {
-      Optional<UUID> replayed = replayProbe.findReplay(command);
+      Optional<UUID> replayed = replayReader.findReplay(command);
       if (replayed.isPresent()) {
         return replayed.get();
       }
@@ -58,7 +58,7 @@ public class CompanyExpenseService {
       // Two same-key submits raced past the probe; the partial-unique index serialized them.
       // Recover by re-reading the winner in a fresh tx — same payload replays, different conflicts.
       if (idempotencyKey != null) {
-        Optional<UUID> winner = replayProbe.findReplay(command);
+        Optional<UUID> winner = replayReader.findReplay(command);
         if (winner.isPresent()) {
           return winner.get();
         }

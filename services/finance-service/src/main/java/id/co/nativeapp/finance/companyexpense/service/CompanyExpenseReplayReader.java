@@ -17,11 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
  * the proxy (rule 5).
  */
 @Component
-public class CompanyExpenseReplayProbe {
+public class CompanyExpenseReplayReader {
 
   private final CompanyExpenseRepository expenseRepository;
 
-  public CompanyExpenseReplayProbe(CompanyExpenseRepository expenseRepository) {
+  public CompanyExpenseReplayReader(CompanyExpenseRepository expenseRepository) {
     this.expenseRepository = expenseRepository;
   }
 

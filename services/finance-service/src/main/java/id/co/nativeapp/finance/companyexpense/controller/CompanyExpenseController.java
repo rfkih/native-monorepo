@@ -4,6 +4,7 @@ import id.co.nativeapp.finance.companyexpense.dto.CompanyExpenseResponse;
 import id.co.nativeapp.finance.companyexpense.dto.RecordCompanyExpenseRequest;
 import id.co.nativeapp.finance.companyexpense.service.CompanyExpenseReader;
 import id.co.nativeapp.finance.companyexpense.service.CompanyExpenseService;
+import io.swagger.v3.oas.annotations.Operation;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,6 +37,12 @@ public class CompanyExpenseController {
   }
 
   /** Records a POSTED company expense; an INVENTORY submit also instructs the stock receive. */
+  @Operation(
+      summary = "Record a company expense",
+      description =
+          "Posts the money to the GL at submit (GENERAL by gl_hint; INVENTORY to HPP or GRNI per"
+              + " the inventory method) and, for INVENTORY, instructs the stock receive via"
+              + " InventoryPurchaseRecorded (ADR 0072). Idempotency-Key replays the same submit.")
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public Map<String, UUID> record(
@@ -45,18 +52,27 @@ public class CompanyExpenseController {
   }
 
   /** Recent expenses, newest first. */
+  @Operation(summary = "List recent company expenses", description = "Newest first; no lines.")
   @GetMapping
   public List<CompanyExpenseResponse> list(@RequestParam(required = false) Integer limit) {
     return reader.listRecent(limit);
   }
 
   /** One expense with its ingredient lines. */
+  @Operation(
+      summary = "Get one company expense",
+      description = "Summary plus the ingredient lines (empty for GENERAL).")
   @GetMapping("/{id}")
   public CompanyExpenseResponse get(@PathVariable UUID id) {
     return reader.getById(id);
   }
 
   /** Voids a POSTED expense — money-side contra only; stock is adjusted via opname/Atur jumlah. */
+  @Operation(
+      summary = "Void a company expense",
+      description =
+          "Posts the exact contra of the stored journal (money-side only — stock is corrected"
+              + " operationally, ADR 0072); 409 when already void.")
   @PostMapping("/{id}/void")
   public Map<String, UUID> voidExpense(@PathVariable UUID id) {
     return Map.of("id", service.voidExpense(id));
