@@ -1462,6 +1462,22 @@ export const en = {
     errorGeneric: 'Could not save. Please try again.',
     nameTaken: 'An item with this name already exists at this outlet.',
   },
+  /**
+   * Owner request — the "+ Tambah bahan baru" inline ingredient picker/create mini-form shared by
+   * NewCompanyExpense.tsx's Belanja bahan line rows and NewBill.tsx's Persediaan linkage. Reuses
+   * `inventory.*`'s name/unit field copy (same fields as IngredientManagement's create dialog);
+   * this namespace only holds the picker-specific bits (the trigger, the create dialog's own
+   * title/hint/submit/error, and the 409 "select existing instead" recovery).
+   */
+  inventoryPicker: {
+    addNew: '+ Add new ingredient',
+    createTitle: 'New ingredient',
+    createHint: 'Stock and cost for a brand-new ingredient are set by this purchase — nothing to fill in here.',
+    createSubmit: 'Create and use',
+    createError: 'Could not create this ingredient. Please try again.',
+    matchesExisting: 'An ingredient named "{{name}}" already exists.',
+    selectInstead: 'Use it instead',
+  },
   posShell: {
     /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */
     online: 'Online',

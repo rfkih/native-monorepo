@@ -18,7 +18,7 @@
  */
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Info, Plus, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -32,7 +32,7 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import { useOrgUnits } from '@/features/org/api'
 import { useCategories } from './api'
 import { ApiError, apiFetch } from '@/lib/api'
-import { useSession } from '@/lib/session'
+import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
 import {
@@ -41,6 +41,7 @@ import {
   type UnitBearing,
 } from '@/features/inventory/lib/units'
 import type { Ingredient } from '@/features/inventory/ingredientApi'
+import { CreateIngredientInline } from '@/features/inventory/CreateIngredientInline'
 import {
   inventoryLinesTotalMinor,
   parseGeneralExpense,
@@ -152,6 +153,10 @@ export function NewCompanyExpense() {
   const ingredients = ingredientsQuery.data ?? []
   const ingredientOf = (id: string): UnitBearing | null =>
     ingredients.find((i) => i.id === id) ?? null
+  // Owner request — "+ Tambah bahan baru": the session `useCreateIngredient` posts against, scoped
+  // to the CHOSEN outlet (mirrors `OutletGate`'s `{ ...company, businessId }` idiom exactly; only
+  // meaningful once `businessId` is set — the trigger stays disabled until then).
+  const ingredientCreateSession: CompanySession = { ...company, businessId }
 
   const selectedCategory = categories.data?.find((c) => c.id === categoryId) ?? null
 
@@ -397,21 +402,24 @@ export function NewCompanyExpense() {
                 <ListSkeleton rows={2} />
               ) : ingredientsQuery.isError ? (
                 <p className="text-sm text-loss">{t('expenses.record.inventory.ingredientsError')}</p>
-              ) : ingredients.length === 0 ? (
-                <p className="rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm text-ink-3">
-                  {t('expenses.record.inventory.noIngredients')}{' '}
-                  <Link to="/inventory" className="font-semibold text-brand-700 hover:underline">
-                    {t('expenses.record.inventory.addIngredientLink')}
-                  </Link>
-                </p>
               ) : (
-                <IngredientLineRows
-                  lines={lineDrafts}
-                  onChange={setLineDrafts}
-                  ingredients={ingredients}
-                  currency={currency}
-                  locale={locale}
-                />
+                <>
+                  {/* Owner request — a brand-new bahan no longer blocks the form: the picker below
+                      always renders (even with an empty catalog) so "+ Tambah bahan baru" can seed
+                      the outlet's very first ingredient inline. */}
+                  {ingredients.length === 0 ? (
+                    <p className="mb-3 text-sm text-ink-3">{t('expenses.record.inventory.noIngredients')}</p>
+                  ) : null}
+                  <IngredientLineRows
+                    lines={lineDrafts}
+                    onChange={setLineDrafts}
+                    ingredients={ingredients}
+                    currency={currency}
+                    locale={locale}
+                    createSession={ingredientCreateSession}
+                    refetchIngredients={() => void ingredientsQuery.refetch()}
+                  />
+                </>
               )}
             </Card>
 
@@ -458,14 +466,21 @@ function IngredientLineRows({
   ingredients,
   currency,
   locale,
+  createSession,
+  refetchIngredients,
 }: {
   lines: InventoryLineDraft[]
   onChange: (lines: InventoryLineDraft[]) => void
   ingredients: Ingredient[]
   currency: string
   locale: string
+  /** Owner request — "+ Tambah bahan baru": scoped to the chosen outlet (`session.businessId`). */
+  createSession: CompanySession
+  refetchIngredients: () => void
 }) {
   const { t } = useTranslation()
+  // Which line's "+ Tambah bahan baru" mini-form is open — at most one at a time.
+  const [creatingForKey, setCreatingForKey] = useState<string | null>(null)
 
   function updateLine(key: string, patch: Partial<InventoryLineDraft>) {
     onChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -475,6 +490,12 @@ function IngredientLineRows({
   }
   function removeLine(key: string) {
     onChange(lines.length > 1 ? lines.filter((l) => l.key !== key) : lines)
+  }
+  /** Selects `ingredient` on `key`'s line (from either a fresh create or the "select existing
+   *  instead" 409 recovery) and clears its qty — a different ingredient may carry a different
+   *  unit/factor. */
+  function selectIngredient(key: string, ingredient: Ingredient) {
+    updateLine(key, { ingredientId: ingredient.id, ingredientName: ingredient.name, qtyInput: '' })
   }
 
   return (
@@ -511,6 +532,17 @@ function IngredientLineRows({
                   </option>
                 ))}
               </Select>
+              {/* Owner request — a brand-new bahan is created inline, no /inventory detour. Needs
+                  a chosen outlet (creation posts against `createSession.businessId`). */}
+              <button
+                type="button"
+                onClick={() => setCreatingForKey(line.key)}
+                disabled={!createSession.businessId}
+                className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline disabled:cursor-not-allowed disabled:text-ink-3 disabled:no-underline disabled:hover:no-underline"
+              >
+                <Plus className="size-3.5" aria-hidden="true" />
+                {t('inventoryPicker.addNew')}
+              </button>
             </Field>
             <Field
               label={t('expenses.record.inventory.qtyLabel', {
@@ -562,6 +594,23 @@ function IngredientLineRows({
         <Plus className="size-4" />
         {t('expenses.record.inventory.addLine')}
       </Button>
+
+      {creatingForKey ? (
+        <CreateIngredientInline
+          session={createSession}
+          existingIngredients={ingredients}
+          onClose={() => setCreatingForKey(null)}
+          onCreated={(created) => {
+            refetchIngredients()
+            selectIngredient(creatingForKey, created)
+            setCreatingForKey(null)
+          }}
+          onSelectExisting={(existing) => {
+            selectIngredient(creatingForKey, existing)
+            setCreatingForKey(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

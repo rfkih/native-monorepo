@@ -1446,6 +1446,15 @@ export const id = {
     errorGeneric: 'Tidak dapat menyimpan. Silakan coba lagi.',
     nameTaken: 'Barang dengan nama ini sudah ada di gerai ini.',
   },
+  inventoryPicker: {
+    addNew: '+ Tambah bahan baru',
+    createTitle: 'Bahan baru',
+    createHint: 'Stok & harga bahan baru akan terisi dari pembelian ini — tidak perlu diisi di sini.',
+    createSubmit: 'Buat dan gunakan',
+    createError: 'Gagal membuat bahan ini. Silakan coba lagi.',
+    matchesExisting: 'Bahan bernama "{{name}}" sudah ada.',
+    selectInstead: 'Gunakan yang sudah ada',
+  },
   posShell: {
     /** Redesign P4 — kerangka POS bersama (bilah status, menu kasir, dok tiket). */
     online: 'Online',

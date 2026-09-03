@@ -10,11 +10,12 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useOrgUnits } from '@/features/org/api'
 import { apiFetch } from '@/lib/api'
-import { useSession } from '@/lib/session'
+import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
 import { allowsFraction, shownUnit, type UnitBearing } from '@/features/inventory/lib/units'
 import type { Ingredient } from '@/features/inventory/ingredientApi'
+import { CreateIngredientInline } from '@/features/inventory/CreateIngredientInline'
 import { parseIngredientLink } from './lib/ingredientLink'
 import { useCreateBill, useVendors, type CreateBillLineBody } from './api'
 import { SELECT_CLASSES } from './parts'
@@ -141,6 +142,9 @@ export function NewBill() {
   // ADR 0072 P4 — filters the ingredient picker ONLY; a bill carries no outlet, so this never
   // reaches the request body.
   const [ingredientOutletId, setIngredientOutletId] = useState('')
+  // Owner request — "+ Tambah bahan baru": which line's inline create mini-form is open (at most
+  // one at a time).
+  const [creatingForKey, setCreatingForKey] = useState<string | null>(null)
 
   // A new outlet invalidates every picked ingredient (a different outlet's catalog) — clear every
   // line's linkage rather than leaving a stale id that would silently fail to resolve. Adjusted
@@ -181,6 +185,11 @@ export function NewBill() {
   const ingredients = ingredientsQuery.data ?? []
   const ingredientOf = (id: string): UnitBearing | null =>
     ingredients.find((i) => i.id === id) ?? null
+  // Owner request — "+ Tambah bahan baru": the session `useCreateIngredient` posts against, scoped
+  // to the picker's outlet FILTER (mirrors `OutletGate`'s `{ ...company, businessId }` idiom
+  // exactly; only meaningful once `ingredientOutletId` is set — the trigger stays disabled until
+  // then, same as the picker itself).
+  const ingredientCreateSession: CompanySession = { ...company, businessId: ingredientOutletId }
 
   const parsedLines = lines.map((l) => ({ draft: l, parsed: parseLine(l, exponent, ingredientOf) }))
   const validLineBodies = parsedLines
@@ -201,6 +210,16 @@ export function NewBill() {
   }
   function removeLine(key: string) {
     setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev))
+  }
+  /** Selects `ingredient` on `key`'s line (from a fresh inline create or the "select existing
+   *  instead" 409 recovery) and clears its qty — a different ingredient may carry a different
+   *  unit/factor. */
+  function selectIngredient(key: string, ingredient: Ingredient) {
+    updateLine(key, {
+      ingredientId: ingredient.id,
+      ingredientName: ingredient.name,
+      ingredientQtyInput: '',
+    })
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -409,57 +428,72 @@ export function NewBill() {
                         <Skeleton className="mt-2 h-[52px] rounded-xl" />
                       ) : ingredientsQuery.isError ? (
                         <p className="mt-2 text-xs text-loss">{t('ap.newBill.ingredientLinkError')}</p>
-                      ) : ingredients.length === 0 ? (
-                        <p className="mt-2 text-xs text-ink-3">{t('ap.newBill.ingredientLinkNone')}</p>
                       ) : (
-                        <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                          <Field label={t('ap.newBill.ingredientLabel')} htmlFor={`line-ing-${line.key}`}>
-                            <select
-                              id={`line-ing-${line.key}`}
-                              className={SELECT_CLASSES}
-                              value={line.ingredientId}
-                              onChange={(e) => {
-                                const chosen = ingredients.find((i) => i.id === e.target.value)
-                                updateLine(line.key, {
-                                  ingredientId: e.target.value,
-                                  ingredientName: chosen?.name ?? '',
-                                  // A different ingredient may carry a different unit/factor — the
-                                  // previously typed quantity would silently mean something else.
-                                  ingredientQtyInput: '',
-                                })
-                              }}
-                            >
-                              <option value="">{t('ap.newBill.ingredientNone')}</option>
-                              {ingredients.map((i) => (
-                                <option key={i.id} value={i.id}>
-                                  {i.name}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-                          <Field
-                            label={t('ap.newBill.ingredientQtyLabel', {
-                              unit: lineIngredient ? shownUnit(lineIngredient) : '',
-                            })}
-                            htmlFor={`line-ing-qty-${line.key}`}
+                        <>
+                          {/* Owner request — a brand-new bahan no longer blocks the linkage: the
+                              picker below always renders (even with an empty catalog) so
+                              "+ Tambah bahan baru" can seed the outlet's very first ingredient. */}
+                          {ingredients.length === 0 ? (
+                            <p className="mt-2 text-xs text-ink-3">{t('ap.newBill.ingredientLinkNone')}</p>
+                          ) : (
+                            <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                              <Field label={t('ap.newBill.ingredientLabel')} htmlFor={`line-ing-${line.key}`}>
+                                <select
+                                  id={`line-ing-${line.key}`}
+                                  className={SELECT_CLASSES}
+                                  value={line.ingredientId}
+                                  onChange={(e) => {
+                                    const chosen = ingredients.find((i) => i.id === e.target.value)
+                                    updateLine(line.key, {
+                                      ingredientId: e.target.value,
+                                      ingredientName: chosen?.name ?? '',
+                                      // A different ingredient may carry a different unit/factor — the
+                                      // previously typed quantity would silently mean something else.
+                                      ingredientQtyInput: '',
+                                    })
+                                  }}
+                                >
+                                  <option value="">{t('ap.newBill.ingredientNone')}</option>
+                                  {ingredients.map((i) => (
+                                    <option key={i.id} value={i.id}>
+                                      {i.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field
+                                label={t('ap.newBill.ingredientQtyLabel', {
+                                  unit: lineIngredient ? shownUnit(lineIngredient) : '',
+                                })}
+                                htmlFor={`line-ing-qty-${line.key}`}
+                              >
+                                <TextInput
+                                  id={`line-ing-qty-${line.key}`}
+                                  type="number"
+                                  min="0"
+                                  step={lineIngredient && allowsFraction(lineIngredient) ? 'any' : '1'}
+                                  inputMode={
+                                    lineIngredient && allowsFraction(lineIngredient) ? 'decimal' : 'numeric'
+                                  }
+                                  value={line.ingredientQtyInput}
+                                  onChange={(e) =>
+                                    updateLine(line.key, { ingredientQtyInput: e.target.value })
+                                  }
+                                  placeholder="0"
+                                  disabled={!line.ingredientId}
+                                />
+                              </Field>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setCreatingForKey(line.key)}
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline"
                           >
-                            <TextInput
-                              id={`line-ing-qty-${line.key}`}
-                              type="number"
-                              min="0"
-                              step={lineIngredient && allowsFraction(lineIngredient) ? 'any' : '1'}
-                              inputMode={
-                                lineIngredient && allowsFraction(lineIngredient) ? 'decimal' : 'numeric'
-                              }
-                              value={line.ingredientQtyInput}
-                              onChange={(e) =>
-                                updateLine(line.key, { ingredientQtyInput: e.target.value })
-                              }
-                              placeholder="0"
-                              disabled={!line.ingredientId}
-                            />
-                          </Field>
-                        </div>
+                            <Plus className="size-3.5" aria-hidden="true" />
+                            {t('inventoryPicker.addNew')}
+                          </button>
+                        </>
                       )}
                       {!linkResult.valid ? (
                         <p className="mt-2 text-xs text-loss">{t('ap.newBill.ingredientLinkInvalid')}</p>
@@ -470,6 +504,23 @@ export function NewBill() {
               )
             })}
           </div>
+
+          {creatingForKey ? (
+            <CreateIngredientInline
+              session={ingredientCreateSession}
+              existingIngredients={ingredients}
+              onClose={() => setCreatingForKey(null)}
+              onCreated={(created) => {
+                void ingredientsQuery.refetch()
+                selectIngredient(creatingForKey, created)
+                setCreatingForKey(null)
+              }}
+              onSelectExisting={(existing) => {
+                selectIngredient(creatingForKey, existing)
+                setCreatingForKey(null)
+              }}
+            />
+          ) : null}
         </Card>
 
         <Card className="p-6">
