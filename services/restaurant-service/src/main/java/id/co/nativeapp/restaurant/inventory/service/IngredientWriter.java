@@ -57,19 +57,19 @@ public class IngredientWriter {
 
   private final IngredientRepository repository;
   private final GoodsReceiptRepository goodsReceiptRepository;
-  private final PricedReceiveApplier pricedReceiveApplier;
+  private final PricedReceiveWriter pricedReceiveWriter;
   private final OutletAccessGuard outletAccessGuard;
   private final List<IngredientDeactivationGuard> deactivationGuards;
 
   public IngredientWriter(
       IngredientRepository repository,
       GoodsReceiptRepository goodsReceiptRepository,
-      PricedReceiveApplier pricedReceiveApplier,
+      PricedReceiveWriter pricedReceiveWriter,
       OutletAccessGuard outletAccessGuard,
       List<IngredientDeactivationGuard> deactivationGuards) {
     this.repository = repository;
     this.goodsReceiptRepository = goodsReceiptRepository;
-    this.pricedReceiveApplier = pricedReceiveApplier;
+    this.pricedReceiveWriter = pricedReceiveWriter;
     this.outletAccessGuard = outletAccessGuard;
     this.deactivationGuards = deactivationGuards;
   }
@@ -202,14 +202,14 @@ public class IngredientWriter {
       // InventoryPurchaseRecorded consumer — one implementation, two entry points (this one keeps
       // the OutletAccessGuard + REQUIRES_NEW semantics; the consumer authorizes at the finance
       // input instead). Behaviour here is byte-identical to the pre-extraction inline code.
-      if (pricedReceiveApplier.checkReplay(key, id, amount, amountPaidMinor, costCurrency)
-          == PricedReceiveApplier.ReplayOutcome.REPLAY) {
+      if (pricedReceiveWriter.checkReplay(key, id, amount, amountPaidMinor, costCurrency)
+          == PricedReceiveWriter.ReplayOutcome.REPLAY) {
         // Idempotent replay: the FIRST-SEEN call already added the value and emitted the event —
         // return the ingredient's CURRENT state, add nothing again, emit nothing again.
         return IngredientResponse.from(ingredient);
       }
       Ingredient saved =
-          pricedReceiveApplier.apply(
+          pricedReceiveWriter.apply(
               ingredient, amount, amountPaidMinor, costCurrency, key, companyId);
       return IngredientResponse.from(saved);
     } else {

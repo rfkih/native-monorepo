@@ -34,7 +34,7 @@ import org.springframework.stereotype.Component;
  * idempotency anchor and the {@code StockReceived} outbox event commit together (rule 3).
  */
 @Component
-public class PricedReceiveApplier {
+public class PricedReceiveWriter {
 
   /** What the idempotency-key probe found. */
   public enum ReplayOutcome {
@@ -48,7 +48,7 @@ public class PricedReceiveApplier {
   private final GoodsReceiptRepository goodsReceiptRepository;
   private final OutboxWriter outboxWriter;
 
-  public PricedReceiveApplier(
+  public PricedReceiveWriter(
       IngredientRepository ingredientRepository,
       GoodsReceiptRepository goodsReceiptRepository,
       OutboxWriter outboxWriter) {

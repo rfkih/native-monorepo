@@ -46,7 +46,7 @@ class IngredientWriterTest {
       new IngredientWriter(
           repository,
           goodsReceiptRepository,
-          new PricedReceiveApplier(repository, goodsReceiptRepository, outboxWriter),
+          new PricedReceiveWriter(repository, goodsReceiptRepository, outboxWriter),
           guard,
           java.util.List.of());
 

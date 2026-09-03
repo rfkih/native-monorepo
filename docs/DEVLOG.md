@@ -21,6 +21,26 @@ anomalies park in the error inbox, money already safely posted). Void is money-s
 priced entry (the human double-entry mitigation). P0 ships the `.avsc` + catalog entry + both
 contract tests; the feature phases follow.
 
+**P1–P4 landed the same day.** Finance `companyexpense` (V58) posts the money at submit through
+the GeneralLedgerWriter door with DERIVED illustrative provenance (a hardcoded flag here would
+have flipped every tenant's audit badge); the void is the exact mirror of the STORED journal
+(`JournalLineReversalView` — immune to a perpetual activation landing between post and void).
+restaurant consumes via the NEW `PricedReceiveWriter` — the priced-receive core extracted from
+`IngredientWriter.addStock` because `OutletAccessGuard` reads the HTTP `X-Roles` header, which
+does not exist on a Kafka thread. Bills (V59) carry an optional per-line ingredient linkage and
+the periodic split now routes inventoryNet to 5100 (the deliberate ADR 0072 behavior change;
+`BillInventoryRoutingTest` rewritten as the record; no-inventory bills stay byte-identical).
+Console: "Catat pengeluaran" on the Pengeluaran hub + the Perusahaan tab + the demoted Terima.
+
+Two things this build coughed up, worth remembering:
+- **The fleet test-executor heap was Gradle's 512m default** — finance OOM'd ("Java heap space")
+  when one more cached Spring context landed. `native.java-conventions` now sets
+  `maxHeapSize = "1g"`; the heap sibling of the max_connections creep. Raise it THERE next time.
+- **A pure accountant (non-owner) hits 403 on two pickers**: `GET /api/v1/expense-categories` is
+  HR_ROLES and `GET /api/v1/ingredients` is POS_ROLES. Deliberately NOT widened — those route
+  patterns also cover writes, so widening would hand accountants stock mutation; a method-aware
+  gate is the real fix. Owner-operators (every current tenant) are unaffected. OPEN.
+
 ## 2026-09-03 — the test-Postgres time bomb disarmed fleet-wide, and a phantom submodule removed
 
 **The trap was still armed in 9 services.** The 2026-09-02 entry below fixed restaurant (and

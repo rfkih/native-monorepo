@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The idempotent {@code @Transactional} unit of work for a consumed {@code
  * InventoryPurchaseRecorded} (ADR 0072): one {@link ProcessedEventStore#processOnce} claim, then
- * each line applied INDEPENDENTLY as a priced goods receipt through {@link PricedReceiveApplier}
+ * each line applied INDEPENDENTLY as a priced goods receipt through {@link PricedReceiveWriter}
  * with {@code goods_receipt.idempotency_key = line_id} — so neither a redelivered event nor a
  * duplicated line can double-add stock or double-count the moving-average value.
  *
@@ -47,17 +47,17 @@ public class InventoryPurchaseApplyWriter {
   static final String KEY_CONFLICT_SOURCE = "restaurant.inventory-purchase.key-conflict";
 
   private final IngredientRepository ingredientRepository;
-  private final PricedReceiveApplier pricedReceiveApplier;
+  private final PricedReceiveWriter pricedReceiveWriter;
   private final ProcessedEventStore processedEvents;
   private final ErrorInboxWriter errorInboxWriter;
 
   public InventoryPurchaseApplyWriter(
       IngredientRepository ingredientRepository,
-      PricedReceiveApplier pricedReceiveApplier,
+      PricedReceiveWriter pricedReceiveWriter,
       ProcessedEventStore processedEvents,
       ErrorInboxWriter errorInboxWriter) {
     this.ingredientRepository = ingredientRepository;
-    this.pricedReceiveApplier = pricedReceiveApplier;
+    this.pricedReceiveWriter = pricedReceiveWriter;
     this.processedEvents = processedEvents;
     this.errorInboxWriter = errorInboxWriter;
   }
@@ -119,16 +119,16 @@ public class InventoryPurchaseApplyWriter {
     }
 
     try {
-      if (pricedReceiveApplier.checkReplay(
+      if (pricedReceiveWriter.checkReplay(
               lineKey, line.ingredientId(), qty, line.valueMinor(), event.currency())
-          == PricedReceiveApplier.ReplayOutcome.REPLAY) {
+          == PricedReceiveWriter.ReplayOutcome.REPLAY) {
         log.debug(
             "InventoryPurchaseRecorded line {} already received (purchase {}) — replay no-op",
             lineKey,
             event.purchaseId());
         return;
       }
-      pricedReceiveApplier.apply(
+      pricedReceiveWriter.apply(
           ingredient.get(), qty, line.valueMinor(), event.currency(), lineKey, companyId);
     } catch (GoodsReceiptIdempotencyKeyConflictException conflict) {
       park(
