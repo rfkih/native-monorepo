@@ -1710,6 +1710,26 @@ public class RoutingConfig {
   }
 
   /**
+   * Company expenses under {@code /api/v1/company-expenses/**} (finance-service, ADR 0072) —
+   * owner/accountant only, mirroring AP: recording an expense posts the GL and (for an INVENTORY
+   * submit) instructs the stock receive. Distinct from the employee expense-claims routes
+   * ({@code /api/v1/expense-claims/**} → employee-service).
+   */
+  @Bean
+  RouterFunction<ServerResponse> companyExpensesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-company-expenses")
+        .route(path("/api/v1/company-expenses/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * Bank accounts + their statement lines (finance-service) — owner/manager only. {@code
    * /api/v1/bank-accounts/**} covers CRUD plus the nested {@code
    * /api/v1/bank-accounts/{id}/statement-lines} import/list (Phase 3 bank reconciliation, ADR
