@@ -1451,8 +1451,11 @@ export const id = {
     setSubmit: 'Atur jumlah',
     errorGeneric: 'Tidak dapat menyimpan. Silakan coba lagi.',
     nameTaken: 'Barang dengan nama ini sudah ada di gerai ini.',
-    unitChangeBlockedGeneric: 'Satuan tidak bisa diubah selagi barang ini masih memiliki stok.',
+    unitChangeBlockedGeneric:
+      '“{{name}}” masih memiliki stok {{qty}} {{fromUnit}} — satuan tidak bisa diubah dari {{fromUnit}} ke {{toUnit}} sebelum stoknya nol.',
     unitChangeBlockedHint: 'Kosongkan dulu stoknya lewat stock opname, baru ubah satuannya dan masukkan kembali jumlahnya dalam satuan baru.',
+    baseUnitChangedNote:
+      'Mengubah satuan mengosongkan isi per kemasan dan biaya di bawah — keduanya tidak ikut pindah dan harus diisi ulang.',
   },
   inventoryPicker: {
     addNew: '+ Tambah bahan baru',
@@ -1468,6 +1471,7 @@ export const id = {
     receiptDescriptionHint: 'Apa yang sebenarnya tertulis di nota pemasok — dikirim sebagai deskripsi baris ini.',
     packSizeLabel: 'Isi per kemasan',
     packSizeHint: 'Opsional — isi hanya jika nota menghitung KEMASAN, tapi stok harus menghitung isinya.',
+    packSizeDefaultHint: 'Terisi otomatis dari bawaan bahan ini — kosongkan kalau beli satuan.',
     packSizePlaceholder: 'Opsional',
     qtyPacksLabel: 'Jumlah (kemasan)',
     packResultLine: '{{packs}} kemasan × {{packSize}} = {{result}} {{unit}} masuk Persediaan',
@@ -1969,7 +1973,8 @@ export const id = {
         expenseNo: 'No. pengeluaran',
         date: 'Tanggal',
         glHint: 'Kategori',
-        lineQty: 'Jumlah (satuan dasar)',
+        lineQty: 'Jumlah',
+        lineQtyBaseUnit: '{{qty}} (satuan dasar)',
       },
       voidDialog: {
         title: 'Batalkan pengeluaran ini?',

@@ -538,6 +538,14 @@ function IngredientLineRows({
         // The "packs × size = result" typo safety net — computed independently of `parsed` (which
         // also needs a valid total) so the readback appears as soon as qty/pack size resolve.
         const packed = ingredient ? parsePackedQtyBase(line.qtyInput, line.packSizeInput, ingredient) : null
+        // F4 (code review) — true only while the field still holds EXACTLY the value it was
+        // pre-filled with from the ingredient's remembered pack-size default (see `selectIngredient`
+        // below); a coincidental match after manual edits is a harmless false positive, not a real one.
+        const packSizeIsDefault =
+          !!ingredient &&
+          ingredient.packSize != null &&
+          line.packSizeInput.trim() !== '' &&
+          line.packSizeInput === packSizeToShownInput(ingredient)
         return (
           <div
             key={line.key}
@@ -646,7 +654,12 @@ function IngredientLineRows({
               <Field
                 label={t('inventoryPicker.packSizeLabel')}
                 htmlFor={`ce-line-pack-${line.key}`}
-                hint={t('inventoryPicker.packSizeHint')}
+                // F4 (code review) — while the value is still exactly the ingredient's remembered
+                // default, say so instead of the generic hint, so clearing it (to switch back to a
+                // per-unit purchase) is discoverable.
+                hint={t(
+                  packSizeIsDefault ? 'inventoryPicker.packSizeDefaultHint' : 'inventoryPicker.packSizeHint',
+                )}
               >
                 <TextInput
                   id={`ce-line-pack-${line.key}`}
@@ -664,14 +677,15 @@ function IngredientLineRows({
                 />
               </Field>
               {/* The typo safety net — always visible once a pack size is entered, so a scale
-                  error (e.g. "200" instead of "20") is obvious BEFORE submit. */}
+                  error (e.g. "200" instead of "20") is obvious BEFORE submit. Every number (packs,
+                  the entered pack size, the result) goes through Intl — rule 9. */}
               {line.packSizeInput.trim() !== '' ? (
                 <div className="flex items-end pb-3">
-                  {ingredient && packed ? (
+                  {ingredient && packed && packed.packs != null ? (
                     <p className="text-sm font-semibold text-emerald-2">
                       {t('inventoryPicker.packResultLine', {
-                        packs: packed.packs,
-                        packSize: line.packSizeInput.trim(),
+                        packs: new Intl.NumberFormat(locale).format(packed.packs),
+                        packSize: formatShownQty(packed.qtyBase / packed.packs, ingredient, locale),
                         result: formatShownQty(packed.qtyBase, ingredient, locale),
                         unit: shownUnit(ingredient),
                       })}

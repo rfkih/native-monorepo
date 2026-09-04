@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Info, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -15,7 +16,9 @@ import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { DialogOverlay } from '@/features/org/parts'
 import { useOrgUnits } from '@/features/org/api'
-import { ApiError } from '@/lib/api'
+import { formatShownQty, shownUnit, type UnitBearing } from '@/features/inventory/lib/units'
+import type { Ingredient } from '@/features/inventory/ingredientApi'
+import { ApiError, apiFetch } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { formatMoney } from '@/lib/money'
 import { localeOf } from '@/i18n'
@@ -39,6 +42,35 @@ const KIND_TONE: Record<CompanyExpenseKind, 'neutral' | 'info'> = {
 const STATUS_TONE: Record<CompanyExpenseStatus, 'profit' | 'loss'> = {
   POSTED: 'profit',
   VOID: 'loss',
+}
+
+/**
+ * Code review — resolves an INVENTORY expense's own outlet's ingredient catalog, so each line's
+ * `qtyBase` (a BASE-unit integer) can be shown in the ingredient's usual DISPLAY unit (e.g.
+ * "1.5 kg") the way `BillDetail.tsx`'s `ingredientLinkLabel` resolves a bill line. Unlike a bill, a
+ * company expense already carries its own `businessId` (ADR 0072 P3 requires an outlet on every
+ * submit) — no "pick an outlet to resolve against" affordance is needed, this just fires once the
+ * detail loads. Falls back to the plain base-unit count when a line's ingredient no longer resolves
+ * (e.g. deactivated since the purchase, or the query hasn't returned yet).
+ */
+function useIngredientsForOutlet(params: {
+  companyId: string
+  actor: string
+  businessId: string
+  enabled: boolean
+}) {
+  const { companyId, actor, businessId, enabled } = params
+  return useQuery({
+    enabled: enabled && !!businessId,
+    queryKey: ['companyExpenseDetailIngredients', companyId, businessId],
+    queryFn: async () => {
+      const result = await apiFetch<Ingredient[]>('/api/v1/ingredients', {
+        tenant: { companyId, actor },
+        query: { businessId },
+      })
+      return result ?? []
+    },
+  })
 }
 
 export function CompanyExpensesList() {
@@ -194,6 +226,25 @@ function CompanyExpenseDetailSheet({
   const [voiding, setVoiding] = useState(false)
 
   const expense = detail.data
+  // Code review — resolves each INVENTORY line's display unit against the expense's OWN outlet
+  // (known up front, unlike a bill) once it loads.
+  const resolveIngredients = useIngredientsForOutlet({
+    companyId,
+    actor,
+    businessId: expense?.businessId ?? '',
+    enabled: expense?.kind === 'INVENTORY',
+  })
+  const resolvedIngredients = resolveIngredients.data ?? []
+  const resolveIngredient = (ingredientId: string): UnitBearing | null =>
+    resolvedIngredients.find((i) => i.id === ingredientId) ?? null
+  const lineQtyLabel = (qtyBase: number, ingredientId: string): string => {
+    const resolved = resolveIngredient(ingredientId)
+    return resolved
+      ? `${formatShownQty(qtyBase, resolved, locale)} ${shownUnit(resolved)}`
+      : t('expenses.company.detail.lineQtyBaseUnit', {
+          qty: new Intl.NumberFormat(locale).format(qtyBase),
+        })
+  }
 
   return (
     <DialogOverlay onClose={onClose}>
@@ -276,33 +327,38 @@ function CompanyExpenseDetailSheet({
                         </tr>
                       </thead>
                       <tbody>
-                        {expense.lines.map((line) => (
-                          <tr key={line.id} className="border-b border-ink-50 last:border-0">
-                            <td className="px-3 py-2 text-ink-2">
-                              {/* "Nama di nota berbeda" (V60) — a non-null line description is the
-                                  RECEIPT wording, shown as the primary text with the linked
-                                  inventory item as subtext; a plain line (description null, the
-                                  common case) renders exactly as before. */}
-                              {line.description ? (
-                                <>
-                                  <div>{line.description}</div>
-                                  <div className="text-xs text-ink-3">
-                                    → {line.ingredientName} ·{' '}
-                                    {new Intl.NumberFormat(locale).format(line.qtyBase)}
-                                  </div>
-                                </>
-                              ) : (
-                                line.ingredientName
-                              )}
-                            </td>
-                            <td className="tnum px-3 py-2 text-right font-mono text-ink-2">
-                              {new Intl.NumberFormat(locale).format(line.qtyBase)}
-                            </td>
-                            <td className="tnum px-3 py-2 text-right font-mono text-ink">
-                              {formatMoney(line.valueMinor, expense.currency, locale)}
-                            </td>
-                          </tr>
-                        ))}
+                        {expense.lines.map((line) => {
+                          // Code review — resolved into the ingredient's usual DISPLAY unit (e.g.
+                          // "1.5 kg") the way `BillDetail.tsx`'s `ingredientLinkLabel` resolves a
+                          // bill line, rather than the raw BASE-unit integer with no unit label.
+                          const qtyLabel = lineQtyLabel(line.qtyBase, line.ingredientId)
+                          return (
+                            <tr key={line.id} className="border-b border-ink-50 last:border-0">
+                              <td className="px-3 py-2 text-ink-2">
+                                {/* "Nama di nota berbeda" (V60) — a non-null line description is
+                                    the RECEIPT wording, shown as the primary text with the linked
+                                    inventory item as subtext; a plain line (description null, the
+                                    common case) renders exactly as before. */}
+                                {line.description ? (
+                                  <>
+                                    <div>{line.description}</div>
+                                    <div className="text-xs text-ink-3">
+                                      → {line.ingredientName} · {qtyLabel}
+                                    </div>
+                                  </>
+                                ) : (
+                                  line.ingredientName
+                                )}
+                              </td>
+                              <td className="tnum px-3 py-2 text-right font-mono text-ink-2">
+                                {qtyLabel}
+                              </td>
+                              <td className="tnum px-3 py-2 text-right font-mono text-ink">
+                                {formatMoney(line.valueMinor, expense.currency, locale)}
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>

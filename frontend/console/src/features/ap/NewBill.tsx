@@ -426,6 +426,12 @@ export function NewBill() {
             {lines.map((line, idx) => {
               const parsed = parseLine(line, exponent, currency, ingredientOf)
               const lineIngredient = line.inventory ? ingredientOf(line.ingredientId) : null
+              // F4 (code review) — the FULL catalog entry (not the `UnitBearing`-narrowed
+              // `lineIngredient` above), only so `.packSize` is reachable for the "pre-filled from
+              // the item's default" marker below.
+              const lineIngredientFull = line.inventory
+                ? ingredients.find((i) => i.id === line.ingredientId) ?? null
+                : null
               const outletChosen = !!ingredientOutletId
               // The "packs × size = result" typo safety net — computed independently of `parsed`
               // (which also needs a valid total) so the readback appears as soon as qty/pack size
@@ -433,6 +439,14 @@ export function NewBill() {
               const packed = lineIngredient
                 ? parsePackedQtyBase(line.quantity, line.packSizeInput, lineIngredient)
                 : null
+              // F4 — true only while the field still holds EXACTLY the value it was pre-filled with
+              // from the ingredient's remembered pack-size default (see `selectIngredient`); a
+              // coincidental match after manual edits is a harmless false positive, not a real one.
+              const packSizeIsDefault =
+                !!lineIngredientFull &&
+                lineIngredientFull.packSize != null &&
+                line.packSizeInput.trim() !== '' &&
+                line.packSizeInput === packSizeToShownInput(lineIngredientFull)
               return (
                 <div
                   key={line.key}
@@ -604,7 +618,14 @@ export function NewBill() {
                         <Field
                           label={t('inventoryPicker.packSizeLabel')}
                           htmlFor={`line-pack-${line.key}`}
-                          hint={t('inventoryPicker.packSizeHint')}
+                          // F4 (code review) — while the value is still exactly the ingredient's
+                          // remembered default, say so instead of the generic hint, so clearing it
+                          // (to switch back to a per-unit purchase) is discoverable.
+                          hint={t(
+                            packSizeIsDefault
+                              ? 'inventoryPicker.packSizeDefaultHint'
+                              : 'inventoryPicker.packSizeHint',
+                          )}
                         >
                           <TextInput
                             id={`line-pack-${line.key}`}
@@ -624,14 +645,20 @@ export function NewBill() {
                           />
                         </Field>
                         {/* The typo safety net — always visible once a pack size is entered, so a
-                            scale error (e.g. "200" instead of "20") is obvious BEFORE submit. */}
+                            scale error (e.g. "200" instead of "20") is obvious BEFORE submit. Every
+                            number (packs, the entered pack size, the result) goes through Intl —
+                            rule 9 — rather than interpolating `packed.packs`/the raw input string. */}
                         {line.packSizeInput.trim() !== '' ? (
                           <div className="flex items-end pb-3">
-                            {lineIngredient && packed ? (
+                            {lineIngredient && packed && packed.packs != null ? (
                               <p className="text-sm font-semibold text-emerald-2">
                                 {t('inventoryPicker.packResultLine', {
-                                  packs: packed.packs,
-                                  packSize: line.packSizeInput.trim(),
+                                  packs: new Intl.NumberFormat(locale).format(packed.packs),
+                                  packSize: formatShownQty(
+                                    packed.qtyBase / packed.packs,
+                                    lineIngredient,
+                                    locale,
+                                  ),
                                   result: formatShownQty(packed.qtyBase, lineIngredient, locale),
                                   unit: shownUnit(lineIngredient),
                                 })}

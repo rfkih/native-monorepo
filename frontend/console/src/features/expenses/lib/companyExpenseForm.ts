@@ -7,10 +7,17 @@
  * quantity parsing reuses `features/inventory/lib/units.ts`'s display-unit→base-unit conversion —
  * an ingredient purchase line is always entered in the ingredient's DISPLAY unit, exactly like the
  * Terima ("receive") dialog.
+ *
+ * Pack-size maths (`parsePackedQtyBase`/`PackedQty`) lives in `features/inventory/lib/packQty.ts`
+ * (code-review F1) — re-exported here so this module's own call sites (`NewCompanyExpense.tsx`) are
+ * unchanged.
  */
 import { parseDiscountInput } from '@/features/pos/lib/discountInput'
-import { parseShownQtyInput, type UnitBearing } from '@/features/inventory/lib/units'
+import type { UnitBearing } from '@/features/inventory/lib/units'
+import { parsePackedQtyBase, type PackedQty } from '@/features/inventory/lib/packQty'
 import type { CompanyExpenseLineInput } from '../companyExpenseApi'
+
+export { parsePackedQtyBase, type PackedQty }
 
 // ---------------------------------------------------------------------------
 // GENERAL mode
@@ -108,44 +115,6 @@ function receiptDescriptionOrNull(
   const trimmed = draft.receiptDescriptionInput.trim()
   if (!trimmed || trimmed === draft.ingredientName.trim()) return null
   return trimmed
-}
-
-/** The resolved BASE quantity, plus the pack count when pack mode was used (for the UI's "packs ×
- *  size = result" readback — the typo safety net). `packs: null` = pack mode wasn't used at all. */
-export interface PackedQty {
-  packs: number | null
-  qtyBase: number
-}
-
-/**
- * Resolves `qtyInput` (+ optional `packSizeInput`) to the BASE integer quantity — see
- * `InventoryLineDraft.packSizeInput`'s doc for the pack semantics. `null` when either input fails
- * to resolve: an under/mistyped pack size or count BLOCKS the line rather than silently falling
- * back to "no pack" or a wrong count (an inflated pack size silently inflates stock, and only a
- * stock opname would catch it later — this must fail loudly instead).
- */
-export function parsePackedQtyBase(
-  qtyInput: string,
-  packSizeInput: string,
-  ingredient: UnitBearing,
-): PackedQty | null {
-  const packSizeTrimmed = packSizeInput.trim()
-  if (packSizeTrimmed === '') {
-    const qtyBase = parseShownQtyInput(qtyInput, ingredient)
-    if (qtyBase == null || qtyBase <= 0) return null
-    return { packs: null, qtyBase }
-  }
-  // Pack SIZE follows the ingredient's own display-unit rules — decimal allowed for kg/liter
-  // (e.g. "2.5" kg per pack), whole for pcs/pack — exactly like any other quantity input;
-  // `parseShownQtyInput` both validates that AND rounds it to a whole BASE integer.
-  const perPackBase = parseShownQtyInput(packSizeTrimmed, ingredient)
-  if (perPackBase == null || perPackBase <= 0) return null
-  // Pack COUNT (how many packs) is always a whole number — you don't buy half a pack.
-  const packs = Number(qtyInput.trim())
-  if (!Number.isInteger(packs) || packs <= 0) return null
-  const qtyBase = packs * perPackBase
-  if (!Number.isInteger(qtyBase) || qtyBase <= 0) return null
-  return { packs, qtyBase }
 }
 
 /**

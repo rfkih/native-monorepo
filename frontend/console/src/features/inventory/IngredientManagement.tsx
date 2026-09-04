@@ -16,7 +16,7 @@
  * `InventoryPurchaseRecorded` → this same `Ingredient.receive` machinery). This prevents the same
  * purchase being entered twice. The backend still accepts a priced call (backward compatible).
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ClipboardList, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-react'
@@ -413,8 +413,8 @@ function IngredientFormDialog({
   // V46 — the remembered pack-size DEFAULT (purchase lines pre-fill "Isi per kemasan" from this,
   // fully editable per line — see ingredientApi.ts's `Ingredient.packSize` doc). Seeded from the
   // per-SHOWN-unit value (edit), like the cost field above; interpreted against whatever unit is
-  // CURRENTLY picked at submit time (like `initialQty` — no live rescaling on a unit-picker change
-  // mid-edit).
+  // CURRENTLY picked. F3 — a base-unit change clears this (and the cost fields) via the
+  // `baseUnitChanged` effect below, so it never rides stale under a unit it was never entered in.
   const initialPackSizeInput =
     ingredient?.packSize != null ? String(toDisplayQty(ingredient.packSize, ingredient)) : ''
   const [packSizeInput, setPackSizeInput] = useState(initialPackSizeInput)
@@ -432,6 +432,25 @@ function IngredientFormDialog({
   const useTotalMode = isCreate && costMode === 'total'
   const stored = unitSelectionToStored(unit)
   const factor = shownFactor(stored)
+  // F3 (code review) — a base-unit change (compare STORED bases, e.g. pcs -> kg; a display-only
+  // relabel like g -> kg is NOT a base change and must not trip this) invalidates the pack-size
+  // default and per-unit cost: neither has a ratio to the new base, and the backend itself resets
+  // `packSize`/`unitCostMinor`/`costCurrency` on a genuine base swap (V46 follow-up). The dialog
+  // mirrors that: `baseUnitChanged` is true whenever the CURRENTLY picked unit's base differs from
+  // the ingredient's ORIGINAL base (drives the note below + guards the "untouched" PATCH checks),
+  // and the effect clears both fields the moment the base actually changes so a left-untouched
+  // field never silently sends a value computed under the OLD shownFactor.
+  const initialStoredUnit = ingredient ? ingredient.unit : null
+  const baseUnitChanged = initialStoredUnit != null && stored.unit !== initialStoredUnit
+  const lastFieldBaseRef = useRef(initialStoredUnit)
+  useEffect(() => {
+    if (lastFieldBaseRef.current != null && stored.unit !== lastFieldBaseRef.current) {
+      setPackSizeInput('')
+      setCostInput('')
+      setTotalInput('')
+    }
+    lastFieldBaseRef.current = stored.unit
+  }, [stored.unit])
   // Quantity is entered in the SHOWN unit (kg/liter accept decimals) and stored in the base unit.
   const baseQty = parseShownQtyInput(initialQty, stored) // base integer, or null (blank/invalid)
   const qtyDisplay = Number.parseFloat(initialQty)
@@ -465,8 +484,11 @@ function IngredientFormDialog({
     // In 'unit' mode the cost is typed per SHOWN unit (per kg); divide by the factor to store it per
     // base unit (per g). 'total' mode already derives the per-base cost from the exact total paid.
     // On EDIT, an untouched cost field sends null (leave the stored value/cost exactly as-is) so a
-    // plain rename never silently re-values through the per-shown⇄per-base rounding round-trip.
-    const costUnchanged = !isCreate && costInput.trim() === initialCostInput.trim()
+    // plain rename never silently re-values through the per-shown⇄per-base rounding round-trip. F3 —
+    // also gated on `!baseUnitChanged`: a base swap makes ANY string match against the OLD-base
+    // seed coincidental at best, so it's never treated as "unchanged" once the base itself moved
+    // (the effect above already blanked the field in the common case; this is the belt-and-braces).
+    const costUnchanged = !isCreate && !baseUnitChanged && costInput.trim() === initialCostInput.trim()
     const costMinor = useTotalMode
       ? derivedBaseCostMinor
       : costUnchanged
@@ -478,7 +500,8 @@ function IngredientFormDialog({
       // V46 — same "untouched leaves it alone" idiom as cost above, but PATCH's pack size has a
       // THIRD state (clear) the cost field doesn't: unchanged → omit both fields entirely; blank →
       // `clearPackSize: true` (the only way to remove a stored default); a real value → `packSize`.
-      const packSizeUnchanged = packSizeTrimmed === initialPackSizeInput.trim()
+      // F3 — same `!baseUnitChanged` gate as cost above.
+      const packSizeUnchanged = !baseUnitChanged && packSizeTrimmed === initialPackSizeInput.trim()
       const packSizePatch = packSizeUnchanged
         ? {}
         : packSizeTrimmed === ''
@@ -568,6 +591,17 @@ function IngredientFormDialog({
             ))}
           </div>
         </Field>
+
+        {/* F3 — a base-unit change (not merely a display relabel) just cleared the pack-size/cost
+            fields below (see `baseUnitChanged`'s doc); tell the operator why they're blank. */}
+        {baseUnitChanged ? (
+          <p
+            className="rounded-xl bg-tint-info px-3.5 py-3 text-xs leading-relaxed text-ink-2"
+            role="status"
+          >
+            {t('inventory.baseUnitChangedNote')}
+          </p>
+        ) : null}
 
         {/* Quantity first on create — in 'total' mode it is the divisor that turns the total paid
             into a per-unit cost, so it must be entered before the amount reads sensibly. */}
@@ -678,15 +712,23 @@ function IngredientFormDialog({
 
         {mutationError ? (
           <div className="space-y-1" role="alert">
+            {/* Code review F2 — the RFC-7807 `detail` string is developer diagnostics (ENGINEERING-
+                STANDARDS §1.2 / rule 9), never rendered verbatim: every branch maps the stable
+                `problem.type` to an i18n key. The unit-change key interpolates the specifics (item
+                name, stock qty, from/to unit) from data this dialog already holds rather than
+                parroting the server's own English sentence. */}
             <p className="text-xs text-loss">
               {isNameConflict(mutationError)
                 ? t('inventory.nameTaken')
                 : isIngredientInRecipe(mutationError)
-                  ? (mutationError instanceof ApiError && mutationError.problem?.detail) ||
-                    t('recipe.ingredientInRecipeError')
-                  : isUnitChangeBlocked(mutationError)
-                    ? (mutationError instanceof ApiError && mutationError.problem?.detail) ||
-                      t('inventory.unitChangeBlockedGeneric')
+                  ? t('recipe.ingredientInRecipeError')
+                  : isUnitChangeBlocked(mutationError) && ingredient
+                    ? t('inventory.unitChangeBlockedGeneric', {
+                        name: ingredient.name,
+                        qty: formatShownQty(ingredient.stockQty, ingredient, locale),
+                        fromUnit: shownUnit(ingredient),
+                        toUnit: shownUnit(stored),
+                      })
                     : t('inventory.errorGeneric')}
             </p>
             {/* V46 — the fix-forward path: this is exactly what an owner hits fixing an item
