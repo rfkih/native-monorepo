@@ -21,8 +21,12 @@
 name: images
 
 on:
+  # RELEASE TAGS ONLY (ADR 0073). This used to also run on every master push, but nothing pulled
+  # those images: UAT builds its own locally (scripts/uat-up.ps1 -> native-uat/<svc>:latest) and
+  # prod consumes ONLY the digest-pinned set from the tag build. ADR 0053's own context had already
+  # flagged it -- "Nothing consumes those images" -- and the intended consumer never materialised.
+  # Need a GHCR image for an untagged commit? Run this workflow on demand (below).
   push:
-    branches: [master]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -163,20 +167,14 @@ jobs:
           # .dockerignore (which excludes **/build/ for the local from-source builds).
           # No buildx cache: the only layer beyond the JRE base is the jar COPY, which
           # changes every build — caching it would only churn the 10 GB cache limit.
-          # Tag builds skip :latest (see header).
+          # :latest tracks the newest RELEASE (ADR 0073) -- it is the fallback
+          # compose.prod.yml resolves when no release manifest is layered over it.
           for svc in $(echo "$SERVICES" | jq -r '.[]'); do
-            if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-              docker buildx build --push \
-                -f docker/runtime.Dockerfile \
-                -t "$IMAGE_BASE/$svc:${{ github.sha }}" \
-                "services/$svc/build/libs"
-            else
-              docker buildx build --push \
-                -f docker/runtime.Dockerfile \
-                -t "$IMAGE_BASE/$svc:${{ github.sha }}" \
-                -t "$IMAGE_BASE/$svc:latest" \
-                "services/$svc/build/libs"
-            fi
+            docker buildx build --push \
+              -f docker/runtime.Dockerfile \
+              -t "$IMAGE_BASE/$svc:${{ github.sha }}" \
+              -t "$IMAGE_BASE/$svc:latest" \
+              "services/$svc/build/libs"
           done
 
   console-image:
@@ -208,7 +206,7 @@ jobs:
           # Tag builds skip :latest (see header) — the empty line the expression leaves is ignored.
           tags: |
             ghcr.io/${{ github.repository }}/console-web:${{ github.sha }}
-            ${{ !startsWith(github.ref, 'refs/tags/') && format('ghcr.io/{0}/console-web:latest', github.repository) || '' }}
+            ghcr.io/${{ github.repository }}/console-web:latest
           # mode=min (final-stage layers only): the sole buildx cache in the repo, so
           # the Gradle cache never gets evicted by image-layer churn.
           cache-from: type=gha,scope=console
@@ -246,6 +244,6 @@ jobs:
           # Tag builds skip :latest (see header) — the empty line the expression leaves is ignored.
           tags: |
             ghcr.io/${{ github.repository }}/employee-web:${{ github.sha }}
-            ${{ !startsWith(github.ref, 'refs/tags/') && format('ghcr.io/{0}/employee-web:latest', github.repository) || '' }}
+            ghcr.io/${{ github.repository }}/employee-web:latest
           cache-from: type=gha,scope=employee
           cache-to: type=gha,mode=min,scope=employee
