@@ -1,8 +1,19 @@
 # Native — PRODUCTION deploy (ADR 0057 §3). An annotated tag `vX.Y.Z` is the ONLY thing that
 # deploys prod (ADR 0053 §3); pushing the tag fires two workflows on the same commit:
 #   images.yml    — force-builds the COMPLETE 13-image set at this SHA (its tag trigger)
-#   this workflow — waits for those images by resolving their digests (retry loop below), pins
-#                   them into a release manifest, and runs the health-gated deploy on the VPS.
+#   this workflow — verify-ci gates on a green ci.yml run for this SHA (see below), THEN waits
+#                   for the images by resolving their digests (retry loop), pins them into a
+#                   release manifest, and runs the health-gated deploy on the VPS.
+#
+# CI gate (closes the "prod releases are CI-ungated" gap): ci.yml now also runs on every `v*`
+# tag push (a full build — no path scoping on a tag). The `verify-ci` job below polls the GitHub
+# Actions API for a workflow run of ci.yml at this exact commit SHA and fails/blocks the deploy
+# job (and therefore the production approval prompt) until one is found with conclusion=success.
+# It accepts EITHER the tag-triggered ci run OR an earlier branch/PR run that happened to land on
+# this same SHA (head_sha match is all that's checked) — belt and braces, no double build forced.
+# A re-tag of an already-green commit therefore passes immediately; a genuinely new commit waits
+# for its own ci run. This job has no `environment:`, so it runs (and can fail fast) BEFORE the
+# reviewer is asked to approve — nobody approves a deploy whose CI hasn't even started.
 #
 # The deploy itself is scripts/prod-deploy.sh ON the VPS: flock → DB snapshot (disaster net) →
 # pull → rolling up → health gate → smoke → LAST_GOOD | AUTO-ROLLBACK. Exit codes: 0 deployed,
@@ -37,6 +48,7 @@ concurrency:
 permissions:
   contents: read
   packages: read
+  actions: read # verify-ci reads ci.yml's workflow-run status via the GitHub API (read-only)
 
 env:
   PROD_HOST: 202.74.75.3
@@ -45,8 +57,61 @@ env:
   IMAGE_BASE: ghcr.io/${{ github.repository }}
 
 jobs:
+  # Gate: refuse to even ASK for prod approval until ci.yml is green for this exact commit.
+  # No `environment:` here on purpose — this must be able to fail on its own, before the
+  # reviewer is prompted (see header). `deploy` below depends on it via `needs`.
+  verify-ci:
+    name: verify ci ${{ github.event.inputs.tag || github.ref_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+
+      - name: Resolve release SHA
+        id: rel
+        run: |
+          SHA="$(git rev-parse HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "verifying ci.yml for $SHA"
+
+      - name: Wait for a green ci run on this exact commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ steps.rel.outputs.sha }}
+        run: |
+          # Poll instead of a fixed sleep: the tag push above also triggers ci.yml (it now
+          # listens for `v*` tags too), so normally we're just waiting out its run time. We
+          # match on head_sha only (not on trigger/event), so a same-SHA branch/PR ci run
+          # that already succeeded counts too — belt and braces, and it means a re-tag of an
+          # already-green commit passes on the very first check below.
+          for attempt in $(seq 1 50); do
+            RUNS=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=20" --jq '.workflow_runs')
+            COUNT=$(echo "$RUNS" | jq 'length')
+            if [ "$COUNT" -gt 0 ]; then
+              if echo "$RUNS" | jq -e 'any(.[]; .status == "completed" and .conclusion == "success")' > /dev/null; then
+                echo "ci green for $SHA — proceeding to the deploy approval gate"
+                exit 0
+              fi
+              if [ "$attempt" -ge 3 ] && echo "$RUNS" | jq -e '(all(.[]; .status == "completed")) and (any(.[]; .conclusion != "success"))' > /dev/null; then
+                echo "::error::every known ci run for $SHA completed without success — refusing to deploy"
+                echo "$RUNS" | jq -r '.[] | "  run \(.id): status=\(.status) conclusion=\(.conclusion) \(.html_url)"'
+                exit 1
+              fi
+              echo "attempt $attempt/50 — ci run(s) found for $SHA still in progress, waiting 60s"
+            else
+              echo "attempt $attempt/50 — no ci run found yet for $SHA, waiting 60s"
+            fi
+            sleep 60
+          done
+          echo "::error::timed out after 50 minutes waiting for a green ci run on $SHA — refusing to deploy"
+          exit 1
+
   deploy:
     name: deploy ${{ github.event.inputs.tag || github.ref_name }}
+    needs: verify-ci
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: production
@@ -131,8 +196,12 @@ jobs:
           rsync -az -e "$SSH" \
             docker/compose.prod.yml docker/prod docker/postgres docker/keycloak docker/minio docker/debezium \
             "$PROD_USER@$PROD_HOST:~/$PROD_DIR/"
+          # prod-backup.sh + prod-outbox-prune.sh ride along so the nightly cron always runs
+          # the repo's current maintenance (the outbox prune, ADR 0071 P1, would otherwise
+          # never reach the VPS — the backup script only got there by hand historically).
           rsync -az -e "$SSH" \
             scripts/prod-deploy.sh scripts/prod-rollback.sh \
+            scripts/prod-backup.sh scripts/prod-outbox-prune.sh \
             "$PROD_USER@$PROD_HOST:~/$PROD_DIR/scripts/"
           rsync -az -e "$SSH" compose.prod.images.yml \
             "$PROD_USER@$PROD_HOST:~/$PROD_DIR/releases/$TAG.images.yml"
