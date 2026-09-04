@@ -1,6 +1,6 @@
 # Native PROD ops watch (ADR 0053 §5 / ADR 0057 Phase 6) — the external watchdog.
 #
-# Every hour, from OUTSIDE the VPS (a GitHub runner = the external uptime check):
+# Once a day, from OUTSIDE the VPS (a GitHub runner = the external uptime check):
 #   1. VPS reachable over SSH; disk usage (fail > 82%, warn > 70% — small shared 78 GB host, so alert
 #      EARLY: the 88/80 thresholds let it reach 100% before anyone acted (2026-08-13 login outage));
 #      every native-prod container running+healthy; nightly backup fresh (< 26 h).
@@ -15,12 +15,17 @@ name: ops-watch
 
 on:
   schedule:
-    # Hourly (was */30). Halves the scheduled-run count (48→24/day) — the single largest recurring
-    # GitHub Actions consumer — while keeping meaningful external outage detection. Drop to
-    # "0 */2 * * *" (every 2h, 75% fewer) if cost matters more than detection latency, or raise it
-    # back if prod grows and needs tighter SLA. The alert channel is unchanged (a failed run emails
-    # the owner); workflow_dispatch stays for on-demand checks.
-    - cron: "0 * * * *"
+    # Every 6 hours (was hourly, before that */30): 24→4 scheduled runs/day — this was the single
+    # largest recurring GitHub Actions consumer, and the owner does not need hourly paging. The
+    # 20:00 UTC slot (03:00 WIB) lands ~50 min AFTER the VPS nightly backup+outbox-prune cron
+    # (19:10 UTC, scripts/prod-backup.sh), so a broken backup or prune surfaces the same night and
+    # stays well inside the 26 h freshness assertion below. Not lower than 4/day deliberately:
+    # ADR 0071 P1 doubles finance's outbox write volume AND adds a nightly destructive prune on a
+    # disk-constrained host — a single daily best-effort cron would leave up to a 48 h blind
+    # window on exactly the disk/CDC signals that change touches (code-review W4). Run on demand
+    # (workflow_dispatch) after any deploy or suspected outage; alert channel unchanged (a failed
+    # run notifies the repo owner).
+    - cron: "0 2,8,14,20 * * *"
   workflow_dispatch:
 
 concurrency:

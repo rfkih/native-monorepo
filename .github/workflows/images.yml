@@ -13,6 +13,11 @@
 # Release tags (ADR 0057): pushing a `v*` tag force-builds the COMPLETE image set at that
 # commit's SHA — deploy-prod.yml waits for exactly these by resolving their digests. Tag
 # builds deliberately do NOT move `:latest` (re-deploying an old tag must never regress it).
+#
+# This workflow builds unconditionally on a tag push — it does not itself gate on tests
+# passing (it only compiles/packages). The test/quality gate lives in ci.yml (which now
+# also runs on `v*` tags); deploy-prod.yml's `verify-ci` job is what actually refuses to
+# deploy the images built here until that ci run for the same SHA is green.
 name: images
 
 on:

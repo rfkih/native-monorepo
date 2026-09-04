@@ -10,6 +10,11 @@
 #   - Branch protection should require exactly TWO status checks: `gate` (this file) and
 #     `ai-gate` (ai-gates.yml — the Claude review/QA/security gates, ADR 0057 §4). Each
 #     always runs and fails if any upstream job failed; path-skipped jobs count as success.
+#   - Release tags (`v*`) also trigger a full run here (no path scoping — `base` is a
+#     branch concept and doesn't exist for a tag; reuses the same FORCE_FULL escalation
+#     as workflow_dispatch(full)/schedule). This is the gate deploy-prod.yml's `verify-ci`
+#     job polls for before the production approval prompt fires — a prod tag can no longer
+#     deploy without a green build for that exact commit. A tag run is cheap (a few/week).
 #
 # Testcontainers spins up real Postgres / Kafka / Redis / Keycloak containers; the
 # GitHub-hosted `ubuntu-latest` runner ships a working Docker daemon.
@@ -18,6 +23,7 @@ name: ci
 on:
   push:
     branches: [master]
+    tags: ["v*"]
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -30,11 +36,12 @@ on:
     # Weekly full build (Mon 03:00 WIB): keeps the cache warm end-to-end, catches drift.
     - cron: "0 20 * * 0"
 
-# Cancel superseded runs on the same ref — but never on master, where cancelling would
-# also abort the cache write that later runs depend on.
+# Cancel superseded runs on the same ref — but never on master or a release tag, where
+# cancelling would abort the cache write (master) or the deploy-prod.yml gate's wait for
+# a concluded run (tag).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
@@ -51,14 +58,19 @@ jobs:
     outputs:
       backend_run: ${{ steps.plan.outputs.backend_run }}
       backend_targets: ${{ steps.plan.outputs.backend_targets }}
-      console: ${{ steps.filter.outputs.console }}
-      employee: ${{ steps.filter.outputs.employee }}
-      self_order: ${{ steps.filter.outputs['self-order'] }}
+      # A release tag has no branch to diff against (see the skipped filter step below) and
+      # gets the full build unconditionally — mirrors images.yml's FORCE_ALL for the same event.
+      console: ${{ startsWith(github.ref, 'refs/tags/') && 'true' || steps.filter.outputs.console }}
+      employee: ${{ startsWith(github.ref, 'refs/tags/') && 'true' || steps.filter.outputs.employee }}
+      self_order: ${{ startsWith(github.ref, 'refs/tags/') && 'true' || steps.filter.outputs['self-order'] }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Filter changed paths
+        # Skipped on tag pushes: `base` is a branch concept, and a tag forces the full
+        # build below anyway (mirrors images.yml, which skips this same step on tags).
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -108,7 +120,7 @@ jobs:
         id: plan
         env:
           CHANGED: ${{ steps.filter.outputs.changes }}
-          FORCE_FULL: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full) }}
+          FORCE_FULL: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full) || startsWith(github.ref, 'refs/tags/') }}
         run: |
           ALL='["gateway","org-service","restaurant-service","carwash-service","barbershop-service","loyalty-service","finance-service","entitlement-service","employee-service","notification-service","payment-service"]'
           if [ "$FORCE_FULL" = "true" ] || echo "$CHANGED" | jq -e 'any(. == "full-backend")' > /dev/null; then
