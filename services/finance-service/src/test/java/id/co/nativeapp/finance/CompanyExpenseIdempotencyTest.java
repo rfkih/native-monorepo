@@ -80,6 +80,28 @@ class CompanyExpenseIdempotencyTest extends PostgresRlsTestBase {
                     tenant, ACTOR, () -> service.record(sameTotalDifferentLines, key)))
         .isInstanceOf(CompanyExpenseIdempotencyConflictException.class);
     assertThat(countAsAdmin("company_expense", tenant)).isEqualTo(1L);
+
+    // Only the RECEIPT WORDING edited, everything else identical: still a different submit.
+    RecordCompanyExpenseRequest reworded =
+        new RecordCompanyExpenseRequest(
+            "INVENTORY",
+            outlet,
+            null,
+            "Belanja idempoten",
+            null,
+            "IDR",
+            OCCURRED,
+            List.of(
+                new RecordCompanyExpenseRequest.LineRequest(
+                    UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+                    "Gula pasir",
+                    1_000L,
+                    40_000L,
+                    "GULA PASIR CURAH 1KG")));
+    assertThatThrownBy(
+            () -> TenantContext.callAs(tenant, ACTOR, () -> service.record(reworded, key)))
+        .isInstanceOf(CompanyExpenseIdempotencyConflictException.class);
+    assertThat(countAsAdmin("company_expense", tenant)).isEqualTo(1L);
   }
 
   @Test

@@ -139,6 +139,65 @@ class CompanyExpenseGlPostingTest extends PostgresRlsTestBase {
             UUID.fromString(lines.get(1).get("line_id").toString()));
   }
 
+  /**
+   * Owner request 2026-09-04 — a receipt names things its own way ("AYAM BROILER 1KG") while the
+   * inventory item is "Ayam fillet". A line keeps BOTH: the wording is stored for matching against
+   * the physical nota, the ingredient link is what moves stock. Wording that matches the item (or
+   * is blank) normalises to null, so "differs" stays a real signal.
+   */
+  @Test
+  void anInventoryLineKeepsTheReceiptWordingAlongsideTheInventoryName() throws Exception {
+    String tenant = UUID.randomUUID().toString();
+    UUID outlet = seedOutlet(tenant);
+    UUID ingredientA = UUID.randomUUID();
+    UUID ingredientB = UUID.randomUUID();
+    UUID ingredientC = UUID.randomUUID();
+
+    UUID expenseId =
+        TenantContext.callAs(
+            tenant,
+            ACTOR,
+            () ->
+                service.record(
+                    new RecordCompanyExpenseRequest(
+                        "INVENTORY",
+                        outlet,
+                        null,
+                        "Belanja pasar",
+                        null,
+                        "IDR",
+                        OCCURRED,
+                        List.of(
+                            // wording differs -> stored
+                            new RecordCompanyExpenseRequest.LineRequest(
+                                ingredientA, "Ayam fillet", 1_000L, 50_000L, "AYAM BROILER 1KG"),
+                            // wording equals the item name -> normalised away
+                            new RecordCompanyExpenseRequest.LineRequest(
+                                ingredientB, "Cabai merah", 500L, 20_000L, "Cabai merah"),
+                            // blank -> normalised away
+                            new RecordCompanyExpenseRequest.LineRequest(
+                                ingredientC, "Bawang", 300L, 10_000L, "   "))),
+                    null));
+
+    List<String> descriptions = lineDescriptionsAsAdmin(expenseId);
+    assertThat(descriptions.get(0)).isEqualTo("AYAM BROILER 1KG");
+    assertThat(descriptions.get(1)).as("same as the item name -> null").isNull();
+    assertThat(descriptions.get(2)).as("blank -> null").isNull();
+
+    // The stock instruction is keyed on the ingredient, never on either name.
+    List<GenericRecord> events = decodeOutboxAsAdmin(tenant);
+    assertThat(events).hasSize(1);
+    @SuppressWarnings("unchecked")
+    List<GenericRecord> lines = (List<GenericRecord>) events.getFirst().get("lines");
+    assertThat(lines.get(0).get("ingredient_id").toString()).isEqualTo(ingredientA.toString());
+
+    // And the read path surfaces it.
+    var detail = TenantContext.callAs(tenant, ACTOR, () -> reader.getById(expenseId));
+    assertThat(detail.lines().get(0).description()).isEqualTo("AYAM BROILER 1KG");
+    assertThat(detail.lines().get(0).ingredientName()).isEqualTo("Ayam fillet");
+    assertThat(detail.lines().get(1).description()).isNull();
+  }
+
   @Test
   void aPerpetualActiveInventoryExpensePostsGrniAndSkipsThePnl() throws Exception {
     String tenant = UUID.randomUUID().toString();
@@ -403,6 +462,23 @@ class CompanyExpenseGlPostingTest extends PostgresRlsTestBase {
       }
     }
     return events;
+  }
+
+  private List<String> lineDescriptionsAsAdmin(UUID expenseId) throws Exception {
+    List<String> out = new java.util.ArrayList<>();
+    try (Connection admin = admin();
+        PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT description FROM company_expense_line WHERE expense_id = ?"
+                    + " ORDER BY line_no")) {
+      ps.setObject(1, expenseId);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          out.add(rs.getString(1));
+        }
+      }
+    }
+    return out;
   }
 
   private List<UUID> lineIdsAsAdmin(UUID expenseId) throws Exception {

@@ -18,12 +18,16 @@ public record CompanyExpenseResponse(
     String status,
     List<LineResponse> lines) {
 
-  /** One ingredient line of an INVENTORY expense (empty list for GENERAL). */
+  /**
+   * One ingredient line of an INVENTORY expense (empty list for GENERAL). {@code description} is
+   * the receipt wording when it differs from {@code ingredientName}, else {@code null}.
+   */
   public record LineResponse(
       UUID id,
       int lineNo,
       UUID ingredientId,
       String ingredientName,
       long qtyBase,
-      long valueMinor) {}
+      long valueMinor,
+      String description) {}
 }

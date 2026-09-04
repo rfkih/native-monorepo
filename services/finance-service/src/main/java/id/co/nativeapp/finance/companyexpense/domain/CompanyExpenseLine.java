@@ -42,6 +42,15 @@ public class CompanyExpenseLine extends Auditable {
   @Column(name = "ingredient_name", nullable = false, updatable = false, length = 255)
   private String ingredientName;
 
+  /**
+   * What the RECEIPT calls this line, when the vendor's wording differs from the inventory item's
+   * name (a nota saying "AYAM BROILER 1KG" against the ingredient "Ayam fillet"). Null when they
+   * are the same — readers fall back to {@link #ingredientName}. Finance-side bookkeeping only: the
+   * stock side is keyed on {@code ingredient_id}, never on either name.
+   */
+  @Column(name = "description", updatable = false, length = 500)
+  private String description;
+
   @Column(name = "qty_base", nullable = false, updatable = false)
   private long qtyBase;
 
@@ -64,6 +73,22 @@ public class CompanyExpenseLine extends Auditable {
       String ingredientName,
       long qtyBase,
       Money value) {
+    return of(expenseId, lineNo, ingredientId, ingredientName, qtyBase, value, null);
+  }
+
+  /**
+   * As {@link #of}, plus the receipt wording for this line ({@code null} when it matches the
+   * inventory item's name).
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public static CompanyExpenseLine of(
+      UUID expenseId,
+      int lineNo,
+      UUID ingredientId,
+      String ingredientName,
+      long qtyBase,
+      Money value,
+      String description) {
     Objects.requireNonNull(value, "value");
     if (qtyBase <= 0) {
       throw new IllegalArgumentException("line qty_base must be strictly positive: " + qtyBase);
@@ -80,7 +105,28 @@ public class CompanyExpenseLine extends Auditable {
     line.qtyBase = qtyBase;
     line.valueMinor = value.amountMinor();
     line.currency = value.currency().getCurrencyCode();
+    line.description = normalizeDescription(description, line.ingredientName);
     return line;
+  }
+
+  /**
+   * The receipt wording, or {@code null} when the line is named after the inventory item. Blank
+   * input and a value equal to the ingredient name both normalise to {@code null}, so "differs"
+   * stays a real signal rather than a duplicated string.
+   */
+  private static String normalizeDescription(String description, String ingredientName) {
+    if (description == null) {
+      return null;
+    }
+    String trimmed = description.strip();
+    if (trimmed.isEmpty() || trimmed.equals(ingredientName)) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  public String getDescription() {
+    return description;
   }
 
   public UUID getId() {

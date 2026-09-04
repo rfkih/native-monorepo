@@ -59,7 +59,8 @@ public class CompanyExpenseReader {
               line.getIngredientId(),
               line.getIngredientName(),
               line.getQtyBase(),
-              line.getValueMinor()));
+              line.getValueMinor(),
+              line.getDescription()));
     }
     return toResponse(view, lines);
   }

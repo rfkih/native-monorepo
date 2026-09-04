@@ -145,9 +145,12 @@ public class CompanyExpenseWriter {
       List<LineCommand> lines,
       String idempotencyKey) {
 
-    /** One validated ingredient line. */
+    /**
+     * One validated ingredient line. {@code description} is the receipt wording, null when it
+     * matches {@code ingredientName}.
+     */
     public record LineCommand(
-        UUID ingredientId, String ingredientName, long qtyBase, Money value) {}
+        UUID ingredientId, String ingredientName, long qtyBase, Money value, String description) {}
   }
 
   /**
@@ -252,7 +255,8 @@ public class CompanyExpenseWriter {
               lineCommand.ingredientId(),
               lineCommand.ingredientName(),
               lineCommand.qtyBase(),
-              lineCommand.value());
+              lineCommand.value(),
+              lineCommand.description());
       line.setCompanyId(companyId);
       lineRepository.save(line);
       lines.add(line);

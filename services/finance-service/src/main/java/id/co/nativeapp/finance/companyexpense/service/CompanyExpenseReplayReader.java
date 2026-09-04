@@ -45,6 +45,15 @@ public class CompanyExpenseReplayReader {
         .map(existing -> requireSamePayload(existing, command));
   }
 
+  /** Mirrors {@code CompanyExpenseLine}'s normalisation so the comparison sees the stored shape. */
+  private static String normalizedDescription(String description, String ingredientName) {
+    if (description == null) {
+      return null;
+    }
+    String trimmed = description.strip();
+    return trimmed.isEmpty() || trimmed.equals(ingredientName) ? null : trimmed;
+  }
+
   private UUID requireSamePayload(
       CompanyExpense existing, CompanyExpenseWriter.RecordCommand command) {
     boolean same =
@@ -73,7 +82,12 @@ public class CompanyExpenseReplayReader {
       CompanyExpenseWriter.RecordCommand.LineCommand c = command.lines().get(i);
       if (!s.getIngredientId().equals(c.ingredientId())
           || s.getQtyBase() != c.qtyBase()
-          || s.getValueMinor() != c.value().amountMinor()) {
+          || s.getValueMinor() != c.value().amountMinor()
+          // The receipt wording is part of the payload: an edited nota name under the same key is
+          // a DIFFERENT submit, not a replay (compared against the same normalisation the entity
+          // applies, so blank and "equals the ingredient name" both read as null).
+          || !java.util.Objects.equals(
+              s.getDescription(), normalizedDescription(c.description(), c.ingredientName()))) {
         return false;
       }
     }

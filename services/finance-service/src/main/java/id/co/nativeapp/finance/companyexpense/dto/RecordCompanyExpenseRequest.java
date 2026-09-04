@@ -24,7 +24,18 @@ public record RecordCompanyExpenseRequest(
     Instant occurredAt,
     List<LineRequest> lines) {
 
-  /** One ingredient line; {@code ingredientName} is a display snapshot (finance-side lists). */
+  /**
+   * One ingredient line. {@code ingredientName} is the inventory item's own name (a display
+   * snapshot for finance-side lists); {@code description} is what the RECEIPT calls it, sent only
+   * when the vendor's wording differs — blank, absent, or equal to the ingredient name all mean
+   * "same" and are stored as null.
+   */
   public record LineRequest(
-      UUID ingredientId, String ingredientName, Long qtyBase, Long valueMinor) {}
+      UUID ingredientId, String ingredientName, Long qtyBase, Long valueMinor, String description) {
+
+    /** A line named after its inventory item (no separate receipt wording). */
+    public LineRequest(UUID ingredientId, String ingredientName, Long qtyBase, Long valueMinor) {
+      this(ingredientId, ingredientName, qtyBase, valueMinor, null);
+    }
+  }
 }
