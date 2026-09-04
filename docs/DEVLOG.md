@@ -1,5 +1,26 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-04 — the per-merge image build was feeding nobody (ADR 0073)
+
+Chasing "why does the pipeline run twice per commit", the two-workflows-per-event part turned out
+to be by design (PR = `ci`+`ai-gates`; master push = `ci`+`images`; tag = both + `deploy-prod`), and
+the tag's runs are **full-scope** (`FORCE_FULL`/`FORCE_ALL` — all 13 images at one SHA, which the
+digest-pinned deploy manifest requires) rather than duplicates of the path-scoped master runs.
+
+The real waste was elsewhere and had been sitting in plain sight: **every merge to `master` built
+and pushed a set of GHCR images that nothing pulls.** ADR 0053 §2 assumed UAT would consume them,
+but `scripts/uat-up.ps1` builds UAT images **locally** (`native-uat/<svc>:latest`) and
+`compose.uat.yml` references only third-party images. A repo-wide sweep confirms the only consumer
+of GHCR app images is the prod deploy, and it uses the **tag** build's digests. ADR 0053's own
+Context had even recorded the symptom — *"Nothing consumes those images."* — and the intended
+consumer never arrived.
+
+`images.yml` now runs on `v*` tags + `workflow_dispatch` only. `:latest` moves with it: it used to
+follow the last master push, it now follows the last RELEASE, which is the safer thing for the
+`compose.prod.yml` fallback to resolve. `ci.yml` on master is untouched and must stay — after a
+squash-merge only the master-push run carries the release commit's SHA, and that is exactly what
+`verify-ci` requires before a deploy.
+
 ## 2026-09-04 — one release line again: `master`, and the drift that cost us twice
 
 ADR 0053 §3 has always said `master` is the trunk and a `vX.Y.Z` tag on it ships prod, with
