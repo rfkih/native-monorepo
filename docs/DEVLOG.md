@@ -1,5 +1,37 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-04 — one release line again: `master`, and the drift that cost us twice
+
+ADR 0053 §3 has always said `master` is the trunk and a `vX.Y.Z` tag on it ships prod, with
+`feat/*` short-lived. In practice releases had been cut from a long-lived
+`feat/business-employee-apps` for months, with fixes ported back and forth. Nothing in the
+pipeline ever referenced that branch — `ci`/`images`/`deploy-prod` key off `master` and `v*` tags
+only — so the drift was invisible in automation and lived purely in habit.
+
+**It cost us twice, both this week.** (1) `master` fell 112 commits behind, so the CI tag gate we
+added only covered tag pushes; `workflow_dispatch` reads the DEFAULT branch, and master's stale
+`deploy-prod.yml` had no `verify-ci` — the v0.1.37 redeploy went through ungated (#11 closed it).
+(2) The migration-safety gate uses `origin/master` as its proxy for "what is already deployed";
+against a stale master, 19 already-shipped migrations looked new, and the only way to silence it
+would have been editing applied `.sql` files — breaking Flyway checksums in prod. Both failures
+trace to the same root: two branches disagreeing about what exists.
+
+**Fix:** `master` was brought current (#12, conflict-free, tree byte-identical to the release
+line), and `feat/business-employee-apps` is retired. Releases go back to the documented flow — PR
+→ master → tag master → approve. `verify-ci` now enforces the invariant structurally: the deploy
+refuses unless a green `ci` run exists for that exact commit, which only happens if the commit
+landed on master first.
+
+**Not a duplicate, contrary to first appearances:** the tag's `ci`/`images` runs are FULL-scope
+(`FORCE_FULL` / `FORCE_ALL` — all 13 images pinned at one SHA, which is what the deploy manifest
+needs), while master pushes are path-scoped for UAT. Two workflows per event (ci+images on master,
+ci+ai-gates on a PR) is likewise by design, not a double-fire. The genuine waste was the two-branch
+lineage, and that is what this removes.
+
+**Open, and worth a decision:** `images.yml` still builds on every master push to feed UAT, but
+UAT is operated by hand (`scripts/uat-up.ps1`). If UAT is not being refreshed per merge, moving
+that build to `workflow_dispatch` is the single largest remaining Actions saving.
+
 ## 2026-09-03 — ADR 0072: one-submit purchases (expense input ⇔ inventory), contract first
 
 The owner's ask — "expense input linked with inventory: a purchase updates stock automatically,
