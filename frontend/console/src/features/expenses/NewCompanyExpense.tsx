@@ -37,7 +37,9 @@ import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
 import {
   allowsFraction,
+  formatShownQty,
   shownUnit,
+  toDisplayQty,
   type UnitBearing,
 } from '@/features/inventory/lib/units'
 import type { Ingredient } from '@/features/inventory/ingredientApi'
@@ -47,6 +49,7 @@ import {
   parseGeneralExpense,
   parseInventoryExpense,
   parseInventoryLine,
+  parsePackedQtyBase,
   type InventoryLineDraft,
 } from './lib/companyExpenseForm'
 import { useRecordCompanyExpense, type CompanyExpenseKind } from './companyExpenseApi'
@@ -69,7 +72,27 @@ function todayIso(): string {
 }
 
 function emptyLine(): InventoryLineDraft {
-  return { key: crypto.randomUUID(), ingredientId: '', ingredientName: '', qtyInput: '', totalInput: '' }
+  return {
+    key: crypto.randomUUID(),
+    ingredientId: '',
+    ingredientName: '',
+    qtyInput: '',
+    totalInput: '',
+    receiptNameDiffers: false,
+    receiptDescriptionInput: '',
+    packSizeInput: '',
+  }
+}
+
+/**
+ * V46 — the SHOWN-unit text a line's "Isi per kemasan" pre-fills to once `ingredient` is picked:
+ * `ingredient.packSize` (BASE units) divided by `shownFactor`, or `''` when the ingredient has no
+ * remembered default. Mirrors `IngredientManagement.tsx`'s `SetQtyDialog`'s
+ * `String(toDisplayQty(...))` idiom exactly (and `features/ap/NewBill.tsx`'s identically-named
+ * helper).
+ */
+function packSizeToShownInput(ingredient: Ingredient): string {
+  return ingredient.packSize != null ? String(toDisplayQty(ingredient.packSize, ingredient)) : ''
 }
 
 /**
@@ -491,11 +514,20 @@ function IngredientLineRows({
   function removeLine(key: string) {
     onChange(lines.length > 1 ? lines.filter((l) => l.key !== key) : lines)
   }
-  /** Selects `ingredient` on `key`'s line (from either a fresh create or the "select existing
-   *  instead" 409 recovery) and clears its qty — a different ingredient may carry a different
-   *  unit/factor. */
+  /**
+   * Selects `ingredient` on `key`'s line (from either a fresh create or the "select existing
+   * instead" 409 recovery) and clears its qty — a different ingredient may carry a different
+   * unit/factor. V46 — ALSO pre-fills "Isi per kemasan" from the ingredient's remembered
+   * `packSize` default (SHOWN unit; blank when there is none), replacing whatever was there for
+   * the PREVIOUS ingredient — the line stays fully editable afterwards and this never writes back.
+   */
   function selectIngredient(key: string, ingredient: Ingredient) {
-    updateLine(key, { ingredientId: ingredient.id, ingredientName: ingredient.name, qtyInput: '' })
+    updateLine(key, {
+      ingredientId: ingredient.id,
+      ingredientName: ingredient.name,
+      qtyInput: '',
+      packSizeInput: packSizeToShownInput(ingredient),
+    })
   }
 
   return (
@@ -503,6 +535,17 @@ function IngredientLineRows({
       {lines.map((line, idx) => {
         const ingredient = ingredients.find((i) => i.id === line.ingredientId) ?? null
         const parsed = parseInventoryLine(line, ingredient, currency)
+        // The "packs × size = result" typo safety net — computed independently of `parsed` (which
+        // also needs a valid total) so the readback appears as soon as qty/pack size resolve.
+        const packed = ingredient ? parsePackedQtyBase(line.qtyInput, line.packSizeInput, ingredient) : null
+        // F4 (code review) — true only while the field still holds EXACTLY the value it was
+        // pre-filled with from the ingredient's remembered pack-size default (see `selectIngredient`
+        // below); a coincidental match after manual edits is a harmless false positive, not a real one.
+        const packSizeIsDefault =
+          !!ingredient &&
+          ingredient.packSize != null &&
+          line.packSizeInput.trim() !== '' &&
+          line.packSizeInput === packSizeToShownInput(ingredient)
         return (
           <div
             key={line.key}
@@ -520,6 +563,9 @@ function IngredientLineRows({
                     // A new ingredient may have a different unit/factor — the previously typed
                     // quantity would silently mean something else, so it is cleared on swap.
                     qtyInput: '',
+                    // V46 — pre-fills "Isi per kemasan" from the newly picked ingredient's
+                    // remembered default (blank when it has none); stays fully editable.
+                    packSizeInput: chosen ? packSizeToShownInput(chosen) : '',
                   })
                 }}
               >
@@ -545,17 +591,29 @@ function IngredientLineRows({
               </button>
             </Field>
             <Field
-              label={t('expenses.record.inventory.qtyLabel', {
-                unit: ingredient ? shownUnit(ingredient) : '',
-              })}
+              label={
+                line.packSizeInput.trim() !== ''
+                  ? t('inventoryPicker.qtyPacksLabel')
+                  : t('expenses.record.inventory.qtyLabel', {
+                      unit: ingredient ? shownUnit(ingredient) : '',
+                    })
+              }
               htmlFor={`ce-line-qty-${line.key}`}
             >
               <TextInput
                 id={`ce-line-qty-${line.key}`}
                 type="number"
                 min="0"
-                step={ingredient && allowsFraction(ingredient) ? 'any' : '1'}
-                inputMode={ingredient && allowsFraction(ingredient) ? 'decimal' : 'numeric'}
+                step={
+                  line.packSizeInput.trim() === '' && ingredient && allowsFraction(ingredient)
+                    ? 'any'
+                    : '1'
+                }
+                inputMode={
+                  line.packSizeInput.trim() === '' && ingredient && allowsFraction(ingredient)
+                    ? 'decimal'
+                    : 'numeric'
+                }
                 value={line.qtyInput}
                 onChange={(e) => updateLine(line.key, { qtyInput: e.target.value })}
                 placeholder="0"
@@ -587,6 +645,101 @@ function IngredientLineRows({
             >
               <Trash2 className="size-4" />
             </button>
+
+            {/* Owner request (same-day follow-up) — a vendor sells by the PACK while inventory
+                counts CONTENTS (e.g. a receipt says "TORTILLA 1 PCS" for a pack of 20 individual
+                tortillas). Optional; blank keeps today's plain display-unit quantity. Deliberately
+                separate from features/inventory/lib/units.ts's fixed 1000× kg/g family. */}
+            <div className="sm:col-span-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <Field
+                label={t('inventoryPicker.packSizeLabel')}
+                htmlFor={`ce-line-pack-${line.key}`}
+                // F4 (code review) — while the value is still exactly the ingredient's remembered
+                // default, say so instead of the generic hint, so clearing it (to switch back to a
+                // per-unit purchase) is discoverable.
+                hint={t(
+                  packSizeIsDefault ? 'inventoryPicker.packSizeDefaultHint' : 'inventoryPicker.packSizeHint',
+                )}
+              >
+                <TextInput
+                  id={`ce-line-pack-${line.key}`}
+                  type="number"
+                  min="0"
+                  // E3 — the pack SIZE follows the ingredient's own display-unit rule, exactly
+                  // like the qty field above (decimal for kg/liter, e.g. "2.5" kg/pack; whole for
+                  // pcs/pack) — never forced whole regardless of unit.
+                  step={ingredient && allowsFraction(ingredient) ? 'any' : '1'}
+                  inputMode={ingredient && allowsFraction(ingredient) ? 'decimal' : 'numeric'}
+                  value={line.packSizeInput}
+                  onChange={(e) => updateLine(line.key, { packSizeInput: e.target.value })}
+                  placeholder={t('inventoryPicker.packSizePlaceholder')}
+                  disabled={!ingredient}
+                />
+              </Field>
+              {/* The typo safety net — always visible once a pack size is entered, so a scale
+                  error (e.g. "200" instead of "20") is obvious BEFORE submit. Every number (packs,
+                  the entered pack size, the result) goes through Intl — rule 9. */}
+              {line.packSizeInput.trim() !== '' ? (
+                <div className="flex items-end pb-3">
+                  {ingredient && packed && packed.packs != null ? (
+                    <p className="text-sm font-semibold text-emerald-2">
+                      {t('inventoryPicker.packResultLine', {
+                        packs: new Intl.NumberFormat(locale).format(packed.packs),
+                        packSize: formatShownQty(packed.qtyBase / packed.packs, ingredient, locale),
+                        result: formatShownQty(packed.qtyBase, ingredient, locale),
+                        unit: shownUnit(ingredient),
+                      })}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-loss">{t('inventoryPicker.packInvalid')}</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Owner request (same-day follow-up) — "Nama di nota berbeda": a supplier's invoice
+                often writes its own product name (e.g. "AYAM BROILER FROZEN 1KG") that doesn't
+                match the inventory item name ("Ayam fillet"). Mirrors NewBill.tsx's AP-bill
+                toggle exactly. Disabled until an ingredient IS linked. */}
+            <label className="flex cursor-pointer items-center gap-2 sm:col-span-5">
+              <input
+                type="checkbox"
+                checked={line.receiptNameDiffers}
+                disabled={!line.ingredientId}
+                onChange={() =>
+                  // BOTH directions prefill receiptDescriptionInput with the ingredient's name:
+                  // turning ON starts from an edit, not a blank; turning OFF discards the
+                  // independent receipt wording (it's ignored on the wire either way once off).
+                  updateLine(line.key, {
+                    receiptNameDiffers: !line.receiptNameDiffers,
+                    receiptDescriptionInput: line.ingredientName,
+                  })
+                }
+                className="size-4 accent-emerald disabled:cursor-not-allowed"
+              />
+              <span className="text-xs font-medium text-ink-2">
+                {t('inventoryPicker.receiptNameDiffersLabel')}
+              </span>
+              <span className="text-xs text-ink-3">{t('inventoryPicker.receiptNameDiffersHint')}</span>
+            </label>
+
+            {line.receiptNameDiffers ? (
+              <div className="sm:col-span-5">
+                <Field
+                  label={t('inventoryPicker.receiptDescriptionLabel')}
+                  htmlFor={`ce-line-receipt-desc-${line.key}`}
+                  hint={t('inventoryPicker.receiptDescriptionHint')}
+                >
+                  <TextInput
+                    id={`ce-line-receipt-desc-${line.key}`}
+                    value={line.receiptDescriptionInput}
+                    onChange={(e) =>
+                      updateLine(line.key, { receiptDescriptionInput: e.target.value })
+                    }
+                  />
+                </Field>
+              </div>
+            ) : null}
           </div>
         )
       })}

@@ -19,4 +19,7 @@ public interface CompanyExpenseLineView {
   long getQtyBase();
 
   long getValueMinor();
+
+  /** The receipt wording, or {@code null} when the line is named after the inventory item. */
+  String getDescription();
 }

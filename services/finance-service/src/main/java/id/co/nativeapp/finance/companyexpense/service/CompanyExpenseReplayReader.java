@@ -2,10 +2,12 @@ package id.co.nativeapp.finance.companyexpense.service;
 
 import id.co.nativeapp.finance.companyexpense.domain.CompanyExpense;
 import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseIdempotencyConflictException;
+import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseLine;
 import id.co.nativeapp.finance.companyexpense.projection.CompanyExpenseLineView;
 import id.co.nativeapp.finance.companyexpense.repository.CompanyExpenseLineRepository;
 import id.co.nativeapp.finance.companyexpense.repository.CompanyExpenseRepository;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -73,7 +75,13 @@ public class CompanyExpenseReplayReader {
       CompanyExpenseWriter.RecordCommand.LineCommand c = command.lines().get(i);
       if (!s.getIngredientId().equals(c.ingredientId())
           || s.getQtyBase() != c.qtyBase()
-          || s.getValueMinor() != c.value().amountMinor()) {
+          || s.getValueMinor() != c.value().amountMinor()
+          // The receipt wording is part of the payload: an edited nota name under the same key is
+          // a DIFFERENT submit, not a replay (compared against the same normalisation the entity
+          // applies, so blank and "equals the ingredient name" both read as null).
+          || !Objects.equals(
+              s.getDescription(),
+              CompanyExpenseLine.normalizeDescription(c.description(), c.ingredientName()))) {
         return false;
       }
     }

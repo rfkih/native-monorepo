@@ -11,8 +11,10 @@ import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.restaurant.inventory.domain.GoodsReceipt;
 import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
+import id.co.nativeapp.restaurant.inventory.domain.IngredientUnitChangeException;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
+import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.repository.GoodsReceiptRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
@@ -96,6 +98,146 @@ class IngredientWriterTest {
 
     assertThat(response.stockQty()).isEqualTo(30);
     assertThat(response.unitCostMinor()).isEqualTo(2_000L);
+  }
+
+  @Test
+  void createStoresTheDefaultPackSize() {
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    IngredientResponse response =
+        asTenant(
+            () ->
+                writer.create(
+                    new CreateIngredientRequest(
+                        OUTLET, "Tortilla", "pcs", null, null, null, null, 20)));
+
+    assertThat(response.packSize()).isEqualTo(20);
+  }
+
+  @Test
+  void aNonPositivePackSizeIsRejected() {
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    assertThatThrownBy(
+            () ->
+                asTenant(
+                    () ->
+                        writer.create(
+                            new CreateIngredientRequest(
+                                OUTLET, "Tortilla", "pcs", null, null, null, null, 0))))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  /**
+   * Owner request 2026-09-04 — the guard behind "kg bisa desimal": an item mis-created as `pcs` has
+   * to become g/kg, and rewriting the unit under existing stock would reinterpret "10 pcs" as "10
+   * g" and poison the moving-average value built from it.
+   */
+  @Test
+  void changingTheBaseUnitIsRefusedWhileStockRemains() {
+    Ingredient ingredient = tracked(10);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+
+    assertThatThrownBy(
+            () ->
+                asTenant(
+                    () ->
+                        writer.update(
+                            ingredient.getId(),
+                            new UpdateIngredientRequest(null, "g", "kg", null, null))))
+        .isInstanceOf(IngredientUnitChangeException.class)
+        .hasMessageContaining("still holds stock");
+  }
+
+  /**
+   * Review finding M1 — zero stock is NOT enough on its own. {@code unit_cost_minor} is a
+   * PER-BASE-UNIT figure that survives the zeroing (the cache recompute is a no-op at qty 0), and
+   * the from-empty revaluation prices new stock at it. Left behind, "Rp 50 per pcs" would silently
+   * become "per gram" and the next 2 kg would book 1000x its real value. A base-unit change must
+   * therefore reset every per-unit figure hanging off the old unit.
+   */
+  @Test
+  void changingTheBaseUnitIsAllowedOnceStockIsZeroAndResetsThePerUnitFigures() {
+    Ingredient ingredient = tracked(0); // "Patty", pcs, Rp 50/pcs
+    ingredient.setPackSize(20);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    IngredientResponse response =
+        asTenant(
+            () ->
+                writer.update(
+                    ingredient.getId(), new UpdateIngredientRequest(null, "g", "kg", null, null)));
+
+    assertThat(response.unit()).isEqualTo("g");
+    assertThat(response.displayUnit())
+        .as("kg display over a g base — decimals now parse")
+        .isEqualTo("kg");
+    assertThat(response.unitCostMinor()).as("a per-pcs cost cannot mean per-gram").isNull();
+    assertThat(response.costCurrency()).isNull();
+    assertThat(response.packSize()).as("pack size is stored in BASE units").isNull();
+
+    // The poisoning path itself: stocking up after the switch must NOT revalue at the old cost.
+    ingredient.setStock(2_000); // 2 kg
+    assertThat(ingredient.getStockValueMinor())
+        .as("uncosted after the unit change — a priced receive re-establishes the cost")
+        .isZero();
+  }
+
+  @Test
+  void aPatchSetsClearsOrLeavesThePackSizeAlone() {
+    Ingredient ingredient = tracked(5);
+    ingredient.setPackSize(20);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    assertThat(
+            asTenant(
+                    () ->
+                        writer.update(
+                            ingredient.getId(),
+                            new UpdateIngredientRequest("Patty Sapi", null, null, null, null)))
+                .packSize())
+        .as("both fields absent -> untouched")
+        .isEqualTo(20);
+
+    assertThat(
+            asTenant(
+                    () ->
+                        writer.update(
+                            ingredient.getId(),
+                            new UpdateIngredientRequest(null, null, null, null, null, 12, null)))
+                .packSize())
+        .isEqualTo(12);
+
+    assertThat(
+            asTenant(
+                    () ->
+                        writer.update(
+                            ingredient.getId(),
+                            new UpdateIngredientRequest(null, null, null, null, null, null, true)))
+                .packSize())
+        .as("clearPackSize -> removed")
+        .isNull();
+  }
+
+  /** Only the DISPLAY label changing is always safe — the base quantity is untouched by it. */
+  @Test
+  void addingADisplayUnitOverTheSameBaseIsAllowedWithStock() {
+    Ingredient ingredient = new Ingredient(OUTLET, "Tepung", "g", 10L, "IDR");
+    ingredient.setStock(2_500);
+    ingredient.setCompanyId(COMPANY);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    IngredientResponse response =
+        asTenant(
+            () ->
+                writer.update(
+                    ingredient.getId(), new UpdateIngredientRequest(null, "g", "kg", null, null)));
+
+    assertThat(response.stockQty()).isEqualTo(2_500);
+    assertThat(response.displayUnit()).isEqualTo("kg");
   }
 
   @Test

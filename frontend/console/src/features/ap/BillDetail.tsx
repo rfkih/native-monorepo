@@ -56,24 +56,32 @@ function useIngredientsForOutlet(params: {
   })
 }
 
-/** The ADR 0072 P4 linkage snapshot for a line, formatted for display — the ingredient name plus
- *  either the resolved DISPLAY-unit quantity (e.g. "1.5 kg", when `resolved` matches by id) or the
- *  plain BASE-unit count (e.g. "1500 (satuan dasar)") when it doesn't resolve. `null` for a plain
- *  or inventory-flagged-but-unlinked line (`ingredientId` absent). */
+/**
+ * The ADR 0072 P4 linkage snapshot for a line, formatted for display — the ingredient name plus
+ * either the resolved DISPLAY-unit quantity (e.g. "1.5 kg", when `resolved` matches by id) or the
+ * plain BASE-unit count (e.g. "1500 (satuan dasar)") when it doesn't resolve. `null` for a plain
+ * or inventory-flagged-but-unlinked line (`ingredientId` absent).
+ *
+ * "Receipt name differs" follow-up (same day) — when the line's OWN `description` (already shown
+ * as the row's primary text) doesn't match the linked ingredient's name, this subtext is prefixed
+ * "→ " to read as "this receipt line points at inventory item X · qty" rather than repeating the
+ * same name twice; when they're equal (today's common case) it renders exactly as before.
+ */
 function ingredientLinkLabel(
-  line: Pick<BillLine, 'ingredientId' | 'ingredientName' | 'ingredientQtyBase'>,
+  line: Pick<BillLine, 'description' | 'ingredientId' | 'ingredientName' | 'ingredientQtyBase'>,
   resolved: UnitBearing | null,
   locale: string,
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): string | null {
   if (!line.ingredientId || line.ingredientQtyBase == null) return null
   const name = line.ingredientName || line.ingredientId
-  if (resolved) {
-    return `${name} · ${formatShownQty(line.ingredientQtyBase, resolved, locale)} ${shownUnit(resolved)}`
-  }
-  return `${name} · ${t('ap.detail.ingredientQtyBaseUnit', {
-    qty: new Intl.NumberFormat(locale).format(line.ingredientQtyBase),
-  })}`
+  const qtyLabel = resolved
+    ? `${formatShownQty(line.ingredientQtyBase, resolved, locale)} ${shownUnit(resolved)}`
+    : t('ap.detail.ingredientQtyBaseUnit', {
+        qty: new Intl.NumberFormat(locale).format(line.ingredientQtyBase),
+      })
+  const receiptNameDiffers = line.description.trim() !== name.trim()
+  return `${receiptNameDiffers ? '→ ' : ''}${name} · ${qtyLabel}`
 }
 
 /**

@@ -44,6 +44,14 @@ export interface Ingredient {
   /** Total value of stock on hand, minor units of `costCurrency` (moving-average cost). */
   stockValueMinor: number
   active: boolean
+  /**
+   * V46 — how many BASE units one PACK usually holds (a tortilla pack of 20 on a `pcs` item: 20; a
+   * 25 kg flour sack on a `g`-based item: 25000), or `null` for no remembered default. A REMEMBERED
+   * DEFAULT only — the purchase forms pre-fill a line's "Isi per kemasan" from it (converted to the
+   * SHOWN unit, `lib/units.ts`'s `toDisplayQty`) but the line stays fully editable and never writes
+   * back here (brands differ purchase to purchase).
+   */
+  packSize: number | null
 }
 
 export const INGREDIENTS_KEY = (s: CompanySession) => ['ingredients', s.companyId, s.businessId]
@@ -114,6 +122,9 @@ export interface CreateIngredientInput {
   costCurrency?: string | null
   /** Initial stock in the BASE `unit` (already converted from any display value). */
   initialStockQty?: number
+  /** V46 — the remembered pack-size default, in BASE units (already converted from the SHOWN-unit
+   *  form input — see `Ingredient.packSize`'s doc). Omitted/`null` = no default. */
+  packSize?: number | null
 }
 
 export function useCreateIngredient(session: CompanySession) {
@@ -131,6 +142,7 @@ export function useCreateIngredient(session: CompanySession) {
           unitCostMinor: input.unitCostMinor ?? null,
           costCurrency: input.costCurrency ?? null,
           initialStockQty: input.initialStockQty ?? 0,
+          packSize: input.packSize ?? null,
         },
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: INGREDIENTS_KEY(session) }),
@@ -144,6 +156,13 @@ export interface UpdateIngredientInput {
   displayUnit?: string | null
   unitCostMinor?: number | null
   costCurrency?: string | null
+  /** V46 — set a new pack-size default (BASE units). Omit (undefined) to leave the stored default
+   *  alone; to REMOVE an existing default, omit this and send `clearPackSize: true` instead (both
+   *  present is nonsensical and never constructed by this console — see `IngredientFormDialog`). */
+  packSize?: number
+  /** V46 — `true` removes the stored pack-size default; omitted/`false`-not-sent leaves it alone
+   *  (the server reads a MISSING field as "not sent", never as `false`). */
+  clearPackSize?: boolean
 }
 
 export function useUpdateIngredient(session: CompanySession) {

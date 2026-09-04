@@ -116,7 +116,8 @@ public class CompanyExpenseService {
                 line.ingredientId(),
                 line.ingredientName() == null ? "" : line.ingredientName().strip(),
                 line.qtyBase(),
-                Money.ofMinor(line.valueMinor(), currency)));
+                Money.ofMinor(line.valueMinor(), currency),
+                line.description()));
         lineSum += line.valueMinor();
       }
     }

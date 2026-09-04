@@ -80,6 +80,30 @@ dialog loses its price inputs (costless stock adjust stays) and links to the exp
 form becomes the **only priced entry surface**. The backend endpoint keeps accepting priced
 receives (backward compatibility; the consumer now feeds the same path).
 
+## Amendment (2026-09-04) — the receipt's wording is not the inventory item's name
+
+A supplier's nota writes its own product text ("AYAM BROILER FROZEN 1KG") which rarely matches the
+inventory item ("Ayam fillet"). Storing only the item name loses the tie back to the physical
+document an auditor holds; storing only the receipt text loses which stock item moved. **A purchase
+line keeps BOTH**, and the two names are never conflated:
+
+- **AP bill lines** already had the shape — `bill_line.description` (the receipt wording) alongside
+  `ingredient_id`/`ingredient_name` (V59). The console previously overwrote the description with
+  the item name; it now offers a per-line toggle so the description can carry the nota's own text.
+- **Company-expense lines** gain `company_expense_line.description` (V60, nullable, additive) for
+  parity.
+
+Normalisation differs by surface, and deliberately so. **Company-expense lines** normalise
+server-side: blank, or a value equal to the ingredient's name, stores as `NULL`, so "the receipt
+says something different" is a real signal rather than a duplicated string. **AP bill lines cannot**
+— `bill_line.description` is `NOT NULL` (V27) and is the line's own printed text, which every bill
+must carry whether or not it is inventory-linked; there the console decides what to send and a
+reader compares it against `ingredient_name` to detect a difference. The wording is finance-side bookkeeping only: **stock is keyed on `ingredient_id`**, never
+on either name, so `InventoryPurchaseRecorded` is unchanged and no consumer needs to know.
+
+The console also renames the Indonesian surface "Inventaris" → **"Persediaan"**, matching the
+accounting term the bill line's own checkbox already used (the API/domain stays `ingredient`).
+
 ## Consequences
 
 - One submit keeps money, HPP moving-average, stock quantity and (under perpetual) the inventory

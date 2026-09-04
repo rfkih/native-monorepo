@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.inventory.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.util.UUID;
@@ -28,4 +29,18 @@ public record CreateIngredientRequest(
     @Nullable @Size(max = 16) String displayUnit,
     @Nullable @PositiveOrZero Long unitCostMinor,
     @Nullable @Size(min = 3, max = 3) String costCurrency,
-    @Nullable @PositiveOrZero Integer initialStockQty) {}
+    @Nullable @PositiveOrZero Integer initialStockQty,
+    @Nullable @Positive Integer packSize) {
+
+  /** Pre-pack-size callers (and every existing test) keep compiling unchanged. */
+  public CreateIngredientRequest(
+      UUID businessId,
+      String name,
+      String unit,
+      @Nullable String displayUnit,
+      @Nullable Long unitCostMinor,
+      @Nullable String costCurrency,
+      @Nullable Integer initialStockQty) {
+    this(businessId, name, unit, displayUnit, unitCostMinor, costCurrency, initialStockQty, null);
+  }
+}

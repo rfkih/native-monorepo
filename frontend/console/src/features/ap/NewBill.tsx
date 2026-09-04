@@ -12,10 +12,16 @@ import { apiFetch } from '@/lib/api'
 import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
-import { allowsFraction, shownUnit, type UnitBearing } from '@/features/inventory/lib/units'
+import {
+  allowsFraction,
+  formatShownQty,
+  shownUnit,
+  toDisplayQty,
+  type UnitBearing,
+} from '@/features/inventory/lib/units'
 import type { Ingredient } from '@/features/inventory/ingredientApi'
 import { CreateIngredientInline } from '@/features/inventory/CreateIngredientInline'
-import { parseInventoryLine } from './lib/ingredientLink'
+import { parseInventoryLine, parsePackedQtyBase } from './lib/ingredientLink'
 import { useCreateBill, useVendors, type CreateBillLineBody } from './api'
 import { SELECT_CLASSES } from './parts'
 
@@ -24,10 +30,13 @@ const TAX_RATE = 0.11
 interface DraftLine {
   key: string
   /**
-   * Owner UX correction (2026-09-04) — when `inventory` is ticked, this field IS the ingredient
-   * combobox: it holds either the search query (unresolved) or the linked ingredient's own name
-   * (resolved, `ingredientId` set). Unticking clears the linkage but keeps whatever text is here —
-   * it reverts to being a plain free-text description.
+   * Owner UX correction (2026-09-04) — when `inventory` is ticked and `receiptNameDiffers` is
+   * OFF (the default), this field IS the ingredient combobox: it holds either the search query
+   * (unresolved) or the linked ingredient's own name (resolved, `ingredientId` set). When
+   * `receiptNameDiffers` is ON, this instead holds the free-text RECEIPT wording (what the
+   * supplier's invoice actually says) — independent of `ingredientName`, which then rides via its
+   * own compact combobox. Unticking `inventory` clears the linkage but keeps whatever text is
+   * here — it reverts to being a plain free-text description.
    */
   description: string
   /** Plain mode: a whole count. Persediaan mode: the bahan quantity in the ingredient's DISPLAY
@@ -39,10 +48,30 @@ interface DraftLine {
   /** ADR 0067 Phase B, §3 — flags this line as a capitalizable inventory purchase. Defaults false;
    *  the backend ignores it unless the company has activated perpetual inventory accounting. */
   inventory: boolean
-  /** ADR 0072 P4 — set once the combobox resolves to a real ingredient (picked or freshly
-   *  created); blank while the operator is still typing/searching. */
+  /** ADR 0072 P4 — set once a combobox (main or, when `receiptNameDiffers` is ON, the compact
+   *  "linked ingredient" one) resolves to a real ingredient (picked or freshly created); blank
+   *  while the operator is still typing/searching. */
   ingredientId: string
   ingredientName: string
+  /**
+   * "Nama di nota berbeda" / "Receipt name differs" (owner request, same day follow-up) —
+   * Persediaan-only. OFF (default): `description` mirrors `ingredientName` (today's one-step
+   * combobox). ON: `description` is a free-text receipt wording independent of the linked
+   * ingredient, which stays linked via `ingredientId`/`ingredientQtyBase` regardless — stock still
+   * lands on the right item either way.
+   */
+  receiptNameDiffers: boolean
+  /**
+   * "Isi per kemasan" / "Units per pack" (owner request, same day follow-up) — a vendor sells by
+   * the PACK while inventory counts CONTENTS (e.g. a receipt says "TORTILLA 1 PCS" for a pack of
+   * 20 individual tortillas). Optional; BLANK (default) is today's behaviour — `quantity` is a
+   * plain display-unit value. Non-blank makes `quantity` mean NUMBER OF PACKS instead, and this is
+   * how many of the ingredient's display unit are in ONE pack — see
+   * `features/ap/lib/ingredientLink.ts`'s `parsePackedQtyBase` for the math. The bill's own
+   * `quantity`/`unitPriceMinor` stay exactly what the receipt says (1 / the line total) — pack
+   * maths only feeds `ingredientQtyBase`.
+   */
+  packSizeInput: string
 }
 
 function newLine(): DraftLine {
@@ -54,7 +83,19 @@ function newLine(): DraftLine {
     inventory: false,
     ingredientId: '',
     ingredientName: '',
+    receiptNameDiffers: false,
+    packSizeInput: '',
   }
+}
+
+/**
+ * V46 — the SHOWN-unit text a line's "Isi per kemasan" pre-fills to once `ingredient` is picked:
+ * `ingredient.packSize` (BASE units) divided by `shownFactor`, or `''` when the ingredient has no
+ * remembered default. Mirrors `SetQtyDialog`'s `String(toDisplayQty(...))` idiom
+ * (IngredientManagement.tsx) exactly.
+ */
+function packSizeToShownInput(ingredient: Ingredient): string {
+  return ingredient.packSize != null ? String(toDisplayQty(ingredient.packSize, ingredient)) : ''
 }
 
 /**
@@ -87,9 +128,10 @@ function useIngredientsForOutlet(params: {
 /**
  * A PLAIN (non-Persediaan) line is submittable once it has a description, a positive integer
  * quantity, and a positive unit price — unchanged. A Persediaan-TICKED line is delegated entirely
- * to `parseInventoryLine` (ADR 0072 P4, reworked): the description field IS the ingredient
- * combobox there, so `quantity`/`unitPriceMajor` carry the bahan qty (display unit) / TOTAL harga
- * instead of a count/per-unit price — see that function's doc for the wire mapping.
+ * to `parseInventoryLine` (ADR 0072 P4, reworked): `quantity`/`unitPriceMajor` carry the bahan qty
+ * (display unit) / TOTAL harga instead of a count/per-unit price, and `description` is sent as
+ * typed — it already equals `ingredientName` unless "Nama di nota berbeda" is ON, in which case it
+ * is the independent receipt wording — see that function's doc for the full wire mapping.
  */
 function parseLine(
   line: DraftLine,
@@ -100,10 +142,12 @@ function parseLine(
   if (line.inventory) {
     const parsed = parseInventoryLine(
       {
+        description: line.description,
         ingredientId: line.ingredientId,
         ingredientName: line.ingredientName,
         qtyInput: line.quantity,
         totalInput: line.unitPriceMajor,
+        packSizeInput: line.packSizeInput,
       },
       ingredientOf(line.ingredientId),
       currency,
@@ -175,7 +219,17 @@ export function NewBill() {
   const [linesResetForOutlet, setLinesResetForOutlet] = useState(ingredientOutletId)
   if (ingredientOutletId !== linesResetForOutlet) {
     setLinesResetForOutlet(ingredientOutletId)
-    setLines((prev) => prev.map((l) => ({ ...l, ingredientId: '', ingredientName: '' })))
+    setLines((prev) =>
+      prev.map((l) => ({
+        ...l,
+        ingredientId: '',
+        ingredientName: '',
+        // The toggle only makes sense relative to a linked ingredient — auto-untick it (the
+        // combobox reverts to the MAIN field, with whatever receipt text was typed as its
+        // starting search query in the new outlet's catalog).
+        receiptNameDiffers: false,
+      })),
+    )
   }
 
   const companyId = company?.companyId ?? ''
@@ -233,15 +287,30 @@ export function NewBill() {
     if (creatingForKey === key) setCreatingForKey(null)
     if (openComboboxKey === key) setOpenComboboxKey(null)
   }
-  /** Resolves `ingredient` onto `key`'s line — from a combobox pick, a fresh inline create, or the
-   *  "select existing instead" 409 recovery. The description mirrors the ingredient's name (it IS
-   *  the combobox's displayed value once linked). */
+  /**
+   * Resolves `ingredient` onto `key`'s line — from a combobox pick, a fresh inline create, or the
+   * "select existing instead" 409 recovery. `description` mirrors the ingredient's name UNLESS
+   * "Nama di nota berbeda" is ON for this line, in which case the receipt wording is independent
+   * and stays untouched (a functional update so it reads the line's CURRENT
+   * `receiptNameDiffers` rather than a value closed over at render time). V46 — ALSO pre-fills
+   * "Isi per kemasan" from the ingredient's remembered `packSize` default (SHOWN unit; blank when
+   * there is none), replacing whatever was there for the PREVIOUS ingredient — the line stays
+   * fully editable afterwards and this never writes back to the ingredient.
+   */
   function selectIngredient(key: string, ingredient: Ingredient) {
-    updateLine(key, {
-      description: ingredient.name,
-      ingredientId: ingredient.id,
-      ingredientName: ingredient.name,
-    })
+    setLines((prev) =>
+      prev.map((l) =>
+        l.key === key
+          ? {
+              ...l,
+              ingredientId: ingredient.id,
+              ingredientName: ingredient.name,
+              description: l.receiptNameDiffers ? l.description : ingredient.name,
+              packSizeInput: packSizeToShownInput(ingredient),
+            }
+          : l,
+      ),
+    )
     setOpenComboboxKey(null)
   }
 
@@ -357,15 +426,53 @@ export function NewBill() {
             {lines.map((line, idx) => {
               const parsed = parseLine(line, exponent, currency, ingredientOf)
               const lineIngredient = line.inventory ? ingredientOf(line.ingredientId) : null
+              // F4 (code review) — the FULL catalog entry (not the `UnitBearing`-narrowed
+              // `lineIngredient` above), only so `.packSize` is reachable for the "pre-filled from
+              // the item's default" marker below.
+              const lineIngredientFull = line.inventory
+                ? ingredients.find((i) => i.id === line.ingredientId) ?? null
+                : null
               const outletChosen = !!ingredientOutletId
+              // The "packs × size = result" typo safety net — computed independently of `parsed`
+              // (which also needs a valid total) so the readback appears as soon as qty/pack size
+              // resolve, before the price is even entered.
+              const packed = lineIngredient
+                ? parsePackedQtyBase(line.quantity, line.packSizeInput, lineIngredient)
+                : null
+              // F4 — true only while the field still holds EXACTLY the value it was pre-filled with
+              // from the ingredient's remembered pack-size default (see `selectIngredient`); a
+              // coincidental match after manual edits is a harmless false positive, not a real one.
+              const packSizeIsDefault =
+                !!lineIngredientFull &&
+                lineIngredientFull.packSize != null &&
+                line.packSizeInput.trim() !== '' &&
+                line.packSizeInput === packSizeToShownInput(lineIngredientFull)
               return (
                 <div
                   key={line.key}
                   className="grid grid-cols-1 items-end gap-2.5 rounded-xl border border-line p-3 sm:grid-cols-[1fr_80px_140px_140px_auto]"
                 >
-                  {line.inventory ? (
+                  {line.inventory && line.receiptNameDiffers ? (
+                    // "Nama di nota berbeda" ON — free-text receipt wording, independent of the
+                    // ingredient link (kept visible/compact further down this row).
+                    <Field
+                      label={t('inventoryPicker.receiptDescriptionLabel')}
+                      htmlFor={`line-desc-${line.key}`}
+                      hint={t('inventoryPicker.receiptDescriptionHint')}
+                    >
+                      <TextInput
+                        id={`line-desc-${line.key}`}
+                        value={line.description}
+                        onChange={(e) => updateLine(line.key, { description: e.target.value })}
+                        placeholder={t('ap.newBill.descriptionPlaceholder')}
+                      />
+                    </Field>
+                  ) : line.inventory ? (
                     <IngredientComboboxField
-                      line={line}
+                      fieldId={`line-ing-${line.key}`}
+                      label={t('ap.newBill.ingredientLabel')}
+                      value={line.description}
+                      linkedIngredientId={line.ingredientId}
                       ingredients={ingredients}
                       ingredientsLoading={ingredientsQuery.isLoading}
                       ingredientsError={ingredientsQuery.isError}
@@ -403,9 +510,11 @@ export function NewBill() {
                   <Field
                     label={
                       line.inventory
-                        ? t('ap.newBill.ingredientQtyLabel', {
-                            unit: lineIngredient ? shownUnit(lineIngredient) : '',
-                          })
+                        ? line.packSizeInput.trim() !== ''
+                          ? t('inventoryPicker.qtyPacksLabel')
+                          : t('ap.newBill.ingredientQtyLabel', {
+                              unit: lineIngredient ? shownUnit(lineIngredient) : '',
+                            })
                         : t('ap.newBill.quantityLabel')
                     }
                     htmlFor={`line-qty-${line.key}`}
@@ -416,13 +525,16 @@ export function NewBill() {
                       min={line.inventory ? '0' : '1'}
                       step={
                         line.inventory
-                          ? lineIngredient && allowsFraction(lineIngredient)
+                          ? line.packSizeInput.trim() === '' && lineIngredient && allowsFraction(lineIngredient)
                             ? 'any'
                             : '1'
                           : '1'
                       }
                       inputMode={
-                        line.inventory && lineIngredient && allowsFraction(lineIngredient)
+                        line.inventory &&
+                        line.packSizeInput.trim() === '' &&
+                        lineIngredient &&
+                        allowsFraction(lineIngredient)
                           ? 'decimal'
                           : 'numeric'
                       }
@@ -467,7 +579,8 @@ export function NewBill() {
                       accounting), so the form stays ready ahead of activation. Ticking/unticking
                       resets qty/price — their MEANING flips (count/per-unit price <-> bahan qty/
                       total harga), so a stale number is never silently reinterpreted as the wrong
-                      thing; unticking keeps the description text (ADR 0072 P4 UX rework). */}
+                      thing; unticking keeps the description text (ADR 0072 P4 UX rework) and
+                      drops "Nama di nota berbeda" (it only makes sense on a linked line). */}
                   <label className="flex cursor-pointer items-center gap-2 sm:col-span-5">
                     <input
                       type="checkbox"
@@ -480,6 +593,8 @@ export function NewBill() {
                           ingredientName: checked ? line.ingredientName : '',
                           quantity: checked ? '' : '1',
                           unitPriceMajor: '',
+                          receiptNameDiffers: checked ? line.receiptNameDiffers : false,
+                          packSizeInput: checked ? line.packSizeInput : '',
                         })
                         setOpenComboboxKey(null)
                       }}
@@ -492,14 +607,138 @@ export function NewBill() {
                   </label>
 
                   {line.inventory ? (
-                    <p className="text-xs text-ink-3 sm:col-span-5">
-                      {t('ap.newBill.ingredientLinkNote')}
-                    </p>
-                  ) : null}
-                  {line.inventory && !parsed ? (
-                    <p className="text-xs text-ink-3 sm:col-span-5">
-                      {t('ap.newBill.ingredientLineIncomplete')}
-                    </p>
+                    <>
+                      {/* Owner request (same-day follow-up) — a vendor sells by the PACK while
+                          inventory counts CONTENTS (e.g. a receipt says "TORTILLA 1 PCS" for a
+                          pack of 20 individual tortillas). Optional; blank keeps today's plain
+                          display-unit quantity. Deliberately separate from
+                          features/inventory/lib/units.ts's fixed 1000× kg/g family — a pack size
+                          is an arbitrary per-product number. */}
+                      <div className="sm:col-span-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                        <Field
+                          label={t('inventoryPicker.packSizeLabel')}
+                          htmlFor={`line-pack-${line.key}`}
+                          // F4 (code review) — while the value is still exactly the ingredient's
+                          // remembered default, say so instead of the generic hint, so clearing it
+                          // (to switch back to a per-unit purchase) is discoverable.
+                          hint={t(
+                            packSizeIsDefault
+                              ? 'inventoryPicker.packSizeDefaultHint'
+                              : 'inventoryPicker.packSizeHint',
+                          )}
+                        >
+                          <TextInput
+                            id={`line-pack-${line.key}`}
+                            type="number"
+                            min="0"
+                            // E3 — the pack SIZE follows the ingredient's own display-unit rule,
+                            // exactly like the qty field above (decimal for kg/liter, e.g. "2.5"
+                            // kg/pack; whole for pcs/pack) — never forced whole regardless of unit.
+                            step={lineIngredient && allowsFraction(lineIngredient) ? 'any' : '1'}
+                            inputMode={
+                              lineIngredient && allowsFraction(lineIngredient) ? 'decimal' : 'numeric'
+                            }
+                            value={line.packSizeInput}
+                            onChange={(e) => updateLine(line.key, { packSizeInput: e.target.value })}
+                            placeholder={t('inventoryPicker.packSizePlaceholder')}
+                            disabled={!line.ingredientId}
+                          />
+                        </Field>
+                        {/* The typo safety net — always visible once a pack size is entered, so a
+                            scale error (e.g. "200" instead of "20") is obvious BEFORE submit. Every
+                            number (packs, the entered pack size, the result) goes through Intl —
+                            rule 9 — rather than interpolating `packed.packs`/the raw input string. */}
+                        {line.packSizeInput.trim() !== '' ? (
+                          <div className="flex items-end pb-3">
+                            {lineIngredient && packed && packed.packs != null ? (
+                              <p className="text-sm font-semibold text-emerald-2">
+                                {t('inventoryPicker.packResultLine', {
+                                  packs: new Intl.NumberFormat(locale).format(packed.packs),
+                                  packSize: formatShownQty(
+                                    packed.qtyBase / packed.packs,
+                                    lineIngredient,
+                                    locale,
+                                  ),
+                                  result: formatShownQty(packed.qtyBase, lineIngredient, locale),
+                                  unit: shownUnit(lineIngredient),
+                                })}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-loss">{t('inventoryPicker.packInvalid')}</p>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* Owner request (same-day follow-up) — a supplier's invoice often writes
+                          its own product name that doesn't match the inventory item; this toggle
+                          lets the description diverge from the linked ingredient's name while
+                          keeping the link (and its ingredientQtyBase) intact underneath. Disabled
+                          until an ingredient IS linked — there's nothing to "differ" from yet. */}
+                      <label className="flex cursor-pointer items-center gap-2 sm:col-span-5">
+                        <input
+                          type="checkbox"
+                          checked={line.receiptNameDiffers}
+                          disabled={!line.ingredientId}
+                          onChange={() => {
+                            // BOTH directions set description = the linked ingredient's name:
+                            // turning ON prefills the free-text field with it (an edit, not a
+                            // blank); turning OFF restores the combobox to it (discarding the
+                            // independent receipt wording).
+                            updateLine(line.key, {
+                              receiptNameDiffers: !line.receiptNameDiffers,
+                              description: line.ingredientName,
+                            })
+                          }}
+                          className="size-4 accent-emerald disabled:cursor-not-allowed"
+                        />
+                        <span className="text-xs font-medium text-ink-2">
+                          {t('inventoryPicker.receiptNameDiffersLabel')}
+                        </span>
+                        <span className="text-xs text-ink-3">
+                          {t('inventoryPicker.receiptNameDiffersHint')}
+                        </span>
+                      </label>
+
+                      {line.receiptNameDiffers ? (
+                        <div className="sm:col-span-5">
+                          <IngredientComboboxField
+                            fieldId={`line-linked-ing-${line.key}`}
+                            label={t('ap.newBill.linkedIngredientLabel')}
+                            value={line.ingredientName}
+                            linkedIngredientId={line.ingredientId}
+                            ingredients={ingredients}
+                            ingredientsLoading={ingredientsQuery.isLoading}
+                            ingredientsError={ingredientsQuery.isError}
+                            outletChosen={outletChosen}
+                            open={openComboboxKey === `linked-${line.key}`}
+                            onOpen={() => setOpenComboboxKey(`linked-${line.key}`)}
+                            onClose={() =>
+                              setOpenComboboxKey((k) => (k === `linked-${line.key}` ? null : k))
+                            }
+                            onQueryChange={(text) => {
+                              updateLine(line.key, { ingredientName: text, ingredientId: '' })
+                              setOpenComboboxKey(`linked-${line.key}`)
+                            }}
+                            onSelect={(ingredient) => selectIngredient(line.key, ingredient)}
+                            onCreateNew={(typedName) => {
+                              setCreatePrefill(typedName)
+                              setCreatingForKey(line.key)
+                              setOpenComboboxKey(null)
+                            }}
+                          />
+                        </div>
+                      ) : null}
+
+                      <p className="text-xs text-ink-3 sm:col-span-5">
+                        {t('ap.newBill.ingredientLinkNote')}
+                      </p>
+                      {!parsed ? (
+                        <p className="text-xs text-ink-3 sm:col-span-5">
+                          {t('ap.newBill.ingredientLineIncomplete')}
+                        </p>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               )
@@ -571,17 +810,27 @@ export function NewBill() {
 // ---------------------------------------------------------------------------
 
 /**
- * The description field once "Persediaan" is ticked: a type-ahead combobox over the outlet's
- * ingredient catalog. Typing filters by name (case-insensitive substring); a match list picks
- * from the catalog, no match at all offers "+ Tambah bahan baru" prefilled with what was typed.
- * Selecting/creating closes the dropdown and resolves the line's linkage.
+ * A type-ahead combobox over the outlet's ingredient catalog. Two call sites: the MAIN description
+ * field once "Persediaan" is ticked (the common case — the combobox IS the description), and the
+ * compact "linked ingredient" field once "Nama di nota berbeda" is ALSO ON (the description then
+ * becomes an independent receipt-wording text input, and this combobox moves here instead, so the
+ * link stays visible/changeable). Fully decoupled from `DraftLine` — the caller supplies which
+ * text field `value` reflects and how to update it, so it never cares which of the two roles it's
+ * playing.
+ *
+ * Typing filters by name (case-insensitive substring); a match list picks from the catalog, no
+ * match at all offers "+ Tambah bahan baru" prefilled with what was typed. Selecting/creating
+ * closes the dropdown and resolves the ingredient link.
  *
  * Keeps focus on the input through a suggestion click via `onMouseDown` + `preventDefault` (not a
  * `setTimeout`/`relatedTarget` blur dance) — the click's `onClick` still fires normally on mouseup,
  * so a plain `onBlur` on the input is enough to close the dropdown on a genuine "click elsewhere".
  */
 function IngredientComboboxField({
-  line,
+  fieldId,
+  label,
+  value,
+  linkedIngredientId,
   ingredients,
   ingredientsLoading,
   ingredientsError,
@@ -593,7 +842,13 @@ function IngredientComboboxField({
   onSelect,
   onCreateNew,
 }: {
-  line: DraftLine
+  /** Unique per-field DOM id prefix (the line key, or `linked-<line key>` for the compact field). */
+  fieldId: string
+  label: string
+  /** The text this combobox reflects — either the line's `description` (main field, default mode)
+   *  or its `ingredientName` (compact field, "Nama di nota berbeda" mode). */
+  value: string
+  linkedIngredientId: string
   ingredients: Ingredient[]
   ingredientsLoading: boolean
   ingredientsError: boolean
@@ -606,16 +861,16 @@ function IngredientComboboxField({
   onCreateNew: (typedName: string) => void
 }) {
   const { t } = useTranslation()
-  const query = line.description.trim().toLowerCase()
+  const query = value.trim().toLowerCase()
   const matches = query ? ingredients.filter((i) => i.name.toLowerCase().includes(query)) : ingredients
-  const listboxId = `line-ing-listbox-${line.key}`
+  const listboxId = `${fieldId}-listbox`
 
   return (
-    <Field label={t('ap.newBill.ingredientLabel')} htmlFor={`line-ing-${line.key}`}>
+    <Field label={label} htmlFor={fieldId}>
       <div className="relative">
         <TextInput
-          id={`line-ing-${line.key}`}
-          value={line.description}
+          id={fieldId}
+          value={value}
           onFocus={onOpen}
           onBlur={onClose}
           onChange={(e) => onQueryChange(e.target.value)}
@@ -635,7 +890,7 @@ function IngredientComboboxField({
           <div
             id={listboxId}
             role="listbox"
-            aria-label={t('ap.newBill.ingredientLabel')}
+            aria-label={label}
             className="absolute left-0 top-[calc(100%+4px)] z-20 max-h-56 w-full overflow-y-auto rounded-xl border border-line bg-surface shadow-xl"
           >
             {ingredientsLoading ? (
@@ -652,7 +907,7 @@ function IngredientComboboxField({
                   key={i.id}
                   type="button"
                   role="option"
-                  aria-selected={i.id === line.ingredientId}
+                  aria-selected={i.id === linkedIngredientId}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onSelect(i)}
                   className="flex w-full items-center px-3.5 py-2.5 text-left text-sm text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald"
@@ -664,11 +919,11 @@ function IngredientComboboxField({
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onCreateNew(line.description.trim())}
+                onClick={() => onCreateNew(value.trim())}
                 className="flex w-full items-center gap-1.5 px-3.5 py-2.5 text-left text-sm font-semibold text-brand-700 transition-colors hover:bg-hover"
               >
                 <Plus className="size-3.5 shrink-0" aria-hidden="true" />
-                {t('ap.newBill.ingredientCreateHint', { name: line.description.trim() })}
+                {t('ap.newBill.ingredientCreateHint', { name: value.trim() })}
               </button>
             )}
           </div>

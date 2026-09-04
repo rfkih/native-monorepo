@@ -153,9 +153,30 @@ class IngredientTest {
   @Test
   void updateWithNullUnitCostLeavesCostUnchanged() {
     Ingredient costed = new Ingredient(BUSINESS_ID, "Patty", "pcs", 5_000L, "IDR");
-    costed.update("Patty Sapi", "pack", null, null, null);
+    // A rename only — the unit is deliberately NOT touched here: PATCH's "null cost means leave it
+    // alone" is what this pins, and a BASE-UNIT change resets the cost on purpose (below).
+    costed.update("Patty Sapi", null, null, null, null);
     assertThat(costed.getUnitCostMinor()).isEqualTo(5_000L);
     assertThat(costed.getCostCurrency()).isEqualTo("IDR");
+  }
+
+  /**
+   * The counterpart: a per-unit cost cannot survive its unit. "Rp 5.000 per pcs" is not "Rp 5.000
+   * per pack" (nor per gram), and the from-empty revaluation would price new stock at whatever was
+   * left behind — so a base-unit change clears the cost, its currency, and the pack size (also
+   * stored in base units). A priced receive re-establishes them.
+   */
+  @Test
+  void changingTheBaseUnitClearsThePerUnitFigures() {
+    Ingredient costed = new Ingredient(BUSINESS_ID, "Patty", "pcs", 5_000L, "IDR");
+    costed.setPackSize(20);
+
+    costed.update(null, "pack", null, null, null);
+
+    assertThat(costed.getUnit()).isEqualTo("pack");
+    assertThat(costed.getUnitCostMinor()).isNull();
+    assertThat(costed.getCostCurrency()).isNull();
+    assertThat(costed.getPackSize()).isNull();
   }
 
   @Test

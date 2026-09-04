@@ -1444,6 +1444,12 @@ export const en = {
     totalCostLabel: 'Total purchase price ({{currency}}, optional)',
     totalCostHint: 'The total you paid the supplier — the per-unit cost is worked out from the quantity.',
     totalNeedsQty: 'Enter the quantity bought above to work out the per-unit cost.',
+    // V46 — the remembered pack-size DEFAULT (optional): purchase lines pre-fill "Isi per
+    // kemasan" from it (fully editable per line — brands differ) but never write back to it.
+    packSizeLabel: 'Units per pack ({{unit}}, optional)',
+    packSizeHint: 'How many {{unit}} a typical pack holds — pre-fills "Units per pack" on purchase lines for this ingredient. Leave blank for no default.',
+    packSizePlaceholder: 'Optional',
+    packSizeInvalid: 'Enter a number greater than zero (or leave it blank).',
     removeAction: 'Remove item',
     removeConfirm: 'Tap again to remove — it disappears from lists and future counts.',
     receiveTitle: 'Receive — {{name}}',
@@ -1461,6 +1467,20 @@ export const en = {
     setSubmit: 'Set quantity',
     errorGeneric: 'Could not save. Please try again.',
     nameTaken: 'An item with this name already exists at this outlet.',
+    // V46 — 409 ingredient-unit-change-blocked: the BASE unit would change while stock/value
+    // remains (no ratio relates pcs to grams, so rewriting it would silently reinterpret the
+    // stock). Code review F2 — this is rendered instead of the server's own English `detail`
+    // string; the specifics (item name, stock qty, from/to unit) are interpolated from data the
+    // dialog already holds. This hint adds the fix-forward steps — exactly what an owner hits
+    // fixing an item mis-created as pcs that should be kg.
+    unitChangeBlockedGeneric:
+      '“{{name}}” still holds {{qty}} {{fromUnit}} of stock — the unit cannot change from {{fromUnit}} to {{toUnit}} until it’s zero.',
+    unitChangeBlockedHint: 'Set the stock to zero via a stock opname first, then change the unit and re-enter the quantity in the new unit.',
+    // F3 — a base-unit change (not a display-only relabel like g -> kg) clears the pack-size
+    // default and per-unit cost below: neither has a ratio to the new base, and the backend
+    // itself resets both on a genuine base swap.
+    baseUnitChangedNote:
+      'Changing the unit cleared the pack size and cost below — they don’t carry over and need to be entered again.',
   },
   /**
    * Owner request — the "+ Tambah bahan baru" inline ingredient picker/create mini-form shared by
@@ -1477,6 +1497,27 @@ export const en = {
     createError: 'Could not create this ingredient. Please try again.',
     matchesExisting: 'An ingredient named "{{name}}" already exists.',
     selectInstead: 'Use it instead',
+    // Owner request (same-day follow-up) — "Nama di nota berbeda": a supplier's invoice often
+    // writes its own product name, which rarely matches the inventory item name. Shared verbatim
+    // by NewBill.tsx (AP bill Persediaan lines) and NewCompanyExpense.tsx (INVENTORY lines) so the
+    // two purchase forms feel identical.
+    receiptNameDiffersLabel: 'Receipt name differs',
+    receiptNameDiffersHint: 'The invoice calls this something else — keep the ingredient link, but record what it actually says.',
+    receiptDescriptionLabel: 'Receipt name',
+    receiptDescriptionHint: 'What the supplier’s invoice actually says — sent as this line’s description.',
+    // Owner request (same-day follow-up) — "Isi per kemasan": a vendor sells by the PACK while
+    // inventory counts CONTENTS (e.g. a receipt says "TORTILLA 1 PCS" for a pack of 20 individual
+    // tortillas). Shared verbatim by both purchase forms.
+    packSizeLabel: 'Units per pack',
+    packSizeHint: 'Optional — fill in only when the receipt counts PACKS but stock should count what’s inside each one.',
+    // F4 (code review) — shown instead of `packSizeHint` while the field still holds the value it
+    // was PRE-FILLED with from the ingredient's remembered default, so clearing it (to switch to a
+    // per-unit purchase) is discoverable rather than looking like the operator's own typing.
+    packSizeDefaultHint: 'Pre-filled from this ingredient’s saved default — clear it if you’re buying by the unit.',
+    packSizePlaceholder: 'Optional',
+    qtyPacksLabel: 'Quantity (packs)',
+    packResultLine: '{{packs}} pack(s) × {{packSize}} = {{result}} {{unit}} into stock',
+    packInvalid: 'Units per pack and the pack count must both be whole numbers greater than zero.',
   },
   posShell: {
     /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */
@@ -1981,7 +2022,11 @@ export const en = {
         expenseNo: 'Expense no.',
         date: 'Date',
         glHint: 'Category',
-        lineQty: 'Qty (base unit)',
+        lineQty: 'Qty',
+        // Code review — resolved into the ingredient's usual DISPLAY unit (e.g. "1.5 kg") the way
+        // `BillDetail.tsx`'s `ingredientLinkLabel` does; this is only the fallback for a line whose
+        // ingredient no longer resolves (e.g. deactivated since the purchase).
+        lineQtyBaseUnit: '{{qty}} (base unit)',
       },
       voidDialog: {
         title: 'Void this expense?',
@@ -3536,6 +3581,9 @@ export const en = {
       ingredientCreateHint: 'No match — add "{{name}}" as a new ingredient',
       ingredientQtyLabel: 'Quantity ({{unit}})',
       ingredientTotalLabel: 'Total price',
+      // "Nama di nota berbeda" / "Isi per kemasan" copy lives under the shared `inventoryPicker.*`
+      // namespace (reused verbatim by the company-expense form's INVENTORY line rows).
+      linkedIngredientLabel: 'Linked ingredient',
       preview: 'Preview',
       subtotal: 'Subtotal',
       tax: 'Tax (11%)',

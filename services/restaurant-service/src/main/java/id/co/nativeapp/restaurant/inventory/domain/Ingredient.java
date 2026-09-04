@@ -63,6 +63,20 @@ public class Ingredient extends Auditable {
   @Nullable private String displayUnit;
 
   /**
+   * How many BASE units one purchase pack usually holds ("1 kemasan tortilla = 20 pcs"), or {@code
+   * null} when the item is simply bought in its own unit.
+   *
+   * <p>Deliberately a DEFAULT, not a rule: pack sizes differ per brand and per supplier, so a
+   * purchase line pre-fills from this and stays free to override it. Nothing derives stock from
+   * this column — the purchase sends the already-multiplied base quantity — so a stale or wrong
+   * value can never move stock on its own.
+   *
+   * <p>Distinct from {@link #displayUnit}, which is the fixed 1000x kg/g · liter/ml family (V37).
+   */
+  @Column(name = "pack_size")
+  @Nullable private Integer packSize;
+
+  /**
    * Current stock in the base {@link #unit}, ALWAYS tracked — unlike {@code MenuItem.stockQuantity}
    * (ADR 0046).
    */
@@ -149,6 +163,22 @@ public class Ingredient extends Auditable {
     this.displayUnit = displayUnit;
   }
 
+  /** The default pack contents in base units, or {@code null} when the item has no pack. */
+  @Nullable public Integer getPackSize() {
+    return packSize;
+  }
+
+  /**
+   * Sets the default pack contents. A non-positive value is rejected rather than silently
+   * normalised: it would pre-fill a purchase line with a quantity multiplier of zero or negative.
+   */
+  public void setPackSize(@Nullable Integer packSize) {
+    if (packSize != null && packSize <= 0) {
+      throw new IllegalArgumentException("packSize must be strictly positive, got: " + packSize);
+    }
+    this.packSize = packSize;
+  }
+
   public int getStockQty() {
     return stockQty;
   }
@@ -193,17 +223,71 @@ public class Ingredient extends Auditable {
    * @param costCurrency the ISO-4217 code paired with {@code unitCostMinor} (required when it is
    *     non-null)
    */
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public void update(
       @Nullable String name,
       @Nullable String unit,
       @Nullable String displayUnit,
       @Nullable Long unitCostMinor,
       @Nullable String costCurrency) {
+    update(name, unit, displayUnit, unitCostMinor, costCurrency, null, false);
+  }
+
+  /**
+   * As {@link #update}, plus the default pack size. {@code clearPackSize} distinguishes "leave it
+   * alone" (the PATCH omitted the field) from "remove the default" — a null value alone cannot say
+   * which was meant.
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public void update(
+      @Nullable String name,
+      @Nullable String unit,
+      @Nullable String displayUnit,
+      @Nullable Long unitCostMinor,
+      @Nullable String costCurrency,
+      @Nullable Integer packSize,
+      boolean clearPackSize) {
+    // Validate the unit change BEFORE any mutation, so a refusal cannot leave a half-applied edit
+    // even outside a transaction.
+    boolean baseUnitChanges = unit != null && !unit.equals(this.unit);
+    if (baseUnitChanges && (stockQty != 0 || stockValueMinor != 0)) {
+      throw new IngredientUnitChangeException(
+          "cannot change the unit of '"
+              + this.name
+              + "' from "
+              + this.unit
+              + " to "
+              + unit
+              + " while it still holds stock ("
+              + stockQty
+              + " "
+              + this.unit
+              + "): set the stock to zero first, then change the unit and re-enter the"
+              + " quantity in the new unit");
+    }
+
+    if (clearPackSize) {
+      setPackSize(null);
+    } else if (packSize != null) {
+      setPackSize(packSize);
+    }
     if (name != null) {
       this.name = name;
     }
-    if (unit != null) {
+    if (baseUnitChanges) {
+      // No ratio relates a count to a weight, so a base-unit change cannot be converted -- it
+      // would silently reinterpret stock_qty. Stock must already be zero (guarded above).
+      //
+      // Zero stock is NOT sufficient on its own: unit_cost_minor is a PER-BASE-UNIT figure that
+      // survives the zeroing (recomputeUnitCostCache is a no-op at qty 0, by design), and
+      // applyCostlessQuantity's from-empty branch re-values new stock at it. Left behind, "Rp
+      // 10.000 per pcs" silently becomes "per gram" and the next "Atur jumlah" of 2 kg books Rp
+      // 20.000.000 -- the exact 1000x poisoning this guard exists to prevent, one step later.
+      // pack_size is likewise stored in BASE units. So every per-unit figure hanging off the old
+      // unit is reset here and must be re-entered; a priced receive re-establishes the cost.
       this.unit = unit;
+      setUnitCost(null, null);
+      setPackSize(null);
     }
     if (displayUnit != null) {
       // A blank string is the caller's explicit "clear the display unit" (back to a base unit);

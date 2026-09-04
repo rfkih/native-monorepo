@@ -16,7 +16,7 @@ public interface CompanyExpenseLineRepository extends JpaRepository<CompanyExpen
       value =
           "SELECT id AS id, line_no AS line_no, ingredient_id AS ingredient_id,"
               + " ingredient_name AS ingredient_name, qty_base AS qty_base,"
-              + " value_minor AS value_minor"
+              + " value_minor AS value_minor, description AS description"
               + " FROM company_expense_line WHERE expense_id = :expenseId ORDER BY line_no",
       nativeQuery = true)
   List<CompanyExpenseLineView> findViewsByExpenseId(@Param("expenseId") UUID expenseId);

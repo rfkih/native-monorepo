@@ -6,7 +6,7 @@ import {
 } from './createIngredientDraft'
 
 function draft(overrides: Partial<NewIngredientDraft> = {}): NewIngredientDraft {
-  return { name: 'Tepung terigu', unitChoice: 'kg', ...overrides }
+  return { name: 'Tepung terigu', unitChoice: 'kg', packSizeInput: '', ...overrides }
 }
 
 describe('parseNewIngredientDraft', () => {
@@ -16,6 +16,7 @@ describe('parseNewIngredientDraft', () => {
       name: 'Tepung terigu',
       unit: 'g',
       displayUnit: 'kg',
+      packSize: null,
     })
   })
 
@@ -25,6 +26,7 @@ describe('parseNewIngredientDraft', () => {
       name: 'Tepung terigu',
       unit: 'pcs',
       displayUnit: null,
+      packSize: null,
     })
   })
 
@@ -40,6 +42,44 @@ describe('parseNewIngredientDraft', () => {
 
   it('rejects a blank name', () => {
     expect(parseNewIngredientDraft('outlet-1', draft({ name: '   ' }))).toBeNull()
+  })
+
+  describe('pack size ("Isi per kemasan")', () => {
+    it('is null (no default) when blank', () => {
+      expect(parseNewIngredientDraft('outlet-1', draft({ packSizeInput: '' }))?.packSize).toBeNull()
+    })
+
+    it('converts a SHOWN-unit whole number to BASE for a kg-display choice (25 kg -> 25000 g)', () => {
+      expect(
+        parseNewIngredientDraft('outlet-1', draft({ unitChoice: 'kg', packSizeInput: '25' }))
+          ?.packSize,
+      ).toBe(25_000)
+    })
+
+    it('accepts a decimal pack size for a kg-display choice (2.5 kg -> 2500 g)', () => {
+      expect(
+        parseNewIngredientDraft('outlet-1', draft({ unitChoice: 'kg', packSizeInput: '2.5' }))
+          ?.packSize,
+      ).toBe(2500)
+    })
+
+    it('accepts a whole pack size for a base-unit choice (pcs, e.g. tortilla pack of 20)', () => {
+      expect(
+        parseNewIngredientDraft('outlet-1', draft({ unitChoice: 'pcs', packSizeInput: '20' }))
+          ?.packSize,
+      ).toBe(20)
+    })
+
+    it('rejects a fractional pack size for a whole-count choice (pcs)', () => {
+      expect(
+        parseNewIngredientDraft('outlet-1', draft({ unitChoice: 'pcs', packSizeInput: '2.5' })),
+      ).toBeNull()
+    })
+
+    it('rejects a zero or negative pack size', () => {
+      expect(parseNewIngredientDraft('outlet-1', draft({ packSizeInput: '0' }))).toBeNull()
+      expect(parseNewIngredientDraft('outlet-1', draft({ packSizeInput: '-5' }))).toBeNull()
+    })
   })
 })
 

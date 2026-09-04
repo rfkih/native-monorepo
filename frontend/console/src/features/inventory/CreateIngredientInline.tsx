@@ -24,6 +24,7 @@ import { DialogOverlay } from '@/features/org/parts'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import type { CompanySession } from '@/lib/session'
+import { allowsFraction, unitSelectionToStored } from './lib/units'
 import { INGREDIENT_UNIT_GROUPS, useCreateIngredient, type Ingredient } from './ingredientApi'
 import { findExistingIngredientByName, parseNewIngredientDraft } from './lib/createIngredientDraft'
 
@@ -67,21 +68,36 @@ export function CreateIngredientInline({
   const create = useCreateIngredient(session)
   const [name, setName] = useState(initialName ?? '')
   const [unitChoice, setUnitChoice] = useState('pcs')
+  // V46 — the remembered pack-size DEFAULT (optional, SHOWN-unit relative to `unitChoice`) — see
+  // `IngredientManagement.tsx`'s identically-named field for the full doc.
+  const [packSizeInput, setPackSizeInput] = useState('')
   const [nameError, setNameError] = useState<string | null>(null)
+  const [packSizeError, setPackSizeError] = useState<string | null>(null)
 
   const conflict = isNameConflict(create.error)
   const matchingExisting = findExistingIngredientByName(name, existingIngredients)
+  const stored = unitSelectionToStored(unitChoice)
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const parsed = parseNewIngredientDraft(session.businessId, { name, unitChoice })
+    const parsed = parseNewIngredientDraft(session.businessId, { name, unitChoice, packSizeInput })
     if (!parsed) {
-      setNameError(t('inventory.nameRequired'))
+      if (!name.trim()) {
+        setNameError(t('inventory.nameRequired'))
+      } else {
+        setPackSizeError(t('inventory.packSizeInvalid'))
+      }
       return
     }
     setNameError(null)
+    setPackSizeError(null)
     create.mutate(
-      { name: parsed.name, unit: parsed.unit, displayUnit: parsed.displayUnit },
+      {
+        name: parsed.name,
+        unit: parsed.unit,
+        displayUnit: parsed.displayUnit,
+        packSize: parsed.packSize,
+      },
       {
         onSuccess: (created) => {
           if (created) onCreated(created)
@@ -143,6 +159,29 @@ export function CreateIngredientInline({
               </div>
             ))}
           </div>
+        </Field>
+
+        {/* V46 — the remembered pack-size DEFAULT (optional). Entered in the SHOWN unit picked
+            above and converted to BASE before sending; blank = no default. */}
+        <Field
+          label={t('inventory.packSizeLabel', { unit: unitChoice })}
+          htmlFor="new-ing-pack-size"
+          hint={t('inventory.packSizeHint', { unit: unitChoice })}
+          error={packSizeError ?? undefined}
+        >
+          <TextInput
+            id="new-ing-pack-size"
+            type="number"
+            min="0"
+            step={allowsFraction(stored) ? 'any' : '1'}
+            inputMode={allowsFraction(stored) ? 'decimal' : 'numeric'}
+            value={packSizeInput}
+            onChange={(e) => {
+              setPackSizeInput(e.target.value)
+              if (packSizeError) setPackSizeError(null)
+            }}
+            placeholder={t('inventory.packSizePlaceholder')}
+          />
         </Field>
 
         {matchingExisting && !create.isError ? (
