@@ -1,5 +1,38 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-04 — receipt wording, pack sizes, and a guard that was wrong one step later
+
+Three owner asks on the purchase surfaces, plus the bug the third one uncovered.
+
+**The receipt does not use your inventory's names.** A nota says "AYAM BROILER FROZEN 1KG"; the
+item is "Ayam fillet". Storing only the item name loses the tie to the paper an auditor holds;
+storing only the receipt text loses which stock moved. A line now keeps BOTH — AP bill lines
+already could (V59), company-expense lines gained `description` (V60). Company-expense normalises
+blank-or-equal-to-the-item-name to NULL so "differs" stays a real signal; the AP column is NOT NULL
+and cannot, which the ADR now states per-surface instead of claiming both behave alike.
+
+**The pack is not the unit.** "Di receipt 1 pcs padahal 1 pcs itu 20 tortilla." A line takes an
+optional "isi per kemasan" and multiplies to base units, with the result read back inline before
+submit — a mistyped 200 must be visible then, because inflated stock only surfaces at the next
+opname. `ingredient.pack_size` (V46) remembers the usual value as a DEFAULT, pre-filled and freely
+overridable ("kadang tiap merek isinya beda"), never written back, and nothing derives stock from
+it. Deliberately separate from `display_unit`'s fixed 1000x kg/g family.
+
+**"kg bisa desimal" already worked** — and checking it turned up two real defects. The pack-size
+input rejected decimals even for kg items. Worse: `Ingredient.update` rewrote the base `unit` with
+no conversion, so an owner fixing an item mis-created as `pcs` would reinterpret "10 pcs" as "10
+g". The first guard — refuse while stock remains — was **incomplete in exactly the dimension it
+existed to protect**: `unit_cost_minor` is a per-BASE-unit figure that survives the zeroing (the
+cache recompute is a no-op at qty 0) and the from-empty revaluation prices new stock at it. Walking
+the very path the 409 prescribed (opname to zero → switch pcs to kg → re-enter 2 kg) booked Rp
+20.000.000 of flour — the same 1000x poisoning, one step later, and my own test had encoded the
+wrong behaviour. A base-unit change now clears every per-unit figure hanging off the old unit
+(cost, currency, pack size); a priced receive re-establishes them.
+
+Lesson worth keeping: when a guard refuses an operation and tells the user how to proceed, walk
+that prescribed path end-to-end — the hole was not in what the guard blocked but in what it let
+through afterwards.
+
 ## 2026-09-04 — the per-merge image build was feeding nobody (ADR 0073)
 
 Chasing "why does the pipeline run twice per commit", the two-workflows-per-event part turned out
