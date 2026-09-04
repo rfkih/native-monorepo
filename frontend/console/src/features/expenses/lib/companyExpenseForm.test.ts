@@ -228,7 +228,13 @@ describe('parseInventoryLine', () => {
       expect(parsed?.qtyBase).toBe(200)
     })
 
-    it('rejects a fractional pack size', () => {
+    it('accepts a DECIMAL pack size for a kg/liter-display ingredient (E3 — decimals are not pack-size-exempt)', () => {
+      // 2 sacks, each holding 2.5 kg — the SAME fraction rule as any other kg quantity input.
+      const parsed = parseInventoryLine(lineDraft({ qtyInput: '2', packSizeInput: '2.5' }), kg, IDR)
+      expect(parsed?.qtyBase).toBe(2 * 2500)
+    })
+
+    it('rejects a fractional pack size for a whole-count ingredient (pcs)', () => {
       expect(parseInventoryLine(lineDraft({ qtyInput: '1', packSizeInput: '2.5' }), pcs, IDR)).toBeNull()
     })
 
@@ -264,10 +270,19 @@ describe('parsePackedQtyBase', () => {
     expect(parsePackedQtyBase('2', '5', kg)).toEqual({ packs: 2, qtyBase: 10_000 })
   })
 
-  it('rejects a non-integer, zero, or negative pack size', () => {
-    expect(parsePackedQtyBase('1', '1.5', kg)).toBeNull()
+  it('E3 — accepts a DECIMAL pack size for a kg/liter-display ingredient, same as any qty input', () => {
+    expect(parsePackedQtyBase('1', '2.5', kg)).toEqual({ packs: 1, qtyBase: 2500 })
+    expect(parsePackedQtyBase('3', '0.25', kg)).toEqual({ packs: 3, qtyBase: 750 })
+  })
+
+  it('rejects a fractional pack size for a whole-count ingredient', () => {
+    expect(parsePackedQtyBase('1', '1.5', pcs)).toBeNull()
+  })
+
+  it('rejects a zero or negative pack size', () => {
     expect(parsePackedQtyBase('1', '0', kg)).toBeNull()
     expect(parsePackedQtyBase('1', '-2', kg)).toBeNull()
+    expect(parsePackedQtyBase('1', '-2.5', kg)).toBeNull()
   })
 
   it('rejects a non-integer, zero, or negative pack count', () => {

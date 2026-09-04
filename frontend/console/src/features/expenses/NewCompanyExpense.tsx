@@ -39,6 +39,7 @@ import {
   allowsFraction,
   formatShownQty,
   shownUnit,
+  toDisplayQty,
   type UnitBearing,
 } from '@/features/inventory/lib/units'
 import type { Ingredient } from '@/features/inventory/ingredientApi'
@@ -81,6 +82,17 @@ function emptyLine(): InventoryLineDraft {
     receiptDescriptionInput: '',
     packSizeInput: '',
   }
+}
+
+/**
+ * V46 — the SHOWN-unit text a line's "Isi per kemasan" pre-fills to once `ingredient` is picked:
+ * `ingredient.packSize` (BASE units) divided by `shownFactor`, or `''` when the ingredient has no
+ * remembered default. Mirrors `IngredientManagement.tsx`'s `SetQtyDialog`'s
+ * `String(toDisplayQty(...))` idiom exactly (and `features/ap/NewBill.tsx`'s identically-named
+ * helper).
+ */
+function packSizeToShownInput(ingredient: Ingredient): string {
+  return ingredient.packSize != null ? String(toDisplayQty(ingredient.packSize, ingredient)) : ''
 }
 
 /**
@@ -502,11 +514,20 @@ function IngredientLineRows({
   function removeLine(key: string) {
     onChange(lines.length > 1 ? lines.filter((l) => l.key !== key) : lines)
   }
-  /** Selects `ingredient` on `key`'s line (from either a fresh create or the "select existing
-   *  instead" 409 recovery) and clears its qty — a different ingredient may carry a different
-   *  unit/factor. */
+  /**
+   * Selects `ingredient` on `key`'s line (from either a fresh create or the "select existing
+   * instead" 409 recovery) and clears its qty — a different ingredient may carry a different
+   * unit/factor. V46 — ALSO pre-fills "Isi per kemasan" from the ingredient's remembered
+   * `packSize` default (SHOWN unit; blank when there is none), replacing whatever was there for
+   * the PREVIOUS ingredient — the line stays fully editable afterwards and this never writes back.
+   */
   function selectIngredient(key: string, ingredient: Ingredient) {
-    updateLine(key, { ingredientId: ingredient.id, ingredientName: ingredient.name, qtyInput: '' })
+    updateLine(key, {
+      ingredientId: ingredient.id,
+      ingredientName: ingredient.name,
+      qtyInput: '',
+      packSizeInput: packSizeToShownInput(ingredient),
+    })
   }
 
   return (
@@ -534,6 +555,9 @@ function IngredientLineRows({
                     // A new ingredient may have a different unit/factor — the previously typed
                     // quantity would silently mean something else, so it is cleared on swap.
                     qtyInput: '',
+                    // V46 — pre-fills "Isi per kemasan" from the newly picked ingredient's
+                    // remembered default (blank when it has none); stays fully editable.
+                    packSizeInput: chosen ? packSizeToShownInput(chosen) : '',
                   })
                 }}
               >
@@ -627,9 +651,12 @@ function IngredientLineRows({
                 <TextInput
                   id={`ce-line-pack-${line.key}`}
                   type="number"
-                  min="1"
-                  step="1"
-                  inputMode="numeric"
+                  min="0"
+                  // E3 — the pack SIZE follows the ingredient's own display-unit rule, exactly
+                  // like the qty field above (decimal for kg/liter, e.g. "2.5" kg/pack; whole for
+                  // pcs/pack) — never forced whole regardless of unit.
+                  step={ingredient && allowsFraction(ingredient) ? 'any' : '1'}
+                  inputMode={ingredient && allowsFraction(ingredient) ? 'decimal' : 'numeric'}
                   value={line.packSizeInput}
                   onChange={(e) => updateLine(line.key, { packSizeInput: e.target.value })}
                   placeholder={t('inventoryPicker.packSizePlaceholder')}

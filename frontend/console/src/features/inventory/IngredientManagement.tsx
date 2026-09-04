@@ -358,6 +358,21 @@ function isIngredientInRecipe(err: unknown): boolean {
   )
 }
 
+/**
+ * The 409 `ingredient-unit-change-blocked` problem (V46) — changing the BASE unit refused while
+ * stock/value remains (no ratio relates pcs to grams, so rewriting it would silently reinterpret
+ * the stock and poison the moving-average cost). Changing only the DISPLAY label (g → g + kg)
+ * stays allowed — this only fires on a genuine base-unit swap (e.g. pcs → pack).
+ */
+function isUnitChangeBlocked(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.status === 409 &&
+    typeof err.problem?.type === 'string' &&
+    err.problem.type.includes('ingredient-unit-change-blocked')
+  )
+}
+
 function IngredientFormDialog({
   session,
   baseCurrency,
@@ -395,8 +410,17 @@ function IngredientFormDialog({
   const [costInput, setCostInput] = useState(initialCostInput)
   const [totalInput, setTotalInput] = useState('')
   const [initialQty, setInitialQty] = useState('0')
+  // V46 — the remembered pack-size DEFAULT (purchase lines pre-fill "Isi per kemasan" from this,
+  // fully editable per line — see ingredientApi.ts's `Ingredient.packSize` doc). Seeded from the
+  // per-SHOWN-unit value (edit), like the cost field above; interpreted against whatever unit is
+  // CURRENTLY picked at submit time (like `initialQty` — no live rescaling on a unit-picker change
+  // mid-edit).
+  const initialPackSizeInput =
+    ingredient?.packSize != null ? String(toDisplayQty(ingredient.packSize, ingredient)) : ''
+  const [packSizeInput, setPackSizeInput] = useState(initialPackSizeInput)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
+  const [packSizeError, setPackSizeError] = useState<string | null>(null)
 
   const busy = create.isPending || update.isPending || deactivate.isPending
   useBackDismiss(onClose, !busy)
@@ -421,10 +445,21 @@ function IngredientFormDialog({
     totalMinor != null && Number.isFinite(qtyDisplay) && qtyDisplay > 0
       ? Math.round(totalMinor / qtyDisplay)
       : null
+  // V46 — the pack-size default, parsed against the CURRENTLY picked unit (kg/liter accept
+  // decimals, exactly like `initialQty` — `parseShownQtyInput` both validates and rounds to a
+  // whole BASE integer). `null` while blank (valid — no default) vs. genuinely unparsable/≤0 while
+  // non-blank (invalid — `@Positive` server-side too).
+  const packSizeTrimmed = packSizeInput.trim()
+  const packSizeBase = packSizeTrimmed === '' ? null : parseShownQtyInput(packSizeInput, stored)
+  const packSizeInvalid = packSizeTrimmed !== '' && (packSizeBase == null || packSizeBase <= 0)
 
   function handleSubmit() {
     if (!name.trim()) {
       setNameError(t('inventory.nameRequired'))
+      return
+    }
+    if (packSizeInvalid) {
+      setPackSizeError(t('inventory.packSizeInvalid'))
       return
     }
     // In 'unit' mode the cost is typed per SHOWN unit (per kg); divide by the factor to store it per
@@ -440,6 +475,15 @@ function IngredientFormDialog({
           ? null
           : Math.round(parseDiscountInput(costInput, baseCurrency) / factor)
     if (ingredient) {
+      // V46 — same "untouched leaves it alone" idiom as cost above, but PATCH's pack size has a
+      // THIRD state (clear) the cost field doesn't: unchanged → omit both fields entirely; blank →
+      // `clearPackSize: true` (the only way to remove a stored default); a real value → `packSize`.
+      const packSizeUnchanged = packSizeTrimmed === initialPackSizeInput.trim()
+      const packSizePatch = packSizeUnchanged
+        ? {}
+        : packSizeTrimmed === ''
+          ? { clearPackSize: true }
+          : { packSize: packSizeBase ?? undefined }
       update.mutate(
         {
           id: ingredient.id,
@@ -451,6 +495,7 @@ function IngredientFormDialog({
           displayUnit: stored.displayUnit ?? '',
           unitCostMinor: costMinor,
           costCurrency: costMinor != null ? baseCurrency : null,
+          ...packSizePatch,
         },
         { onSuccess: onClose },
       )
@@ -463,6 +508,7 @@ function IngredientFormDialog({
           unitCostMinor: costMinor,
           costCurrency: costMinor != null ? baseCurrency : null,
           initialStockQty: baseQty ?? 0,
+          packSize: packSizeBase,
         },
         { onSuccess: onClose },
       )
@@ -605,15 +651,50 @@ function IngredientFormDialog({
           </Field>
         )}
 
+        {/* V46 — the remembered pack-size DEFAULT (optional). Entered in the SHOWN unit above
+            (e.g. kg) and converted to BASE before sending; blank = no default. Purchase lines
+            pre-fill "Isi per kemasan" from this but stay fully editable per line — brands differ,
+            so this never writes back from a line, only from this dialog. */}
+        <Field
+          label={t('inventory.packSizeLabel', { unit })}
+          htmlFor="ing-pack-size"
+          hint={t('inventory.packSizeHint')}
+          error={packSizeError ?? undefined}
+        >
+          <TextInput
+            id="ing-pack-size"
+            type="number"
+            min="0"
+            step={allowsFraction(stored) ? 'any' : '1'}
+            inputMode={allowsFraction(stored) ? 'decimal' : 'numeric'}
+            value={packSizeInput}
+            onChange={(e) => {
+              setPackSizeInput(e.target.value)
+              if (packSizeError) setPackSizeError(null)
+            }}
+            placeholder={t('inventory.packSizePlaceholder')}
+          />
+        </Field>
+
         {mutationError ? (
-          <p className="text-xs text-loss" role="alert">
-            {isNameConflict(mutationError)
-              ? t('inventory.nameTaken')
-              : isIngredientInRecipe(mutationError)
-                ? (mutationError instanceof ApiError && mutationError.problem?.detail) ||
-                  t('recipe.ingredientInRecipeError')
-                : t('inventory.errorGeneric')}
-          </p>
+          <div className="space-y-1" role="alert">
+            <p className="text-xs text-loss">
+              {isNameConflict(mutationError)
+                ? t('inventory.nameTaken')
+                : isIngredientInRecipe(mutationError)
+                  ? (mutationError instanceof ApiError && mutationError.problem?.detail) ||
+                    t('recipe.ingredientInRecipeError')
+                  : isUnitChangeBlocked(mutationError)
+                    ? (mutationError instanceof ApiError && mutationError.problem?.detail) ||
+                      t('inventory.unitChangeBlockedGeneric')
+                    : t('inventory.errorGeneric')}
+            </p>
+            {/* V46 — the fix-forward path: this is exactly what an owner hits fixing an item
+                mis-created as pcs that should be weighed in kg. */}
+            {isUnitChangeBlocked(mutationError) ? (
+              <p className="text-xs text-ink-3">{t('inventory.unitChangeBlockedHint')}</p>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="flex gap-2">

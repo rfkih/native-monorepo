@@ -8,8 +8,13 @@
  * Deliberately produces NO stock/cost fields — the purchase that follows (the company-expense line
  * or the bill line) values a brand-new, uncosted ingredient at ITS OWN price via the moving-average
  * machinery (ADR 0056); duplicating a cost here would pre-empt that.
+ *
+ * V46 — an OPTIONAL "Isi per kemasan" (pack-size default) field, entered in the SHOWN unit (kg/
+ * liter accept decimals, mirroring `parseShownQtyInput`'s own fraction rule) and converted to a
+ * whole BASE integer — the same remembered default `IngredientManagement.tsx`'s create/edit
+ * dialogs set, so a brand-new ingredient created mid-purchase can carry one from the start.
  */
-import { unitSelectionToStored } from './units'
+import { parseShownQtyInput, unitSelectionToStored } from './units'
 
 export interface NewIngredientDraft {
   name: string
@@ -17,6 +22,8 @@ export interface NewIngredientDraft {
    *  IngredientManagement create dialog offers, mapped to the stored base unit + display label via
    *  `unitSelectionToStored`. */
   unitChoice: string
+  /** Optional "Isi per kemasan" — SHOWN-unit text (relative to `unitChoice`); blank = no default. */
+  packSizeInput: string
 }
 
 export interface ParsedNewIngredient {
@@ -24,12 +31,16 @@ export interface ParsedNewIngredient {
   name: string
   unit: string
   displayUnit: string | null
+  /** BASE units, or `null` for no default (blank input). */
+  packSize: number | null
 }
 
 /**
  * Validates + parses the mini-form into `useCreateIngredient`'s input shape, or `null` when not
  * submittable: an outlet and a non-empty name are both required (mirrors
- * `IngredientFormDialog`'s create-mode `nameRequired` check exactly).
+ * `IngredientFormDialog`'s create-mode `nameRequired` check exactly), and a NON-BLANK pack-size
+ * input must resolve to a positive BASE integer (a typo blocks the whole submit rather than
+ * silently being dropped).
  */
 export function parseNewIngredientDraft(
   businessId: string,
@@ -38,7 +49,14 @@ export function parseNewIngredientDraft(
   const name = draft.name.trim()
   if (!businessId || !name) return null
   const stored = unitSelectionToStored(draft.unitChoice)
-  return { businessId, name, unit: stored.unit, displayUnit: stored.displayUnit }
+  const packSizeTrimmed = draft.packSizeInput.trim()
+  let packSize: number | null = null
+  if (packSizeTrimmed !== '') {
+    const parsedPackSize = parseShownQtyInput(packSizeTrimmed, stored)
+    if (parsedPackSize == null || parsedPackSize <= 0) return null
+    packSize = parsedPackSize
+  }
+  return { businessId, name, unit: stored.unit, displayUnit: stored.displayUnit, packSize }
 }
 
 /**

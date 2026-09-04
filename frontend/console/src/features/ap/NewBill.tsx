@@ -12,7 +12,13 @@ import { apiFetch } from '@/lib/api'
 import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
-import { allowsFraction, formatShownQty, shownUnit, type UnitBearing } from '@/features/inventory/lib/units'
+import {
+  allowsFraction,
+  formatShownQty,
+  shownUnit,
+  toDisplayQty,
+  type UnitBearing,
+} from '@/features/inventory/lib/units'
 import type { Ingredient } from '@/features/inventory/ingredientApi'
 import { CreateIngredientInline } from '@/features/inventory/CreateIngredientInline'
 import { parseInventoryLine, parsePackedQtyBase } from './lib/ingredientLink'
@@ -80,6 +86,16 @@ function newLine(): DraftLine {
     receiptNameDiffers: false,
     packSizeInput: '',
   }
+}
+
+/**
+ * V46 — the SHOWN-unit text a line's "Isi per kemasan" pre-fills to once `ingredient` is picked:
+ * `ingredient.packSize` (BASE units) divided by `shownFactor`, or `''` when the ingredient has no
+ * remembered default. Mirrors `SetQtyDialog`'s `String(toDisplayQty(...))` idiom
+ * (IngredientManagement.tsx) exactly.
+ */
+function packSizeToShownInput(ingredient: Ingredient): string {
+  return ingredient.packSize != null ? String(toDisplayQty(ingredient.packSize, ingredient)) : ''
 }
 
 /**
@@ -276,7 +292,10 @@ export function NewBill() {
    * "select existing instead" 409 recovery. `description` mirrors the ingredient's name UNLESS
    * "Nama di nota berbeda" is ON for this line, in which case the receipt wording is independent
    * and stays untouched (a functional update so it reads the line's CURRENT
-   * `receiptNameDiffers` rather than a value closed over at render time).
+   * `receiptNameDiffers` rather than a value closed over at render time). V46 — ALSO pre-fills
+   * "Isi per kemasan" from the ingredient's remembered `packSize` default (SHOWN unit; blank when
+   * there is none), replacing whatever was there for the PREVIOUS ingredient — the line stays
+   * fully editable afterwards and this never writes back to the ingredient.
    */
   function selectIngredient(key: string, ingredient: Ingredient) {
     setLines((prev) =>
@@ -287,6 +306,7 @@ export function NewBill() {
               ingredientId: ingredient.id,
               ingredientName: ingredient.name,
               description: l.receiptNameDiffers ? l.description : ingredient.name,
+              packSizeInput: packSizeToShownInput(ingredient),
             }
           : l,
       ),
@@ -589,9 +609,14 @@ export function NewBill() {
                           <TextInput
                             id={`line-pack-${line.key}`}
                             type="number"
-                            min="1"
-                            step="1"
-                            inputMode="numeric"
+                            min="0"
+                            // E3 — the pack SIZE follows the ingredient's own display-unit rule,
+                            // exactly like the qty field above (decimal for kg/liter, e.g. "2.5"
+                            // kg/pack; whole for pcs/pack) — never forced whole regardless of unit.
+                            step={lineIngredient && allowsFraction(lineIngredient) ? 'any' : '1'}
+                            inputMode={
+                              lineIngredient && allowsFraction(lineIngredient) ? 'decimal' : 'numeric'
+                            }
                             value={line.packSizeInput}
                             onChange={(e) => updateLine(line.key, { packSizeInput: e.target.value })}
                             placeholder={t('inventoryPicker.packSizePlaceholder')}

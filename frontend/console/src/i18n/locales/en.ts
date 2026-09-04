@@ -1444,6 +1444,12 @@ export const en = {
     totalCostLabel: 'Total purchase price ({{currency}}, optional)',
     totalCostHint: 'The total you paid the supplier — the per-unit cost is worked out from the quantity.',
     totalNeedsQty: 'Enter the quantity bought above to work out the per-unit cost.',
+    // V46 — the remembered pack-size DEFAULT (optional): purchase lines pre-fill "Isi per
+    // kemasan" from it (fully editable per line — brands differ) but never write back to it.
+    packSizeLabel: 'Units per pack ({{unit}}, optional)',
+    packSizeHint: 'How many {{unit}} a typical pack holds — pre-fills "Units per pack" on purchase lines for this ingredient. Leave blank for no default.',
+    packSizePlaceholder: 'Optional',
+    packSizeInvalid: 'Enter a number greater than zero (or leave it blank).',
     removeAction: 'Remove item',
     removeConfirm: 'Tap again to remove — it disappears from lists and future counts.',
     receiveTitle: 'Receive — {{name}}',
@@ -1461,6 +1467,12 @@ export const en = {
     setSubmit: 'Set quantity',
     errorGeneric: 'Could not save. Please try again.',
     nameTaken: 'An item with this name already exists at this outlet.',
+    // V46 — 409 ingredient-unit-change-blocked: the BASE unit would change while stock/value
+    // remains (no ratio relates pcs to grams, so rewriting it would silently reinterpret the
+    // stock). The server's own `detail` names the units/quantity; this hint adds the fix-forward
+    // steps — exactly what an owner hits fixing an item mis-created as pcs that should be kg.
+    unitChangeBlockedGeneric: 'The unit cannot be changed while this item still holds stock.',
+    unitChangeBlockedHint: 'Set the stock to zero via a stock opname first, then change the unit and re-enter the quantity in the new unit.',
   },
   /**
    * Owner request — the "+ Tambah bahan baru" inline ingredient picker/create mini-form shared by

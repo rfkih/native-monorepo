@@ -83,8 +83,12 @@ export interface InventoryLineDraft {
    * Owner request — a vendor sells by the PACK while inventory counts CONTENTS (e.g. a receipt
    * says "TORTILLA 1 PCS" for a pack of 20 individual tortillas). Optional; BLANK (default) is
    * today's behaviour unchanged — `qtyInput` is a plain display-unit quantity. NON-BLANK means
-   * `qtyInput` now counts PACKS, and this is how many of the ingredient's DISPLAY unit are in ONE
-   * pack — both must be positive WHOLE numbers (no fractional pack counts/sizes). Deliberately
+   * `qtyInput` now counts PACKS (always a whole number — you don't buy half a pack), and this is
+   * how many of the ingredient's DISPLAY unit are in ONE pack — SAME fraction rule as any other
+   * quantity (decimal allowed for kg/liter, e.g. "2.5" kg/pack; whole for pcs/pack), converted to a
+   * whole BASE integer exactly like `qtyInput` itself. Also PRE-FILLED (V46) from the selected
+   * ingredient's remembered `packSize` default when one exists — see `NewCompanyExpense.tsx`'s
+   * `packSizeToShownInput` — but stays fully editable per line and never writes back. Deliberately
    * separate from `features/inventory/lib/units.ts`'s `shownFactor`/`DISPLAY_OVER_BASE` (a fixed
    * 1000× kg/g, liter/ml family) — a pack size is an arbitrary per-product number; see
    * `parsePackedQtyBase`.
@@ -116,9 +120,9 @@ export interface PackedQty {
 /**
  * Resolves `qtyInput` (+ optional `packSizeInput`) to the BASE integer quantity — see
  * `InventoryLineDraft.packSizeInput`'s doc for the pack semantics. `null` when either input fails
- * to resolve to a positive whole number: an under/mistyped pack size or count BLOCKS the line
- * rather than silently falling back to "no pack" or a wrong count (an inflated pack size silently
- * inflates stock, and only a stock opname would catch it later — this must fail loudly instead).
+ * to resolve: an under/mistyped pack size or count BLOCKS the line rather than silently falling
+ * back to "no pack" or a wrong count (an inflated pack size silently inflates stock, and only a
+ * stock opname would catch it later — this must fail loudly instead).
  */
 export function parsePackedQtyBase(
   qtyInput: string,
@@ -131,15 +135,14 @@ export function parsePackedQtyBase(
     if (qtyBase == null || qtyBase <= 0) return null
     return { packs: null, qtyBase }
   }
-  const packSize = Number(packSizeTrimmed)
-  if (!Number.isInteger(packSize) || packSize <= 0) return null
-  const packs = Number(qtyInput.trim())
-  if (!Number.isInteger(packs) || packs <= 0) return null
-  // The per-pack content, in the ingredient's DISPLAY unit, converted to base via the SAME
-  // shownFactor machinery a plain quantity would use (packSize is always a whole number, so this
-  // never trips the base-unit fraction rejection either way).
+  // Pack SIZE follows the ingredient's own display-unit rules — decimal allowed for kg/liter
+  // (e.g. "2.5" kg per pack), whole for pcs/pack — exactly like any other quantity input;
+  // `parseShownQtyInput` both validates that AND rounds it to a whole BASE integer.
   const perPackBase = parseShownQtyInput(packSizeTrimmed, ingredient)
   if (perPackBase == null || perPackBase <= 0) return null
+  // Pack COUNT (how many packs) is always a whole number — you don't buy half a pack.
+  const packs = Number(qtyInput.trim())
+  if (!Number.isInteger(packs) || packs <= 0) return null
   const qtyBase = packs * perPackBase
   if (!Number.isInteger(qtyBase) || qtyBase <= 0) return null
   return { packs, qtyBase }
