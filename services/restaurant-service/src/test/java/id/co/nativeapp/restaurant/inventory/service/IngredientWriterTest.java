@@ -149,9 +149,17 @@ class IngredientWriterTest {
         .hasMessageContaining("still holds stock");
   }
 
+  /**
+   * Review finding M1 — zero stock is NOT enough on its own. {@code unit_cost_minor} is a
+   * PER-BASE-UNIT figure that survives the zeroing (the cache recompute is a no-op at qty 0), and
+   * the from-empty revaluation prices new stock at it. Left behind, "Rp 50 per pcs" would silently
+   * become "per gram" and the next 2 kg would book 1000x its real value. A base-unit change must
+   * therefore reset every per-unit figure hanging off the old unit.
+   */
   @Test
-  void changingTheBaseUnitIsAllowedOnceStockIsZero() {
-    Ingredient ingredient = tracked(0);
+  void changingTheBaseUnitIsAllowedOnceStockIsZeroAndResetsThePerUnitFigures() {
+    Ingredient ingredient = tracked(0); // "Patty", pcs, Rp 50/pcs
+    ingredient.setPackSize(20);
     when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
     when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -165,6 +173,52 @@ class IngredientWriterTest {
     assertThat(response.displayUnit())
         .as("kg display over a g base — decimals now parse")
         .isEqualTo("kg");
+    assertThat(response.unitCostMinor()).as("a per-pcs cost cannot mean per-gram").isNull();
+    assertThat(response.costCurrency()).isNull();
+    assertThat(response.packSize()).as("pack size is stored in BASE units").isNull();
+
+    // The poisoning path itself: stocking up after the switch must NOT revalue at the old cost.
+    ingredient.setStock(2_000); // 2 kg
+    assertThat(ingredient.getStockValueMinor())
+        .as("uncosted after the unit change — a priced receive re-establishes the cost")
+        .isZero();
+  }
+
+  @Test
+  void aPatchSetsClearsOrLeavesThePackSizeAlone() {
+    Ingredient ingredient = tracked(5);
+    ingredient.setPackSize(20);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    assertThat(
+            asTenant(
+                    () ->
+                        writer.update(
+                            ingredient.getId(),
+                            new UpdateIngredientRequest("Patty Sapi", null, null, null, null)))
+                .packSize())
+        .as("both fields absent -> untouched")
+        .isEqualTo(20);
+
+    assertThat(
+            asTenant(
+                    () ->
+                        writer.update(
+                            ingredient.getId(),
+                            new UpdateIngredientRequest(null, null, null, null, null, 12, null)))
+                .packSize())
+        .isEqualTo(12);
+
+    assertThat(
+            asTenant(
+                    () ->
+                        writer.update(
+                            ingredient.getId(),
+                            new UpdateIngredientRequest(null, null, null, null, null, null, true)))
+                .packSize())
+        .as("clearPackSize -> removed")
+        .isNull();
   }
 
   /** Only the DISPLAY label changing is always safe — the base quantity is untouched by it. */

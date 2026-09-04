@@ -104,6 +104,64 @@ class CompanyExpenseIdempotencyTest extends PostgresRlsTestBase {
     assertThat(countAsAdmin("company_expense", tenant)).isEqualTo(1L);
   }
 
+  /**
+   * Review finding W8 — the normalisation must make a HARMLESS retry replay, not conflict. A client
+   * that sends the receipt name equal to the ingredient's name (or blank) is saying "no different
+   * wording", which stores as null; the same submit retried under the same key must return the SAME
+   * expense, never a 409.
+   */
+  @Test
+  void aRetryWhoseReceiptNameNormalisesToTheSameValueStillReplays() throws Exception {
+    String tenant = UUID.randomUUID().toString();
+    UUID outlet = seedOutlet(tenant);
+    String key = "normalise-" + UUID.randomUUID();
+    UUID ingredient = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
+
+    RecordCompanyExpenseRequest omitted =
+        new RecordCompanyExpenseRequest(
+            "INVENTORY",
+            outlet,
+            null,
+            "Belanja",
+            null,
+            "IDR",
+            OCCURRED,
+            List.of(
+                new RecordCompanyExpenseRequest.LineRequest(
+                    ingredient, "Gula pasir", 1_000L, 40_000L)));
+    RecordCompanyExpenseRequest equalName =
+        new RecordCompanyExpenseRequest(
+            "INVENTORY",
+            outlet,
+            null,
+            "Belanja",
+            null,
+            "IDR",
+            OCCURRED,
+            List.of(
+                new RecordCompanyExpenseRequest.LineRequest(
+                    ingredient, "Gula pasir", 1_000L, 40_000L, "Gula pasir")));
+    RecordCompanyExpenseRequest blank =
+        new RecordCompanyExpenseRequest(
+            "INVENTORY",
+            outlet,
+            null,
+            "Belanja",
+            null,
+            "IDR",
+            OCCURRED,
+            List.of(
+                new RecordCompanyExpenseRequest.LineRequest(
+                    ingredient, "Gula pasir", 1_000L, 40_000L, "   ")));
+
+    UUID first = TenantContext.callAs(tenant, ACTOR, () -> service.record(omitted, key));
+    assertThat(TenantContext.callAs(tenant, ACTOR, () -> service.record(equalName, key)))
+        .isEqualTo(first);
+    assertThat(TenantContext.callAs(tenant, ACTOR, () -> service.record(blank, key)))
+        .isEqualTo(first);
+    assertThat(countAsAdmin("company_expense", tenant)).isEqualTo(1L);
+  }
+
   @Test
   void twoSimultaneousSameKeySubmitsRecordExactlyOnce() throws Exception {
     String tenant = UUID.randomUUID().toString();

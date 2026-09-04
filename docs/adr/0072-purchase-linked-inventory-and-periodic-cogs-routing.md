@@ -93,9 +93,12 @@ line keeps BOTH**, and the two names are never conflated:
 - **Company-expense lines** gain `company_expense_line.description` (V60, nullable, additive) for
   parity.
 
-Normalisation (server-side, both paths): blank, or a value equal to the ingredient's name, stores
-as `NULL` — so "the receipt says something different" stays a real signal rather than a duplicated
-string. The wording is finance-side bookkeeping only: **stock is keyed on `ingredient_id`**, never
+Normalisation differs by surface, and deliberately so. **Company-expense lines** normalise
+server-side: blank, or a value equal to the ingredient's name, stores as `NULL`, so "the receipt
+says something different" is a real signal rather than a duplicated string. **AP bill lines cannot**
+— `bill_line.description` is `NOT NULL` (V27) and is the line's own printed text, which every bill
+must carry whether or not it is inventory-linked; there the console decides what to send and a
+reader compares it against `ingredient_name` to detect a difference. The wording is finance-side bookkeeping only: **stock is keyed on `ingredient_id`**, never
 on either name, so `InventoryPurchaseRecorded` is unchanged and no consumer needs to know.
 
 The console also renames the Indonesian surface "Inventaris" → **"Persediaan"**, matching the

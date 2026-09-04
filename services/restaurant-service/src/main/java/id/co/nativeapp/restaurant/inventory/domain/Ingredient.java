@@ -247,6 +247,25 @@ public class Ingredient extends Auditable {
       @Nullable String costCurrency,
       @Nullable Integer packSize,
       boolean clearPackSize) {
+    // Validate the unit change BEFORE any mutation, so a refusal cannot leave a half-applied edit
+    // even outside a transaction.
+    boolean baseUnitChanges = unit != null && !unit.equals(this.unit);
+    if (baseUnitChanges && (stockQty != 0 || stockValueMinor != 0)) {
+      throw new IngredientUnitChangeException(
+          "cannot change the unit of '"
+              + this.name
+              + "' from "
+              + this.unit
+              + " to "
+              + unit
+              + " while it still holds stock ("
+              + stockQty
+              + " "
+              + this.unit
+              + "): set the stock to zero first, then change the unit and re-enter the"
+              + " quantity in the new unit");
+    }
+
     if (clearPackSize) {
       setPackSize(null);
     } else if (packSize != null) {
@@ -255,27 +274,20 @@ public class Ingredient extends Auditable {
     if (name != null) {
       this.name = name;
     }
-    if (unit != null && !unit.equals(this.unit)) {
-      // No ratio relates a count to a weight, so a base-unit change on a stocked item cannot be
-      // converted -- it would silently reinterpret stock_qty and the moving-average value built
-      // from it. Refuse while anything is on hand; the owner zeroes it (opname), switches, then
-      // re-enters the quantity in the new unit.
-      if (stockQty != 0 || stockValueMinor != 0) {
-        throw new IngredientUnitChangeException(
-            "cannot change the unit of '"
-                + this.name
-                + "' from "
-                + this.unit
-                + " to "
-                + unit
-                + " while it still holds stock ("
-                + stockQty
-                + " "
-                + this.unit
-                + "): set the stock to zero first, then change the unit and re-enter the"
-                + " quantity in the new unit");
-      }
+    if (baseUnitChanges) {
+      // No ratio relates a count to a weight, so a base-unit change cannot be converted -- it
+      // would silently reinterpret stock_qty. Stock must already be zero (guarded above).
+      //
+      // Zero stock is NOT sufficient on its own: unit_cost_minor is a PER-BASE-UNIT figure that
+      // survives the zeroing (recomputeUnitCostCache is a no-op at qty 0, by design), and
+      // applyCostlessQuantity's from-empty branch re-values new stock at it. Left behind, "Rp
+      // 10.000 per pcs" silently becomes "per gram" and the next "Atur jumlah" of 2 kg books Rp
+      // 20.000.000 -- the exact 1000x poisoning this guard exists to prevent, one step later.
+      // pack_size is likewise stored in BASE units. So every per-unit figure hanging off the old
+      // unit is reset here and must be re-entered; a priced receive re-establishes the cost.
       this.unit = unit;
+      setUnitCost(null, null);
+      setPackSize(null);
     }
     if (displayUnit != null) {
       // A blank string is the caller's explicit "clear the display unit" (back to a base unit);

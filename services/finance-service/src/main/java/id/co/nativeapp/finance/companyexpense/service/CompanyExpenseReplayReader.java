@@ -2,10 +2,12 @@ package id.co.nativeapp.finance.companyexpense.service;
 
 import id.co.nativeapp.finance.companyexpense.domain.CompanyExpense;
 import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseIdempotencyConflictException;
+import id.co.nativeapp.finance.companyexpense.domain.CompanyExpenseLine;
 import id.co.nativeapp.finance.companyexpense.projection.CompanyExpenseLineView;
 import id.co.nativeapp.finance.companyexpense.repository.CompanyExpenseLineRepository;
 import id.co.nativeapp.finance.companyexpense.repository.CompanyExpenseRepository;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -45,15 +47,6 @@ public class CompanyExpenseReplayReader {
         .map(existing -> requireSamePayload(existing, command));
   }
 
-  /** Mirrors {@code CompanyExpenseLine}'s normalisation so the comparison sees the stored shape. */
-  private static String normalizedDescription(String description, String ingredientName) {
-    if (description == null) {
-      return null;
-    }
-    String trimmed = description.strip();
-    return trimmed.isEmpty() || trimmed.equals(ingredientName) ? null : trimmed;
-  }
-
   private UUID requireSamePayload(
       CompanyExpense existing, CompanyExpenseWriter.RecordCommand command) {
     boolean same =
@@ -86,8 +79,9 @@ public class CompanyExpenseReplayReader {
           // The receipt wording is part of the payload: an edited nota name under the same key is
           // a DIFFERENT submit, not a replay (compared against the same normalisation the entity
           // applies, so blank and "equals the ingredient name" both read as null).
-          || !java.util.Objects.equals(
-              s.getDescription(), normalizedDescription(c.description(), c.ingredientName()))) {
+          || !Objects.equals(
+              s.getDescription(),
+              CompanyExpenseLine.normalizeDescription(c.description(), c.ingredientName()))) {
         return false;
       }
     }

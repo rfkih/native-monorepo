@@ -114,7 +114,7 @@ public class CompanyExpenseLine extends Auditable {
    * input and a value equal to the ingredient name both normalise to {@code null}, so "differs"
    * stays a real signal rather than a duplicated string.
    */
-  private static String normalizeDescription(String description, String ingredientName) {
+  public static String normalizeDescription(String description, String ingredientName) {
     if (description == null) {
       return null;
     }
