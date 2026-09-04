@@ -132,6 +132,27 @@ up_manifest() { # up_manifest <images.yml> — (re)converge onto the given pin f
 CONNECT_CTR="native-prod-connect"
 connect_get()  { docker exec "$CONNECT_CTR" curl -s -m 10         "localhost:8083/$1" 2>/dev/null; }
 connect_post() { docker exec "$CONNECT_CTR" curl -s -m 10 -X POST "localhost:8083/$1" 2>/dev/null; }
+connect_put()  { docker exec "$CONNECT_CTR" curl -fsS -m 15 -X PUT -H 'Content-Type: application/json' -d "$2" "localhost:8083/$1" >/dev/null 2>&1; }
+
+# Register EVERY connector from the release's synced debezium/*.json — idempotently (PUT
+# /connectors/{name}/config creates a missing connector and updates an existing one). This is the
+# missing half of recover_cdc: recovery only restarts ALREADY-REGISTERED connectors, which is
+# exactly how finance-service ran without a connector in every environment for months (its outbox
+# rows relayed nowhere — ADR 0071 §A). A new producer's connector now goes live BY DEPLOYING it;
+# no hand registration, no silent gap. Best-effort per file: one bad json never blocks the rest.
+register_connectors() {
+  local f name cfg
+  for f in debezium/*.json; do
+    [ -e "$f" ] || continue
+    name=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['name'])" "$f" 2>/dev/null)       || { log "WARN: cdc: cannot parse $f — skipping"; continue; }
+    cfg=$(python3 -c "import json,sys;print(json.dumps(json.load(open(sys.argv[1]))['config']))" "$f" 2>/dev/null)       || { log "WARN: cdc: cannot parse $f config — skipping"; continue; }
+    if connect_put "connectors/$name/config" "$cfg"; then
+      log "cdc: registered/updated connector $name"
+    else
+      log "WARN: cdc: failed to register $name — register manually (RUNBOOK: local dev section 3 idiom)"
+    fi
+  done
+}
 cdc_stopped_connectors() { # names of connectors whose task state is not RUNNING; empty ⇒ all good
   local list c
   list=$(connect_get connectors | tr -d '[]"' | tr ',' ' ') || return 0
@@ -197,6 +218,7 @@ if [ -z "${DEPLOY_FAILED:-}" ]; then
     # every Debezium task FAILED while the app tier is green (2026-08-16 outage). Recover it here so a
     # deploy never silently kills the event pipeline. Best-effort: the app is healthy, so a CDC hiccup
     # does not fail/rollback the deploy — it logs loudly and ops-watch keeps alerting until resolved.
+    register_connectors
     recover_cdc || log "WARN: post-deploy CDC recovery incomplete — see ops-watch (deploy still recorded; app tier is healthy)"
     echo "$RELEASE" > LAST_GOOD
     cp "$MANIFEST" releases/LAST_GOOD.images.yml
