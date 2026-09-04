@@ -1,0 +1,121 @@
+package id.co.nativeapp.finance.gl.service;
+
+import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.events.OutboxWriter;
+import id.co.nativeapp.finance.gl.domain.JournalEntry;
+import id.co.nativeapp.finance.gl.domain.JournalLine;
+import id.co.nativeapp.finance.gl.messaging.JournalEntryPostedSchema;
+import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
+import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import java.time.Clock;
+import java.util.Objects;
+import java.util.UUID;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * The single sanctioned way to persist a {@link JournalEntry} — the GL's one door.
+ *
+ * <p><strong>Why this exists.</strong> Before it, ~29 call sites across 28 writer classes each
+ * repeated the identical five-line incantation: stamp the tenant on the entry, {@code saveAndFlush}
+ * it (forcing the FK target to the DB), then stamp and save every line. {@link
+ * JournalPostingService} centralised how an entry is *built*; nothing centralised how it is
+ * *written*. That is the {@link <a
+ * href="../../../../../../../../../../docs/adr/0065-gl-derived-dashboard-pnl.md">ADR 0065</a>}
+ * shape one level down — "every new posting writer must remember to also …" — and it is the reason
+ * a per-entry GL event could not be emitted reliably: the emit would have to be copy-pasted 29
+ * times, and the 30th writer would forget.
+ *
+ * <p><strong>The guarantee.</strong> An ArchUnit rule ({@code
+ * onlyTheGeneralLedgerWriterPersistsJournals} in {@code config/LayeredArchitectureTest}) forbids
+ * any other class from calling a WRITE method ({@code save*}/{@code delete*}/{@code flush}) on
+ * {@link JournalEntryRepository} / {@link JournalLineRepository}. It is deliberately a write-side
+ * rule, not a no-dependency rule: {@code GlTrialBalanceReader}, {@code BalanceSheetReader}, {@code
+ * RegisterCloseWriter}, {@code ReversalPostingWriter}, {@code PayrollLiabilityWriter} and {@code
+ * PayrollSettlementWriter} all legitimately READ those repositories (prior-entry lookups for
+ * supersession, trial-balance aggregation), and forbidding that would be wrong. So "a posting
+ * writer that does not go through this door" is not merely detected — it does not survive the test
+ * gate. That structural guarantee, not a numeric assertion, is what makes the {@code
+ * JournalEntryPosted} emission below (ADR 0071 P1) complete by construction: every persisted entry
+ * emits exactly one event, because there is exactly one place an entry can be persisted.
+ *
+ * <p><strong>Transaction.</strong> {@link Propagation#MANDATORY} — this never opens its own
+ * transaction; it joins the calling {@code *Writer}'s, which is where {@code RlsAutoApplyAspect}
+ * has bound the tenant GUC. Calling it outside a transaction is a programming error and fails
+ * loudly rather than writing rows with an unbound tenant (which FORCE RLS would reject anyway, but
+ * late and obscurely).
+ */
+@Component
+public class GeneralLedgerWriter {
+
+  private final JournalEntryRepository journalEntryRepository;
+  private final JournalLineRepository journalLineRepository;
+  private final OutboxWriter outboxWriter;
+  private final Clock clock;
+
+  public GeneralLedgerWriter(
+      JournalEntryRepository journalEntryRepository,
+      JournalLineRepository journalLineRepository,
+      OutboxWriter outboxWriter,
+      Clock clock) {
+    this.journalEntryRepository =
+        Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
+    this.journalLineRepository =
+        Objects.requireNonNull(journalLineRepository, "journalLineRepository");
+    this.outboxWriter = Objects.requireNonNull(outboxWriter, "outboxWriter");
+    this.clock = Objects.requireNonNull(clock, "clock");
+  }
+
+  /**
+   * Stamps the tenant onto the entry and its lines, persists both, and emits {@code
+   * JournalEntryPosted} — all in the caller's transaction.
+   *
+   * <p>The entry is {@code saveAndFlush}ed before the lines so the FK {@code journal_line.entry_id
+   * → journal_entry.id} has its target in the database — {@link JournalEntry#getLines()} is a
+   * {@code @Transient} list assembled in memory by {@link JournalPostingService}, so the lines are
+   * not cascaded and must be saved explicitly.
+   *
+   * <p>The outbox row (rule 3) rides the same commit as the entry: either both exist or neither
+   * does, which is what lets {@code GlOutboxCompletenessTest} assert entry-count == event-count as
+   * an invariant rather than a hope. One entry, one event — a supersession (ADR 0064) posts its
+   * contra and its re-post as two entries and therefore two events, each carrying its own {@code
+   * posting_role}.
+   *
+   * @param entry the balanced entry to persist (typically from {@link JournalPostingService})
+   * @param companyId the bound tenant, stamped on the entry and every line
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void post(JournalEntry entry, String companyId) {
+    Objects.requireNonNull(entry, "entry");
+    Objects.requireNonNull(companyId, "companyId");
+
+    // outbox.company_id is a UUID column (V10) while the tenant rides as a string everywhere
+    // else, so the parse is unavoidable — fail with a message that names the money path rather
+    // than a bare "Invalid UUID string" from the middle of every posting flow.
+    final UUID tenantUuid;
+    try {
+      tenantUuid = UUID.fromString(companyId);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalStateException(
+          "GL posting requires a UUID tenant for the JournalEntryPosted outbox row, got: "
+              + companyId,
+          e);
+    }
+
+    entry.setCompanyId(companyId);
+    journalEntryRepository.saveAndFlush(entry);
+    for (JournalLine line : entry.getLines()) {
+      line.setCompanyId(companyId);
+      journalLineRepository.save(line);
+    }
+    outboxWriter.write(
+        JournalEntryPostedSchema.AGGREGATE_TYPE,
+        companyId,
+        JournalEntryPostedSchema.EVENT_TYPE,
+        AvroSerde.serialize(JournalEntryPostedSchema.toRecord(entry, companyId)),
+        null,
+        tenantUuid,
+        clock.instant());
+  }
+}

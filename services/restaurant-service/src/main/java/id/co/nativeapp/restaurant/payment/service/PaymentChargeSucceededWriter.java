@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.payment.service;
 import id.co.nativeapp.errorinbox.ErrorInboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.bill.service.BillPaymentCaptureWriter;
 import id.co.nativeapp.restaurant.payment.domain.Payment;
 import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeSucceededEvent;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
@@ -11,6 +12,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +48,20 @@ import org.springframework.transaction.annotation.Transactional;
  * already moved at the PSP), the failure is parked for a human instead of propagated: because
  * capture runs in its OWN {@code REQUIRES_NEW} transaction, its rollback is physically independent
  * of this method's transaction, which stays healthy and can still record the park + processed-mark.
+ *
+ * <p><strong>V38 — bill dispatch.</strong> When the resolved payment is bill-originated ({@link
+ * Payment#isForBill()}), capture dispatches to {@link BillPaymentCaptureWriter#capture} instead —
+ * payment-service and every other step above (event shape, dedupe, amount/currency verify, park-
+ * don't-drop) are UNCHANGED; only the final capture call differs. An order-originated payment is
+ * UNAFFECTED — it still captures via {@code PaymentCaptureWriter}, through the EXACT SAME {@code
+ * catch} clause as before this change (byte-for-byte; see {@link #handle}).
+ *
+ * <p><strong>HIGH fix (code review) — bill capture also parks on a sale-key collision.</strong> The
+ * BILL dispatch's {@code catch} ALSO covers {@link DataIntegrityViolationException} (the order
+ * dispatch's does not, unchanged): a bill's per-payment sale idempotency key (see {@code
+ * BillPaymentCaptureWriter}) makes a collision here rare, but a residual one (e.g. a duplicate
+ * concurrent capture call racing the DB-level UNIQUE constraint) must PARK — real money has already
+ * moved at the gateway — rather than propagate and poison-loop the Kafka redelivery forever.
  */
 @Component
 public class PaymentChargeSucceededWriter {
@@ -65,16 +81,19 @@ public class PaymentChargeSucceededWriter {
   private final ProcessedEventStore processedEvents;
   private final PaymentRepository paymentRepository;
   private final PaymentCaptureWriter captureWriter;
+  private final BillPaymentCaptureWriter billCaptureWriter;
   private final ErrorInboxWriter errorInboxWriter;
 
   public PaymentChargeSucceededWriter(
       ProcessedEventStore processedEvents,
       PaymentRepository paymentRepository,
       PaymentCaptureWriter captureWriter,
+      BillPaymentCaptureWriter billCaptureWriter,
       ErrorInboxWriter errorInboxWriter) {
     this.processedEvents = processedEvents;
     this.paymentRepository = paymentRepository;
     this.captureWriter = captureWriter;
+    this.billCaptureWriter = billCaptureWriter;
     this.errorInboxWriter = errorInboxWriter;
   }
 
@@ -156,6 +175,20 @@ public class PaymentChargeSucceededWriter {
       return;
     }
 
+    if (payment.isForBill()) {
+      // V38 / HIGH fix: the bill dispatch's catch set ALSO covers DataIntegrityViolationException
+      // — see class javadoc. The order dispatch below is UNTOUCHED (byte-for-byte).
+      try {
+        billCaptureWriter.capture(payment.getId());
+      } catch (IllegalArgumentException
+          | IllegalStateException
+          | id.co.nativeapp.restaurant.menu.domain.InsufficientStockException
+          | DataIntegrityViolationException captureFailure) {
+        parkCaptureFailure(event, captureFailure);
+      }
+      return;
+    }
+
     try {
       captureWriter.capture(payment.getId());
     } catch (IllegalArgumentException
@@ -166,18 +199,23 @@ public class PaymentChargeSucceededWriter {
       // fault (lock timeout, deadlock, DB blip) propagates instead, so the container's bounded
       // retry gets to re-run the idempotent capture rather than turning a blip into ops toil —
       // the carwash/barbershop consumers' exact posture.
-      park(
-          CAPTURE_FAILED_SOURCE,
-          "PaymentChargeSucceeded chargeId="
-              + event.chargeId()
-              + " paymentId="
-              + event.paymentId()
-              + " — capture failed ("
-              + captureFailure.getClass().getSimpleName()
-              + ": "
-              + captureFailure.getMessage()
-              + "); real money already moved at the PSP, a human must resolve");
+      parkCaptureFailure(event, captureFailure);
     }
+  }
+
+  /** Shared park-message builder for a caught capture failure (order or bill dispatch). */
+  private void parkCaptureFailure(PaymentChargeSucceededEvent event, Exception captureFailure) {
+    park(
+        CAPTURE_FAILED_SOURCE,
+        "PaymentChargeSucceeded chargeId="
+            + event.chargeId()
+            + " paymentId="
+            + event.paymentId()
+            + " — capture failed ("
+            + captureFailure.getClass().getSimpleName()
+            + ": "
+            + captureFailure.getMessage()
+            + "); real money already moved at the PSP, a human must resolve");
   }
 
   /**

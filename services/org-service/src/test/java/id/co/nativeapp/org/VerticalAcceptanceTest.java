@@ -4,21 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.org.company.domain.OrgUnit;
-import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
-import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
-import id.co.nativeapp.org.company.messaging.OrgUnitChangedSchema;
+import id.co.nativeapp.org.company.messaging.CompanyCreatedSchema;
 import id.co.nativeapp.org.company.messaging.OrgUnitCreatedSchema;
+import id.co.nativeapp.org.company.service.CompanyReader;
 import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.company.service.OrgUnitService;
 import id.co.nativeapp.tenant.TenantContext;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
@@ -27,203 +20,138 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Acceptance for the business-unit {@code vertical} (restaurant | carwash | barbershop): required
- * for a BUSINESS_UNIT on every creation path, forbidden for outlet/team, persisted LOWERCASE, and
- * carried on the org-unit events (null for the seeded outlet). Runs over real RLS-enforcing
- * PostgreSQL (see {@link PostgresRlsTestBase}).
+ * The business vertical, end to end, over real RLS-enforcing PostgreSQL (see {@link
+ * PostgresRlsTestBase}).
+ *
+ * <p><strong>ADR 0070 moved it to the COMPANY.</strong> It used to live on the {@code
+ * BUSINESS_UNIT} node and be inherited by outlets through a parent self-join; with the division
+ * level gone it is a company attribute — required and immutable, like the base currency — and org
+ * units carry none at all. This class pins that: the company persists it lowercase and emits it on
+ * {@code CompanyCreated}, the org-unit events carry a null vertical, and an unknown value is
+ * rejected.
  */
 @SpringBootTest
 class VerticalAcceptanceTest extends PostgresRlsTestBase {
 
-  private static final String ACTOR = "owner-vert";
-
   @Autowired private CompanyService companyService;
+  @Autowired private CompanyReader companyReader;
   @Autowired private OrgUnitService orgUnitService;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @Test
-  void bootstrapPersistsTheVerticalLowercaseAndEmitsItOnTheEvents() throws Exception {
+  void bootstrapPersistsTheVerticalLowercaseOnTheCompanyAndEmitsItOnCompanyCreated()
+      throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand("WashCo", "IDR", "id", "Wash HQ", "carwash", ACTOR));
+            new CreateCompanyCommand("Cuci Kilat", "IDR", "id", "carwash", "owner-v"));
     UUID companyId = result.company().getId();
-    UUID buId = result.firstBusiness().getId();
 
-    // Persisted LOWERCASE on the BU row; NULL on the seeded outlet.
-    assertThat(verticalOf(buId)).isEqualTo("carwash");
-    UUID outletId = seededOutletId(companyId, buId);
-    assertThat(verticalOf(outletId)).isNull();
+    // Persisted on the COMPANY, lowercase (the module-key vocabulary), not on the org unit.
+    assertThat(result.company().getVertical().key()).isEqualTo("carwash");
+    assertThat(columnValue("SELECT vertical FROM company WHERE company_id = ?", companyId))
+        .isEqualTo("carwash");
+    assertThat(columnValue("SELECT vertical FROM org_unit WHERE company_id = ?", companyId))
+        .isNull();
 
-    // Both OrgUnitCreated payloads carry the field: BU = "carwash", outlet = null.
-    List<Map<String, Object>> created = orgUnitCreatedRows(companyId);
-    assertThat(created).hasSize(2);
-    assertThat(decodeCreated(created, buId).get("vertical").toString()).isEqualTo("carwash");
-    assertThat(decodeCreated(created, outletId).get("vertical")).isNull();
+    // CompanyCreated carries it (the field is appended LAST for positional decode safety).
+    GenericRecord companyCreated =
+        AvroSerde.deserialize(
+            payloadOf("CompanyCreated", companyId), CompanyCreatedSchema.schema());
+    assertThat(companyCreated.get("vertical").toString()).isEqualTo("carwash");
+
+    // The org-unit event does NOT — an outlet has no vertical of its own any more.
+    GenericRecord orgUnitCreated =
+        AvroSerde.deserialize(
+            payloadOf("OrgUnitCreated", companyId), OrgUnitCreatedSchema.schema());
+    assertThat(orgUnitCreated.get("vertical")).isNull();
+    assertThat(orgUnitCreated.get("type").toString()).isEqualTo("OUTLET");
   }
 
   @Test
-  void aBusinessUnitWithoutAVerticalIsRejected() throws Exception {
-    var result =
-        companyService.createCompany(
-            new CreateCompanyCommand("NoVertCo", "IDR", "id", "First", "restaurant", ACTOR));
-    UUID companyId = result.company().getId();
+  void theCompanyReadApiExposesTheVertical() throws Exception {
+    UUID companyId =
+        companyService
+            .createCompany(
+                new CreateCompanyCommand("Pangkas Rapi", "IDR", "id", "barbershop", "owner-b"))
+            .company()
+            .getId();
 
-    assertThatThrownBy(
-            () ->
-                TenantContext.callAs(
-                    companyId.toString(),
-                    ACTOR,
-                    () ->
-                        orgUnitService.create(
-                            new CreateOrgUnitCommand("Typeless Biz", "business_unit", null))))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("vertical");
+    // /api/v1/companies/current and /mine both read through here — a cashier's POS bootstraps
+    // its surface from this field now that the outlet no longer carries one.
+    var response =
+        TenantContext.callAs(
+            companyId.toString(), "owner-b", () -> companyReader.findCurrentCompany());
+    assertThat(response.vertical()).isEqualTo("barbershop");
   }
 
   @Test
-  void anUnknownVerticalIsRejected() throws Exception {
+  void aCompanyWithoutAVerticalIsRejected() {
     assertThatThrownBy(
             () ->
                 companyService.createCompany(
-                    new CreateCompanyCommand(
-                        "LaundryCo", "IDR", "id", "Laundry HQ", "laundromat", ACTOR)))
+                    new CreateCompanyCommand("NoVertical", "IDR", "id", null, "owner-n")))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void anUnknownVerticalIsRejected() {
+    assertThatThrownBy(
+            () ->
+                companyService.createCompany(
+                    new CreateCompanyCommand("Laundry", "IDR", "id", "laundromat", "owner-l")))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("laundromat");
   }
 
   @Test
-  void anOutletWithAVerticalIsRejected() throws Exception {
-    var result =
-        companyService.createCompany(
-            new CreateCompanyCommand("StrictCo", "IDR", "id", "Strict HQ", "restaurant", ACTOR));
-    UUID companyId = result.company().getId();
-    UUID buId = result.firstBusiness().getId();
+  void anOutletCarriesNoVerticalOfItsOwn() throws Exception {
+    UUID companyId =
+        companyService
+            .createCompany(
+                new CreateCompanyCommand("MultiOutlet", "IDR", "id", "restaurant", "owner-m"))
+            .company()
+            .getId();
 
-    assertThatThrownBy(
-            () ->
-                TenantContext.callAs(
-                    companyId.toString(),
-                    ACTOR,
-                    () ->
-                        orgUnitService.create(
-                            new CreateOrgUnitCommand(
-                                "Typed Outlet", "outlet", buId, "restaurant"))))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("vertical");
-  }
-
-  @Test
-  void addBusinessPersistsAndEmitsItsVertical() throws Exception {
-    var result =
-        companyService.createCompany(
-            new CreateCompanyCommand("MultiCo", "IDR", "id", "First Biz", "restaurant", ACTOR));
-    UUID companyId = result.company().getId();
-
-    OrgUnit second =
+    UUID secondId =
         TenantContext.callAs(
             companyId.toString(),
-            ACTOR,
+            "owner-m",
             () ->
-                companyService.addBusiness(
-                    new CreateBusinessCommand(companyId, "Cuts Biz", "barbershop")));
+                orgUnitService
+                    .create(new CreateOrgUnitCommand("Senopati", "outlet", null))
+                    .getId());
 
-    assertThat(verticalOf(second.getId())).isEqualTo("barbershop");
-    assertThat(decodeCreated(orgUnitCreatedRows(companyId), second.getId()).get("vertical"))
-        .hasToString("barbershop");
+    // Both outlets store NULL; the vertical is read once from the company. Read over the ADMIN
+    // connection: a plain JdbcTemplate read here runs with NO tenant GUC bound, so FORCE RLS would
+    // filter it to empty and the assertion would pass vacuously.
+    assertThat(columnValue("SELECT vertical FROM org_unit WHERE id = ?::uuid", secondId)).isNull();
+    assertThat(columnValue("SELECT vertical FROM org_unit WHERE company_id = ?", companyId))
+        .isNull();
   }
 
-  @Test
-  void aRenameChangeEventCarriesTheNodesOwnVertical() throws Exception {
-    var result =
-        companyService.createCompany(
-            new CreateCompanyCommand("RenameCo", "IDR", "id", "Wash HQ", "carwash", ACTOR));
-    UUID companyId = result.company().getId();
-    UUID buId = result.firstBusiness().getId();
+  // ---- helpers (read over the admin BYPASSRLS connection / the non-RLS outbox) -----------------
 
-    TenantContext.runAs(
-        companyId.toString(),
-        ACTOR,
-        () ->
-            orgUnitService.patch(
-                new PatchOrgUnitCommand(buId, "Wash Central", false, null, false, false)));
-
-    List<Map<String, Object>> changed =
-        jdbcTemplate.queryForList(
-            "SELECT payload FROM outbox WHERE event_type = 'OrgUnitChanged'"
-                + " AND aggregate_id = ? ORDER BY occurred_at",
-            buId.toString());
-    assertThat(changed).hasSize(1);
-    GenericRecord event =
-        AvroSerde.deserialize(
-            (byte[]) changed.get(0).get("payload"), OrgUnitChangedSchema.schema());
-    assertThat(event.get("vertical").toString()).isEqualTo("carwash");
-    assertThat(event.get("name").toString()).isEqualTo("Wash Central");
-  }
-
-  @Test
-  void theOutletPickerInheritsTheParentBusinessUnitsVertical() throws Exception {
-    var result =
-        companyService.createCompany(
-            new CreateCompanyCommand("PickerCo", "IDR", "id", "Wash Picker", "carwash", ACTOR));
-    UUID companyId = result.company().getId();
-    UUID buId = result.firstBusiness().getId();
-    UUID outletId = seededOutletId(companyId, buId);
-
-    // The outlet row stores NULL, but GET /api/v1/outlets exposes the parent BU's vertical so
-    // the POS can gate without calling the dashboard-only org-units endpoint.
-    List<id.co.nativeapp.org.company.dto.OutletResponse> visible =
-        TenantContext.callAs(companyId.toString(), ACTOR, () -> orgUnitService.listActiveOutlets());
-    assertThat(visible).hasSize(1);
-    assertThat(visible.get(0).id()).isEqualTo(outletId);
-    assertThat(visible.get(0).vertical()).isEqualTo("carwash");
-  }
-
-  // ---- helpers --------------------------------------------------------------------------------
-
-  private String verticalOf(UUID orgUnitId) throws Exception {
-    try (Connection admin =
+  /** A single column for one tenant, read over the admin connection (RLS bypassed). */
+  private Object columnValue(String sql, UUID id) throws Exception {
+    try (var admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        PreparedStatement ps =
-            admin.prepareStatement("SELECT vertical FROM org_unit WHERE id = ?")) {
-      ps.setObject(1, orgUnitId);
-      try (ResultSet rs = ps.executeQuery()) {
-        rs.next();
-        return rs.getString(1);
+        var ps = admin.prepareStatement(sql)) {
+      ps.setString(1, id.toString());
+      try (var rs = ps.executeQuery()) {
+        assertThat(rs.next()).isTrue();
+        return rs.getObject(1);
       }
     }
   }
 
-  private UUID seededOutletId(UUID companyId, UUID buId) throws Exception {
-    try (Connection admin =
-            java.sql.DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        PreparedStatement ps =
-            admin.prepareStatement(
-                "SELECT id FROM org_unit WHERE company_id = ? AND parent_id = ?"
-                    + " AND type = 'OUTLET'")) {
-      ps.setString(1, companyId.toString());
-      ps.setObject(2, buId);
-      try (ResultSet rs = ps.executeQuery()) {
-        rs.next();
-        return rs.getObject(1, UUID.class);
-      }
-    }
-  }
-
-  private List<Map<String, Object>> orgUnitCreatedRows(UUID companyId) {
-    return jdbcTemplate.queryForList(
-        "SELECT aggregate_id, payload FROM outbox WHERE event_type = 'OrgUnitCreated'"
-            + " AND company_id = ? ORDER BY occurred_at, id",
+  /** The first outbox payload of one event type for one tenant (the outbox is not RLS'd). */
+  private byte[] payloadOf(String eventType, UUID companyId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT payload FROM outbox WHERE event_type = ? AND company_id = ? "
+            + "ORDER BY occurred_at, id LIMIT 1",
+        byte[].class,
+        eventType,
         companyId);
-  }
-
-  private GenericRecord decodeCreated(List<Map<String, Object>> rows, UUID aggregateId) {
-    Map<String, Object> row =
-        rows.stream()
-            .filter(r -> aggregateId.toString().equals(r.get("aggregate_id")))
-            .findFirst()
-            .orElseThrow();
-    return AvroSerde.deserialize((byte[]) row.get("payload"), OrgUnitCreatedSchema.schema());
   }
 }

@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "SaleCogsRecorded",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a sale depletes recipe ingredients (ADR 0050 phase C). Consumed by finance-service to post perpetual COGS (Dr 5100 / Cr 1100) WHEN the company is perpetual-active for occurred_at's period; otherwise a claimed no-op. cogs_minor = Σ depleted qty × moving-average unit cost at sale time, snapshotted into sale.cogs_minor. Money is integer minor units + an ISO-4217 code, never a float (rule 8). A separate event from SaleRecorded (NOT a field on it) to avoid the SALE posting-template deployment hazard (ADR 0050 phase-C pin, V37 note). ALL fields required; future additive fields append LAST with a default (rule 7).",
+  "fields": [
+    {"name": "sale_id", "type": "string", "doc": "The sale aggregate id (UUID as string); partition key AND finance idempotency key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating outlet (UUID as string) — the dimensional business_id on the COGS ledger_posting."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the sale occurred, epoch millis UTC — drives the accounting period (same period as the sale's revenue)."},
+    {"name": "cogs_minor", "type": "long", "doc": "Cost of goods sold for this sale: Σ (depleted qty × moving-average unit cost at sale time), in the currency's minor units. Never a float (rule 8)."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code (e.g. IDR, USD)."}
+  ]
+}

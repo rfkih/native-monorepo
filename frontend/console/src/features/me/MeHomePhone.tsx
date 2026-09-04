@@ -26,7 +26,7 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import { useMyClaims } from '@/features/expenses/api'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
-import { formatMoney } from '@/lib/money'
+import { formatMoney, formatPercent } from '@/lib/money'
 import { canFinance, canHr, canOps, canPos as canPosRole, canReports, ROLE_HOME } from '@/lib/rolePreset'
 import { localeOf } from '@/i18n'
 import { isNotLinked, useMyLeaveBalance, useMyProfile, useMySales } from './api'
@@ -99,7 +99,7 @@ export function MeHomePhone() {
 
   // Bottom clearance for the fixed tab bar comes from MobileTabBarGate's in-flow spacer.
   return (
-    <div className="min-h-screen bg-paper pb-6">
+    <div className="min-h-[100dvh] bg-paper pb-6">
       {/* Compact topbar — mirrors the desktop Me header (POS/dashboard escape + logout). */}
       <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-surface/90 px-4 backdrop-blur">
         <Wordmark />
@@ -228,7 +228,7 @@ export function MeHomePhone() {
                       <div className="flex-1 rounded-[14px] bg-paper px-3.5 py-3">
                         <div className="text-[11px] font-medium text-ink-3">{t('me.sales.rate')}</div>
                         <div className="tnum mt-1 font-mono text-[16px] font-bold leading-none text-ink">
-                          {(sales.data.commissionBasisPoints / 100).toLocaleString(locale)}%
+                          {formatPercent(sales.data.commissionBasisPoints / 10000, locale)}
                         </div>
                       </div>
                       <div className="flex-1 rounded-[14px] bg-tint-profit px-3.5 py-3">

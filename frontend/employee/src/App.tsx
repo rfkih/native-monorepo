@@ -7,6 +7,8 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useAuth } from '@/lib/authContext'
+import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
+import { BackGuard } from '@/components/mobile/BackGuard'
 import { StaffShell } from './staff/StaffShell'
 import { Beranda } from './staff/Beranda'
 import { useIsSupervisor } from './staff/ui'
@@ -107,6 +109,13 @@ export function App() {
 
   return (
     <Suspense fallback={<CenteredSpinner />}>
+      {/* Hardware-Back confirm guard (Android shell only — self-disables in browsers). */}
+      <BackGuard homePath="/me" />
+      {/* ADR 0062 staleness recovery — this app has no service worker, so a soft update prompt is
+          the only nudge a long-lived cached bundle gets (no-ops when /version.json is absent). */}
+      <div className="fixed inset-x-0 top-0 z-[70] flex flex-col print:hidden">
+        <AppUpdatePrompt />
+      </div>
       <Routes>
         {/* Tab screens — wrapped in the bottom-nav shell. */}
         <Route element={<StaffShell />}>

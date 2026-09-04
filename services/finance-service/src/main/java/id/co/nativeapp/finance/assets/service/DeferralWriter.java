@@ -6,8 +6,7 @@ import id.co.nativeapp.finance.assets.repository.DeferralRepository;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -37,8 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class DeferralWriter {
 
   private final DeferralRepository deferralRepository;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
@@ -46,16 +44,12 @@ public class DeferralWriter {
   @SuppressWarnings("checkstyle:ParameterNumber")
   public DeferralWriter(
       DeferralRepository deferralRepository,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.deferralRepository = Objects.requireNonNull(deferralRepository, "deferralRepository");
-    this.journalEntryRepository =
-        Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
-    this.journalLineRepository =
-        Objects.requireNonNull(journalLineRepository, "journalLineRepository");
+    this.generalLedgerWriter = Objects.requireNonNull(generalLedgerWriter, "generalLedgerWriter");
     this.roleAccountResolver = Objects.requireNonNull(roleAccountResolver, "roleAccountResolver");
     this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
     this.clock = Objects.requireNonNull(clock, "clock");
@@ -153,6 +147,7 @@ public class DeferralWriter {
     String clearingCode = requireMapped(AccountRole.CASH_CLEARING, now);
     List<JournalLine> lines;
     String description;
+    boolean usesIllustrative;
     if (kind == DeferralKind.PREPAID_EXPENSE) {
       String prepaidCode = requireMapped(AccountRole.PREPAID_EXPENSE, now);
       lines =
@@ -160,6 +155,11 @@ public class DeferralWriter {
               JournalLine.debit(entryId, 1, prepaidCode, total),
               JournalLine.credit(entryId, 2, clearingCode, total));
       description = "Prepaid expense created";
+      // Derived from the provenance of the PREPAID_EXPENSE/CASH_CLEARING mappings actually
+      // resolved above, rather than hardcoded.
+      usesIllustrative =
+          roleAccountResolver.anyIllustrative(
+              now, AccountRole.PREPAID_EXPENSE, AccountRole.CASH_CLEARING);
     } else {
       String deferredCode = requireMapped(AccountRole.DEFERRED_REVENUE, now);
       lines =
@@ -167,6 +167,11 @@ public class DeferralWriter {
               JournalLine.debit(entryId, 1, clearingCode, total),
               JournalLine.credit(entryId, 2, deferredCode, total));
       description = "Deferred revenue received";
+      // Derived from the provenance of the CASH_CLEARING/DEFERRED_REVENUE mappings actually
+      // resolved above, rather than hardcoded.
+      usesIllustrative =
+          roleAccountResolver.anyIllustrative(
+              now, AccountRole.CASH_CLEARING, AccountRole.DEFERRED_REVENUE);
     }
     return JournalEntry.balanced(
         entryId,
@@ -175,7 +180,7 @@ public class DeferralWriter {
         description,
         total.currency().getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 
@@ -189,12 +194,7 @@ public class DeferralWriter {
   }
 
   private void persistEntry(JournalEntry entry, String companyId) {
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (var line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   private void requireConsistentGlCurrency(String period, Money amount) {

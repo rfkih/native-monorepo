@@ -3,6 +3,7 @@ package id.co.nativeapp.mediastorage;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
@@ -26,6 +27,12 @@ import org.springframework.validation.annotation.Validated;
  *     (receipts, QR) leave it unset.
  * @param region S3 region name — MinIO ignores it but the SDK requires one; default {@code
  *     us-east-1}
+ * @param connectTimeout TCP connect timeout for the S3 client (§4 Resilience: every outbound client
+ *     owns explicit timeouts — the SDK's 30s-with-retries default let a hung MinIO pin callers for
+ *     minutes; flaw-audit C1)
+ * @param socketTimeout per-read socket timeout for the S3 client
+ * @param apiCallTimeout HARD ceiling on one whole S3 call including SDK retries — the figure that
+ *     actually bounds how long a serve path can stall on a sick object store
  */
 @Validated
 @ConfigurationProperties("native.media")
@@ -36,7 +43,10 @@ public record MediaStorageProperties(
     @DefaultValue("native-media") @NotBlank String bucket,
     @NotBlank String servicePrefix,
     String publicBaseUrl,
-    @DefaultValue("us-east-1") @NotBlank String region) {
+    @DefaultValue("us-east-1") @NotBlank String region,
+    @DefaultValue("2s") @NotNull Duration connectTimeout,
+    @DefaultValue("10s") @NotNull Duration socketTimeout,
+    @DefaultValue("15s") @NotNull Duration apiCallTimeout) {
 
   /**
    * The public URL for an object key, for services that embed media URLs in API responses.

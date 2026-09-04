@@ -60,14 +60,75 @@ public final class AvroSerde {
   }
 
   /**
-   * Deserializes Avro binary back into a {@link GenericRecord}.
+   * Deserializes Avro binary back into a {@link GenericRecord} using {@code schema} as BOTH writer
+   * and reader — the shape every consumer in this codebase uses, because the outbox ships raw Avro
+   * with no writer schema on the wire and no Schema Registry to look one up.
+   *
+   * <p><strong>Tolerates a payload written before trailing optional fields were appended.</strong>
+   * The fleet-wide convention is "evolve an event by APPENDING a nullable field with a default,
+   * LAST" (see any {@code .avsc} in {@code libs/contracts}). That is genuinely backward-compatible
+   * under Avro schema resolution — but resolution needs the WRITER schema, and on this path there
+   * isn't one: a straight writer==reader decode of an older, shorter payload runs off the end of
+   * the buffer and throws. Since consumers run {@code auto-offset-reset: earliest}, any new
+   * consumer group, group reset, or environment rebuilt without {@code __consumer_offsets} replays
+   * historical payloads straight into that — and every one of them would land on the DLT.
+   *
+   * <p>So on a decode failure this retries with the writer schema truncated to each shorter prefix
+   * that ends before a DEFAULTED field, longest first, keeping {@code schema} as the reader. Avro
+   * then fills the absent fields from their declared defaults, which is exactly what the convention
+   * promises. The full schema is always attempted first, so a current payload never takes the
+   * fallback; if no prefix decodes either, the ORIGINAL failure is thrown (a genuinely corrupt
+   * payload still fails closed to the DLT, and reports the real error).
+   *
+   * <p>Only trailing fields that declare a default are ever dropped — removing a required field
+   * would be a breaking change, and this must not paper over one.
    *
    * @param bytes the encoded data
-   * @param writerSchema the schema the data was written with
-   * @return the decoded record (read with {@code writerSchema} as both writer and reader)
+   * @param schema the consumer's current schema, used as writer and reader
+   * @return the decoded record
    */
-  public static GenericRecord deserialize(byte[] bytes, Schema writerSchema) {
-    return deserialize(bytes, writerSchema, writerSchema);
+  public static GenericRecord deserialize(byte[] bytes, Schema schema) {
+    try {
+      return deserialize(bytes, schema, schema);
+    } catch (UncheckedIOException probablyOlderPayload) {
+      for (Schema olderWriter : trailingDefaultedPrefixes(schema)) {
+        try {
+          return deserialize(bytes, olderWriter, schema);
+        } catch (RuntimeException stillNo) {
+          // Try the next-shorter prefix; the original failure is rethrown if none work.
+        }
+      }
+      throw probablyOlderPayload;
+    }
+  }
+
+  /**
+   * The plausible earlier versions of {@code schema}: the same record with its trailing DEFAULTED
+   * fields peeled off one at a time, longest first. A record with no trailing defaulted field (or a
+   * non-record schema) yields nothing, so the caller's original failure stands.
+   */
+  private static java.util.List<Schema> trailingDefaultedPrefixes(Schema schema) {
+    if (schema.getType() != Schema.Type.RECORD) {
+      return java.util.List.of();
+    }
+    java.util.List<Schema.Field> fields = schema.getFields();
+    java.util.List<Schema> prefixes = new java.util.ArrayList<>();
+    for (int keep = fields.size() - 1; keep >= 1; keep--) {
+      if (!fields.get(keep).hasDefaultValue()) {
+        break; // a required field: nothing shorter than this was ever a legal earlier version
+      }
+      java.util.List<Schema.Field> kept = new java.util.ArrayList<>(keep);
+      for (int i = 0; i < keep; i++) {
+        Schema.Field f = fields.get(i);
+        kept.add(new Schema.Field(f.name(), f.schema(), f.doc(), f.defaultVal(), f.order()));
+      }
+      Schema prefix =
+          Schema.createRecord(
+              schema.getName(), schema.getDoc(), schema.getNamespace(), schema.isError());
+      prefix.setFields(kept);
+      prefixes.add(prefix);
+    }
+    return prefixes;
   }
 
   /**

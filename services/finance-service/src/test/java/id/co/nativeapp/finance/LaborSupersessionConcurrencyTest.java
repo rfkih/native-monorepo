@@ -88,7 +88,8 @@ class LaborSupersessionConcurrencyTest extends PostgresRlsTestBase {
     // The period nets to run 2 ONLY — the double-count (run1 + run2) is prevented by the advisory
     // lock making the later run see-and-reverse (or self-supersede) the earlier.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense())
         .as("period nets to run 2 only — no double-count")
         .isEqualTo(Money.ofMinor(run2Amount, "IDR"));
@@ -140,7 +141,7 @@ class LaborSupersessionConcurrencyTest extends PostgresRlsTestBase {
 
         // This iteration's period nets to run 2 ONLY — no double-count on ANY interleaving.
         ConsolidatedPnl pnl =
-            TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period))
+            TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
                 .orElseThrow();
         assertThat(pnl.expense())
             .as("iteration %s: period nets to run 2 only — no double-count", i)

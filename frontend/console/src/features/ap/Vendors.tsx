@@ -58,32 +58,34 @@ export function Vendors() {
         <EmptyState title={t('ap.vendors.empty')} hint={t('ap.vendors.emptyHint')} />
       ) : (
         <Card className="overflow-hidden rounded-[20px]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
-                <th className="px-4 py-3">{t('ap.vendors.colName')}</th>
-                <th className="px-4 py-3">{t('ap.vendors.colEmail')}</th>
-                <th className="px-4 py-3">{t('ap.vendors.colTaxId')}</th>
-                <th className="px-4 py-3">{t('ap.vendors.colStatus')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendors.map((v) => (
-                <tr key={v.id} className="border-b border-ink-50 last:border-0 hover:bg-hover">
-                  <td className="px-4 py-3 font-semibold text-ink">{v.name}</td>
-                  <td className="px-4 py-3 text-ink-2">{v.email ?? t('ap.vendors.noValue')}</td>
-                  <td className="px-4 py-3 font-mono text-ink-2">
-                    {v.taxId ?? t('ap.vendors.noValue')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={v.active ? 'profit' : 'neutral'}>
-                      {v.active ? t('ap.vendors.statusActive') : t('ap.vendors.statusInactive')}
-                    </Badge>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                  <th className="px-4 py-3">{t('ap.vendors.colName')}</th>
+                  <th className="px-4 py-3">{t('ap.vendors.colEmail')}</th>
+                  <th className="px-4 py-3">{t('ap.vendors.colTaxId')}</th>
+                  <th className="px-4 py-3">{t('ap.vendors.colStatus')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {vendors.map((v) => (
+                  <tr key={v.id} className="border-b border-ink-50 last:border-0 hover:bg-hover">
+                    <td className="px-4 py-3 font-semibold text-ink">{v.name}</td>
+                    <td className="px-4 py-3 text-ink-2">{v.email ?? t('ap.vendors.noValue')}</td>
+                    <td className="px-4 py-3 font-mono text-ink-2">
+                      {v.taxId ?? t('ap.vendors.noValue')}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={v.active ? 'profit' : 'neutral'}>
+                        {v.active ? t('ap.vendors.statusActive') : t('ap.vendors.statusInactive')}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 

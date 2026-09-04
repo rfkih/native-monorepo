@@ -73,7 +73,10 @@ class RegisterSessionClosedContractTest {
             1_600_000L,
             -50_000L,
             "IDR",
-            List.of());
+            List.of(),
+            null,
+            1,
+            null);
 
     byte[] bytes = AvroSerde.serialize(record);
     GenericRecord decoded = AvroSerde.deserialize(bytes, RegisterSessionClosedSchema.schema());
@@ -122,7 +125,10 @@ class RegisterSessionClosedContractTest {
             "IDR",
             List.of(
                 new TenderLine("CARD", 800_000L, 790_000L, -10_000L),
-                new TenderLine("QRIS", 430_000L, 430_000L, 0L)));
+                new TenderLine("QRIS", 430_000L, 430_000L, 0L)),
+            null,
+            1,
+            null);
 
     GenericRecord decoded =
         AvroSerde.deserialize(AvroSerde.serialize(record), RegisterSessionClosedSchema.schema());

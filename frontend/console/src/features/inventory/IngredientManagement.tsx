@@ -8,19 +8,31 @@
  * optional and entered in MAJOR units of the company base currency (converted exponent-aware
  * via parseDiscountInput, rendered via formatMoney — rule 8); an uncosted ingredient is
  * counted at opname but never posts to the books.
+ *
+ * ADR 0072 §5 — the Terima ("receive") dialog's PRICED path is demoted: it no longer accepts a
+ * price (the costless quantity adjust is unchanged). A purchase WITH a payment is now recorded
+ * once, in full, via the company-expense form (`/expenses/record`) — the ONLY priced entry
+ * surface — which posts the money AND applies the stock receive together (finance's
+ * `InventoryPurchaseRecorded` → this same `Ingredient.receive` machinery). This prevents the same
+ * purchase being entered twice. The backend still accepts a priced call (backward compatible).
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, TextInput } from '@/components/ui/Field'
+import { Segmented } from '@/components/ui/Segmented'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { OutletGate } from '@/components/OutletGate'
 import { OutletPicker } from '@/components/OutletPicker'
 import { ApiError } from '@/lib/api'
+import { effectiveRoles, useAuth } from '@/lib/authContext'
+import { canFinance } from '@/lib/rolePreset'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
@@ -28,7 +40,18 @@ import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/cn'
 import { parseDiscountInput } from '@/features/pos/lib/discountInput'
 import { minorToMajorInput } from '@/features/pos/lib/registerFloat'
-import { formatQty } from '@/features/stocktake/lib/qty'
+import { StocktakeHistorySheet } from './StocktakeHistorySheet'
+import {
+  allowsFraction,
+  formatShownQty,
+  parseShownQtyInput,
+  shownFactor,
+  shownUnit,
+  shownUnitCostMinor,
+  storedToUnitSelection,
+  toDisplayQty,
+  unitSelectionToStored,
+} from './lib/units'
 import {
   INGREDIENT_UNIT_GROUPS,
   useAddIngredientStock,
@@ -83,6 +106,8 @@ function IngredientManagementInner({
   const [editing, setEditing] = useState<Ingredient | null>(null)
   const [receiving, setReceiving] = useState<Ingredient | null>(null)
   const [setting, setSetting] = useState<Ingredient | null>(null)
+  // Riwayat opname (V42 usage in the detail).
+  const [showHistory, setShowHistory] = useState(false)
 
   const ingredients = query.data ?? []
 
@@ -111,6 +136,17 @@ function IngredientManagementInner({
         <div className="min-w-0 max-sm:order-last max-sm:w-full">
           <OutletPicker />
         </div>
+
+        {/* Riwayat opname — past counts with sistem/hitung/selisih + "terpakai hari itu" (V42). */}
+        <Button
+          variant="outline"
+          onClick={() => setShowHistory(true)}
+          aria-label={t('stocktake.historyTitle')}
+          className="shrink-0"
+        >
+          <ClipboardList className="size-4" />
+          <span className="hidden sm:inline">{t('stocktake.historyAction')}</span>
+        </Button>
 
         <Button onClick={() => setShowCreate(true)} aria-label={t('inventory.addAction')} className="shrink-0">
           <Plus className="size-4" />
@@ -187,7 +223,6 @@ function IngredientManagementInner({
       {receiving ? (
         <ReceiveDialog
           session={session}
-          baseCurrency={baseCurrency}
           ingredient={receiving}
           locale={locale}
           onClose={() => setReceiving(null)}
@@ -195,6 +230,14 @@ function IngredientManagementInner({
       ) : null}
       {setting ? (
         <SetQtyDialog session={session} ingredient={setting} locale={locale} onClose={() => setSetting(null)} />
+      ) : null}
+      {showHistory ? (
+        <StocktakeHistorySheet
+          session={session}
+          currency={baseCurrency}
+          locale={locale}
+          onClose={() => setShowHistory(false)}
+        />
       ) : null}
     </div>
   )
@@ -226,8 +269,12 @@ function IngredientRow({
         {ingredient.unitCostMinor != null && ingredient.costCurrency != null ? (
           <div className="tnum mt-0.5 font-mono text-xs text-ink-3">
             {t('inventory.costPerUnit', {
-              cost: formatMoney(ingredient.unitCostMinor, ingredient.costCurrency, locale),
-              unit: ingredient.unit,
+              cost: formatMoney(
+                shownUnitCostMinor(ingredient) ?? ingredient.unitCostMinor,
+                ingredient.costCurrency,
+                locale,
+              ),
+              unit: shownUnit(ingredient),
             })}
             {/* Guard: an older restaurant-service (pre-ADR 0056) omits stockValueMinor → undefined →
                 formatMoney renders "IDRNaN". Only show the stock value when it's a real number. */}
@@ -251,7 +298,7 @@ function IngredientRow({
           low ? 'border-loss/30 bg-tint-loss text-loss' : 'border-line bg-paper text-ink-2',
         )}
       >
-        {formatQty(ingredient.stockQty, locale)} {ingredient.unit}
+        {formatShownQty(ingredient.stockQty, ingredient, locale)} {shownUnit(ingredient)}
       </div>
 
       {/* Phone: a full-width three-up grid with taller touch targets; desktop keeps the
@@ -322,51 +369,100 @@ function IngredientFormDialog({
   ingredient: Ingredient | null
   onClose: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = localeOf(i18n.language)
   const create = useCreateIngredient(session)
   const update = useUpdateIngredient(session)
   const deactivate = useDeactivateIngredient(session)
 
+  const isCreate = ingredient == null
   const [name, setName] = useState(ingredient?.name ?? '')
-  const [unit, setUnit] = useState<string>(ingredient?.unit ?? 'pcs')
-  const [costInput, setCostInput] = useState(
-    ingredient?.unitCostMinor != null
-      ? minorToMajorInput(ingredient.unitCostMinor, ingredient.costCurrency ?? baseCurrency)
-      : '',
-  )
+  // The picker holds the CHOICE the user sees (g/kg/ml/liter/pcs/pack); it maps to a stored base
+  // unit + display label via `unitSelectionToStored` on submit. Edit pre-selects the shown unit.
+  const [unit, setUnit] = useState<string>(ingredient ? storedToUnitSelection(ingredient) : 'pcs')
+  // Two ways to express cost, toggled on create (an owner buying from a vendor knows the TOTAL they
+  // paid, not the per-unit — dividing by hand is the friction this removes). 'total' derives the
+  // per-unit from the quantity below; 'unit' takes the per-unit directly (the old behaviour, and
+  // the only mode when editing an existing item, which has no purchase quantity to divide by).
+  const [costMode, setCostMode] = useState<'total' | 'unit'>('total')
+  // Seed the cost field with the per-SHOWN-unit cost (per kg, derived exactly from the total value),
+  // not the stored per-base cache — the field is labelled per satuan and satuan is the shown unit.
+  const shownCostSeed = ingredient ? shownUnitCostMinor(ingredient) : null
+  const initialCostInput =
+    shownCostSeed != null
+      ? minorToMajorInput(shownCostSeed, ingredient?.costCurrency ?? baseCurrency)
+      : ''
+  const [costInput, setCostInput] = useState(initialCostInput)
+  const [totalInput, setTotalInput] = useState('')
   const [initialQty, setInitialQty] = useState('0')
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
 
   const busy = create.isPending || update.isPending || deactivate.isPending
+  useBackDismiss(onClose, !busy)
+  useScrollLock()
   const mutationError = create.error ?? update.error ?? deactivate.error
+
+  // 'total' mode is only offered on create (the qty below is the divisor). Live-derive the per-unit
+  // as the owner types, so they see exactly what will be booked before submitting.
+  const useTotalMode = isCreate && costMode === 'total'
+  const stored = unitSelectionToStored(unit)
+  const factor = shownFactor(stored)
+  // Quantity is entered in the SHOWN unit (kg/liter accept decimals) and stored in the base unit.
+  const baseQty = parseShownQtyInput(initialQty, stored) // base integer, or null (blank/invalid)
+  const qtyDisplay = Number.parseFloat(initialQty)
+  const qtyPositive = baseQty != null && baseQty > 0
+  const totalMinor = totalInput.trim() === '' ? null : parseDiscountInput(totalInput, baseCurrency)
+  // The per-BASE cost that gets stored (round(total / baseQty)), and the per-SHOWN cost shown live
+  // in the hint (round(total / shown-qty)) — both from the exact total, never one scaled off the other.
+  const derivedBaseCostMinor =
+    totalMinor != null && baseQty != null && baseQty > 0 ? Math.round(totalMinor / baseQty) : null
+  const derivedShownCostMinor =
+    totalMinor != null && Number.isFinite(qtyDisplay) && qtyDisplay > 0
+      ? Math.round(totalMinor / qtyDisplay)
+      : null
 
   function handleSubmit() {
     if (!name.trim()) {
       setNameError(t('inventory.nameRequired'))
       return
     }
-    const costMinor = costInput.trim() === '' ? null : parseDiscountInput(costInput, baseCurrency)
+    // In 'unit' mode the cost is typed per SHOWN unit (per kg); divide by the factor to store it per
+    // base unit (per g). 'total' mode already derives the per-base cost from the exact total paid.
+    // On EDIT, an untouched cost field sends null (leave the stored value/cost exactly as-is) so a
+    // plain rename never silently re-values through the per-shown⇄per-base rounding round-trip.
+    const costUnchanged = !isCreate && costInput.trim() === initialCostInput.trim()
+    const costMinor = useTotalMode
+      ? derivedBaseCostMinor
+      : costUnchanged
+        ? null
+        : costInput.trim() === ''
+          ? null
+          : Math.round(parseDiscountInput(costInput, baseCurrency) / factor)
     if (ingredient) {
       update.mutate(
         {
           id: ingredient.id,
           name: name.trim(),
-          unit,
+          unit: stored.unit,
+          // '' explicitly CLEARS the display unit (switching kg→pcs/g); the server treats a blank as
+          // "back to a base unit" and null as "leave unchanged" (PATCH), so send '' not null here —
+          // else a stale display_unit='kg' with unit='pcs' would violate the pairing CHECK.
+          displayUnit: stored.displayUnit ?? '',
           unitCostMinor: costMinor,
           costCurrency: costMinor != null ? baseCurrency : null,
         },
         { onSuccess: onClose },
       )
     } else {
-      const qty = Number.parseInt(initialQty, 10)
       create.mutate(
         {
           name: name.trim(),
-          unit,
+          unit: stored.unit,
+          displayUnit: stored.displayUnit,
           unitCostMinor: costMinor,
           costCurrency: costMinor != null ? baseCurrency : null,
-          initialStockQty: Number.isFinite(qty) && qty > 0 ? qty : 0,
+          initialStockQty: baseQty ?? 0,
         },
         { onSuccess: onClose },
       )
@@ -427,36 +523,87 @@ function IngredientFormDialog({
           </div>
         </Field>
 
-        <Field
-          label={t('inventory.costLabel', { currency: baseCurrency })}
-          htmlFor="ing-cost"
-          hint={t('inventory.costHint')}
-        >
-          <TextInput
-            id="ing-cost"
-            type="number"
-            min="0"
-            inputMode="numeric"
-            value={costInput}
-            onChange={(e) => setCostInput(e.target.value)}
-            placeholder={t('inventory.costPlaceholder')}
-          />
-        </Field>
-
-        {ingredient == null ? (
-          <Field label={t('inventory.initialQtyLabel')} htmlFor="ing-initial">
+        {/* Quantity first on create — in 'total' mode it is the divisor that turns the total paid
+            into a per-unit cost, so it must be entered before the amount reads sensibly. */}
+        {isCreate ? (
+          <Field
+            label={t(useTotalMode ? 'inventory.qtyBoughtLabel' : 'inventory.initialQtyLabel', {
+              unit,
+            })}
+            htmlFor="ing-initial"
+          >
             <TextInput
               id="ing-initial"
               type="number"
               min="0"
-              step="1"
-              inputMode="numeric"
+              step={allowsFraction(stored) ? 'any' : '1'}
+              inputMode={allowsFraction(stored) ? 'decimal' : 'numeric'}
               value={initialQty}
               onChange={(e) => setInitialQty(e.target.value)}
               placeholder="0"
             />
           </Field>
         ) : null}
+
+        {/* Cost — enter the vendor TOTAL (per-unit derived) or the per-unit directly. The toggle is
+            create-only; editing an existing item has no purchase qty to divide by, so it stays
+            per-unit. */}
+        {isCreate ? (
+          <Segmented<'total' | 'unit'>
+            className="mb-2"
+            fluid
+            ariaLabel={t('inventory.costModeLabel')}
+            value={costMode}
+            onChange={setCostMode}
+            options={[
+              { value: 'total', label: t('inventory.costModeTotal') },
+              { value: 'unit', label: t('inventory.costModeUnit') },
+            ]}
+          />
+        ) : null}
+
+        {useTotalMode ? (
+          <Field
+            label={t('inventory.totalCostLabel', { currency: baseCurrency })}
+            htmlFor="ing-total"
+            hint={
+              derivedShownCostMinor != null
+                ? t('inventory.receiveUnitPriceHint', {
+                    price: formatMoney(derivedShownCostMinor, baseCurrency, locale),
+                    unit,
+                  })
+                : totalMinor != null && !qtyPositive
+                  ? t('inventory.totalNeedsQty')
+                  : t('inventory.totalCostHint')
+            }
+          >
+            <TextInput
+              id="ing-total"
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={totalInput}
+              onChange={(e) => setTotalInput(e.target.value)}
+              placeholder={t('inventory.costPlaceholder')}
+            />
+          </Field>
+        ) : (
+          <Field
+            label={t('inventory.costLabel', { currency: baseCurrency })}
+            htmlFor="ing-cost"
+            hint={t('inventory.costHint')}
+          >
+            <TextInput
+              id="ing-cost"
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={costInput}
+              onChange={(e) => setCostInput(e.target.value)}
+              placeholder={t('inventory.costPlaceholder')}
+            />
+          </Field>
+        )}
 
         {mutationError ? (
           <p className="text-xs text-loss" role="alert">
@@ -505,93 +652,80 @@ function IngredientFormDialog({
 
 function ReceiveDialog({
   session,
-  baseCurrency,
   ingredient,
   locale,
   onClose,
 }: {
   session: CompanySession
-  baseCurrency: string
   ingredient: Ingredient
   locale: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
+  const { roles, elevatedRoles } = useAuth()
+  // ADR 0072 §5 — the priced Terima path is demoted (double-entry mitigation: the new company-
+  // expense form is the only priced entry surface now). The hint pointing there is FINANCE-gated
+  // (owner/accountant) so it never links a non-finance login to a route that would 403 for them.
+  const financeOk = canFinance(effectiveRoles(roles, elevatedRoles))
   const add = useAddIngredientStock(session)
   const [amountInput, setAmountInput] = useState('')
-  const [priceInput, setPriceInput] = useState('')
-  const amount = Number.parseInt(amountInput, 10)
-  const valid = Number.isFinite(amount) && amount !== 0
-  const isReceive = Number.isFinite(amount) && amount > 0
+  // The delta is typed in the SHOWN unit (kg/liter allow decimals; a negative value is a correction)
+  // and sent to the API in the BASE unit. parseShownQtyInput forbids fractions/negatives, so this
+  // path validates and converts by hand to keep the negative-correction affordance.
+  const amountDisplay = Number.parseFloat(amountInput)
+  const amountValid =
+    Number.isFinite(amountDisplay) &&
+    amountDisplay !== 0 &&
+    (allowsFraction(ingredient) || Number.isInteger(amountDisplay))
+  const amount = amountValid ? Math.round(amountDisplay * shownFactor(ingredient)) : Number.NaN
+  const valid = amountValid && amount !== 0
+  const isReceive = amountValid && amount > 0
 
-  // Total-paid → per-unit hint, live as the cashier types. Costless (amount<=0 or price empty)
-  // shows nothing — divide-by-zero and empty-input are both guarded.
-  const amountPaidMinor =
-    isReceive && priceInput.trim() !== '' ? parseDiscountInput(priceInput, baseCurrency) : null
-  const unitPriceHint =
-    amountPaidMinor != null && amount > 0
-      ? formatMoney(Math.round(amountPaidMinor / amount), baseCurrency, locale)
-      : null
+  function handleSubmit() {
+    if (!valid) return
+    // ADR 0072 §5 — always the costless path now (no price input here — see the module doc). The
+    // backend still accepts a priced call (backward compatible; InventoryPurchaseRecorded now feeds
+    // the same `Ingredient.receive` machinery from the company-expense form instead).
+    add.mutate({ id: ingredient.id, amount }, { onSuccess: onClose })
+  }
 
   return (
     <DialogShell title={t('inventory.receiveTitle', { name: ingredient.name })} onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm text-ink-3">
           {t('inventory.receiveHint', {
-            qty: formatQty(ingredient.stockQty, locale),
-            unit: ingredient.unit,
+            qty: formatShownQty(ingredient.stockQty, ingredient, locale),
+            unit: shownUnit(ingredient),
           })}
         </p>
-        <Field label={t('inventory.receiveAmountLabel', { unit: ingredient.unit })} htmlFor="ing-recv">
+        <Field label={t('inventory.receiveAmountLabel', { unit: shownUnit(ingredient) })} htmlFor="ing-recv">
           <TextInput
             id="ing-recv"
             type="number"
-            step="1"
-            inputMode="numeric"
+            step={allowsFraction(ingredient) ? 'any' : '1'}
+            inputMode={allowsFraction(ingredient) ? 'decimal' : 'numeric'}
             autoFocus
             value={amountInput}
             onChange={(e) => setAmountInput(e.target.value)}
             placeholder="0"
           />
         </Field>
-        {isReceive ? (
-          <Field
-            label={t('inventory.receivePriceLabel', { currency: baseCurrency })}
-            htmlFor="ing-recv-price"
-            hint={
-              unitPriceHint != null
-                ? t('inventory.receiveUnitPriceHint', { price: unitPriceHint, unit: ingredient.unit })
-                : t('inventory.receivePriceHint')
-            }
-          >
-            <TextInput
-              id="ing-recv-price"
-              type="number"
-              min="0"
-              inputMode="numeric"
-              value={priceInput}
-              onChange={(e) => setPriceInput(e.target.value)}
-              placeholder={t('inventory.costPlaceholder')}
-            />
-          </Field>
+        {isReceive && financeOk ? (
+          <p className="rounded-xl bg-tint-info px-3.5 py-3 text-xs leading-relaxed text-ink-2">
+            {t('inventory.receivePricedHint')}{' '}
+            <Link to="/expenses/record" className="font-semibold text-brand-700 hover:underline">
+              {t('inventory.receivePricedHintLink')}
+            </Link>
+          </p>
         ) : null}
         {add.isError ? (
           <p className="text-xs text-loss" role="alert">
             {t('inventory.errorGeneric')}
           </p>
         ) : null}
-        <Button
-          className="w-full"
-          disabled={!valid || add.isPending}
-          onClick={() =>
-            add.mutate(
-              amountPaidMinor != null
-                ? { id: ingredient.id, amount, amountPaidMinor, costCurrency: baseCurrency }
-                : { id: ingredient.id, amount },
-              { onSuccess: onClose },
-            )
-          }
-        >
+        <Button className="w-full" disabled={!valid || add.isPending} onClick={handleSubmit}>
           {add.isPending ? <Spinner /> : t('inventory.receiveSubmit')}
         </Button>
       </div>
@@ -610,28 +744,31 @@ function SetQtyDialog({
   locale: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const set = useSetIngredientStock(session)
-  const [qtyInput, setQtyInput] = useState(String(ingredient.stockQty))
-  const qty = Number.parseInt(qtyInput, 10)
-  const valid = Number.isFinite(qty) && qty >= 0
+  // Shown in the display unit (kg), parsed back to a base integer for the API.
+  const [qtyInput, setQtyInput] = useState(String(toDisplayQty(ingredient.stockQty, ingredient)))
+  const qtyBase = parseShownQtyInput(qtyInput, ingredient)
+  const valid = qtyBase != null
 
   return (
     <DialogShell title={t('inventory.setTitle', { name: ingredient.name })} onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm text-ink-3">
           {t('inventory.setHint', {
-            qty: formatQty(ingredient.stockQty, locale),
-            unit: ingredient.unit,
+            qty: formatShownQty(ingredient.stockQty, ingredient, locale),
+            unit: shownUnit(ingredient),
           })}
         </p>
-        <Field label={t('inventory.setQtyLabel', { unit: ingredient.unit })} htmlFor="ing-setqty">
+        <Field label={t('inventory.setQtyLabel', { unit: shownUnit(ingredient) })} htmlFor="ing-setqty">
           <TextInput
             id="ing-setqty"
             type="number"
             min="0"
-            step="1"
-            inputMode="numeric"
+            step={allowsFraction(ingredient) ? 'any' : '1'}
+            inputMode={allowsFraction(ingredient) ? 'decimal' : 'numeric'}
             autoFocus
             value={qtyInput}
             onChange={(e) => setQtyInput(e.target.value)}
@@ -646,7 +783,10 @@ function SetQtyDialog({
         <Button
           className="w-full"
           disabled={!valid || set.isPending}
-          onClick={() => set.mutate({ id: ingredient.id, quantity: qty }, { onSuccess: onClose })}
+          onClick={() =>
+            qtyBase != null &&
+            set.mutate({ id: ingredient.id, quantity: qtyBase }, { onSuccess: onClose })
+          }
         >
           {set.isPending ? <Spinner /> : t('inventory.setSubmit')}
         </Button>

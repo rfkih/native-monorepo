@@ -7,10 +7,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.events.OutboxWriter;
+import id.co.nativeapp.restaurant.inventory.domain.GoodsReceipt;
 import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
+import id.co.nativeapp.restaurant.inventory.repository.GoodsReceiptRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.tenant.TenantContext;
@@ -21,7 +24,10 @@ import org.junit.jupiter.api.Test;
 /**
  * Unit pins for {@link IngredientWriter} (ADR 0046 phase 1): create stamps {@code company_id}, the
  * set/add stock paths, the not-found 404 path, and the {@link OutletAccessGuard} call on every
- * mutation. Repository + guard are mocked; SQL + RLS are exercised by the integration tests.
+ * mutation. Repository + guard are mocked; SQL + RLS are exercised by the integration tests. The
+ * ADR 0067 Phase B goods-receipt/outbox side effect is covered by a dedicated Testcontainers
+ * atomicity test (real DB + real outbox insert), so {@link #goodsReceiptRepository} / {@link
+ * #outboxWriter} here are mocked no-ops.
  */
 class IngredientWriterTest {
 
@@ -29,10 +35,20 @@ class IngredientWriterTest {
   private static final UUID OUTLET = UUID.fromString("5f5e0167-ee70-45b8-8afe-019e8129e659");
 
   private final IngredientRepository repository = mock(IngredientRepository.class);
+  private final GoodsReceiptRepository goodsReceiptRepository = mock(GoodsReceiptRepository.class);
+  private final OutboxWriter outboxWriter = mock(OutboxWriter.class);
   private final OutletAccessGuard guard = mock(OutletAccessGuard.class);
   // No deactivation guards in the unit pins — the ADR 0050 recipe veto is integration-tested.
+  // The applier is REAL and wraps the same mocks, so the existing verify()/verifyNoInteractions()
+  // assertions keep observing the receive/receipt/outbox writes unchanged (the ADR 0071
+  // GeneralLedgerWriter test-construction precedent).
   private final IngredientWriter writer =
-      new IngredientWriter(repository, guard, java.util.List.of());
+      new IngredientWriter(
+          repository,
+          goodsReceiptRepository,
+          new PricedReceiveWriter(repository, goodsReceiptRepository, outboxWriter),
+          guard,
+          java.util.List.of());
 
   private static <T> T asTenant(java.util.concurrent.Callable<T> action) {
     try {
@@ -59,7 +75,7 @@ class IngredientWriterTest {
         asTenant(
             () ->
                 writer.create(
-                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, null, null)));
+                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, null, null, null)));
 
     assertThat(response.name()).isEqualTo("Roti");
     assertThat(response.stockQty()).isZero();
@@ -76,7 +92,7 @@ class IngredientWriterTest {
         asTenant(
             () ->
                 writer.create(
-                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", 2_000L, "IDR", 30)));
+                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, 2_000L, "IDR", 30)));
 
     assertThat(response.stockQty()).isEqualTo(30);
     assertThat(response.unitCostMinor()).isEqualTo(2_000L);
@@ -110,7 +126,7 @@ class IngredientWriterTest {
     when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
 
     IngredientResponse response =
-        asTenant(() -> writer.addStock(ingredient.getId(), 5, null, null));
+        asTenant(() -> writer.addStock(ingredient.getId(), 5, null, null, null));
 
     assertThat(response.stockQty()).isEqualTo(15);
   }
@@ -122,7 +138,7 @@ class IngredientWriterTest {
     when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
 
     IngredientResponse response =
-        asTenant(() -> writer.addStock(ingredient.getId(), -100, null, null));
+        asTenant(() -> writer.addStock(ingredient.getId(), -100, null, null, null));
 
     assertThat(response.stockQty()).isZero();
   }
@@ -134,13 +150,29 @@ class IngredientWriterTest {
     Ingredient ingredient = tracked(10);
     when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
     when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(goodsReceiptRepository.saveAndFlush(any(GoodsReceipt.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
 
     IngredientResponse response =
-        asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, "IDR"));
+        asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, "IDR", null));
 
     assertThat(response.stockQty()).isEqualTo(20);
     assertThat(response.stockValueMinor()).isEqualTo(180_000L);
     assertThat(response.unitCostMinor()).isEqualTo(9_000L);
+
+    // ADR 0067 Phase B: the priced receive also records the goods-receipt fact + outbox event, in
+    // this same transaction — the atomicity test exercises the real DB path; here we pin that the
+    // writer at least attempts both.
+    verify(goodsReceiptRepository).saveAndFlush(any(GoodsReceipt.class));
+    verify(outboxWriter)
+        .write(
+            org.mockito.ArgumentMatchers.eq("goods_receipt"),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.eq("StockReceived"),
+            org.mockito.ArgumentMatchers.any(byte[].class),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.eq(UUID.fromString(COMPANY)),
+            org.mockito.ArgumentMatchers.any(java.time.Instant.class));
   }
 
   @Test
@@ -149,7 +181,7 @@ class IngredientWriterTest {
     when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
 
     assertThatThrownBy(
-            () -> asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, null)))
+            () -> asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, null, null)))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("both be present or both absent");
   }

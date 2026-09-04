@@ -5,8 +5,8 @@
  * useStaticQrImageUrl}, reimplemented locally rather than imported across features).
  *
  * A company has ONE QRIS mode (MANUAL/STATIC/GATEWAY) with an optional per-unit MODE override —
- * ADR 0045 amendment: a "unit" is a generic org-unit scope, either a division (business unit) or
- * an outlet, resolved outlet → division → company (never a per-unit gateway credential — those
+ * A "unit" is an OUTLET scope, resolved outlet → company (ADR 0070 removed the division rung with
+ * the division level itself; never a per-unit gateway credential — those
  * are company-level only). A unit may also override just the STATIC image while inheriting its
  * resolved mode. `QrisMode`/`EffectiveSettings` live in `./effectiveMode` (a fetch-free pure
  * module) and are re-exported here for convenience.
@@ -34,19 +34,30 @@ function tenantOf(session: CompanySession) {
 
 export type GatewayEnvironment = 'SANDBOX' | 'PRODUCTION'
 
-/** The company-level gateway config block — credentials are company-level only (never per-outlet). */
-export interface GatewaySettings {
-  provider: 'MIDTRANS'
-  environment: GatewayEnvironment
-  /** Last 4 characters of the stored server key — never the key itself. Null when never configured. */
+/** One environment slot's readable trace — never the key itself (rule 6). */
+export interface GatewayEnvCredential {
+  /** Last 4 characters of that environment's stored server key. Null when its slot is empty. */
   serverKeyLast4: string | null
   connected: boolean
+}
+
+/**
+ * The company-level gateway config block (credentials are company-level only, never per-outlet).
+ * Per-environment (V6): the SANDBOX and PRODUCTION keys live in separate slots, and
+ * `activeEnvironment` is the one the till + webhook actually use — so an owner can hold both keys
+ * at once and switch between them without ever re-typing.
+ */
+export interface GatewaySettings {
+  provider: 'MIDTRANS'
+  activeEnvironment: GatewayEnvironment
+  sandbox: GatewayEnvCredential
+  production: GatewayEnvCredential
 }
 
 /** One row of the owner settings response — either the company default or a unit override. */
 export interface PaymentSettingsRow {
   id: string
-  /** Null for the company default row; otherwise a generic org-unit id — a division (business
+  /** Null for the company default row; otherwise an outlet id (ADR 0070: the only kind of org
    *  unit) or an outlet (ADR 0045 amendment; RENAMED from `outletId`). */
   unitId: string | null
   mode: QrisMode
@@ -91,14 +102,30 @@ function invalidatePaymentSettings(qc: ReturnType<typeof useQueryClient>, sessio
   void qc.invalidateQueries({ queryKey: ['payment-settings-effective', session.companyId] })
 }
 
-/** PUT /api/v1/payment-settings body — serverKey/clientKey are WRITE-ONLY (blank/absent keeps the
- *  stored value); omit them entirely for a mode-only write (the settings page's mode picker). */
+/**
+ * PUT /api/v1/payment-settings body. The per-environment keys are WRITE-ONLY (blank/absent keeps
+ * that slot's stored value); omit every gateway field for a mode-only write (the settings page's
+ * mode picker). `activeEnvironment` selects the slot the till uses — the server refuses to activate
+ * an environment whose slot has no key (→ 422), so an environment can never be activated against
+ * the wrong (or no) key.
+ */
 export interface UpsertCompanySettingsBody {
   mode: QrisMode
   provider?: 'MIDTRANS'
-  environment?: GatewayEnvironment
+  activeEnvironment?: GatewayEnvironment
+  sandboxServerKey?: string
+  sandboxClientKey?: string
+  productionServerKey?: string
+  productionClientKey?: string
+}
+
+/** Outcome of a "Test connection" probe (POST …/gateway/verify) — availability only, no key. */
+export type GatewayVerifyResult = 'VALID' | 'INVALID' | 'UNREACHABLE'
+
+/** POST …/gateway/verify body — `serverKey` blank probes the environment's already-stored key. */
+export interface VerifyGatewayBody {
+  environment: GatewayEnvironment
   serverKey?: string
-  clientKey?: string
 }
 
 /** PUT /api/v1/payment-settings — OWNER only. */
@@ -116,8 +143,25 @@ export function useUpsertPaymentSettings(session: CompanySession) {
   })
 }
 
+/**
+ * POST /api/v1/payment-settings/gateway/verify — OWNER only. Probes Midtrans with a key (or the
+ * stored one) WITHOUT saving or charging, so a wrong key or a key for the wrong environment is
+ * caught at the settings page instead of at the till. No cache invalidation (read-only probe).
+ */
+export function useVerifyGateway(session: CompanySession) {
+  return useMutation({
+    mutationFn: (body: VerifyGatewayBody) =>
+      apiFetch<{ result: GatewayVerifyResult }>('/api/v1/payment-settings/gateway/verify', {
+        method: 'POST',
+        tenant: tenantOf(session),
+        auth: 'personal',
+        body,
+      }),
+  })
+}
+
 /** PUT /api/v1/payment-settings/units/{unitId} — OWNER only; mode-only (gateway fields 422).
- *  `unitId` is a division or an outlet id (ADR 0045 amendment; RENAMED from `outlets/{outletId}`). */
+ *  `unitId` is an outlet id (RENAMED from `outlets/{outletId}` by the ADR 0045 amendment). */
 export function useUpsertUnitOverride(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -133,7 +177,7 @@ export function useUpsertUnitOverride(session: CompanySession) {
 }
 
 /** DELETE /api/v1/payment-settings/units/{unitId} — OWNER only; removes the mode override (the
- *  unit falls back to inheriting its resolved parent — division default, else company default). */
+ *  unit falls back to inheriting the company default). */
 export function useDeleteUnitOverride(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -168,7 +212,7 @@ function staticQrUploadPath(unitId?: string) {
  * POST /api/v1/payment-settings/static-qr (or the unit variant) — OWNER only, multipart `file`
  * (jpeg/png/webp, ≤ 2 MiB; the caller pre-checks size client-side to avoid a round trip for the
  * common case, but the server is the source of truth — 413/422 on a bad upload). `unitId` is a
- * division or an outlet id (ADR 0045 amendment; RENAMED from `outletId`).
+ * an outlet id (RENAMED from `outletId` by the ADR 0045 amendment).
  */
 export function useUploadStaticQr(session: CompanySession) {
   const qc = useQueryClient()
@@ -210,14 +254,14 @@ const STATIC_QR_LOADING: StaticQrPreviewState = { url: null, status: 'loading' }
 
 /**
  * Fetches the static QRIS image as an object URL for an `<img>` preview — GET
- * /api/v1/payment-settings/static-qr/image, company-scoped when `businessId`/`divisionId` are
- * both null/undefined, otherwise resolved outlet → division → company server-side (ADR 0045
+ * /api/v1/payment-settings/static-qr/image, company-scoped when `businessId` is
+ * null/undefined, otherwise resolved outlet → company server-side (ADR 0045
  * amendment). Same object-URL/revoke lifecycle as `features/expenses/api.ts`'s
  * `useReceiptUrlAtPath` (reimplemented here rather than imported across features — a Blob's
  * object-URL lifetime needs an explicit revoke tied to THIS component instance).
  *
  * `version` is a caller-bumped counter (e.g. incremented after a successful upload/delete) that
- * forces a re-fetch even though `businessId`/`divisionId`/`enabled` did not change — the image
+ * forces a re-fetch even though `businessId`/`enabled` did not change — the image
  * byte content can change behind the same URL. A 404 (no image on file) resolves to `'none'`, not
  * `'error'`.
  */
@@ -227,8 +271,7 @@ export function useStaticQrImageUrl(
   enabled: boolean,
   version = 0,
   /** ADR 0045 amendment: the outlet's parent business-unit id, when known — omitted/undefined on
-   *  a company-scoped preview or when no division context is available. */
-  divisionId?: string | null,
+   *  a company-scoped preview. */
 ): StaticQrPreviewState {
   const [state, setState] = useState<StaticQrPreviewState>(STATIC_QR_LOADING)
 
@@ -245,7 +288,6 @@ export function useStaticQrImageUrl(
           tenant: tenantOf(session),
           query: {
             businessId: businessId ?? undefined,
-            divisionId: divisionId ?? undefined,
           },
         })
         if (cancelled) return
@@ -267,7 +309,7 @@ export function useStaticQrImageUrl(
     }
     // Keyed on session.companyId/session.actor (not the session object) — the useReceiptUrlAtPath idiom.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.companyId, session.actor, businessId, divisionId, enabled, version])
+  }, [session.companyId, session.actor, businessId, enabled, version])
 
   // Not enabled → the idle/loading sentinel, same value the initial render already has — never
   // reset via setState-in-effect (mirrors features/expenses/api.ts's useReceiptUrlAtPath, which
@@ -280,30 +322,29 @@ export function useStaticQrImageUrl(
 // ---------------------------------------------------------------------------
 
 /**
- * GET /api/v1/payment-settings/effective?businessId=<uuid>&divisionId=<uuid> — the till's read:
- * the resolved mode for this outlet (ADR 0045 amendment: per-facet resolution outlet → division →
- * company — mode and `staticQrAvailable` walk the chain; `gateway` comes from the company only),
+ * GET /api/v1/payment-settings/effective?businessId=<uuid> — the till's read:
+ * the resolved mode for this outlet (per-facet resolution outlet → company since ADR 0070 removed
+ * the division rung — mode and `staticQrAvailable` walk the chain; `gateway` is company-only),
  * whether a static image is actually available, and the gateway's connection state. Cached briefly
  * (60s) since a payment surface may re-render often within one checkout session; `options.enabled`
  * lets the caller gate the fetch (e.g. never fetch while offline — a digital mode is unreachable
- * anyway); `options.divisionId` is the outlet's parent business-unit id, when known — omitted
+ * anyway). ADR 0070 removed the division rung: settings resolve outlet -> company — omitted
  * degrades to outlet → company resolution exactly as before this amendment.
  */
 export function useQrisEffective(
   session: CompanySession,
   businessId: string,
-  options: { enabled?: boolean; divisionId?: string | null } = {},
+  options: { enabled?: boolean } = {},
 ) {
   const enabled = (options.enabled ?? true) && !!businessId
-  const divisionId = options.divisionId ?? undefined
   return useQuery({
-    queryKey: ['payment-settings-effective', session.companyId, businessId, divisionId ?? null],
+    queryKey: ['payment-settings-effective', session.companyId, businessId],
     enabled,
     staleTime: 60_000,
     queryFn: () =>
       apiFetch<EffectiveSettings>('/api/v1/payment-settings/effective', {
         tenant: tenantOf(session),
-        query: { businessId, divisionId },
+        query: { businessId },
       }),
   })
 }
@@ -350,7 +391,6 @@ export interface CreateChargeInput {
   businessId: string
   /** ADR 0045 amendment: the outlet's parent business-unit id (→ null on the wire when absent) —
    *  advisory only, used for the GATEWAY mode gate; the charge itself is always company-scoped. */
-  divisionId?: string | null
   /** The tender RESIDUAL the vertical checkout returned — integer minor units (rule 8). */
   amountMinor: number
   currency: string
@@ -366,12 +406,12 @@ export function createCharge(
   session: CompanySession,
   input: CreateChargeInput,
 ): Promise<ChargeResponse | null> {
-  const { idempotencyKey, referenceId, divisionId, ...rest } = input
+  const { idempotencyKey, referenceId, ...rest } = input
   return apiFetch<ChargeResponse>('/api/v1/payment-charges', {
     method: 'POST',
     tenant: tenantOf(session),
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: { ...rest, referenceId: referenceId ?? null, divisionId: divisionId ?? null },
+    body: { ...rest, referenceId: referenceId ?? null },
   })
 }
 

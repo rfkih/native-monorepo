@@ -28,6 +28,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Printer, RefreshCw, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { usePrinter } from '@/lib/escpos/printerContext'
 import { toEscposReceiptData } from '@/lib/escpos/fromThermalProps'
@@ -58,6 +60,23 @@ export interface ThermalRow {
   isDeduction?: boolean
 }
 
+/**
+ * An optional DESTRUCTIVE action rendered as a full-width button beneath the main Print/action row
+ * (e.g. the manager-gated "Return sale" refund, ADR 0061). Omitted → nothing renders, so every
+ * caller that doesn't pass one is byte-identical to before.
+ */
+export interface ThermalSecondaryAction {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  /**
+   * Visual tone. Defaults to `'danger'` (red) — the original use was the manager-gated Return sale
+   * (ADR 0061). `'neutral'` is a plain outline for a non-destructive drill-in (e.g. the past-day
+   * "Lihat transaksi" from the closing-history Z-report).
+   */
+  tone?: 'neutral' | 'danger'
+}
+
 export interface ThermalProps {
   /** Business / outlet name — printed in ALL CAPS in the header. */
   businessName: string
@@ -86,6 +105,8 @@ export interface ThermalProps {
   onAction: () => void
   /** Label for the primary action button. */
   actionLabel: string
+  /** Optional destructive action shown full-width below the Print/primary row — see the type doc. */
+  secondaryAction?: ThermalSecondaryAction
   /** When true, shows an amber "pending" banner beneath the title. */
   isPending?: boolean
   /** Pending note text (shown when isPending is true). */
@@ -99,6 +120,15 @@ export interface ThermalProps {
   isProvisional?: boolean
   /** Provisional marker text (shown when isProvisional is true). */
   provisionalNote?: string
+  /**
+   * True when the underlying payment was reversed (VOIDED / REFUNDED / PARTIALLY_REFUNDED) — a
+   * cancelled or refunded sale must never be mistaken for a normal paid receipt, on screen OR on
+   * the printed thermal paper (incl. a history reprint). Renders a solid banner identical in style
+   * to the provisional marker, placed right after it (and after the pending banner).
+   */
+  isReversed?: boolean
+  /** Reversed-sale banner text (shown when isReversed is true). */
+  reversedNote?: string
   /**
    * Set by surfaces that mount right after a successful payment (ReceiptView, ServiceReceipt,
    * BillReceiptView): when the operator has enabled auto-print in printer settings AND a device
@@ -297,15 +327,22 @@ export function ThermalReceipt({
   onPrint,
   onAction,
   actionLabel,
+  secondaryAction,
   isPending,
   pendingNote,
   isProvisional,
   provisionalNote,
+  isReversed,
+  reversedNote,
   autoPrint,
   cashTender,
   zIndexClass = 'z-40',
 }: ThermalProps) {
   const { t } = useTranslation()
+  // No dedicated close/X or Escape handling on this surface — onAction IS the dismiss/proceed
+  // callback every caller passes (labelled Close / New order), so Back mirrors it.
+  useBackDismiss(onAction)
+  useScrollLock()
   const headingId = useId()
   const printer = usePrinter()
   const [deviceBusy, setDeviceBusy] = useState(false)
@@ -331,6 +368,7 @@ export function ThermalReceipt({
         paymentRows,
         footerNote,
         provisionalNote: isProvisional ? provisionalNote : undefined,
+        reversedNote: isReversed ? reversedNote : undefined,
       }),
     [
       businessName,
@@ -347,6 +385,8 @@ export function ThermalReceipt({
       footerNote,
       isProvisional,
       provisionalNote,
+      isReversed,
+      reversedNote,
     ],
   )
 
@@ -529,6 +569,24 @@ export function ThermalReceipt({
               </div>
             ) : null}
 
+            {/* ---- REVERSED BANNER (voided/refunded/partially refunded) ---- */}
+            {isReversed && reversedNote ? (
+              <div
+                style={{
+                  border: '2px solid #000',
+                  padding: '4px 6px',
+                  marginBottom: 8,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                  textAlign: 'center',
+                  letterSpacing: '0.03em',
+                }}
+              >
+                {reversedNote}
+              </div>
+            ) : null}
+
             {/* ---- META ROWS ---- */}
             {metaRows.length > 0 ? (
               <>
@@ -540,33 +598,40 @@ export function ThermalReceipt({
             ) : null}
 
             {/* ---- LINE ITEMS ---- */}
-            <div style={{ marginBottom: 4 }}>
-              {lineItems.map((item, i) => (
-                <div key={i} style={{ marginBottom: 4 }}>
-                  <ItemRow qty={item.qty} name={item.name} priceLabel={item.priceLabel} />
-                  {item.modifiers.map((mod, j) => (
-                    <div
-                      key={j}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        paddingLeft: 24,
-                        fontSize: 11,
-                        color: '#444',
-                        marginBottom: 1,
-                      }}
-                    >
-                      <span>{mod.label}</span>
-                      {mod.deltaLabel ? (
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{mod.deltaLabel}</span>
-                      ) : null}
+            {/* An item-less receipt (the daily summary / Z-report reuses this component with no line
+                items) skips the whole items block AND its trailing rule so the header/totals don't
+                sit between two adjacent dashed rules. A real receipt always has ≥1 item. */}
+            {lineItems.length > 0 ? (
+              <>
+                <div style={{ marginBottom: 4 }}>
+                  {lineItems.map((item, i) => (
+                    <div key={i} style={{ marginBottom: 4 }}>
+                      <ItemRow qty={item.qty} name={item.name} priceLabel={item.priceLabel} />
+                      {item.modifiers.map((mod, j) => (
+                        <div
+                          key={j}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            paddingLeft: 24,
+                            fontSize: 11,
+                            color: '#444',
+                            marginBottom: 1,
+                          }}
+                        >
+                          <span>{mod.label}</span>
+                          {mod.deltaLabel ? (
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{mod.deltaLabel}</span>
+                          ) : null}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
-              ))}
-            </div>
 
-            <DashedRule />
+                <DashedRule />
+              </>
+            ) : null}
 
             {/* ---- TOTAL ROWS (subtotal, discount, service, tax) ---- */}
             {totalRows.map((row, i) => (
@@ -655,25 +720,44 @@ export function ThermalReceipt({
         {/* Buttons — outside the paper, hidden when printing                */}
         {/* ---------------------------------------------------------------- */}
         <div
-          className="mt-4 flex w-full justify-center gap-3 print:hidden"
+          className="mt-4 flex w-full flex-col gap-3 print:hidden"
           style={{ maxWidth: 320 }}
         >
-          <Button
-            variant="outline"
-            className="flex-1 border-white/20 bg-white/10 text-white hover:bg-white/20"
-            onClick={handlePrint}
-            disabled={deviceBusy}
-          >
-            <Printer className="size-4" />
-            {deviceBusy
-              ? t('pos.receipt.printing')
-              : printer.connected
-                ? t('pos.receipt.printDevice')
-                : t('pos.receipt.print')}
-          </Button>
-          <Button className="flex-1" onClick={onAction}>
-            {actionLabel}
-          </Button>
+          <div className="flex justify-center gap-3">
+            <Button
+              variant="outline"
+              className="flex-1 border-white/20 bg-white/10 text-white hover:bg-white/20"
+              onClick={handlePrint}
+              disabled={deviceBusy}
+            >
+              <Printer className="size-4" />
+              {deviceBusy
+                ? t('pos.receipt.printing')
+                : printer.connected
+                  ? t('pos.receipt.printDevice')
+                  : t('pos.receipt.print')}
+            </Button>
+            <Button className="flex-1" onClick={onAction}>
+              {actionLabel}
+            </Button>
+          </div>
+          {/* Secondary action — full-width, visually separated below. Default tone is destructive
+              (manager-gated Return sale, ADR 0061): red-toned so it never reads as a routine tap on
+              this dark backdrop. 'neutral' is a plain outline for a non-destructive drill-in. */}
+          {secondaryAction ? (
+            <Button
+              variant="outline"
+              className={
+                secondaryAction.tone === 'neutral'
+                  ? 'w-full border-white/25 bg-white/5 text-white hover:bg-white/10'
+                  : 'w-full border-red-400/40 bg-red-500/10 text-red-50 hover:bg-red-500/20 focus-visible:outline-red-300'
+              }
+              onClick={secondaryAction.onClick}
+              disabled={secondaryAction.disabled}
+            >
+              {secondaryAction.label}
+            </Button>
+          ) : null}
         </div>
       </div>
 

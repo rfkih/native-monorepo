@@ -1,6 +1,5 @@
 package id.co.nativeapp.org.user.service;
 
-import id.co.nativeapp.org.company.domain.OrgUnitType;
 import id.co.nativeapp.org.company.projection.OrgUnitView;
 import id.co.nativeapp.org.company.repository.OrgUnitRepository;
 import id.co.nativeapp.org.user.dto.OrgUnitUserResponse;
@@ -53,9 +52,8 @@ public class OrgUnitUsersReader {
         orgUnitRepository
             .findViewById(orgUnitId)
             .orElseThrow(() -> new OrgUnitNotFoundException(orgUnitId));
-    if (OrgUnitType.from(unit.getType()) == OrgUnitType.TEAM) {
-      throw new InvalidUnitUsersTargetException(orgUnitId);
-    }
+    // ADR 0070: the TEAM level is gone, so every org unit is a valid target — an outlet is
+    // exactly what an assignment points at. The existence/tenant check above is the whole guard.
     return assignmentRepository.findActiveUnderUnit(orgUnitId).stream()
         .map(v -> new OrgUnitUserResponse(v.getUserId(), v.getOrgUnitId(), v.getOutletName()))
         .toList();

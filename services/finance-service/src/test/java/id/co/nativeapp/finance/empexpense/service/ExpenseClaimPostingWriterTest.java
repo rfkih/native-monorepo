@@ -6,12 +6,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.empexpense.domain.EmployeeExpenseClaimLedger;
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimApprovedEvent;
@@ -21,6 +23,7 @@ import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.mapping.domain.GlAccountResolution;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
@@ -32,6 +35,7 @@ import id.co.nativeapp.finance.revenue.domain.PostingType;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -80,8 +84,11 @@ class ExpenseClaimPostingWriterTest {
             glAccountResolver,
             pnlReadModel,
             journalPostingService,
-            journalEntryRepository,
-            journalLineRepository,
+            new GeneralLedgerWriter(
+                journalEntryRepository,
+                journalLineRepository,
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             claimLedgerRepository);
   }
 

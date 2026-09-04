@@ -10,6 +10,8 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * The {@code sale} aggregate — restaurant-service's system of record for a recorded sale, and the
@@ -94,6 +96,63 @@ public class Sale extends Auditable {
    */
   @Column(name = "sold_by_user_id", updatable = false)
   private String soldByUserId;
+
+  /**
+   * Reporting snapshot of the Phase 2 price breakdown computed at ring time (V39) — the SAME
+   * figures emitted on {@code SaleRecorded} (see {@link
+   * id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema}), persisted here so the POS daily
+   * summary (Z-report) aggregates them with exact SQL sums instead of re-deriving the pricing
+   * engine per order. {@code updatable=false}: stamped exactly once at creation via {@link
+   * #stampBreakdown}. NULL for legacy/pre-V39 rows and for producers that carry no breakdown (the
+   * legacy {@code POST /api/v1/sales}, carwash) — readers fall back to {@code subtotal ==
+   * amount_minor}, mirroring finance's documented fallback. {@link #discountMinor} is PROMO-ONLY (a
+   * loyalty-points redemption is a separate contra-revenue term, not folded in here), matching the
+   * event wire's {@code discount_minor} decomposition.
+   */
+  @Column(name = "subtotal_minor", updatable = false)
+  private Long subtotalMinor;
+
+  @Column(name = "discount_minor", updatable = false)
+  private Long discountMinor;
+
+  @Column(name = "service_charge_minor", updatable = false)
+  private Long serviceChargeMinor;
+
+  @Column(name = "tax_minor", updatable = false)
+  private Long taxMinor;
+
+  /**
+   * Reporting snapshot (V39) of the loyalty-points redemption on this sale — a CONTRA-REVENUE term
+   * kept SEPARATE from {@link #discountMinor} (which is promo-only), matching the {@code
+   * SaleRecorded} wire. Persisting it lets the daily summary reconcile the full identity {@code
+   * gross − discount − loyaltyRedeemed + serviceCharge + tax = total}. {@code 0}/NULL when no
+   * points were redeemed.
+   */
+  @Column(name = "loyalty_redeemed_minor", updatable = false)
+  private Long loyaltyRedeemedMinor;
+
+  @Column(name = "uses_illustrative_rules", updatable = false)
+  private Boolean usesIllustrativeRules;
+
+  /**
+   * The Σ (depleted qty × moving-average unit cost at sale time) fold (ADR 0067 Phase C, V44) — the
+   * durable, never-recomputed audit anchor for what this sale actually expensed against inventory,
+   * and the SAME value folded into the {@code SaleCogsRecorded} outbox event. {@code updatable =
+   * false}: stamped exactly once, BEFORE the first save, via {@link #stampCogs}. {@code NULL} for a
+   * sale whose items carry no recipe / deplete no costed ingredients — recipes mutate under
+   * full-replace (ADR 0050), so a later recompute could never reliably reproduce what was actually
+   * depleted at sale time.
+   */
+  @Column(name = "cogs_minor", updatable = false)
+  private Long cogsMinor;
+
+  /**
+   * ISO-4217 code of {@link #cogsMinor}; {@code null} exactly when {@link #cogsMinor} is null.
+   * {@code CHAR(3)} to match {@code sale.currency}'s own type (V1/V44) — the same ISO-4217 domain.
+   */
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(name = "cogs_currency", length = 3, updatable = false)
+  private String cogsCurrency;
 
   protected Sale() {
     // for JPA
@@ -244,5 +303,121 @@ public class Sale extends Auditable {
       throw new IllegalStateException("soldByUserId is already stamped on this sale");
     }
     this.soldByUserId = userId;
+  }
+
+  /**
+   * Stamps the Phase 2 price-breakdown reporting snapshot onto this sale (V39) — called by {@code
+   * SaleWriter} on a freshly-constructed (not-yet-persisted) sale, BEFORE the first save (the
+   * columns are {@code updatable=false}). The values are the SAME figures put on the {@code
+   * SaleRecorded} event: {@code discountMinor} must be PROMO-ONLY (the caller subtracts any loyalty
+   * redemption first, exactly as {@code SaleRecordedSchema#toRecord} does), so the sale row, the
+   * event, and the receipt all agree. Reporting-only — finance's GL remains the authoritative
+   * statutory figure.
+   *
+   * <p>Guarded to run exactly once: a second call (e.g. against an already-stamped sale) throws
+   * loudly instead of silently no-op'ing at the {@code updatable=false} column level.
+   *
+   * @throws IllegalStateException if a breakdown snapshot is already stamped on this sale
+   */
+  public void stampBreakdown(
+      long subtotalMinor,
+      long discountMinor,
+      long serviceChargeMinor,
+      long taxMinor,
+      long loyaltyRedeemedMinor,
+      boolean usesIllustrativeRules) {
+    if (this.subtotalMinor != null) {
+      throw new IllegalStateException("a price-breakdown snapshot is already stamped on this sale");
+    }
+    this.subtotalMinor = subtotalMinor;
+    this.discountMinor = discountMinor;
+    this.serviceChargeMinor = serviceChargeMinor;
+    this.taxMinor = taxMinor;
+    this.loyaltyRedeemedMinor = loyaltyRedeemedMinor;
+    this.usesIllustrativeRules = usesIllustrativeRules;
+  }
+
+  /**
+   * Reporting snapshot (V39): Σ line totals before discount, minor units — {@code null} if legacy.
+   */
+  public Long getSubtotalMinor() {
+    return subtotalMinor;
+  }
+
+  /** Reporting snapshot (V39): promo-only discount, minor units — {@code null} if legacy. */
+  public Long getDiscountMinor() {
+    return discountMinor;
+  }
+
+  /** Reporting snapshot (V39): service charge, minor units — {@code null} if legacy. */
+  public Long getServiceChargeMinor() {
+    return serviceChargeMinor;
+  }
+
+  /** Reporting snapshot (V39): tax / PB1, minor units — {@code null} if legacy. */
+  public Long getTaxMinor() {
+    return taxMinor;
+  }
+
+  /**
+   * Reporting snapshot (V39): loyalty-points contra-revenue, minor units — {@code null} if legacy.
+   */
+  public Long getLoyaltyRedeemedMinor() {
+    return loyaltyRedeemedMinor;
+  }
+
+  /**
+   * Reporting snapshot (V39): whether an {@code ILLUSTRATIVE_PLACEHOLDER} tax/service-charge rule
+   * produced these figures — the POS badges the printed tax line "estimasi" when true. {@code null}
+   * for legacy rows.
+   */
+  public Boolean getUsesIllustrativeRules() {
+    return usesIllustrativeRules;
+  }
+
+  /**
+   * Σ (depleted qty × moving-average unit cost at sale time), minor units (ADR 0067 Phase C) —
+   * {@code null} for a sale with no costed recipe depletion.
+   */
+  public Long getCogsMinor() {
+    return cogsMinor;
+  }
+
+  /**
+   * ISO-4217 code of {@link #getCogsMinor()}; {@code null} exactly when that is null. PostgreSQL
+   * space-pads {@code CHAR(3)} on read, so this strips before returning (the {@code
+   * MoneyEmbeddable#getCurrency}/{@code Ingredient#getCostCurrency} precedent).
+   */
+  public String getCogsCurrency() {
+    return cogsCurrency == null ? null : cogsCurrency.strip();
+  }
+
+  /**
+   * Stamps the ADR 0067 Phase C COGS fold onto this freshly-constructed (not-yet-persisted) sale —
+   * called by {@code SaleWriter} BEFORE the first save (the columns are {@code updatable=false}). A
+   * no-op when {@code cogsMinor} is {@code null} (no costed depletion — the columns stay NULL,
+   * mirroring {@link #stampBreakdown}'s no-breakdown no-op).
+   *
+   * @param cogsMinor the Σ (depleted qty × moving-average unit cost) fold, or {@code null}
+   * @param cogsCurrency the ISO-4217 code of {@code cogsMinor}; required exactly when {@code
+   *     cogsMinor} is non-null
+   * @throws IllegalArgumentException if {@code cogsMinor} is present but not strictly positive, or
+   *     {@code cogsCurrency} is missing while {@code cogsMinor} is present
+   * @throws IllegalStateException if COGS is already stamped on this sale
+   */
+  public void stampCogs(Long cogsMinor, String cogsCurrency) {
+    if (cogsMinor == null) {
+      return;
+    }
+    if (cogsMinor <= 0) {
+      throw new IllegalArgumentException(
+          "cogsMinor must be positive when present, got: " + cogsMinor);
+    }
+    Objects.requireNonNull(cogsCurrency, "cogsCurrency");
+    if (this.cogsMinor != null) {
+      throw new IllegalStateException("COGS is already stamped on this sale");
+    }
+    this.cogsMinor = cogsMinor;
+    this.cogsCurrency = cogsCurrency;
   }
 }

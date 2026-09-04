@@ -3,9 +3,10 @@
  * materials (bahan: bread, patty, sauce…) that the stock opname counts — a SEPARATE concept
  * from per-menu-item stock, which stays the sellable-portion/86 gate.
  *
- * Quantities are INTEGERS in the ingredient's own unit (g/ml/pcs/pack — the backend stores
- * `unit` as opaque display text; the ArchUnit decimal ban makes fractional quantities
- * impossible server-side, so the picker deliberately offers no kg/L).
+ * Quantities are INTEGERS in the ingredient's BASE `unit` (g/ml/pcs/pack). A weight/volume item may
+ * carry a `displayUnit` (kg over a base of g, liter over ml) so the console SHOWS and accepts it in
+ * kg/litres with a decimal while storage stays whole integers — see `lib/units.ts` for the ×1000
+ * conversion. `displayUnit` is null when the shown unit IS the base unit.
  *
  * Money rule (rule 8): `unitCostMinor` is integer minor units with its own `costCurrency`
  * (an ingredient has no price to ride on) — both null together = counted but never valued.
@@ -15,9 +16,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 
-/** Units offered by the console picker. Backend treats the value as opaque display text (≤16 chars,
- *  no server-side conversion). Quantities are WHOLE numbers (stockQty is an int), so kg/liter mean
- *  whole kg/liter — pick g/ml for anything you weigh or measure to a fraction. */
+/** Units offered by the console picker. kg/liter are DISPLAY units over a smaller integer base
+ *  (g/ml) — the console converts ×1000 so a weight can be entered as 1.5 kg yet stored whole (see
+ *  `lib/units.ts`). g/ml/pcs/pack are base units shown as-is. */
 export const INGREDIENT_UNITS = ['g', 'kg', 'ml', 'liter', 'pcs', 'pack'] as const
 export type IngredientUnit = (typeof INGREDIENT_UNITS)[number]
 
@@ -32,7 +33,11 @@ export interface Ingredient {
   id: string
   businessId: string
   name: string
+  /** The BASE unit stock is stored/counted in (g/ml/pcs/pack). */
   unit: string
+  /** The unit SHOWN to the user when it sits above the base (kg over g, liter over ml); null = base. */
+  displayUnit: string | null
+  /** On-hand stock in the BASE `unit` — a whole integer (convert with `lib/units.ts` to show kg). */
   stockQty: number
   unitCostMinor: number | null
   costCurrency: string | null
@@ -59,12 +64,55 @@ export function useIngredients(session: CompanySession) {
   })
 }
 
+/** One ingredient's quantity consumed by sales on the requested day ("terpakai", V42). */
+export interface IngredientUsage {
+  ingredientId: string
+  qtyUsed: number
+}
+
+/**
+ * The outlet-local calendar-day key (YYYY-MM-DD) usage is attributed to — Asia/Jakarta, mirroring
+ * the SERVER's attribution zone (IngredientDepletionWriter / the register business-date
+ * convention). Never the device zone: a device in another zone would query the wrong bucket.
+ */
+export function usageDayKey(at: Date = new Date()): string {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(at)
+}
+
+/**
+ * GET /api/v1/ingredients/usage?businessId&date — per-ingredient "terpakai" for one outlet-local
+ * day. Ingredients with no sales that day are ABSENT (treat absence as 0). Usage accrues from the
+ * feature's deployment forward — earlier days read empty, not zero-filled.
+ */
+export function useIngredientUsage(session: CompanySession, dateKey: string, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['ingredient-usage', session.companyId, session.businessId, dateKey],
+    staleTime: 30_000,
+    queryFn: () =>
+      apiFetch<IngredientUsage[]>('/api/v1/ingredients/usage', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId, date: dateKey },
+      }),
+  })
+}
+
 export interface CreateIngredientInput {
   name: string
+  /** BASE unit (g/ml/pcs/pack). */
   unit: string
+  /** Display label (kg/liter) when it sits above the base, else null — see `lib/units.ts`. */
+  displayUnit?: string | null
   /** Both-or-neither with `costCurrency` (server-enforced CHECK). */
   unitCostMinor?: number | null
   costCurrency?: string | null
+  /** Initial stock in the BASE `unit` (already converted from any display value). */
   initialStockQty?: number
 }
 
@@ -79,6 +127,7 @@ export function useCreateIngredient(session: CompanySession) {
           businessId: session.businessId,
           name: input.name,
           unit: input.unit,
+          displayUnit: input.displayUnit ?? null,
           unitCostMinor: input.unitCostMinor ?? null,
           costCurrency: input.costCurrency ?? null,
           initialStockQty: input.initialStockQty ?? 0,
@@ -92,6 +141,7 @@ export interface UpdateIngredientInput {
   id: string
   name?: string
   unit?: string
+  displayUnit?: string | null
   unitCostMinor?: number | null
   costCurrency?: string | null
 }
@@ -143,16 +193,33 @@ export interface AddIngredientStockInput {
    * Sent together with `costCurrency`, only on a positive receive with a price entered. */
   amountPaidMinor?: number
   costCurrency?: string
+  /**
+   * ADR 0067 Phase D1 — a stable UUID minted ONCE per user submit (`crypto.randomUUID()` in the
+   * calling component's submit handler, NOT inside `mutationFn`, which re-runs on every TanStack
+   * Query retry and would mint a fresh key per retry) — mirrors `features/ap/api.ts`'s
+   * `useRecordPayment` idiom exactly. Sent as the `Idempotency-Key` header ONLY on a priced receive
+   * (`amountPaidMinor` present): the backend dedupes a retried priced receive by this key
+   * (`goods_receipt.idempotency_key`) so it never double-adds the value / double-posts `Dr 1100`.
+   * The header is optional server-side (backward compatible) and ignored on a costless call.
+   */
+  idempotencyKey?: string
 }
 
 /** POST /{id}/stock/add — signed delta, floored at 0 server-side (the receive/purchase path). */
 export function useAddIngredientStock(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, amount, amountPaidMinor, costCurrency }: AddIngredientStockInput) =>
+    mutationFn: ({
+      id,
+      amount,
+      amountPaidMinor,
+      costCurrency,
+      idempotencyKey,
+    }: AddIngredientStockInput) =>
       apiFetch<Ingredient>(`/api/v1/ingredients/${id}/stock/add`, {
         method: 'POST',
         tenant: tenantOf(session),
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
         body:
           amountPaidMinor != null && costCurrency != null
             ? { amount, amountPaidMinor, costCurrency }

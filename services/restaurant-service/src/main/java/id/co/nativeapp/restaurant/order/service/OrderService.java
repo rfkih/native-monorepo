@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.order.service;
 import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.order.dto.CheckoutResult;
 import id.co.nativeapp.restaurant.order.dto.ItemPopularityResponse;
+import id.co.nativeapp.restaurant.order.dto.ItemSalesResponse;
 import id.co.nativeapp.restaurant.order.dto.OrderResponse;
 import id.co.nativeapp.restaurant.order.dto.ParkOrderRequest;
 import id.co.nativeapp.restaurant.order.dto.ParkedOrderSummary;
@@ -13,6 +14,7 @@ import id.co.nativeapp.restaurant.order.projection.ParkedOrderView;
 import id.co.nativeapp.restaurant.order.repository.OrderLineRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderRepository;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -142,6 +144,23 @@ public class OrderService {
     TenantContext.require();
     return orderLineRepository.itemPopularityByBusinessId(businessId).stream()
         .map(v -> new ItemPopularityResponse(v.getMenuItemId(), v.getSoldQty()))
+        .toList();
+  }
+
+  /**
+   * Per-menu-item units sold + gross revenue over a time window {@code [from, to)}, best-sellers
+   * first — the Z-report (register-close summary, with the session's window) and the stock-opname
+   * "sold today" reference render "Burger ×12 · Rp 300.000" from this. Read-only; RLS-scoped. The
+   * window keys off {@code sale.occurred_at}, so it foots to the same sales the Z-report totals do.
+   */
+  @Transactional(readOnly = true)
+  public List<ItemSalesResponse> itemSales(UUID businessId, Instant from, Instant to) {
+    TenantContext.require();
+    return orderLineRepository.soldItemsByWindow(businessId, from, to).stream()
+        .map(
+            v ->
+                new ItemSalesResponse(
+                    v.getMenuItemId(), v.getName(), v.getSoldQty(), v.getRevenueMinor()))
         .toList();
   }
 

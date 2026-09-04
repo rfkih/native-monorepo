@@ -1,10 +1,12 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import { AUTH_MODE } from '@/lib/config'
 import { useAuth } from '@/lib/authContext'
 import { isNativeShell } from '@/lib/escpos/transport'
 import { toPlanTier } from '@/lib/featureTier'
+import { reconcileLanguage } from '@/i18n'
+import { isIndonesiaByTimeZone, isIndonesiaCompany } from '@/lib/geo'
 import { SessionContext, type CompanySession } from '@/lib/session'
 
 /**
@@ -28,6 +30,11 @@ interface CompanyDto {
   planTier?: string
   /** The company's login-namespace code (ADR 0054). Absent on an older server → '' via toSession. */
   companyCode?: string
+  /**
+   * The company's business vertical (ADR 0070 — it moved here from the org unit). Absent on an
+   * older server; consumers fail open to 'restaurant'.
+   */
+  vertical?: string | null
 }
 
 const LEGACY_STORAGE_KEY = 'native.console.session'
@@ -156,6 +163,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       actor: auth.actor,
       planTier: toPlanTier(dto.planTier),
       companyCode: dto.companyCode ?? '',
+      vertical: dto.vertical ?? null,
     }),
     [auth.actor],
   )
@@ -268,6 +276,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setActiveOutletState(id)
     saveOutletToSessionStorage(id)
   }, [])
+
+  // Keep the UI language aligned with the English-first policy (ADR 0059): a signed-in company is
+  // Indonesian iff its books are IDR-derived (exact proxy, ADR 0025); with no company (public pages,
+  // or before /mine resolves) the browser time zone decides. This is the ONE place a company's
+  // stored `defaultLanguage` is applied to the UI, and where a non-Indonesian company is clamped off
+  // Indonesian. Reconcile (not persist) — a manual toggle still wins. Keyed on primitives so it does
+  // not re-run on every render (the resolved company is a fresh object each time).
+  const companyCurrency = company?.baseCurrency ?? null
+  const companyDefaultLanguage = company?.defaultLanguage ?? null
+  useEffect(() => {
+    const indonesia = companyCurrency ? isIndonesiaCompany(companyCurrency) : isIndonesiaByTimeZone()
+    reconcileLanguage(indonesia, companyDefaultLanguage)
+  }, [companyCurrency, companyDefaultLanguage])
 
   return (
     <SessionContext.Provider

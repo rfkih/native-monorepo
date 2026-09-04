@@ -14,7 +14,7 @@ import id.co.nativeapp.finance.fx.dto.AppliedRate;
 import id.co.nativeapp.finance.fx.dto.PnlPresentation;
 import id.co.nativeapp.finance.fx.service.PresentationConverter;
 import id.co.nativeapp.finance.pnl.controller.PnlController;
-import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.domain.PnlFigures;
 import id.co.nativeapp.finance.pnl.service.PnlReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.money.Provenance;
@@ -24,7 +24,6 @@ import java.util.Currency;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -49,19 +48,15 @@ class PnlPresentationControllerTest {
   @MockitoBean private PnlReader pnlReader;
   @MockitoBean private PresentationConverter presentationConverter;
 
-  private static ConsolidatedPnl idrPnl() {
-    ConsolidatedPnl pnl = Mockito.mock(ConsolidatedPnl.class);
-    when(pnl.getPeriod()).thenReturn("2026-06");
-    when(pnl.revenue()).thenReturn(Money.ofMinor(20_000_000L, "IDR"));
-    when(pnl.expense()).thenReturn(Money.ofMinor(8_000_000L, "IDR"));
-    when(pnl.net()).thenReturn(Money.ofMinor(12_000_000L, "IDR"));
-    when(pnl.usesIllustrativeRules()).thenReturn(false);
-    return pnl;
+  private static PnlFigures idrPnl() {
+    // net() is derived on the carrier: 20,000,000 − 8,000,000 = 12,000,000 IDR.
+    return new PnlFigures(
+        "2026-06", Money.ofMinor(20_000_000L, "IDR"), Money.ofMinor(8_000_000L, "IDR"), false);
   }
 
   @Test
   void presentationParamReturnsConvertedLegsWithNativeFiguresStillPresent() throws Exception {
-    ConsolidatedPnl pnl = idrPnl();
+    PnlFigures pnl = idrPnl();
     when(pnlReader.pnlForPeriod("2026-06")).thenReturn(Optional.of(pnl));
 
     AppliedRate applied =
@@ -97,9 +92,7 @@ class PnlPresentationControllerTest {
 
   @Test
   void noPresentationParamOmitsAllPresentationFields() throws Exception {
-    // Build the mock FIRST (its internal stubbing completes) before the outer when(...) — nesting
-    // them would trip Mockito's UnfinishedStubbingException.
-    ConsolidatedPnl pnl = idrPnl();
+    PnlFigures pnl = idrPnl();
     when(pnlReader.pnlForPeriod("2026-06")).thenReturn(Optional.of(pnl));
 
     mockMvc
@@ -113,7 +106,7 @@ class PnlPresentationControllerTest {
 
   @Test
   void aMissingRateFailsLoudlyWith422() throws Exception {
-    ConsolidatedPnl pnl = idrPnl();
+    PnlFigures pnl = idrPnl();
     when(pnlReader.pnlForPeriod("2026-06")).thenReturn(Optional.of(pnl));
     when(presentationConverter.convertPnl(eq(pnl), eq("2026-06"), any(Currency.class)))
         .thenThrow(

@@ -51,6 +51,16 @@ public interface QrisGatewayPort {
     NOT_FOUND
   }
 
+  /** The outcome of a side-effect-free credential probe ({@link #verify}). */
+  enum GatewayVerification {
+    /** The provider authenticated the key (the probe order is simply unknown). */
+    VALID,
+    /** The provider rejected the key (401/403) — wrong key, or a key for the other environment. */
+    INVALID,
+    /** The provider could not be reached / gave an inconclusive answer — try again later. */
+    UNREACHABLE
+  }
+
   /**
    * Creates a QRIS charge at the provider.
    *
@@ -69,4 +79,13 @@ public interface QrisGatewayPort {
 
   /** Cancels (or expires) the charge at the provider. */
   CancelOutcome cancel(GatewayCredentials credentials, String providerOrderId);
+
+  /**
+   * Verifies that {@code credentials} authenticate against the provider WITHOUT creating a charge
+   * (ADR 0045 amendment — the "Test connection" affordance): a status probe of a throwaway order id
+   * that the provider does not know. An authenticated key gets an order-not-found answer ({@link
+   * GatewayVerification#VALID}); a rejected key gets 401/403 ({@link GatewayVerification#INVALID});
+   * anything else is {@link GatewayVerification#UNREACHABLE}.
+   */
+  GatewayVerification verify(GatewayCredentials credentials);
 }

@@ -20,8 +20,9 @@ import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useClaims, useMyClaims } from '@/features/expenses/api'
+import { formatDate } from '@/features/expenses/format'
 import { useLeaveRequests, useOvertimeEntries } from '@/features/hr/api'
-import { formatMoney } from '@/lib/money'
+import { formatMoney, formatPercent } from '@/lib/money'
 import { localeOf } from '@/i18n'
 import {
   isNotLinked,
@@ -147,7 +148,7 @@ export function Beranda() {
                 key={a.id}
                 className="rounded-full border border-line bg-paper px-2.5 py-[5px] text-[12px] font-medium text-ink-3"
               >
-                <span className="font-bold text-ink">{a.role}</span> · {a.effectiveFrom}
+                <span className="font-bold text-ink">{a.role}</span> · {formatDate(a.effectiveFrom, locale)}
               </span>
             ))}
           </div>
@@ -228,7 +229,7 @@ export function Beranda() {
                   <div className="flex-1 rounded-[14px] bg-paper px-3.5 py-3">
                     <div className="text-[11.5px] font-medium text-ink-3">{t('me.sales.rate')}</div>
                     <div className="tnum mt-1 font-mono text-[16px] font-bold leading-none text-ink">
-                      {(sales.data.commissionBasisPoints / 100).toLocaleString(locale)}%
+                      {formatPercent(sales.data.commissionBasisPoints / 10000, locale)}
                     </div>
                   </div>
                   <div className="flex-1 rounded-[14px] bg-tint-profit px-3.5 py-3">

@@ -67,9 +67,9 @@ services:
       - -c
       - wal_level=logical
       - -c
-      - max_wal_senders=10
+      - max_wal_senders=20
       - -c
-      - max_replication_slots=10
+      - max_replication_slots=20
       - -c
       - max_connections=150
     environment:
@@ -548,9 +548,14 @@ services:
     ports:
       - "127.0.0.1:12002:2000" # GET /quicktunnel -> {"hostname":"...trycloudflare.com"} (employee)
 
-  # NAMED tunnel (profile: namedtunnel) — the prod target once a domain is on Cloudflare.
-  # Stable URL, so restart:unless-stopped. Needs docker/prod/cloudflared/{config.yml,<UUID>.json}
-  # and TUNNEL_UUID in prod.env. Ingress maps app.<domain>->edge:8080, me.<domain>->edge:8081.
+  # NAMED tunnel (profile: namedtunnel) — the DURABLE prod edge, now that native-app.my.id is on
+  # Cloudflare. Remotely-managed (dashboard) tunnel: the connector authenticates with a single
+  # TUNNEL TOKEN (prod.env CF_TUNNEL_TOKEN) and pulls its ingress from Cloudflare — the public
+  # hostnames app.native-app.my.id -> http://edge:8080 (business) and emp.native-app.my.id ->
+  # http://edge:8081 (employee) are configured in the Zero Trust dashboard, and Cloudflare
+  # auto-creates their DNS. Stable URL, so restart:unless-stopped. Replaces BOTH quick tunnels
+  # (drop the quicktunnel profile once this is verified live). Reaches the edge by the compose
+  # hostname `edge` over native-prod_default — no host port, no config files, no cert JSON.
   cloudflared-named:
     image: cloudflare/cloudflared:latest
     container_name: native-prod-cloudflared-named
@@ -558,11 +563,43 @@ services:
     restart: unless-stopped
     mem_limit: 128m
     cpus: 0.5
-    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run", "${TUNNEL_UUID:-}"]
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CF_TUNNEL_TOKEN:-}"]
+
+  # Dedicated Tailscale node for Native prod (profile: tsfunnel) — an INTERIM stable public
+  # origin WITHOUT a domain, until the named Cloudflare tunnel + domain lands. The VPS host's
+  # OWN tailscale node has all three Funnel ports (443/8443/10000) used by the co-located
+  # blackheart workload ("Funnel exhausted on this box"), so Native cannot funnel there. This
+  # is a SEPARATE tailscale node (its own container = its own tailnet identity), so it gets its
+  # own hostname `native-prod.<tailnet>.ts.net` and its own three Funnel ports — blackheart is
+  # untouched. Funnel maps :8443 -> edge:8080 (business) and :10000 -> edge:8081 (employee),
+  # mirroring the two cloudflared quick tunnels. Stable across restarts (persisted node state),
+  # so the APK origin baked against it never breaks like a quick tunnel does.
+  #
+  # Requires in prod.env: TS_AUTHKEY (a REUSABLE, non-ephemeral Tailscale auth key) and
+  # COMPOSE_PROFILES=tsfunnel. The tailnet ACL must allow Funnel for this node (nodeAttrs
+  # attr "funnel"); HTTPS/Funnel must be enabled for the tailnet (it already is — a8 UAT +
+  # blackheart both funnel). Serve+funnel is declared in ./prod/tailscale/serve.json;
+  # ${TS_CERT_DOMAIN} in that file is substituted with this node's FQDN at boot.
+  tailscale-native:
+    image: tailscale/tailscale:latest
+    container_name: native-prod-tailscale
+    profiles: ["tsfunnel"]
+    restart: unless-stopped
+    hostname: native-prod
+    mem_limit: 128m
+    cpus: 0.5
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_HOSTNAME: native-prod
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
     volumes:
-      - ./prod/cloudflared:/etc/cloudflared:ro
+      - native-prod-tailscale-state:/var/lib/tailscale
+      - ./prod/tailscale/serve.json:/config/serve.json:ro
 
 volumes:
   native-prod-pgdata:
   native-prod-kafka-data:
   native-prod-minio-data:
+  native-prod-tailscale-state:

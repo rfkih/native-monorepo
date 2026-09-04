@@ -1,10 +1,9 @@
 package id.co.nativeapp.org;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.org.company.domain.OrgUnit;
-import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
 import id.co.nativeapp.org.company.dto.OutletResponse;
@@ -22,13 +21,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * ADR 0012 — every new business unit seeds ONE default OUTLET (named after the business unit, in
- * the same transaction, with its own {@code OrgUnitCreated} outbox event) so the POS always has a
- * real outlet to bind to and never falls back to the business-unit id.
+ * ADR 0070 — the company bootstrap seeds exactly ONE top-level {@code OUTLET}, named after the
+ * COMPANY, in the same transaction and with its own {@code OrgUnitCreated} outbox event, so the POS
+ * always has a real outlet to bind to.
  *
- * <p>Covers both seeding sites: company bootstrap ({@code CompanyWriter.create}) and adding another
- * business later ({@code CompanyWriter.addBusiness}). Runs over real RLS-enforcing PostgreSQL (see
- * {@link PostgresRlsTestBase}).
+ * <p>This replaces the ADR 0012 shape it was written for (a root business unit plus a seeded outlet
+ * under it, re-seeded on every add-business path): with the division level gone there is one node,
+ * one name, and one event. Additional outlets are created flat via {@code POST /api/v1/org-units}.
+ *
+ * <p>Runs over real RLS-enforcing PostgreSQL (see {@link PostgresRlsTestBase}).
  */
 @SpringBootTest
 class DefaultOutletSeedingTest extends PostgresRlsTestBase {
@@ -38,35 +39,35 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @Test
-  void companyBootstrapSeedsOneDefaultOutletUnderTheRootBusinessUnit() throws Exception {
+  void companyBootstrapSeedsExactlyOneTopLevelOutletNamedAfterTheCompany() throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand(
-                "SeedCo", "IDR", "id", "Warung Seed", "restaurant", "owner-s"));
+            new CreateCompanyCommand("SeedCo", "IDR", "id", "restaurant", "owner-s"));
     UUID companyId = result.company().getId();
-    UUID rootId = result.firstBusiness().getId();
+    UUID outletId = result.firstBusiness().getId();
 
-    // Exactly one OUTLET row exists, under the root BU, named after the business unit, active.
-    List<Map<String, Object>> outlets =
+    // Exactly one org_unit row: an OUTLET, top-level, named after the COMPANY, active.
+    List<Map<String, Object>> units =
         adminQuery(
-            "SELECT id, name, parent_id, active FROM org_unit "
-                + "WHERE company_id = ? AND type = 'OUTLET'",
+            "SELECT id, name, type, parent_id, active FROM org_unit WHERE company_id = ?",
             companyId.toString());
-    assertThat(outlets).hasSize(1);
-    assertThat(outlets.get(0).get("name")).isEqualTo("Warung Seed");
-    assertThat(outlets.get(0).get("parent_id")).isEqualTo(rootId);
-    assertThat(outlets.get(0).get("active")).isEqualTo(true);
-    UUID outletId = (UUID) outlets.get(0).get("id");
+    assertThat(units).hasSize(1);
+    assertThat(units.get(0).get("id")).isEqualTo(outletId);
+    assertThat(units.get(0).get("type")).isEqualTo("OUTLET");
+    assertThat(units.get(0).get("name")).isEqualTo("SeedCo");
+    assertThat(units.get(0).get("parent_id")).isNull();
+    assertThat(units.get(0).get("active")).isEqualTo(true);
 
-    // The bootstrap emitted TWO OrgUnitCreated events: the root BU and the seeded outlet —
-    // atomically with the company (same transaction, rule 3).
+    // ONE OrgUnitCreated, atomic with the company (same transaction, rule 3).
     List<Map<String, Object>> created = orgUnitCreatedRows(companyId);
-    assertThat(created).hasSize(2);
-    GenericRecord outletEvent = decodeCreated(created, outletId);
-    assertThat(outletEvent.get("type").toString()).isEqualTo("OUTLET");
-    assertThat(outletEvent.get("parent_id").toString()).isEqualTo(rootId.toString());
-    assertThat(outletEvent.get("name").toString()).isEqualTo("Warung Seed");
-    assertThat(outletEvent.get("company_id").toString()).isEqualTo(companyId.toString());
+    assertThat(created).hasSize(1);
+    GenericRecord event = decodeCreated(created, outletId);
+    assertThat(event.get("type").toString()).isEqualTo("OUTLET");
+    assertThat(event.get("parent_id")).isNull();
+    assertThat(event.get("name").toString()).isEqualTo("SeedCo");
+    assertThat(event.get("company_id").toString()).isEqualTo(companyId.toString());
+    // The vertical is a COMPANY attribute now — the org-unit event carries none.
+    assertThat(event.get("vertical")).isNull();
 
     // The POS picker sees it immediately.
     List<OutletResponse> visible =
@@ -74,72 +75,86 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
             companyId.toString(), "owner-s", () -> orgUnitService.listActiveOutlets());
     assertThat(visible).hasSize(1);
     assertThat(visible.get(0).id()).isEqualTo(outletId);
-    assertThat(visible.get(0).name()).isEqualTo("Warung Seed");
-    // The picker row inherits the parent BU's vertical (the outlet row itself stores NULL).
-    assertThat(visible.get(0).vertical()).isEqualTo("restaurant");
-    // divisionId is the outlet's parent org-unit id — the root business unit here.
-    assertThat(visible.get(0).divisionId()).isEqualTo(rootId);
+    assertThat(visible.get(0).name()).isEqualTo("SeedCo");
   }
 
   @Test
-  void addingABusinessSeedsItsOwnDefaultOutlet() throws Exception {
+  void theCompanyCarriesTheVerticalAndTheOutletDoesNot() throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand("AddCo", "IDR", "id", "First Biz", "restaurant", "owner-a"));
+            new CreateCompanyCommand("WashCo", "IDR", "id", "carwash", "owner-w"));
     UUID companyId = result.company().getId();
 
-    OrgUnit secondBu =
-        TenantContext.callAs(
-            companyId.toString(),
-            "owner-a",
-            () ->
-                companyService.addBusiness(
-                    new CreateBusinessCommand(companyId, "Second Biz", "restaurant")));
+    assertThat(result.company().getVertical().key()).isEqualTo("carwash");
 
-    // The new BU has its own seeded outlet, named after it.
-    List<Map<String, Object>> outlets =
-        adminQuery(
-            "SELECT id, name, parent_id FROM org_unit "
-                + "WHERE company_id = ? AND type = 'OUTLET' ORDER BY created_at",
-            companyId.toString());
-    assertThat(outlets).hasSize(2); // bootstrap outlet + the new BU's outlet
-    assertThat(outlets.get(1).get("name")).isEqualTo("Second Biz");
-    assertThat(outlets.get(1).get("parent_id")).isEqualTo(secondBu.getId());
+    List<Map<String, Object>> company =
+        adminQuery("SELECT vertical FROM company WHERE company_id = ?", companyId.toString());
+    assertThat(company).hasSize(1);
+    assertThat(company.get(0).get("vertical")).isEqualTo("carwash");
 
-    // Four OrgUnitCreated events total: 2 BUs + 2 seeded outlets.
-    assertThat(orgUnitCreatedRows(companyId)).hasSize(4);
+    // The org_unit row stores no vertical of its own any more.
+    List<Map<String, Object>> units =
+        adminQuery("SELECT vertical FROM org_unit WHERE company_id = ?", companyId.toString());
+    assertThat(units).hasSize(1);
+    assertThat(units.get(0).get("vertical")).isNull();
   }
 
   @Test
-  void aRootBusinessUnitCreatedViaTheOrgUnitEndpointSeedsItsOwnDefaultOutlet() throws Exception {
+  void additionalOutletsAreCreatedFlatAndEmitOneEventEach() throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand(
-                "OrgUnitCo", "IDR", "id", "First Biz", "restaurant", "owner-o"));
+            new CreateCompanyCommand("MultiCo", "IDR", "id", "restaurant", "owner-m"));
     UUID companyId = result.company().getId();
 
-    // The org-tree page creates top-level business units via POST /api/v1/org-units — that
-    // path must seed a default outlet too (ADR 0012), not just the CompanyWriter paths.
-    OrgUnit thirdBu =
+    UUID secondId =
         TenantContext.callAs(
             companyId.toString(),
-            "owner-o",
+            "owner-m",
             () ->
-                orgUnitService.create(
-                    new CreateOrgUnitCommand(
-                        "Tree-Made Biz", "business_unit", null, "restaurant")));
+                orgUnitService.create(new CreateOrgUnitCommand("Kemang", "outlet", null)).getId());
 
-    List<Map<String, Object>> outlets =
+    List<Map<String, Object>> units =
         adminQuery(
-            "SELECT id, name, parent_id FROM org_unit "
-                + "WHERE company_id = ? AND type = 'OUTLET' ORDER BY created_at",
+            "SELECT id, name, type, parent_id FROM org_unit WHERE company_id = ? ORDER BY created_at",
             companyId.toString());
-    assertThat(outlets).hasSize(2); // bootstrap outlet + the tree-made BU's outlet
-    assertThat(outlets.get(1).get("name")).isEqualTo("Tree-Made Biz");
-    assertThat(outlets.get(1).get("parent_id")).isEqualTo(thirdBu.getId());
+    assertThat(units).hasSize(2);
+    assertThat(units.get(1).get("id")).isEqualTo(secondId);
+    assertThat(units.get(1).get("name")).isEqualTo("Kemang");
+    assertThat(units.get(1).get("type")).isEqualTo("OUTLET");
+    // Flat: the second outlet is top-level too, NOT nested under the first.
+    assertThat(units.get(1).get("parent_id")).isNull();
 
-    // Four OrgUnitCreated events total: 2 BUs + 2 seeded outlets.
-    assertThat(orgUnitCreatedRows(companyId)).hasSize(4);
+    // One event per outlet — no seeded child to double-count.
+    assertThat(orgUnitCreatedRows(companyId)).hasSize(2);
+  }
+
+  @Test
+  void creatingAnOutletUnderAParentIsRejected() throws Exception {
+    var result =
+        companyService.createCompany(
+            new CreateCompanyCommand("FlatCo", "IDR", "id", "restaurant", "owner-f"));
+    UUID companyId = result.company().getId();
+    UUID firstOutletId = result.firstBusiness().getId();
+
+    // An old client still trying to nest is told so, rather than having the parent silently
+    // dropped and getting a differently-shaped tree than it asked for.
+    TenantContext.callAs(
+        companyId.toString(),
+        "owner-f",
+        () -> {
+          assertThatThrownBy(
+                  () ->
+                      orgUnitService.create(
+                          new CreateOrgUnitCommand("Nested", "outlet", firstOutletId)))
+              .isInstanceOf(IllegalArgumentException.class)
+              .hasMessageContaining("flat");
+          return null;
+        });
+
+    // Nothing was created, and nothing was emitted.
+    assertThat(adminQuery("SELECT id FROM org_unit WHERE company_id = ?", companyId.toString()))
+        .hasSize(1);
+    assertThat(orgUnitCreatedRows(companyId)).hasSize(1);
   }
 
   // ---- helpers --------------------------------------------------------------------------------

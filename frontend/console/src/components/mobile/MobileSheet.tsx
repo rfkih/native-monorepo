@@ -12,6 +12,8 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/cn'
+import { useBackDismiss } from './useBackDismiss'
+import { useScrollLock } from './useScrollLock'
 
 export function MobileSheet({
   onClose,
@@ -27,6 +29,13 @@ export function MobileSheet({
 }) {
   const { t } = useTranslation()
   const panelRef = useRef<HTMLDivElement>(null)
+
+  // Phone/browser BACK closes the sheet instead of navigating off the page (Android hardware back
+  // in the native shell, the browser back gesture in a PWA). Mirrors the Escape handler below; the
+  // caller's reopen affordance (e.g. the POS dock's expand chevron) is unaffected.
+  useBackDismiss(onClose)
+  // Freeze the page behind the sheet — touch flicks otherwise scroll-chain through the backdrop.
+  useScrollLock()
 
   useEffect(() => {
     panelRef.current?.focus()

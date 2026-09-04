@@ -45,7 +45,10 @@ class ApWriterIntegrationTest extends PostgresRlsTestBase {
               VendorResponse vendor = vendorWriter.create("Acme", null, null);
               UUID id =
                   billWriter.createDraft(
-                      vendor.id(), "IDR", false, List.of(new BillLineInput("Item", 1, 1_000_000L)));
+                      vendor.id(),
+                      "IDR",
+                      false,
+                      List.of(new BillLineInput("Item", 1, 1_000_000L, false)));
               billWriter.post(id, 30);
               return id;
             });
@@ -82,10 +85,13 @@ class ApWriterIntegrationTest extends PostgresRlsTestBase {
                       vendor.id(),
                       "IDR",
                       false,
-                      List.of(new BillLineInput("IDR item", 1, 1_000_000L)));
+                      List.of(new BillLineInput("IDR item", 1, 1_000_000L, false)));
               billWriter.post(idr, 30);
               return billWriter.createDraft(
-                  vendor.id(), "USD", false, List.of(new BillLineInput("USD item", 1, 10_000L)));
+                  vendor.id(),
+                  "USD",
+                  false,
+                  List.of(new BillLineInput("USD item", 1, 10_000L, false)));
             });
 
     assertThatThrownBy(

@@ -62,11 +62,11 @@ services:
       - -c
       - wal_level=logical
       - -c
-      - max_wal_senders=10
+      - max_wal_senders=20
       - -c
-      - max_replication_slots=10
+      - max_replication_slots=20
       - -c
-      # One instance serves 9 service pools + Keycloak + 7 Debezium connectors; the
+      # One instance serves 9 service pools + Keycloak + 9 Debezium connectors; the
       # default 100 slots ran dry during connector validation.
       - max_connections=150
     environment:

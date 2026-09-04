@@ -3,7 +3,7 @@ package id.co.nativeapp.finance.pnl.dto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import id.co.nativeapp.finance.fx.dto.AppliedRate;
 import id.co.nativeapp.finance.fx.dto.PnlPresentation;
-import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.domain.PnlFigures;
 import java.util.List;
 
 /**
@@ -56,10 +56,10 @@ public record PnlResponse(
     String fxAsOf,
     List<AppliedRate> appliedRates) {
 
-  /** Builds the native-only response from a {@link ConsolidatedPnl} accumulator row. */
-  public static PnlResponse from(ConsolidatedPnl pnl) {
+  /** Builds the native-only response from the {@link PnlFigures} read-model carrier. */
+  public static PnlResponse from(PnlFigures pnl) {
     return new PnlResponse(
-        pnl.getPeriod(),
+        pnl.period(),
         pnl.revenue().amountMinor(),
         pnl.expense().amountMinor(),
         pnl.net().amountMinor(),
@@ -78,9 +78,9 @@ public record PnlResponse(
    * Builds the response carrying BOTH the native P&amp;L and the additive presentation view (the
    * native figures are never dropped).
    */
-  public static PnlResponse withPresentation(ConsolidatedPnl pnl, PnlPresentation presentation) {
+  public static PnlResponse withPresentation(PnlFigures pnl, PnlPresentation presentation) {
     return new PnlResponse(
-        pnl.getPeriod(),
+        pnl.period(),
         pnl.revenue().amountMinor(),
         pnl.expense().amountMinor(),
         pnl.net().amountMinor(),

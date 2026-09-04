@@ -4,7 +4,7 @@ import id.co.nativeapp.finance.fx.dto.AppliedRate;
 import id.co.nativeapp.finance.fx.dto.PnlPresentation;
 import id.co.nativeapp.finance.fx.dto.RevenuePresentation;
 import id.co.nativeapp.finance.fx.dto.Translated;
-import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.domain.PnlFigures;
 import id.co.nativeapp.money.Money;
 import java.util.ArrayList;
 import java.util.Currency;
@@ -27,9 +27,9 @@ import org.springframework.stereotype.Component;
  * <p>A read-only, stateless {@code @Component} (a service-layer collaborator wrapping {@link
  * TranslationService}); it carries no {@code @Transactional} and no repository, so it sits cleanly
  * below the controllers and above nothing — it just transforms {@link Money} on the way out. The
- * P&amp;L variant accepts the {@code ConsolidatedPnl} read-model row so the entity-method access
+ * P&amp;L variant accepts the {@link PnlFigures} read-model carrier so the money-method access
  * ({@code revenue()}/{@code expense()}) stays OUT of the controller (the controllers expose DTOs,
- * never reach into a JPA entity).
+ * never reach into the read model directly).
  */
 @Component
 public class PresentationConverter {
@@ -64,16 +64,16 @@ public class PresentationConverter {
    * ({@link MissingFxRateException}) — a half-converted P&amp;L is never returned. The stub flag is
    * the OR across both legs.
    *
-   * <p>Takes the {@link ConsolidatedPnl} read-model row (not raw {@link Money}) so the
-   * entity-method access stays out of the controller. The row is READ ONLY — never mutated.
+   * <p>Takes the {@link PnlFigures} read-model carrier (not raw {@link Money}) so the money-method
+   * access stays out of the controller. The carrier is READ ONLY — never mutated.
    *
-   * @param pnl the stored P&amp;L read-model row (its legs are in the transaction/base currency)
+   * @param pnl the P&amp;L figures (its legs are in the transaction/base currency)
    * @param period the accounting period {@code YYYY-MM}
    * @param presentation the requested presentation currency
    * @return the presentation view (converted revenue/expense/net + OR-ed stub flag + as-of + rates)
    * @throws MissingFxRateException if either leg has no resolvable rate (→ 422)
    */
-  public PnlPresentation convertPnl(ConsolidatedPnl pnl, String period, Currency presentation) {
+  public PnlPresentation convertPnl(PnlFigures pnl, String period, Currency presentation) {
     Objects.requireNonNull(pnl, "pnl");
     // Convert each leg independently at AVERAGE; both must succeed (atomic) before deriving net.
     Translated revenue = translationService.translateFlow(pnl.revenue(), period, presentation);

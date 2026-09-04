@@ -1,20 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <!-- Open Graph share card. Brand = the deep-cyan ramp from src/index.css (hue 193°); green is
+       reserved for profit and nothing else (so only NET carries it, matching DashboardMock). Raster
+       it after any edit: node scripts/og-image.mjs → public/og-image.png. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#eef6f0"/>
+      <stop offset="1" stop-color="#e8f4f8"/>
     </linearGradient>
     <radialGradient id="glow" cx="0.85" cy="0.1" r="0.6">
-      <stop offset="0" stop-color="#2ebc72" stop-opacity="0.30"/>
-      <stop offset="1" stop-color="#2ebc72" stop-opacity="0"/>
+      <stop offset="0" stop-color="#0e8fab" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#0e8fab" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#16b364"/>
-      <stop offset="1" stop-color="#0a7e3f"/>
+      <stop offset="0" stop-color="#0b7f99"/>
+      <stop offset="1" stop-color="#064654"/>
     </linearGradient>
     <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#16b364" stop-opacity="0.28"/>
-      <stop offset="1" stop-color="#16b364" stop-opacity="0"/>
+      <stop offset="0" stop-color="#0e8fab" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#0e8fab" stop-opacity="0"/>
     </linearGradient>
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
       <path d="M40 0H0V40" fill="none" stroke="#0e1116" stroke-opacity="0.05" stroke-width="1"/>
@@ -35,15 +38,15 @@
 
   <!-- headline -->
   <text x="80" y="300" font-family="'Plus Jakarta Sans',sans-serif" font-size="76" font-weight="800" fill="#0e1116" letter-spacing="-2.5">Run every entity’s</text>
-  <text x="80" y="384" font-family="'Plus Jakarta Sans',sans-serif" font-size="76" font-weight="800" letter-spacing="-2.5"><tspan fill="#0e1116">books </tspan><tspan fill="#0e9f50">as one.</tspan></text>
+  <text x="80" y="384" font-family="'Plus Jakarta Sans',sans-serif" font-size="76" font-weight="800" letter-spacing="-2.5"><tspan fill="#0e1116">books </tspan><tspan fill="#0b7f99">as one.</tspan></text>
 
   <text x="82" y="452" font-family="'Plus Jakarta Sans',sans-serif" font-size="27" font-weight="500" fill="#4f5867">Multi-entity finance — revenue, expense, payroll &amp; FX, consolidated in real time.</text>
 
   <!-- chip -->
   <g transform="translate(82,506)">
-    <rect width="286" height="46" rx="23" fill="#e8f8ee" stroke="#97deb1"/>
-    <circle cx="26" cy="23" r="5" fill="#16b364"/>
-    <text x="44" y="30" font-family="'Plus Jakarta Sans',sans-serif" font-size="17" font-weight="700" fill="#0a7e3f">Multi-entity finance platform</text>
+    <rect width="286" height="46" rx="23" fill="#e4f6fa" stroke="#bfe9f1"/>
+    <circle cx="26" cy="23" r="5" fill="#0b7f99"/>
+    <text x="44" y="30" font-family="'Plus Jakarta Sans',sans-serif" font-size="17" font-weight="700" fill="#095f73">Multi-entity finance platform</text>
   </g>
 
   <!-- chart motif -->
@@ -52,23 +55,23 @@
     <text x="26" y="46" font-family="'Plus Jakarta Sans',sans-serif" font-size="17" font-weight="700" fill="#0e1116">Consolidated position</text>
     <text x="26" y="70" font-family="'Plus Jakarta Sans',sans-serif" font-size="13" font-weight="500" fill="#8a93a0">July 2026 · 4 entities</text>
     <g transform="translate(26,96)">
-      <rect width="98" height="58" rx="10" fill="#f4f8f5"/>
+      <rect width="98" height="58" rx="10" fill="#eef6f9"/>
       <text x="12" y="24" font-family="'Plus Jakarta Sans',sans-serif" font-size="11" font-weight="700" fill="#8a93a0">REVENUE</text>
-      <text x="12" y="44" font-family="'Plus Jakarta Sans',sans-serif" font-size="17" font-weight="800" fill="#16b364">Rp 482M</text>
+      <text x="12" y="44" font-family="'Plus Jakarta Sans',sans-serif" font-size="17" font-weight="800" fill="#0e1116">Rp 482M</text>
     </g>
     <g transform="translate(131,96)">
-      <rect width="98" height="58" rx="10" fill="#f4f8f5"/>
+      <rect width="98" height="58" rx="10" fill="#eef6f9"/>
       <text x="12" y="24" font-family="'Plus Jakarta Sans',sans-serif" font-size="11" font-weight="700" fill="#8a93a0">EXPENSE</text>
       <text x="12" y="44" font-family="'Plus Jakarta Sans',sans-serif" font-size="17" font-weight="800" fill="#0e1116">Rp 332M</text>
     </g>
     <g transform="translate(236,96)">
-      <rect width="98" height="58" rx="10" fill="#f4f8f5"/>
+      <rect width="98" height="58" rx="10" fill="#eef6f9"/>
       <text x="12" y="24" font-family="'Plus Jakarta Sans',sans-serif" font-size="11" font-weight="700" fill="#8a93a0">NET</text>
-      <text x="12" y="44" font-family="'Plus Jakarta Sans',sans-serif" font-size="17" font-weight="800" fill="#16b364">Rp 150M</text>
+      <text x="12" y="44" font-family="'Plus Jakarta Sans',sans-serif" font-size="17" font-weight="800" fill="#0a7e3f">Rp 150M</text>
     </g>
     <g transform="translate(26,176)">
       <path d="M0 86 C40 74 60 58 100 56 C150 54 170 30 214 22 C258 14 288 12 308 6 L308 96 L0 96 Z" fill="url(#fill)"/>
-      <path d="M0 86 C40 74 60 58 100 56 C150 54 170 30 214 22 C258 14 288 12 308 6" fill="none" stroke="#16b364" stroke-width="3.5" stroke-linecap="round"/>
+      <path d="M0 86 C40 74 60 58 100 56 C150 54 170 30 214 22 C258 14 288 12 308 6" fill="none" stroke="#0e8fab" stroke-width="3.5" stroke-linecap="round"/>
     </g>
   </g>
 </svg>

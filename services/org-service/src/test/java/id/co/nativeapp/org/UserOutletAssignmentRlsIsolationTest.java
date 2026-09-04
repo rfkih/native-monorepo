@@ -41,8 +41,7 @@ class UserOutletAssignmentRlsIsolationTest extends PostgresRlsTestBase {
     // --- Tenant A: create a company, an outlet, assign User A to it ---
     UUID companyA =
         companyService
-            .createCompany(
-                new CreateCompanyCommand("RlsCompanyA", "IDR", "id", "A HQ", "restaurant", "a"))
+            .createCompany(new CreateCompanyCommand("RlsCompanyA", "IDR", "id", "restaurant", "a"))
             .company()
             .getId();
 
@@ -52,15 +51,7 @@ class UserOutletAssignmentRlsIsolationTest extends PostgresRlsTestBase {
             "a",
             () -> {
               OrgUnit outlet =
-                  orgUnitService.create(
-                      new CreateOrgUnitCommand(
-                          "A Outlet",
-                          "outlet",
-                          companyService.findOrgUnitsForCurrentTenant().stream()
-                              .filter(u -> "BUSINESS_UNIT".equals(u.getType()))
-                              .findFirst()
-                              .orElseThrow()
-                              .getId()));
+                  orgUnitService.create(new CreateOrgUnitCommand("A Outlet", "outlet", null));
               return outlet.getId();
             });
 
@@ -70,8 +61,7 @@ class UserOutletAssignmentRlsIsolationTest extends PostgresRlsTestBase {
     // --- Tenant B: create a DIFFERENT company ---
     UUID companyB =
         companyService
-            .createCompany(
-                new CreateCompanyCommand("RlsCompanyB", "USD", "en", "B HQ", "restaurant", "b"))
+            .createCompany(new CreateCompanyCommand("RlsCompanyB", "USD", "en", "restaurant", "b"))
             .company()
             .getId();
 

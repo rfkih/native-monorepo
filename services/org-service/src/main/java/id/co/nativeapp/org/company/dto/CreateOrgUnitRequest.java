@@ -2,7 +2,6 @@ package id.co.nativeapp.org.company.dto;
 
 import id.co.nativeapp.security.ApiExceptionHandler;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import java.util.UUID;
 
 /**
@@ -22,8 +21,4 @@ import java.util.UUID;
  *     forbidden otherwise (the conditional rule lives in the {@link OrgUnit} aggregate; the
  *     {@code @Pattern} accepts {@code null} — only a present value is whitelist-checked)
  */
-public record CreateOrgUnitRequest(
-    @NotBlank String name,
-    @NotBlank String type,
-    UUID parentId,
-    @Pattern(regexp = "restaurant|carwash|barbershop", message = "unsupported vertical") String vertical) {}
+public record CreateOrgUnitRequest(@NotBlank String name, String type, UUID parentId) {}

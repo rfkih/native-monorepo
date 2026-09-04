@@ -45,4 +45,44 @@ class CountryDefaultsTest {
   void nullIsRejected() {
     assertThatNullPointerException().isThrownBy(() -> CountryDefaults.requireValidCountry(null));
   }
+
+  // ---------------------------------------------------------------------------
+  // Language policy (ADR 0059): English-first, Indonesian only in Indonesia
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void englishIsAllowedForEveryCountry() {
+    assertThat(CountryDefaults.requireLanguageForCountry("ID", "en")).isEqualTo("en");
+    assertThat(CountryDefaults.requireLanguageForCountry("US", "en")).isEqualTo("en");
+    assertThat(CountryDefaults.requireLanguageForCountry("GB", "en")).isEqualTo("en");
+  }
+
+  @Test
+  void indonesianIsAllowedOnlyForIndonesia() {
+    assertThat(CountryDefaults.requireLanguageForCountry("ID", "id")).isEqualTo("id");
+    assertThatIllegalArgumentException()
+        .isThrownBy(() -> CountryDefaults.requireLanguageForCountry("US", "id"))
+        .withMessageContaining("Indonesia");
+    assertThatIllegalArgumentException()
+        .isThrownBy(() -> CountryDefaults.requireLanguageForCountry("SG", "id"));
+  }
+
+  @Test
+  void languageIsNormalizedToLowerCase() {
+    assertThat(CountryDefaults.requireLanguageForCountry("ID", " ID ")).isEqualTo("id");
+    assertThat(CountryDefaults.requireLanguageForCountry("US", "EN")).isEqualTo("en");
+  }
+
+  @Test
+  void anUnsupportedLanguageIsRejected() {
+    assertThatIllegalArgumentException()
+        .isThrownBy(() -> CountryDefaults.requireLanguageForCountry("ID", "fr"))
+        .withMessageContaining("unsupported language");
+  }
+
+  @Test
+  void nullLanguageIsRejected() {
+    assertThatNullPointerException()
+        .isThrownBy(() -> CountryDefaults.requireLanguageForCountry("ID", null));
+  }
 }

@@ -13,11 +13,18 @@
  *
  * Money rule (rule 8): unit cost / variance value render via formatMoney; quantities via the
  * Intl-backed helpers in ./lib/qty (never a raw toString). Strings rule (rule 9): i18n keys only.
+ *
+ * ADR 0068 part 3 — before a count is submitted, every line runs through stocktakeVarianceGuard
+ * (../lib/stocktakeVarianceGuard); a line that looks implausible (a ×1000 g/kg slip, an extra
+ * zero…) pauses submit behind a confirm dialog naming the suspicious line(s) — the SAME "are you
+ * sure?" shape as RegisterSheet's close-cash mismatch confirm, one step later in the flow.
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardCheck, TriangleAlert, X } from 'lucide-react'
+import { ChevronDown, ClipboardCheck, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
@@ -25,13 +32,22 @@ import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import { useIngredients, type Ingredient } from '@/features/inventory/ingredientApi'
+import { useItemSales, type ItemSalesResponse } from '@/features/pos/api'
+import { localDayBounds } from '@/features/pos/salesHistoryApi'
+import {
+  useIngredients,
+  useIngredientUsage,
+  usageDayKey,
+  type Ingredient,
+} from '@/features/inventory/ingredientApi'
 import {
   useSubmitIngredientStocktake,
   type IngredientStocktakeLineResponse,
   type IngredientStocktakeResponse,
 } from '@/features/inventory/ingredientStocktakeApi'
-import { formatQty, formatSignedQty, parseQtyInput } from './lib/qty'
+import { allowsFraction, formatShownQty, parseShownQtyInput, shownUnit, toDisplayQty } from '@/features/inventory/lib/units'
+import { formatQty, formatSignedQty } from './lib/qty'
+import { checkStocktakeVariance, type StocktakeVarianceFlag, type StocktakeVarianceLine } from './lib/stocktakeVarianceGuard'
 
 /** The three verdict tones shared by the live per-line preview and the post-submit summary. */
 type Tone = 'loss' | 'gain' | 'balanced'
@@ -64,9 +80,21 @@ export function StocktakeSheet({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
+  useScrollLock()
   const navigate = useNavigate()
   const ingredientsQuery = useIngredients(session)
   const submit = useSubmitIngredientStocktake(session)
+
+  // "Sold today" reference for the opname — units + omzet per MENU item over the local day, a
+  // read-only aid to reconcile the physical count (the stocktake itself is ingredient-keyed, ADR
+  // 0046). Day bounds are truncated to the calendar day, so from/to are stable across renders.
+  const { from, to } = localDayBounds(new Date())
+  const soldTodayQuery = useItemSales(session, from, to)
+  // Per-ingredient "terpakai hari ini" (V42) — how much today's sales consumed by recipe, so the
+  // operator can sanity-check the prefilled system figure. Absent = 0 (no sales of it today).
+  const usageQuery = useIngredientUsage(session, usageDayKey(), true)
+  const usedById = new Map((usageQuery.data ?? []).map((u) => [u.ingredientId, u.qtyUsed]))
 
   const ingredients: Ingredient[] = ingredientsQuery.data ?? []
 
@@ -77,26 +105,70 @@ export function StocktakeSheet({
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   // Held after a successful submit so the summary stays visible.
   const [result, setResult] = useState<IngredientStocktakeResponse | null>(null)
+  // ADR 0068 part 3 — set when Submit trips the variance guard: holds the flagged line(s) so the
+  // confirm dialog can name them. Null = no confirm showing (either nothing tripped, or it's
+  // already been dismissed/confirmed).
+  const [pendingVarianceFlags, setPendingVarianceFlags] = useState<StocktakeVarianceFlag[] | null>(
+    null,
+  )
+  // Inner confirm layer, inline conditional JSX within this always-mounted-while-open component.
+  useBackDismiss(
+    () => setPendingVarianceFlags(null),
+    pendingVarianceFlags != null && pendingVarianceFlags.length > 0,
+  )
+  useScrollLock(pendingVarianceFlags != null && pendingVarianceFlags.length > 0)
 
+  // Seeded (and re-parsed) in the ingredient's SHOWN unit — kg/liter items start counted at the
+  // system quantity expressed as a decimal (e.g. "1.5"), not the raw base-unit integer.
   function valueFor(ing: Ingredient): string {
-    return overrides[ing.id] ?? String(ing.stockQty)
+    return overrides[ing.id] ?? String(toDisplayQty(ing.stockQty, ing))
   }
 
   const parsedCounts = new Map<string, number | null>(
-    ingredients.map((ing) => [ing.id, parseQtyInput(valueFor(ing))]),
+    ingredients.map((ing) => [ing.id, parseShownQtyInput(valueFor(ing), ing)]),
   )
   const allCounted = ingredients.length > 0 && [...parsedCounts.values()].every((v) => v !== null)
+  // Lookup for the confirm dialog — flags carry only ingredientId + numbers (the guard is a plain
+  // pure helper with no ingredient/display knowledge, see stocktakeVarianceGuard.ts).
+  const ingredientById = new Map(ingredients.map((ing) => [ing.id, ing]))
 
-  function handleSubmit() {
-    const lines = ingredients.map((ing) => ({
+  // ADR 0068 part 3 guard input — BASE-unit quantities (the same numbers the submit payload
+  // carries), the ingredient's own unit cost/currency (defaulted to the company base currency when
+  // the ingredient carries none, same fallback StocktakeIngredientRow already uses for its preview).
+  const varianceLines: StocktakeVarianceLine[] = ingredients.map((ing) => ({
+    ingredientId: ing.id,
+    systemQty: ing.stockQty,
+    countedQty: parsedCounts.get(ing.id) ?? 0,
+    unitCostMinor: ing.unitCostMinor,
+    currency: ing.costCurrency ?? currency,
+  }))
+
+  function buildSubmitLines() {
+    return ingredients.map((ing) => ({
       ingredientId: ing.id,
       countedQty: parsedCounts.get(ing.id) ?? 0,
     }))
-    submit.mutate(lines, {
+  }
+
+  function doSubmit() {
+    setPendingVarianceFlags(null)
+    submit.mutate(buildSubmitLines(), {
       onSuccess: (res) => {
         if (res) setResult(res)
       },
     })
+  }
+
+  // Submit tapped: if any line looks implausible (a ×1000 g/kg slip, an extra zero…), hold the
+  // submit behind a confirm dialog naming the suspicious line(s) instead of posting straight away —
+  // a safety net, not a hard block (the owner can always "Save anyway", ADR 0068 §3).
+  function handleSubmitClick() {
+    const flags = checkStocktakeVariance(varianceLines)
+    if (flags.length > 0) {
+      setPendingVarianceFlags(flags)
+      return
+    }
+    doSubmit()
   }
 
   const submitErrorMessage = (): string => {
@@ -108,6 +180,7 @@ export function StocktakeSheet({
   }
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
@@ -169,6 +242,12 @@ export function StocktakeSheet({
           </div>
         ) : (
           <>
+            <SoldTodayPanel
+              items={soldTodayQuery.data ?? []}
+              loading={soldTodayQuery.isLoading}
+              currency={currency}
+              locale={locale}
+            />
             <p className="shrink-0 px-5 pt-3 text-xs leading-relaxed text-ink-3">{t('stocktake.entryHint')}</p>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-3">
               <ul className="space-y-2">
@@ -180,6 +259,7 @@ export function StocktakeSheet({
                     onChange={(raw) => setOverrides((p) => ({ ...p, [ing.id]: raw }))}
                     currency={currency}
                     locale={locale}
+                    usedToday={usedById.get(ing.id) ?? 0}
                   />
                 ))}
               </ul>
@@ -194,7 +274,7 @@ export function StocktakeSheet({
                 className="w-full"
                 data-testid="stocktake-submit"
                 disabled={!allCounted || submit.isPending}
-                onClick={handleSubmit}
+                onClick={handleSubmitClick}
               >
                 {submit.isPending ? <Spinner /> : t('stocktake.submitAction')}
               </Button>
@@ -202,6 +282,126 @@ export function StocktakeSheet({
           </>
         )}
       </div>
+    </div>
+
+    {/* ADR 0068 part 3 — variance confirm: one or more counts tripped the plausibility guard, so
+        make the operator reconfirm before the count posts (a fat-finger/×1000-slip safety net; the
+        server still records + values whatever is submitted, this only gates whether it's sent). */}
+    {pendingVarianceFlags && pendingVarianceFlags.length > 0 ? (
+      <div
+        className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4 backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('stocktake.varianceGuardTitle')}
+      >
+        <div
+          className="reveal max-h-full w-full max-w-sm space-y-4 overflow-y-auto overscroll-contain rounded-card border border-line bg-surface p-5 shadow-lg"
+          data-testid="stocktake-variance-confirm"
+        >
+          <h3 className="font-display text-lg font-semibold text-ink">
+            {t('stocktake.varianceGuardTitle')}
+          </h3>
+          <p className="text-sm text-ink-3">{t('stocktake.varianceGuardBody')}</p>
+          <ul className="space-y-2 rounded-xl bg-ink-50 px-4 py-3">
+            {pendingVarianceFlags.map((flag) => {
+              const ing = ingredientById.get(flag.ingredientId)
+              if (!ing) return null
+              return (
+                <li key={flag.ingredientId} className="text-sm">
+                  <div className="font-medium text-ink">{ing.name}</div>
+                  <div className="tnum text-xs text-loss">
+                    {t('stocktake.lineCounts', {
+                      system: formatShownQty(flag.systemQty, ing, locale),
+                      counted: formatShownQty(flag.countedQty, ing, locale),
+                    })}{' '}
+                    {shownUnit(ing)}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              data-testid="stocktake-variance-recount"
+              onClick={() => setPendingVarianceFlags(null)}
+            >
+              {t('stocktake.varianceGuardRecount')}
+            </Button>
+            <Button
+              className="flex-1"
+              data-testid="stocktake-variance-proceed"
+              disabled={submit.isPending}
+              onClick={doSubmit}
+            >
+              {submit.isPending ? <Spinner /> : t('stocktake.varianceGuardProceed')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
+  )
+}
+
+/**
+ * A collapsible, read-only "items sold today" reference in the stock-opname flow — units + gross
+ * omzet per MENU item over the local day (from useItemSales). Collapsed by default so the ingredient
+ * count stays the focus; expanded it caps its height and scrolls. Purely informational (helps the
+ * operator sanity-check the physical count); it never feeds the ingredient submission.
+ */
+function SoldTodayPanel({
+  items,
+  loading,
+  currency,
+  locale,
+}: {
+  items: ItemSalesResponse[]
+  loading: boolean
+  currency: string
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="shrink-0 border-b border-line px-5 pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-lg py-1.5 text-left text-[13px] font-semibold text-ink-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+      >
+        <ChevronDown
+          className={cn('size-4 shrink-0 text-ink-3 transition-transform', open && 'rotate-180')}
+          aria-hidden="true"
+        />
+        <span className="flex-1">{t('stocktake.soldTodayTitle')}</span>
+      </button>
+      {open ? (
+        <div className="max-h-44 overflow-y-auto overscroll-contain pb-2">
+          {loading ? (
+            <p className="py-2 text-center text-xs text-ink-3">…</p>
+          ) : items.length === 0 ? (
+            <p className="py-2 text-center text-xs text-ink-3">{t('stocktake.soldTodayEmpty')}</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {items.map((it) => (
+                <li key={it.menuItemId} className="flex items-center gap-3 py-1.5 text-sm">
+                  <span className="tnum w-9 shrink-0 font-mono font-bold text-ink">
+                    {it.soldQty}×
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-ink-2">{it.name}</span>
+                  <span className="tnum shrink-0 font-mono text-[12px] text-ink-3">
+                    {formatMoney(it.revenueMinor, currency, locale)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -212,41 +412,65 @@ function StocktakeIngredientRow({
   onChange,
   currency,
   locale,
+  usedToday,
 }: {
   ingredient: Ingredient
   value: string
   onChange: (raw: string) => void
   currency: string
   locale: string
+  /** Quantity today's sales consumed by recipe ("terpakai hari ini", V42) — 0 when none. */
+  usedToday: number
 }) {
   const { t } = useTranslation()
   const systemQty = ingredient.stockQty
-  const countedQty = parseQtyInput(value)
+  const countedQty = parseShownQtyInput(value, ingredient)
   const varianceQty = countedQty != null ? countedQty - systemQty : null
   const tone = varianceQty != null ? toneOfVariance(varianceQty) : null
   // Client-side preview only (the server recomputes authoritatively on submit) — a simple
-  // qty × unit-cost, never rounded beyond integer minor units.
+  // qty × unit-cost, never rounded beyond integer minor units. Stays in the BASE quantity
+  // (grams) — unitCostMinor is per-base-unit, so a shown (kg) value would distort it ~1000×.
   const valuePreviewMinor =
     varianceQty != null && ingredient.unitCostMinor != null
       ? varianceQty * ingredient.unitCostMinor
       : null
   const previewCurrency = ingredient.costCurrency ?? currency
+  const fractional = allowsFraction(ingredient)
+  // Signed, locale-aware, in the SHOWN unit — up to 3 fraction digits for kg/liter.
+  const varianceDisplay =
+    varianceQty != null
+      ? new Intl.NumberFormat(locale, {
+          signDisplay: 'exceptZero',
+          maximumFractionDigits: fractional ? 3 : 0,
+        }).format(toDisplayQty(varianceQty, ingredient))
+      : null
 
   return (
     <li className="flex items-center gap-3 rounded-xl border border-line bg-paper px-3 py-2.5">
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-ink">{ingredient.name}</div>
         <div className="tnum mt-0.5 text-xs text-ink-3">
-          {t('stocktake.systemQty', { qty: formatQty(systemQty, locale), unit: ingredient.unit })}
+          {t('stocktake.systemQty', {
+            qty: formatShownQty(systemQty, ingredient, locale),
+            unit: shownUnit(ingredient),
+          })}
         </div>
+        {usedToday > 0 ? (
+          <div className="tnum mt-0.5 text-[11px] text-ink-3">
+            {t('stocktake.usedToday', {
+              qty: formatShownQty(usedToday, ingredient, locale),
+              unit: shownUnit(ingredient),
+            })}
+          </div>
+        ) : null}
       </div>
 
       <input
         aria-label={t('stocktake.countedForItem', { name: ingredient.name })}
         type="number"
         min="0"
-        step="1"
-        inputMode="numeric"
+        step={fractional ? 'any' : '1'}
+        inputMode={fractional ? 'decimal' : 'numeric'}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="0"
@@ -257,7 +481,7 @@ function StocktakeIngredientRow({
         {varianceQty != null ? (
           <>
             <div className={cn('tnum font-mono text-sm font-semibold', tone ? TONE_TEXT[tone] : undefined)}>
-              {formatSignedQty(varianceQty, locale)}
+              {varianceDisplay}
             </div>
             {valuePreviewMinor != null ? (
               <div className={cn('tnum font-mono text-[11px]', tone ? TONE_TEXT[tone] : undefined)}>

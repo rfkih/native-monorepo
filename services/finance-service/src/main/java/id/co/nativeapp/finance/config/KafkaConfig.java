@@ -153,6 +153,12 @@ public class KafkaConfig {
         // ADR 0038 phase 3 (inventory stocktake) — the same fail-closed decode + validation-poison
         // contract.
         id.co.nativeapp.finance.stocktake.messaging.StocktakeCompletedDecodeException.class,
+        // ADR 0067 Phase B (perpetual inventory — capitalize on receipt) — the same fail-closed
+        // decode + validation-poison contract.
+        id.co.nativeapp.finance.inventory.messaging.StockReceivedDecodeException.class,
+        // ADR 0067 Phase C (perpetual inventory — COGS on sale) — the same fail-closed decode +
+        // validation-poison contract.
+        id.co.nativeapp.finance.inventory.messaging.SaleCogsRecordedDecodeException.class,
         id.co.nativeapp.finance.orgref.messaging.OrgUnitRefDecodeException.class,
         id.co.nativeapp.finance.orgref.messaging.OrgUnitRefMissingEventIdException.class,
         id.co.nativeapp.finance.revenue.messaging.MissingEventIdException.class,

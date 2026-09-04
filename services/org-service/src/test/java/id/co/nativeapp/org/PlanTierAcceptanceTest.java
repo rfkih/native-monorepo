@@ -68,8 +68,7 @@ class PlanTierAcceptanceTest extends PostgresRlsTestBase {
 
   private UUID bootstrapCompany(String name, String actor) throws Exception {
     return companyService
-        .createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " Outlet", "restaurant", actor))
+        .createCompany(new CreateCompanyCommand(name, "IDR", "id", "restaurant", actor))
         .company()
         .getId();
   }

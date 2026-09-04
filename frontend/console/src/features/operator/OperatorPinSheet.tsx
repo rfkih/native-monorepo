@@ -43,6 +43,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Check, KeyRound, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { ApiError } from '@/lib/api'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
@@ -94,6 +95,7 @@ export function OperatorPinSheet({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  useScrollLock()
   const auth = useAuth()
   const operatorSession = useOperatorSession()
   const rosterQuery = useOperatorRoster(session, session.businessId)

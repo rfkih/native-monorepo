@@ -5,9 +5,9 @@ import java.util.UUID;
 /**
  * Read-path projection for the order read path's receipt-rebuild need ({@code GET
  * /api/v1/orders/{id}}) — narrower than {@link PaymentView}: only the columns {@code
- * PaymentResponse} needs, not the full receipt/refund bookkeeping ({@code businessId}, {@code
- * refundedMinor}, {@code providerRef}, {@code capturedAt}, {@code occurredAt}, {@code
- * idempotencyKey}).
+ * PaymentResponse} needs, not the full bookkeeping-only columns ({@code businessId}, {@code
+ * providerRef}, {@code capturedAt}, {@code occurredAt}, {@code idempotencyKey}). {@code
+ * refundedMinor} IS included — a reprinted receipt needs to show a partial-refund amount.
  *
  * <p>Selected by column alias from the native query in {@link
  * id.co.nativeapp.restaurant.payment.repository.PaymentRepository PaymentRepository}; no {@code
@@ -37,4 +37,6 @@ public interface PaymentReceiptView {
   boolean isProviderPending();
 
   UUID getSaleId();
+
+  long getRefundedMinor();
 }

@@ -27,6 +27,7 @@ import id.co.nativeapp.mediastorage.MediaStorageProperties;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.net.URI;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
@@ -64,7 +65,10 @@ class ReceiptWriterTest {
               "native-media",
               "employee",
               null,
-              "us-east-1"));
+              "us-east-1",
+              Duration.ofSeconds(2),
+              Duration.ofSeconds(10),
+              Duration.ofSeconds(15)));
 
   private static Employee employee() {
     return new Employee("Budi", PtkpStatus.TK0, "3201234567890123", "1234567890123456");

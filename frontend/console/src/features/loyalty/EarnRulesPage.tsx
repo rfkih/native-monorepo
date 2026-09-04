@@ -19,6 +19,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CreditCard, Percent, Plus, Search, TriangleAlert, User } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -27,6 +29,7 @@ import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Segmented } from '@/components/ui/Segmented'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState } from '@/features/_shared/financeUi'
+import { formatDate } from '@/features/expenses/format'
 import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatPercent, isoMinorExponent } from '@/lib/money'
@@ -155,7 +158,16 @@ function EarnRuleRow({
           ) : null}
           <p className="mt-0.5 text-xs text-ink-3">{rule.sourceNote}</p>
           <p className="mt-1 text-xs text-ink-3">
-            {t('loyalty.earnRules.effectiveRange', { from: rule.effectiveFrom, to: rule.effectiveTo })}
+            {/* Open-ended rows use the far-future sentinel (repo convention), not NULL — showing
+                the formatted year 9999 would read as a data bug. */}
+            {rule.effectiveTo.startsWith('9999')
+              ? t('loyalty.earnRules.effectiveOpenEnded', {
+                  from: formatDate(rule.effectiveFrom, locale),
+                })
+              : t('loyalty.earnRules.effectiveRange', {
+                  from: formatDate(rule.effectiveFrom, locale),
+                  to: formatDate(rule.effectiveTo, locale),
+                })}
           </p>
         </div>
       </div>
@@ -176,6 +188,8 @@ function EarnRuleDialog({
   currency: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const createRule = useCreateEarnRule(session)
 

@@ -10,6 +10,14 @@ import {
 import { AUTH_MODE, KEYCLOAK_CLIENT_ID, KEYCLOAK_REALM, KEYCLOAK_SCOPE, KEYCLOAK_URL } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
 import {
+  clearAuthEstablished,
+  isTerminalAuthError,
+  ownerSessionExpired,
+  readAuthEstablished,
+  resolveAuthAtMs,
+  stampAuthEstablished,
+} from '@/lib/authSession'
+import {
   AuthContext,
   BUSINESS_ROLES,
   type ActorType,
@@ -45,9 +53,22 @@ const ELEVATION_IDLE_TTL_MS = 10 * 60 * 1000
  *  - `dev` — no Keycloak: a synthetic always-authenticated principal with every business role, so
  *    local `npm run dev` works offline against the header-trust `DevTenantFilter` path.
  */
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({
+  children,
+  persistSession = false,
+}: {
+  children: ReactNode
+  /**
+   * Persist the OIDC session in localStorage even in a plain browser (not just the native shell) —
+   * used by the Employee app (a personal-device app, ADR 0049 P5) so an employee stays signed in
+   * across app/browser restarts; the offline refresh token then keeps them in for the offline
+   * session's idle window (~30 days). The console leaves this `false`: on a shared computer the
+   * sessionStorage default is a security feature (the session dies when the browser closes).
+   */
+  persistSession?: boolean
+}) {
   return AUTH_MODE === 'oidc' ? (
-    <OidcAuthProvider>{children}</OidcAuthProvider>
+    <OidcAuthProvider persistSession={persistSession}>{children}</OidcAuthProvider>
   ) : (
     <DevAuthProvider>{children}</DevAuthProvider>
   )
@@ -95,7 +116,13 @@ function DevAuthProvider({ children }: { children: ReactNode }) {
 // ---------------------------------------------------------------------------
 // oidc: real Keycloak login (authorization-code + PKCE).
 // ---------------------------------------------------------------------------
-function OidcAuthProvider({ children }: { children: ReactNode }) {
+function OidcAuthProvider({
+  children,
+  persistSession,
+}: {
+  children: ReactNode
+  persistSession: boolean
+}) {
   // Created exactly once (lazy initializer) — a ref read during render trips react-hooks/refs.
   const [manager] = useState(
     () =>
@@ -107,12 +134,14 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         response_type: 'code',
         scope: KEYCLOAK_SCOPE,
         automaticSilentRenew: true,
-        // Native Till shell (ADR 0043): the WebView process dies with the app, and
-        // sessionStorage with it — every cold start dumped the operator on the logged-out
-        // landing page. localStorage keeps the till signed in across restarts (Keycloak
-        // token lifetimes still govern expiry). Browsers keep the per-tab default.
+        // Native Till shell (ADR 0043) AND the Employee app (persistSession, ADR 0049 P5 — a
+        // personal-device app) keep the session in localStorage so it survives an app/browser
+        // restart; the offline refresh token then re-authenticates silently on reopen (Keycloak
+        // token lifetimes still govern expiry). A plain console browser keeps the per-tab
+        // sessionStorage default — a shared-computer safeguard (the session dies with the tab).
         userStore: new WebStorageStateStore({
-          store: isNativeShell() ? window.localStorage : window.sessionStorage,
+          store:
+            isNativeShell() || persistSession ? window.localStorage : window.sessionStorage,
         }),
       }),
   )
@@ -192,6 +221,56 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true
+    // Guards forceOwnerReauth against a double-fire: a real resume fires BOTH visibilitychange and
+    // focus (and a concurrent 401→apply can re-enter), which would otherwise start two removeUser +
+    // signinRedirect round-trips. Never reset: after the first fire removeUser clears the stored
+    // user, so every later foreground sees no user and short-circuits; a successful redirect
+    // navigates away (fresh effect), and the manual "Sign in" affordance is not gated by this.
+    let reauthing = false
+
+    // Owner 1-day cap (persistent-login policy): an `owner` login re-authenticates at most once a
+    // day. Every other login — manager, cashier, other staff, and a kiosk `device` — rides the long
+    // (~30-day) offline session. The original authentication time comes from the token's `auth_time`
+    // claim (preserved across silent renews, so it is the true session start); the stored fresh-login
+    // stamp is the fallback when a token carries no auth_time. Roles are passed in (already decoded by
+    // the caller) to avoid re-decoding the JWT.
+    function ownerCapExpiredFor(user: User, roles: readonly BusinessRole[]): boolean {
+      const authAtMs = resolveAuthAtMs(
+        typeof user.profile?.auth_time === 'number' ? user.profile.auth_time : null,
+        readAuthEstablished(persistSession),
+      )
+      // Compares the client clock to the token's auth_time; a client clock skewed far ahead could
+      // trip the cap early — an accepted extreme edge (the reauthing guard stops it from storming).
+      return ownerSessionExpired({ roles, authAtMs, nowMs: Date.now() })
+    }
+
+    // The owner cap fired → force a FRESH login (credentials, not a silent SSO bounce). Kiosk
+    // softening does not apply here: an owner is always `actor_type='user'`, never a `device`, so no
+    // shared till is stranded on the IdP form. Offline / IdP-unreachable leaves the owner signed out
+    // (correct — they are past their daily cap and must re-authenticate when back online).
+    function forceOwnerReauth() {
+      if (reauthing) return
+      reauthing = true
+      setAccessToken(null)
+      dropElevation()
+      clearAuthEstablished(persistSession)
+      // Flip the shell to signed-out NOW (same as recoverOrLogout) so an owner whose forced re-login
+      // can't reach the IdP — offline — lands on the normal signed-out screen, not a tokenless
+      // "authenticated" shell that waits for connectivity.
+      apply(null)
+      void (async () => {
+        try {
+          await manager.removeUser()
+        } catch {
+          /* best-effort clear of the stored session */
+        }
+        try {
+          await manager.signinRedirect({ prompt: 'login' })
+        } catch {
+          /* offline — the owner re-authenticates on their next attempt with a connection */
+        }
+      })()
+    }
 
     function apply(user: User | null) {
       if (!mounted) return
@@ -213,8 +292,15 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         })
         return
       }
-      setAccessToken(user.access_token)
       const claims = decodeJwt(user.access_token)
+      const roles = extractRoles(claims)
+      // Owner 1-day cap: enforced on EVERY apply (boot, silent renew, event), so an owner past 24h is
+      // turned around no matter which path re-hydrated the session. Non-owners are unaffected.
+      if (ownerCapExpiredFor(user, roles)) {
+        forceOwnerReauth()
+        return
+      }
+      setAccessToken(user.access_token)
       // The company_id claim is `string | string[]` (a multivalued mapper emits an array — the
       // login's allowed companies, first = default active; pre-rollout tokens carry a scalar).
       const companyIds = extractCompanyIds(claims.company_id)
@@ -242,7 +328,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
           'unknown',
         sub: typeof claims.sub === 'string' ? claims.sub : null,
         actorType,
-        roles: extractRoles(claims),
+        roles,
       })
     }
 
@@ -251,6 +337,8 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       if (window.location.pathname === '/auth/callback') {
         try {
           const user = await manager.signinRedirectCallback()
+          // Record the fresh-login instant — the owner-cap fallback when the token has no auth_time.
+          stampAuthEstablished(persistSession, Date.now())
           window.history.replaceState({}, document.title, '/')
           apply(user)
           return
@@ -262,6 +350,23 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       if (user && !user.expired) {
         apply(user)
         return
+      }
+      // A stored session whose ACCESS token has expired (the app was closed longer than the ~5-min
+      // access-token lifespan) is NOT treated as logged out: try ONE silent renew via the (offline)
+      // refresh token first, so reopening a PERSISTED app (native till shell / Employee app) re-auths
+      // seamlessly instead of dropping to the login screen. A plain browser with no persisted session
+      // (user === null here) skips this and falls straight through to the public site below.
+      if (user && user.expired) {
+        try {
+          const renewed = await manager.signinSilent()
+          if (renewed && !renewed.expired) {
+            apply(renewed)
+            return
+          }
+        } catch {
+          // Refresh/offline token is dead or the offline session has idled out → fall through to
+          // the unauthenticated public site; the user signs in explicitly.
+        }
       }
       // No valid session → render the PUBLIC marketing site (the landing page, /signup, /login)
       // instead of force-redirecting to Keycloak. Login is now EXPLICIT: the landing page's
@@ -298,7 +403,16 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       try {
         // Success fires addUserLoaded → apply(newUser); in-flight react-query retries then succeed.
         await manager.signinSilent()
-      } catch {
+      } catch (err) {
+        // Persistent-login resilience: a TRANSIENT failure — no network on reopen, the IdP
+        // momentarily unreachable, a resume race — must NOT discard the session. removeUser() below
+        // deletes the OFFLINE token, permanently ending a session that still had weeks of idle left
+        // (the field-reported "logged out after inactivity"). Keep the stored session and let the
+        // next resume / API call retry. Only a TERMINAL error (invalid_grant — the offline session
+        // is genuinely dead) falls through to the hard logout.
+        if (!isTerminalAuthError(err)) {
+          return
+        }
         // Truly unrecoverable (refresh token expired / IdP session gone) → hard logout.
         // Read BEFORE apply(null) below, which always resets the ref to 'user'.
         const wasKiosk = actorTypeRef.current === 'device' || isNativeShell()
@@ -309,6 +423,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         } catch {
           // best-effort clear of the stored (dead) session
         }
+        clearAuthEstablished(persistSession)
         // Kiosk-renew softening (ADR 0049 P3b): a Business-app terminal — an outlet `device` login
         // (ADR 0049), or literally the native shell, which is ALWAYS a till — must never be
         // auto-bounced to the Keycloak hosted login FORM here: nobody is standing at a shared till
@@ -328,6 +443,27 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Refresh-on-resume (persistent-login fix): a backgrounded WebView's automaticSilentRenew timer
+    // is suspended by the OS, so a reopened app returns with an already-expired 5-min access token
+    // and 401s before it renews. On coming back to the foreground, proactively renew via the offline
+    // token so the session is live BEFORE the first request — and enforce the owner cap on the way
+    // in. Standard WebView events (no @capacitor/app dependency); a no-op in the plain browser tab
+    // that never backgrounds. Renewal is funnelled through recoverOrLogout so it shares the
+    // `recovering` debounce and the terminal-vs-transient policy above (a flaky resume never logs out).
+    async function refreshOnForeground() {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      const user = await manager.getUser().catch(() => null)
+      if (!user || !user.access_token) return
+      if (ownerCapExpiredFor(user, extractRoles(decodeJwt(user.access_token)))) {
+        forceOwnerReauth()
+        return
+      }
+      const nearExpiry =
+        user.expired || (typeof user.expires_in === 'number' && user.expires_in < 60)
+      if (nearExpiry) void recoverOrLogout()
+    }
+    const onForeground = () => void refreshOnForeground()
+
     const onLoaded = (user: User) => apply(user)
     const onUnloaded = () => apply(null)
     const onExpired = () => void recoverOrLogout()
@@ -337,6 +473,12 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
     manager.events.addAccessTokenExpired(onExpired)
     manager.events.addSilentRenewError(onRenewError)
     setUnauthorizedHandler(() => void recoverOrLogout())
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onForeground)
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', onForeground)
+    }
     return () => {
       mounted = false
       manager.events.removeUserLoaded(onLoaded)
@@ -344,8 +486,14 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       manager.events.removeAccessTokenExpired(onExpired)
       manager.events.removeSilentRenewError(onRenewError)
       setUnauthorizedHandler(null)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onForeground)
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', onForeground)
+      }
     }
-  }, [manager, dropElevation])
+  }, [manager, dropElevation, persistSession])
 
   // ADR 0049 P3b — the elevation manager's OWN init + event wiring, entirely separate from the
   // primary effect above (different manager, different storage, different lifecycle). Handles BOTH
@@ -461,6 +609,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         // truth for localStorage + its own React state; this just makes the outlet's own explicit
         // logout synchronous too.
         setOperatorSession(null)
+        clearAuthEstablished(persistSession)
         void manager.signoutRedirect()
       },
       // Employee self-service "Account settings" (two-app program) — the SAME signinRedirect
@@ -484,7 +633,15 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [state, manager, elevationManager, elevatedRoles, elevateCallbackPending, dropElevation],
+    [
+      state,
+      manager,
+      elevationManager,
+      elevatedRoles,
+      elevateCallbackPending,
+      dropElevation,
+      persistSession,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

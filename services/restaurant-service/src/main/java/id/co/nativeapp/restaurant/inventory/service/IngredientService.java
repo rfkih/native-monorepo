@@ -3,8 +3,10 @@ package id.co.nativeapp.restaurant.inventory.service;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNameConflictException;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientUsageResponse;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -34,6 +36,12 @@ public class IngredientService {
   public List<IngredientResponse> findByBusiness(UUID businessId) {
     TenantContext.require();
     return reader.findByBusiness(businessId);
+  }
+
+  /** Per-ingredient quantity consumed by sales on one outlet-local day ("terpakai", V42). */
+  public List<IngredientUsageResponse> usageForDate(UUID businessId, LocalDate date) {
+    TenantContext.require();
+    return reader.usageForDate(businessId, date);
   }
 
   /**
@@ -92,10 +100,30 @@ public class IngredientService {
    * {@code costCurrency} are supplied (a priced positive receive), updates the moving-average cost;
    * otherwise it is a costless adjustment. The both-or-neither / positive-amount rules are enforced
    * in {@link IngredientWriter}/the aggregate (400 on violation).
+   *
+   * <p><strong>ADR 0067 Phase D, D1 — concurrent same-key race recovery.</strong> Two concurrent
+   * priced receives carrying the SAME {@code idempotencyKey} may both pass the writer's in-tx
+   * replay probe and race the {@code goods_receipt} INSERT; the partial-unique index backstops the
+   * race and the loser's {@link DataIntegrityViolationException} is recovered here by re-reading
+   * the winner's state in a FRESH transaction — mirroring {@code RegisterSessionService#open} /
+   * {@code IngredientStocktakeService#submit}. A key-less (or costless) call is unaffected — any
+   * other integrity violation propagates untouched (there is no other unique constraint on this
+   * path).
    */
   public IngredientResponse addStock(
-      UUID id, int amount, @Nullable Long amountPaidMinor, @Nullable String costCurrency) {
+      UUID id,
+      int amount,
+      @Nullable Long amountPaidMinor,
+      @Nullable String costCurrency,
+      @Nullable String idempotencyKey) {
     TenantContext.require();
-    return writer.addStock(id, amount, amountPaidMinor, costCurrency);
+    try {
+      return writer.addStock(id, amount, amountPaidMinor, costCurrency, idempotencyKey);
+    } catch (DataIntegrityViolationException conflict) {
+      if (idempotencyKey == null || idempotencyKey.isBlank()) {
+        throw conflict;
+      }
+      return writer.findByGoodsReceiptKey(idempotencyKey).orElseThrow(() -> conflict);
+    }
   }
 }

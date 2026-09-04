@@ -6,8 +6,7 @@ import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimVoidedEvent;
 import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseClaimLedgerRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.mapping.domain.GlAccountResolution;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
@@ -66,8 +65,7 @@ public class ExpenseClaimVoidWriter {
   private final GlAccountResolver glAccountResolver;
   private final PnlReadModelWriter pnlReadModel;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final EmployeeExpenseClaimLedgerRepository claimLedgerRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -77,16 +75,14 @@ public class ExpenseClaimVoidWriter {
       GlAccountResolver glAccountResolver,
       PnlReadModelWriter pnlReadModel,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       EmployeeExpenseClaimLedgerRepository claimLedgerRepository) {
     this.ledgerRepository = ledgerRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.processedEvents = processedEvents;
     this.glAccountResolver = glAccountResolver;
     this.pnlReadModel = pnlReadModel;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
     this.claimLedgerRepository = claimLedgerRepository;
   }
 
@@ -171,15 +167,7 @@ public class ExpenseClaimVoidWriter {
             event.eventId(),
             "ExpenseClaimVoided",
             false);
-    glEntry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(glEntry);
-    glEntry
-        .getLines()
-        .forEach(
-            line -> {
-              line.setCompanyId(companyId);
-              journalLineRepository.save(line);
-            });
+    generalLedgerWriter.post(glEntry, companyId);
 
     // 4) Stamp the claim-ledger row (ADR 0030 §4 drill-down). When NO row exists (void arrived
     //    before the approval — cross-topic reorder, QA sweep 2026-08-05), SELF-HEAL one carrying

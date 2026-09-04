@@ -14,7 +14,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
+import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import { Gift } from 'lucide-react'
 import { GiftCardField } from '@/components/GiftCardField'
 import type { CompanySession } from '@/lib/session'
@@ -122,15 +122,22 @@ export function ServicePaymentModal({
 }: Props) {
   const { t } = useTranslation()
   const [tender, setTender] = useState<ServiceTender>('CASH')
+  // Back must not dismiss the surface while a checkout/capture mutation is posting — see PaymentModal.
+  const mutationsInFlight = useIsMutating()
 
   // ADR 0045: the QRIS mode this outlet actually resolves to — see PaymentModal's twin doc
   // (never fetched while offline; `currency` is the sale's own currency, rule 8). ADR 0045
-  // amendment: `divisionId` extends the resolution to outlet → division → company.
   const qrisEffectiveQuery = useQrisEffective(session, session.businessId, {
     enabled: !offline,
-    divisionId: session.divisionId,
   })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
+  // ADR 0045 amendment: configured GATEWAY degraded to MANUAL — see PaymentModal's twin doc
+  // (gated on IDR so a non-IDR currency limitation isn't misattributed to a gateway outage).
+  const degradedFromGateway =
+    qrisEffectiveQuery.data?.mode === 'GATEWAY' &&
+    qrisMode !== 'GATEWAY' &&
+    !offline &&
+    currency === 'IDR'
 
   // ADR 0045: while a GATEWAY charge is live, `ServiceDigitalAttempt` registers its cancel function
   // here so the FRAME's own X close button cancels the charge before closing — see PaymentModal's
@@ -189,7 +196,7 @@ export function ServicePaymentModal({
   }
 
   return (
-    <PaymentSurfaceFrame onClose={handleFrameClose}>
+    <PaymentSurfaceFrame onClose={handleFrameClose} backDismissEnabled={mutationsInFlight === 0}>
       <PaymentBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
       {/* Gift-card redemption (Phase 4, ADR 0027) — unreachable offline (Phase 5, ADR 0028). */}
@@ -251,6 +258,7 @@ export function ServicePaymentModal({
               locale={locale}
               tenderType={tender}
               qrisMode={qrisMode}
+              degradedFromGateway={degradedFromGateway}
               registerGatewayCancel={registerGatewayCancel}
             />
           )}
@@ -385,6 +393,7 @@ function ServiceDigitalAttempt({
   locale,
   tenderType,
   qrisMode,
+  degradedFromGateway = false,
   registerGatewayCancel,
 }: {
   attempt: TicketAttemptArgs
@@ -394,6 +403,8 @@ function ServiceDigitalAttempt({
   tenderType: 'QRIS' | 'CARD'
   /** ADR 0045: irrelevant for CARD — see PaymentModal's twin doc. */
   qrisMode: QrisMode
+  /** ADR 0045 amendment: configured GATEWAY degraded to MANUAL — see PaymentModal's twin doc. */
+  degradedFromGateway?: boolean
   /** ADR 0045: lets this attempt register the live gateway-cancel function with the modal frame —
    *  see ServicePaymentModal's `handleFrameClose` doc (identical contract to PaymentModal's). */
   registerGatewayCancel?: (fn: (() => Promise<boolean>) | null) => void
@@ -439,13 +450,11 @@ function ServiceDigitalAttempt({
   }
 
   // ADR 0045: fetched once the PENDING ticket exists — the same businessId checkout used.
-  // ADR 0045 amendment: divisionId extends the fallback to outlet → division → company.
   const staticQr = useStaticQrImageUrl(
     session,
     session.businessId,
     showStaticQr && pendingTicket != null,
     0,
-    session.divisionId,
   )
   const staticQrSlot = showStaticQr ? (
     staticQr.status === 'ready' && staticQr.url ? (
@@ -472,7 +481,6 @@ function ServiceDigitalAttempt({
     paymentId: gatewayActive && pendingPayment ? pendingPayment.paymentId : null,
     referenceId: pendingTicket?.ticketId ?? null,
     businessId: session.businessId,
-    divisionId: session.divisionId,
     amountMinor: pendingPayment?.amountMinor ?? chargeMinor,
     currency,
   })
@@ -516,6 +524,8 @@ function ServiceDigitalAttempt({
         busy={checkout.isPending}
         errorSlot={checkout.isError ? <CheckoutErrorText error={checkout.error} /> : null}
         onInitiate={initiatePayment}
+        hintText={degradedFromGateway ? t('pos.payment.qris.gatewayDegradedHint') : undefined}
+        badgeText={degradedFromGateway ? t('pos.payment.qris.gatewayDegradedBadge') : undefined}
       />
     )
   }
@@ -555,8 +565,20 @@ function ServiceDigitalAttempt({
       onConfirm={confirmPayment}
       onCancel={onClose}
       qrSlot={staticQrSlot}
-      hintText={showStaticQr ? t('pos.payment.qris.staticHint') : undefined}
-      badgeText={showStaticQr ? null : undefined}
+      hintText={
+        showStaticQr
+          ? t('pos.payment.qris.staticHint')
+          : degradedFromGateway
+            ? t('pos.payment.qris.gatewayDegradedHint')
+            : undefined
+      }
+      badgeText={
+        showStaticQr
+          ? null
+          : degradedFromGateway
+            ? t('pos.payment.qris.gatewayDegradedBadge')
+            : undefined
+      }
     />
   )
 }

@@ -35,7 +35,14 @@ abstract class PostgresRlsTestBase {
 
   @SuppressWarnings("resource") // reaped by the Testcontainers/Ryuk shutdown hook at JVM exit
   static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+          // Connection-slot headroom: many test classes share this container, Spring caches up to
+          // 32 distinct @SpringBootTest contexts, and each holds a Hikari pool — at Postgres's
+          // default max_connections=100 a grown suite dies mid-run with "FATAL: remaining
+          // connection slots are reserved for ... SUPERUSER" (restaurant hit this first — see its
+          // PostgresRlsTestBase). withCommand REPLACES the constructor's command, so fsync=off
+          // (Testcontainers' own default, a large test-time speedup) must be restated alongside.
+          .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=500");
 
   static {
     POSTGRES.start();
@@ -75,6 +82,7 @@ abstract class PostgresRlsTestBase {
               + " employee_expense_claim_ledger,"
               + " platform_receivable, platform_settlement,"
               + " pending_sale_reversal,"
+              + " inventory_method_config,"
               + " journal_line, journal_entry CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
@@ -90,6 +98,11 @@ abstract class PostgresRlsTestBase {
     registry.add("spring.datasource.username", () -> APP_USER);
     registry.add("spring.datasource.password", () -> APP_PASSWORD);
     registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+    // Hikari defaults to minimumIdle == maximumPoolSize == 10, so every CACHED test context pins
+    // 10 idle connections for the rest of the run. Cap the pool and let idle connections drain so
+    // 32 cached contexts stay well under the container's max_connections (see POSTGRES above).
+    registry.add("spring.datasource.hikari.maximum-pool-size", () -> "8");
+    registry.add("spring.datasource.hikari.minimum-idle", () -> "2");
   }
 
   private static void provisionAppRole() {

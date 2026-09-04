@@ -6,10 +6,11 @@
 # What it provisions:
 #   - the single per-environment bucket `native-media` (versioned — object history is the
 #     backup story's foundation: RUNBOOK "Object-store backup");
-#   - anonymous download on the `restaurant/` prefix ONLY (public menu images, served via
-#     the gateway's GET-only /api/media/restaurant/** proxy; unguessable content-hash keys).
-#     employee/ (expense receipts) and payment/ (QRIS) stay private — they are read only by
-#     their owning service through authenticated endpoints;
+#   - anonymous download on the restaurant MENU-IMAGE prefix ONLY (`restaurant/*/menu/*`,
+#     served via the gateway's GET-only /api/media/restaurant/** proxy; unguessable
+#     content-hash keys). Bill attachments (`restaurant/*/bill/*`, ADR 0063) are business-
+#     sensitive and stay PRIVATE — read only through restaurant-service's authenticated
+#     stream endpoint. employee/ (expense receipts) and payment/ (QRIS) stay private too;
 #   - one prefix-scoped user per service (the storage twin of database-per-service): each
 #     service's credentials can touch its OWN prefix and nothing else.
 #
@@ -39,13 +40,16 @@ echo "minio-init: ensuring bucket ${BUCKET} (versioned)"
 mc mb --ignore-existing "native/${BUCKET}"
 mc version enable "native/${BUCKET}"
 
-# Anonymous access: an EXPLICIT bucket policy granting s3:GetObject on the restaurant/
-# prefix ONLY — never the `download` preset, which can carry prefix ListBucket and would
-# let anonymous clients ENUMERATE keys, defeating the unguessable-content-hash model
-# (review W1). Consequence: an anonymous GET of a MISSING restaurant/ key is 403 (S3
-# returns 404 only to callers holding ListBucket), which is fine — the gateway marks
-# every non-2xx no-store and a browser <img> treats 403 and 404 identically.
-echo "minio-init: anonymous GetObject-only policy on restaurant/ prefix"
+# Anonymous access: an EXPLICIT bucket policy granting s3:GetObject on the restaurant MENU-IMAGE
+# prefix ONLY (`restaurant/*/menu/*`) — never the `download` preset, which can carry prefix
+# ListBucket and would let anonymous clients ENUMERATE keys, defeating the unguessable-content-hash
+# model (review W1). Scoped to `/menu/` so BILL attachments (`restaurant/*/bill/*`, ADR 0063) are
+# NOT anonymously fetchable — a bill's receipt is business-sensitive and is served only through
+# restaurant-service's authenticated endpoint. Our keys are exactly {service}/{company}/{domain}/
+# {sha}.{ext}, so only menu keys ever contain "/menu/". Consequence: an anonymous GET of a MISSING
+# or non-menu key is 403 (S3 returns 404 only to callers holding ListBucket), which is fine — the
+# gateway marks every non-2xx no-store and a browser <img> treats 403 and 404 identically.
+echo "minio-init: anonymous GetObject-only policy on restaurant/*/menu/* prefix"
 cat > /tmp/anonymous-media.json <<POLICY
 {
   "Version": "2012-10-17",
@@ -54,7 +58,7 @@ cat > /tmp/anonymous-media.json <<POLICY
       "Effect": "Allow",
       "Principal": {"AWS": ["*"]},
       "Action": ["s3:GetObject"],
-      "Resource": ["arn:aws:s3:::${BUCKET}/restaurant/*"]
+      "Resource": ["arn:aws:s3:::${BUCKET}/restaurant/*/menu/*"]
     }
   ]
 }

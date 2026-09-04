@@ -19,7 +19,10 @@ const dict = {
     yourOrder: 'Pesanan Anda',
     add: 'Tambah',
     soldOut: 'Habis',
-    cartCount: '{{n}} item',
+    // Indonesian has no plural marking, so both keys read identically — split to match the `en`
+    // shape (the mini-`t()` has no plural support, App.tsx picks the key by count).
+    cartCountOne: '{{n}} item',
+    cartCountMany: '{{n}} item',
     cartEmptyHint: 'Ketuk "Tambah" pada menu untuk mulai memesan',
     sendOrder: 'Kirim pesanan',
     sending: 'Mengirim…',
@@ -29,6 +32,8 @@ const dict = {
     confirmedTable: 'Meja {{label}}',
     orderAgain: 'Pesan lagi',
     otherCategory: 'Lainnya',
+    qtyPlus: 'Tambah jumlah',
+    qtyMinus: 'Kurangi jumlah',
   },
   en: {
     loading: 'Loading menu…',
@@ -40,7 +45,8 @@ const dict = {
     yourOrder: 'Your order',
     add: 'Add',
     soldOut: 'Sold out',
-    cartCount: '{{n}} item(s)',
+    cartCountOne: '{{n}} item',
+    cartCountMany: '{{n}} items',
     cartEmptyHint: 'Tap "Add" on a menu item to start your order',
     sendOrder: 'Send order',
     sending: 'Sending…',
@@ -50,6 +56,8 @@ const dict = {
     confirmedTable: 'Table {{label}}',
     orderAgain: 'Order again',
     otherCategory: 'Other',
+    qtyPlus: 'Increase quantity',
+    qtyMinus: 'Decrease quantity',
   },
 } as const
 

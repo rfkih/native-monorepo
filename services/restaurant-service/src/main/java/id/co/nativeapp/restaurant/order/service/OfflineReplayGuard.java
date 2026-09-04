@@ -5,6 +5,8 @@ import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -39,10 +41,16 @@ public class OfflineReplayGuard {
    *
    * @param request the checkout request
    * @param now the server's current instant (injected so tests can pin it)
+   * @param openSessionOpenedAt lazily yields the current OPEN register session's {@code openedAt}
+   *     for the request's outlet (empty when none is open). A supplier — not a value — so the extra
+   *     query runs ONLY on the accepted-backdate replay path, never on the normal checkout hot
+   *     path; supplied by the caller because this guard sits below the service layer's repository
+   *     access (ArchUnit: repositories are used only from *Service/*Writer/*Reader).
    * @return the instant to use as the order/sale's {@code occurredAt}
    * @throws OfflineReplayValidationException if the contract is violated (surfaces as {@code 422})
    */
-  public Instant resolveOccurredAt(CheckoutRequest request, Instant now) {
+  public Instant resolveOccurredAt(
+      CheckoutRequest request, Instant now, Supplier<Optional<Instant>> openSessionOpenedAt) {
     boolean offlineReplay = Boolean.TRUE.equals(request.offlineReplay());
     Instant clientOccurredAt = request.clientOccurredAt();
 
@@ -88,7 +96,21 @@ public class OfflineReplayGuard {
 
     enforceOfflineFieldMatrix(request);
 
-    return clientOccurredAt != null ? clientOccurredAt : now;
+    if (clientOccurredAt == null) {
+      return now;
+    }
+
+    // 2026-08-31 audit #5: a replay backdated BEFORE the current OPEN register session's window
+    // would land in NO session at all — its own session already closed (and summed its cash
+    // without it), and the current window starts later — permanently understating the drawer's
+    // expected cash. The physical cash IS in this drawer, so clamp the instant to the open
+    // session's start: the sale reconciles in the session that will actually count the money.
+    // With no OPEN session the instant is left as-is (the pre-existing, inherent backdating gap —
+    // nothing can reconcile a drawer that isn't open).
+    return openSessionOpenedAt
+        .get()
+        .map(openedAt -> clientOccurredAt.isBefore(openedAt) ? openedAt : clientOccurredAt)
+        .orElse(clientOccurredAt);
   }
 
   private static Instant max(Instant a, Instant b) {

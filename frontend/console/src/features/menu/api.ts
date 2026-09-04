@@ -101,12 +101,22 @@ export interface CreateMenuItemInput {
   imageUrl?: string | null
   /** Optional cost per unit in minor units (ADR 0038 phase 3) — feeds valued stocktake shrinkage. */
   unitCostMinor?: number | null
+  /** "Lacak stok": true 1:1-auto-links the new item to a same-named ingredient (sales deplete it). */
+  autoTrackStock?: boolean
 }
 
 export function useCreateMenuItem(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ name, category, priceMinor, currency, imageUrl, unitCostMinor }: CreateMenuItemInput) =>
+    mutationFn: ({
+      name,
+      category,
+      priceMinor,
+      currency,
+      imageUrl,
+      unitCostMinor,
+      autoTrackStock,
+    }: CreateMenuItemInput) =>
       apiFetch<MenuItem>('/api/v1/menu', {
         method: 'POST',
         tenant: tenantOf(session),
@@ -118,10 +128,13 @@ export function useCreateMenuItem(session: CompanySession) {
           currency,
           imageUrl: imageUrl ?? null,
           unitCostMinor: unitCostMinor ?? null,
+          autoTrackStock: autoTrackStock ?? null,
         },
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['menu', session.companyId, session.businessId] })
+      // An auto-tracked item minted an ingredient — refresh the bahan catalog too.
+      void qc.invalidateQueries({ queryKey: ['ingredients', session.companyId, session.businessId] })
     },
   })
 }

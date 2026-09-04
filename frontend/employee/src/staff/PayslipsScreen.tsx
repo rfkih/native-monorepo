@@ -25,6 +25,7 @@ import {
   type MyPayslipHeader,
   type MyPayslipLine,
 } from '@/features/me/api'
+import { periodLabel } from '@/features/me/periodLabel'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/cn'
 import { localeOf } from '@/i18n'
@@ -158,13 +159,6 @@ export function PayslipsScreen() {
       </div>
     </>
   )
-}
-
-/** 'YYYY-MM' → a localized "Month YYYY" label (e.g. "Agustus 2026" / "August 2026"). */
-function periodLabel(period: string, locale: string): string {
-  const d = new Date(`${period}-01T00:00:00`)
-  if (Number.isNaN(d.getTime())) return period
-  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(d)
 }
 
 function PayslipRow({

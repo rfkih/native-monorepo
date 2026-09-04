@@ -6,8 +6,7 @@ import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimApprovedEvent;
 import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseClaimLedgerRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.mapping.domain.GlAccountResolution;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
@@ -73,8 +72,7 @@ public class ExpenseClaimPostingWriter {
   private final GlAccountResolver glAccountResolver;
   private final PnlReadModelWriter pnlReadModel;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final EmployeeExpenseClaimLedgerRepository claimLedgerRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -84,16 +82,14 @@ public class ExpenseClaimPostingWriter {
       GlAccountResolver glAccountResolver,
       PnlReadModelWriter pnlReadModel,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       EmployeeExpenseClaimLedgerRepository claimLedgerRepository) {
     this.ledgerRepository = ledgerRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.processedEvents = processedEvents;
     this.glAccountResolver = glAccountResolver;
     this.pnlReadModel = pnlReadModel;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
     this.claimLedgerRepository = claimLedgerRepository;
   }
 
@@ -166,14 +162,7 @@ public class ExpenseClaimPostingWriter {
     glEntry.setCompanyId(companyId);
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
-    journalEntryRepository.saveAndFlush(glEntry);
-    glEntry
-        .getLines()
-        .forEach(
-            line -> {
-              line.setCompanyId(companyId);
-              journalLineRepository.save(line);
-            });
+    generalLedgerWriter.post(glEntry, companyId);
 
     // 5) Upsert the claim-ledger row (ADR 0030 §4 drill-down + §7 reconciliation signal, review
     //    W1/S3): normal in-order case INSERTS a fresh recognition-only row; if a row already

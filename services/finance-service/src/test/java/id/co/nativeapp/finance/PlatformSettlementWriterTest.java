@@ -65,6 +65,9 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
     assertThat(legs.get("1900")[0]).isEqualTo(240_000L);
     assertThat(legs.get("5710")[0]).isEqualTo(60_000L);
     assertThat(legs.get("1250")[1]).isEqualTo(300_000L);
+    // Provenance-derived (was hardcoded true): every resolved role above is OFFICIAL, so the entry
+    // is not badged provisional.
+    assertThat(usesIllustrativeRulesAsAdmin(result.settlement().getJournalEntryId())).isFalse();
 
     // The accumulator decremented by GROSS.
     List<PlatformOutstandingResponse> outstanding =
@@ -147,6 +150,22 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
           legs.put(rs.getString(1), new long[] {rs.getLong(2), rs.getLong(3)});
         }
         return legs;
+      }
+    }
+  }
+
+  /** The {@code journal_entry.uses_illustrative_rules} flag for {@code entryId}, read as admin. */
+  private boolean usesIllustrativeRulesAsAdmin(UUID entryId) throws Exception {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT uses_illustrative_rules FROM journal_entry WHERE id = ?")) {
+      ps.setObject(1, entryId);
+      try (ResultSet rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getBoolean(1);
       }
     }
   }

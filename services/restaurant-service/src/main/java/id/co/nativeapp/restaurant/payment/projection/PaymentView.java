@@ -20,6 +20,9 @@ public interface PaymentView {
 
   UUID getOrderId();
 
+  /** {@code null} for an order-originated payment; set for a bill-originated one (V38). */
+  UUID getBillId();
+
   UUID getBusinessId();
 
   String getTenderType();

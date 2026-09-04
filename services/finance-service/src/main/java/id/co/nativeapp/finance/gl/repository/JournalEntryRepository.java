@@ -78,6 +78,33 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
   Optional<JournalEntrySaleView> findBySaleAggregateId(
       @Param("saleAggregateId") UUID saleAggregateId);
 
+  /**
+   * The id of the {@link JournalEntry} posted from a given {@code source_event_id} — used by the
+   * register-close correction (ADR 0064) to resolve the prior variance entry a correction
+   * supersedes so its lines can be negated into a balanced contra. {@code source_event_id} is
+   * UNIQUE (V13), so this returns at most one row. RLS scopes it to the bound tenant (rule 5 — no
+   * manual {@code company_id}). Returns {@link Optional#empty()} when the superseded close posted
+   * no variance (it reconciled to zero) or has not yet been consumed. Scalar id, not a {@code
+   * SELECT *}.
+   */
+  @Query(
+      value =
+          "SELECT je.id FROM journal_entry je WHERE je.source_event_id = :sourceEventId LIMIT 1",
+      nativeQuery = true)
+  Optional<UUID> findIdBySourceEventId(@Param("sourceEventId") UUID sourceEventId);
+
+  /**
+   * Whether the entry {@code id} was posted with illustrative (provisional) provenance — read by
+   * the register-close correction (ADR 0064) so a reversal contra MIRRORS the flag of the entry it
+   * reverses (the {@code ReversalPostingWriter} / {@code PayrollLiabilityWriter} pattern), rather
+   * than re-deriving it from the corrected event. RLS-scoped (rule 5). Scalar boolean, not a {@code
+   * SELECT *}.
+   */
+  @Query(
+      value = "SELECT je.uses_illustrative_rules FROM journal_entry je WHERE je.id = :id",
+      nativeQuery = true)
+  Optional<Boolean> findUsesIllustrativeRulesById(@Param("id") UUID id);
+
   @Query(
       value =
           """

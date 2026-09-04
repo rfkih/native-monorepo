@@ -9,6 +9,7 @@
  *    `DevTenantFilter` reads, exactly as before.
  */
 import { API_BASE_URL, AUTH_MODE } from '@/lib/config'
+import { deliverDownload } from '@/lib/csv'
 import { deriveTokenState, recordFailure } from '@/lib/diagnostics'
 
 /** The current bearer token in oidc mode; null in dev mode. Set by the AuthProvider. */
@@ -389,15 +390,7 @@ export async function apiDownload(
   const match = /filename="?([^";]+)"?/i.exec(disposition)
   const filename = match?.[1] ?? fallbackFilename
 
-  const url = URL.createObjectURL(blob)
-  try {
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-  } finally {
-    URL.revokeObjectURL(url)
-  }
+  // Android shells ignore anchor downloads entirely — route through NativeShell.saveFile there
+  // (FileSaveToast announces the outcome); the browser anchor path is unchanged otherwise.
+  await deliverDownload(blob, filename)
 }

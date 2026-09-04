@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant.recipe.service;
 
+import id.co.nativeapp.restaurant.recipe.dto.AutoLinkResult;
 import id.co.nativeapp.restaurant.recipe.dto.HppSummaryRow;
 import id.co.nativeapp.restaurant.recipe.dto.PutRecipeRequest;
 import id.co.nativeapp.restaurant.recipe.dto.RecipeResponse;
@@ -18,10 +19,13 @@ public class RecipeService {
 
   private final RecipeReader reader;
   private final RecipeWriter writer;
+  private final RecipeAutoLinkWriter autoLinkWriter;
 
-  public RecipeService(RecipeReader reader, RecipeWriter writer) {
+  public RecipeService(
+      RecipeReader reader, RecipeWriter writer, RecipeAutoLinkWriter autoLinkWriter) {
     this.reader = reader;
     this.writer = writer;
+    this.autoLinkWriter = autoLinkWriter;
   }
 
   public RecipeResponse getRecipe(UUID menuItemId) {
@@ -36,5 +40,18 @@ public class RecipeService {
 
   public List<HppSummaryRow> hppSummary(UUID businessId) {
     return reader.hppSummary(businessId);
+  }
+
+  /**
+   * "Lacak stok semua menu": 1:1-links every active recipe-less item of the outlet (idempotent).
+   */
+  public AutoLinkResult autoLinkAll(UUID businessId) {
+    return autoLinkWriter.autoLinkAll(businessId);
+  }
+
+  /** 1:1-links ONE item (no-op if it already has a recipe); returns the resulting recipe. */
+  public RecipeResponse autoLinkItem(UUID menuItemId) {
+    autoLinkWriter.autoLinkItem(menuItemId);
+    return reader.getRecipe(menuItemId);
   }
 }

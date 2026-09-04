@@ -1,9 +1,773 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-03 — ADR 0072: one-submit purchases (expense input ⇔ inventory), contract first
+
+The owner's ask — "expense input linked with inventory: a purchase updates stock automatically,
+synchronized" — turned out to expose two facts worth recording. First, **there is no company
+expense input at all**: the "Pengeluaran" page is employee claims; `ExpenseRecorded` has a finance
+consumer and *no producer anywhere*; the only money entry for purchases is the AP bill. Second,
+nearly all the stock-side machinery already exists dormant behind the ADR 0068 periodic gate
+(priced `goods_receipt` + moving-average + `StockReceived`, `bill_line.is_inventory`, the GRNI
+split in `BillWriter`).
+
+ADR 0072 (owner decisions 2026-09-03): a NEW finance `companyexpense` feature is the primary
+entry; AP bills with ingredient-linked inventory lines join in the same program; under periodic,
+ingredient purchases post **5100 HPP** (not 5000 — makes HPP meaningful in the periodic P&L). The
+seam is **`InventoryPurchaseRecorded`** — the fleet's first finance→vertical event: emitted in the
+same tx as the money's journal entry, consumed by restaurant as one priced goods receipt per line
+with `goods_receipt.idempotency_key = line_id` (no redelivery can double-add stock; business
+anomalies park in the error inbox, money already safely posted). Void is money-side only
+(fix-forward); the priced "Terima" path gets demoted in the console so the form is the only
+priced entry (the human double-entry mitigation). P0 ships the `.avsc` + catalog entry + both
+contract tests; the feature phases follow.
+
+**P1–P4 landed the same day.** Finance `companyexpense` (V58) posts the money at submit through
+the GeneralLedgerWriter door with DERIVED illustrative provenance (a hardcoded flag here would
+have flipped every tenant's audit badge); the void is the exact mirror of the STORED journal
+(`JournalLineReversalView` — immune to a perpetual activation landing between post and void).
+restaurant consumes via the NEW `PricedReceiveWriter` — the priced-receive core extracted from
+`IngredientWriter.addStock` because `OutletAccessGuard` reads the HTTP `X-Roles` header, which
+does not exist on a Kafka thread. Bills (V59) carry an optional per-line ingredient linkage and
+the periodic split now routes inventoryNet to 5100 (the deliberate ADR 0072 behavior change;
+`BillInventoryRoutingTest` rewritten as the record; no-inventory bills stay byte-identical).
+Console: "Catat pengeluaran" on the Pengeluaran hub + the Perusahaan tab + the demoted Terima.
+
+Two things this build coughed up, worth remembering:
+- **The fleet test-executor heap was Gradle's 512m default** — finance OOM'd ("Java heap space")
+  when one more cached Spring context landed. `native.java-conventions` now sets
+  `maxHeapSize = "1g"`; the heap sibling of the max_connections creep. Raise it THERE next time.
+- **A pure accountant (non-owner) hits 403 on two pickers**: `GET /api/v1/expense-categories` is
+  HR_ROLES and `GET /api/v1/ingredients` is POS_ROLES. Deliberately NOT widened — those route
+  patterns also cover writes, so widening would hand accountants stock mutation; a method-aware
+  gate is the real fix. Owner-operators (every current tenant) are unaffected. OPEN.
+
+## 2026-09-03 — the test-Postgres time bomb disarmed fleet-wide, and a phantom submodule removed
+
+**The trap was still armed in 9 services.** The 2026-09-02 entry below fixed restaurant (and
+finance followed) but closed with "copy the fix when it fires" — and it was about to.
+Ranking the remaining services by test-class count put **employee-service at 94, already past the
+~90 that killed restaurant**; org 54, carwash 50, barbershop 44, then the small ones. Because the
+failure presents as three *unrelated* tests failing on their own subjects, hitting it again would
+have cost another debugging session to reach the same answer, so all 13 remaining Testcontainers
+Postgres declarations now carry both halves of the fix:
+`postgres -c fsync=off -c max_connections=500` on the container, and
+`maximum-pool-size=8` / `minimum-idle=2` on each `@DynamicPropertySource`.
+
+**`fsync=off` is restated deliberately, and that is the subtle part.** `withCommand` *replaces* the
+constructor's command rather than appending to it, so a fix that passes only `max_connections`
+silently drops Testcontainers' own `fsync=off` default and slows every suite for the rest of time.
+The first cut of the restaurant fix had exactly that shape before it was corrected.
+
+Verified: **employee 619 tests green** (the one at the threshold) and restaurant **818 green**
+(confirming the original fix holds). org-service's five *standalone* container declarations
+(DeviceCredential / MultiCompanyMembership / SecuredCompanyBootstrap / Signup / UserManagement
+acceptance tests) were patched too — each starts its own container for a single class so none is
+at risk today, but they are the same declaration, and drift between copies is what armed this in
+the first place. `gateway` has no Postgres container and needs nothing.
+
+**A phantom submodule was in the tree.** `.claude/worktrees/agent-accbb693f5a9ef84a` had been
+committed as a **mode-160000 gitlink** — an agent worktree (a nested git repo) captured by accident,
+and the only gitlink in the repo. With no `.gitmodules` to describe it, a fresh clone gets a
+submodule it cannot resolve. Removed from the index and the path is now gitignored.
+
+It arrived inside a commit whose message read *"Add unit tests for OrderTotal functionality in
+restaurant service"* — a description of work it did not contain (`OrderTotalTest.java` was added in
+`bbc04860`, long before). What it actually held was 67 files of Play-Store publishing work: store
+assets and screenshots, launcher icons across every mipmap density for both Android shells,
+`delete-account.html` / `privacy.html` / `sitemap.xml`, and the e2e lockfile. The commit was
+unpushed, so it was reworded to say what it is rather than left as a false record.
+
+## 2026-09-02 — `JournalEntryPosted` ships from the door (ADR 0071 P1), and the outbox finally gets retention
+
+With the door in place (P0 below), P1 is small by construction: `GeneralLedgerWriter.post` now
+builds a `JournalEntryPosted` record (`gl/messaging/JournalEntryPostedSchema`, schema in
+`libs/contracts/avro/JournalEntryPosted.avsc`) and writes it to the outbox **in the same
+transaction** as the entry and its lines — partition key `company_id`, one event per entry, a
+supersession's contra and re-post each carrying their own `posting_role` (`PRIMARY`/`REVERSAL`).
+Catalog entry added. `JournalEntryPostedContractTest` proves the rule-7 triad;
+**`GlOutboxCompletenessTest`** is the numeric belt to the ArchUnit suspenders: it drives the
+revenue AND expense flows (two independent writers) and reconciles `journal_entry` against the
+outbox — count equality, faithful lines, balanced on the wire. **`GlPostingAtomicityTest`** proves
+the rollback half (ENGINEERING-STANDARDS §3.2): a throw AFTER the outbox write rolls entry, lines
+and event back together — via a test-only `@Transactional` harness, since the door itself is
+MANDATORY-propagation. The consumer contract that matters
+later: **idempotency keys on `journal_entry_id` (a claim table), never the outbox event id** — a
+replayed event carries a fresh id.
+
+**The retention decision (deferred from P0) is made: option (b), and the ordering is the design.**
+`scripts/prod-outbox-prune.sh` runs from `prod-backup.sh` **after** a successful nightly backup, so
+every pruned row already exists in tonight's encrypted archive. It prunes a service's outbox only
+while that service's **Debezium connector task is RUNNING** (a missing connector may mean unrelayed
+rows — exactly the finance-backlog failure shape P0 fixed), and only rows older than
+`OUTBOX_KEEP_DAYS` (30). No `@Scheduled` job enters the fleet (ADR 0029 convention holds), nothing
+lands on the outbox's hot write path, and the finance initial-snapshot hazard is closed by the
+RUNNING guard rather than by hoping about deploy order.
+
+Also in this pass: the stale `sold_by_user_id` docs (`SaleRecorded.avsc`, its catalog copy,
+`SaleRecordedSchema`) now state the truth — populated since ADR 0049 P4 for operator-PIN sales,
+never set by carwash/barbershop, and `MetricPublished.subject_id` is a *different id space* (no
+bridging event). **ADR 0071 written** (`docs/adr/0071-analytics-star-schema.md`) and the ADR index
+repaired — 0067/0068/0069 were missing from `docs/adr/README.md`.
+
+## 2026-09-02 — prod tags are no longer CI-ungated, and the restaurant suite stops eating its own Postgres
+
+Two CI holes closed:
+
+1. **Release tags never ran CI** — `ci.yml` triggered on master only, tags are cut from
+   `feat/business-employee-apps`, so v0.1.34 shipped while the branch was red. Now `ci.yml` also
+   fires on `v*` tag pushes (tag refs escalate to the FULL build — a tag has no paths-filter base),
+   and `deploy-prod.yml` gained a **`verify-ci` job ahead of the approval gate**: it resolves the
+   tag's SHA and polls for a successful `ci` run on that exact SHA (accepting an already-green
+   branch/PR run — no forced double build), failing the deploy if CI failed and waiting up to 30
+   min if it is still running. Caveat: tags predating this change have no CI run to find, so a
+   `workflow_dispatch` REDEPLOY of an old tag needs a manual `ci.yml` dispatch on that tag first
+   (the VPS-side `prod-rollback.sh` path is unaffected).
+2. **The 3 "failing restaurant tests" were never about their subjects.** `SelfOrderSweepTest`,
+   `StocktakeAtomicityTest`, `StocktakeLineRlsIsolationTest` died on
+   `FATAL: remaining connection slots are reserved for roles with the SUPERUSER attribute`: ~90
+   test classes share one Postgres container, Spring's context cache keeps up to 32 distinct
+   contexts alive, and Hikari's default `minimumIdle == maximumPoolSize == 10` pins 10 idle
+   connections per cached context — the suite finally crossed `max_connections=100`. Fix in both
+   container bases: `max_connections=500` on the container + `maximum-pool-size=8` /
+   `minimum-idle=2` per context. Full suite green locally (818 tests). The same time bomb ticks in
+   every service's copy of these bases as their suites grow — copy the fix when it fires.
+
+## 2026-09-02 — the GL gets one persistence door: `GeneralLedgerWriter` (ADR 0071 P0)
+
+Groundwork for the analytics module, but it stands on its own. `JournalPostingService` centralised
+how a journal entry is *built* (`buildEntry`, `buildEntryForSale`, `buildEntryFromBreakdown`);
+nothing centralised how it is *written*. So **29 call sites across 28 writer classes** each repeated
+the identical incantation — stamp the tenant on the entry, `saveAndFlush` it (forcing the FK target
+down before the lines, which are `@Transient` and therefore not cascaded), then stamp and save each
+line. Five lines, copy-pasted 29 times.
+
+That is the [ADR 0065](adr/0065-gl-derived-dashboard-pnl.md) anti-pattern one level down. ADR 0065's
+lesson was that a figure assembled by a hand-picked set of writers diverges silently as writers are
+added; here the same shape blocks the thing analytics needs most — a per-entry `JournalEntryPosted`
+event. Emitting it would mean copy-pasting the emit 29 times, and the 30th posting writer would
+forget. **All five lines now collapse to `generalLedgerWriter.post(entry, companyId)`.**
+
+**The guarantee is structural, not a numeric test.** A new ArchUnit rule
+(`onlyTheGeneralLedgerWriterPersistsJournals`) forbids every class except `GeneralLedgerWriter`
+from calling a Spring Data WRITE method (`save*`/`delete*`/`flush`) on `JournalEntryRepository` /
+`JournalLineRepository`. It is deliberately a **write-side** rule rather than a no-dependency rule:
+`GlTrialBalanceReader`, `BalanceSheetReader`, `RegisterCloseWriter`, `ReversalPostingWriter`,
+`PayrollLiabilityWriter` and `PayrollSettlementWriter` all legitimately READ those repositories
+(trial-balance aggregation; prior-entry lookups for ADR 0064 supersession), and forbidding that
+would be wrong. So the 30th posting writer cannot bypass the door — that is not detected after the
+fact, it does not survive the test gate.
+
+`post` is `@Transactional(propagation = MANDATORY)` — it never opens its own transaction, it joins
+the calling `*Writer`'s, which is where `RlsAutoApplyAspect` has bound the tenant GUC.
+`ReversalPostingWriter` already used MANDATORY, so the shape has precedent; the aspect re-applies
+the GUC across suspend/resume, so the added proxy changes nothing.
+
+**Three traps, and the third is the one to remember.**
+
+1. A regex that consumes the `setCompanyId` line preceding a save will happily eat one belonging to
+   a *different* object — audited by diffing every removed `setCompanyId` and confirming all 35 were
+   on the entry (`entry`/`glEntry`/`contra`) or the line variable.
+2. A "is this dependency now dead?" scan keyed on `repo.method(` **misses line-wrapped calls**:
+   `PayrollSettlementWriter` uses `journalEntryRepository\n.findById(...)`, was misread as dead, and
+   had a live dependency removed — caught only because the restored-then-compiled signature
+   disagreed. Grep-based deadness is not deadness; the compiler is.
+3. **The guard was silently vacuous on the first attempt, and passing tests looked like proof.**
+   It was written as `noClasses().that(…).should(customCondition)`. ArchUnit **negates** a
+   `noClasses()` condition — it flags a class when the condition reports *satisfied* — so a custom
+   `ArchCondition` that only ever emits `SimpleConditionEvent.violated(...)` can never fire there.
+   The rule went green against a fully-migrated codebase and would have gone green against a
+   completely unmigrated one. Caught by **deliberately pointing the excluded class name at a
+   non-existent class**: the rule still passed, which it could only do if it were vacuous. Fixed by
+   using `classes()` (the form this file's other custom conditions already use); re-checked, it now
+   reports 2 violations with the intended message. **Vacuity-check every new ArchUnit rule by
+   inverting its premise — a structural guarantee you have not seen fail is not yet a guarantee.**
+
+In tests, writers are now constructed with a **real** `GeneralLedgerWriter` wrapping the *same*
+mock repositories, so existing `verify(journalEntryRepository).saveAndFlush(…)` and
+`verifyNoInteractions(…)` assertions keep observing the writes unchanged — the door delegates
+straight through.
+
+**Deliberately NOT in this change:** the outbox retention job. `@Scheduled` turns out to be against
+a documented fleet convention (`OrderWriter:546` — *"no @Scheduled job in this fleet — see ADR
+0029"*, the lazy-sweep idiom), and there is a hard ordering hazard: the new finance connector's
+`snapshot.mode: initial` replays the unrelayed outbox backlog to repair `group_trial_balance`, so
+pruning finance's outbox before that snapshot runs in prod destroys the repair permanently. It
+belongs with `JournalEntryPosted` (the change that actually inflates the outbox), with the design
+chosen rather than guessed.
+
+## 2026-09-02 — finance-service had no Debezium connector: two "live" events never reached Kafka
+
+Found while designing the analytics module, not by a failing test — which is the point. finance-service
+has wired an `OutboxWriter` since the group-consolidation work (`config/EventsConfig.java:58`), and
+two writers use it: `withinclose/WithinCompanyCloseWriter` emits **`ConsolidationClosed`**
+(`group_id = NULL`, the within-company kind) plus one **`TrialBalancePublished`** per group the
+company is active in, and `consolidation/GroupCloseWriter` emits `ConsolidationClosed` at group
+scope. `docs/EVENT-CATALOG.md` lists both as live on both sides. But `docker/debezium/` held **eight**
+connectors — barbershop, carwash, employee, entitlement, loyalty, org, restaurant, payment — and
+**none for `finance_service`**. The rows were written to a table and relayed nowhere, in every
+environment including prod.
+
+The consequence is quietest where it hurts most: `TrialBalancePublished` is consumed by **finance
+itself** (the `grouptb` ingest that fills `group_trial_balance`), so group consolidation has been
+assembling a consolidated trial balance from a read model that was never fed — the SEAM-2 ingest had
+no input, and `GET /api/v1/groups/{id}/consolidation` returned its "no close" 204 for a company that
+had genuinely closed. `ConsolidationClosed` never reached notification-service either.
+
+**Why nothing caught it.** Every CDC guard we have — `prod-deploy.sh`'s `recover_cdc`, the ops-watch
+"connector TASKS running" job — enumerates the connectors Kafka Connect **already has registered**
+and asserts their tasks are RUNNING. A connector that was never registered has no task to be
+un-RUNNING, so it is invisible to all of them. ops-watch even errors on *zero* connectors, which
+made eight-out-of-nine look like health. The missing assertion is **declared vs registered**: every
+`docker/debezium/*.json` should exist in `GET /connectors`. Left as a follow-up here only because
+`.github/workflows/ops-watch.yml` has in-flight edits.
+
+**The fix** is `docker/debezium/finance-outbox-connector.json`, structurally identical to the other
+eight (verified key-by-key) — only `database.{user,password,dbname}`, `topic.prefix`, `slot.name`
+and `publication.name` differ. `finance_service` already had `REPLICATION` on its role
+(`docker/postgres/init/01-init-databases.sql:32`), so no DB change was needed. Both registration
+paths glob `debezium/*.json` (`scripts/prod-bootstrap.sh` §6, `scripts/uat-up.ps1` §9), so the file
+is picked up with no script change.
+
+**`snapshot.mode: initial` is load-bearing here, and means something different than it does on the
+other eight.** They were registered against empty outbox tables; finance's has been accumulating
+unrelayed rows this whole time (nothing prunes the outbox). The initial snapshot therefore **replays
+that backlog**, which is the repair — it backfills `group_trial_balance` from every historical close.
+Safe on both consumers: the `grouptb` ingest is `processOnce`-idempotent, and notification-service
+sends through `StubNotificationSender` (synthetic receipts, no real email/SMS), so replayed
+`ConsolidationClosed` rows cannot deliver stale messages to a human.
+
+**Deploy note.** `prod-deploy.sh` only *restarts* connectors it finds already registered; it never
+registers new ones from disk. A running prod therefore needs `prod-bootstrap.sh`'s §6 (idempotent
+PUT) or a manual `PUT /connectors/finance-outbox-connector/config` — a rolling deploy alone will not
+pick this up. Replication headroom was also raised **10 → 20** (`max_replication_slots`,
+`max_wal_senders`) across dev/uat/prod: eight slots were in use of ten, finance makes nine, and
+that ceiling is a Postgres restart to change — better done now than mid-incident.
+
+## 2026-09-01 — ADR 0070: the org tree is flat (`company > outlet`); the division level is gone
+
+The tree was `company > business_unit > outlet > team`, but only the OUTLET level ever did anything.
+Sales, menus, tables, bills, register sessions, labor allocation and per-outlet revenue all key on
+the outlet id (ADR 0012 guaranteed that); the `BUSINESS_UNIT` — the console's **"Division"** —
+existed only so outlets had a parent and the `vertical` had somewhere to live, and `TEAM` existed
+almost nowhere at all. That layer cost a self-join on the POS's hottest read, a `divisionId` threaded
+from `/api/v1/outlets` through the session into three payment modals, per-BU fan-out branches in
+Dashboard / HR / Payroll / Expenses, a second name at signup, and a *company-vs-division* decision at
+the worst possible moment — and bought nothing. [ADR 0021](adr/0021-multi-company-ownership.md)
+already delivers what it stood in for: **one login, N companies**. So a second business is now a
+second company, and grouping for reporting is group consolidation's job.
+
+**The vertical moved to the company** (`V14`), REQUIRED and IMMUTABLE like `base_currency` /
+`country`. Two traps shaped that migration: the column is **nullable in the DB with the non-null
+invariant in the aggregate** (the house rule — and it keeps `V14` expand-only for the ADR 0057
+rollback gate, which forbids `SET NOT NULL`); and the backfill is bracketed in `NO FORCE` … `FORCE`
+because `company` and `org_unit` are FORCE RLS, so a bare Flyway `UPDATE` matches **zero rows
+silently** — the failure that looks exactly like success. `CompanyCreated` gained `vertical` as a
+nullable, defaulted, **LAST** field; no other event schema changed, because `type` is a free string
+(now always `"OUTLET"`) and `parent_id` was already a nullable union (now always null). That is why
+`OrgUnitType` survives as a one-value enum and `org_unit.parent_id` survives as an always-null
+column: keeping them meant finance's `org_unit_ref` and employee's `org_unit_projection` needed **no
+consumer migration at all**.
+
+**`OrgUnitDeleted` (P1, shipped first and alone)** closes a gap ADR 0018 recorded as a follow-up: a
+hard delete emitted nothing, so every consumer kept the deleted node forever as an inert ref. It is
+terminal, emitted from the same transaction as the row delete, and consumed by finance + employee as
+a PURGE (a dedicated removal command, not an upsert with placeholder fields — a deletion has no
+state to project, and modelling it as one would let a malformed event write a ghost row). **Deploy
+order is load-bearing**: those consumers must be live before org-service ever emits.
+
+**The flattening itself runs as a one-shot idempotent reconciler, not SQL.** Reparenting and
+retiring nodes are state changes, so they publish through the outbox (rule 3), and hand-serialised
+Avro in a `.sql` file would be neither maintainable nor testable. The catch: the reconciler boots
+with no tenant bound, so under FORCE RLS it **cannot enumerate the affected tenants** — Flyway can,
+so `V15` does the discovery into a non-RLS work queue which the reconciler drains one transaction
+per tenant, failures isolated and left pending for the next boot. That queue is keyed
+`VARCHAR(64)`, matching `org_unit.company_id`: a `::uuid` cast hard-failed the whole migration on a
+non-canonical tenant id (caught by `VerticalBackfillMigrationTest`, whose fixture uses
+`"pre-v6-company"`).
+
+**Also gone:** the DIVISION rung in payment-service (settings resolve outlet → company; prod carries
+zero division-scoped rows, so no data migration), `POST /api/v1/companies/{id}/businesses` ("add"
+means add a *company* now), and `firstBusinessName` at signup — the bootstrap seeds one outlet named
+after the company, and an old body still sending `firstBusiness` is accepted with its vertical
+honoured as a fallback so an in-flight old console tab does not 400.
+
+A **prod pre-flight gated the whole thing** (2026-09-01): one tenant (`Bara Kebab`), one business
+unit (`restaurant`), one outlet, **zero** teams, **zero** division-scoped `payment_settings`, empty
+`user_outlet_assignment`. A tenant with two business units of *different* verticals would have
+silently lost one in the backfill; there was none, and such a tenant must be split into two
+companies before the migration runs.
+
+Tests: 1801 backend (org 272, payment 76, finance 834, employee 619) + 599 console, all green.
+Commits `81776ec6` (P1) and `9da9e0d5` (P2–P5). **Not yet deployed** — the prod rollout still needs
+a DB backup first (the `BUSINESS_UNIT` row is deleted, not deactivated: the reconciler is re-runnable
+but that delete is not reversible without the backup), and P1's consumers must go out before P2.
+
+## 2026-08-31 — Follow-ups closed: `PaymentChargeExpired` event (order+bill release) + ArchUnit debt
+
+Cleared the open follow-ups from the money-flow audit below.
+
+**`PaymentChargeExpired` — the un-happy-path counterpart of `PaymentChargeSucceeded` (ADR 0045).**
+The audit's TTL self-heal covered the BILL side lazily; the ORDER side (stuck `AWAITING_PAYMENT`)
+had no recovery at all, and neither side learned *promptly* that a charge had died. Now
+payment-service emits `PaymentChargeExpired` (outbox, rule 3) whenever a **QR_ISSUED** gateway
+charge terminates without settling — `EXPIRED` (the lazy `expireIfPast` sweep on the till poll, or
+a `/sync`), `CANCELED` (cashier cancel), or `FAILED` (PSP) — carrying a `reason`. Emission is in
+the SAME transaction as the terminal transition; `ChargeWriter.terminateIfLive` captures
+`wasQrIssued` before the flip and emits ONLY then, so an `INITIATED`-stage failure (dead PSP at
+create — the `create()` call already fails synchronously to the caller) emits **nothing** (proven
+by `ChargeFlowAcceptanceTest`, which still asserts zero outbox on the dead-PSP path and now asserts
+exactly one event, with `reason`, on cancel-of-issued-QR and sync-finds-expired).
+restaurant-service consumes it (`PaymentChargeExpiredListener → …Service → …Writer`: dedupe by
+event id, vertical filter, PENDING-precondition no-op for the capture-won-the-race case,
+park-don't-drop for unknown-payment/order or a true state divergence): a BILL payment releases its
+`bill_line` reservation + abandons under the ADR 0069 bill-row lock (a new **guard-free**
+`BillPaymentWriter.abandonForExpiredChargeInCurrentTx` — the outlet-access guard scopes *cashier*
+actions and would wrongly 403 on the system consumer thread; RLS still scopes every query by the
+event's `company_id`); an ORDER payment reverts `AWAITING_PAYMENT → PENDING` (new
+`Order.revertAwaitingToPending()`, so the sale is payable again by cash / a fresh QR) + abandons the
+tender. No money moves, no `SaleRecorded` (ADR 0006 revenue-at-capture holds). Schema single-sourced
+in `libs/contracts`, added to `docs/EVENT-CATALOG.md`; contract tests both sides + a real-Kafka
+`PaymentChargeExpiredConsumeAcceptanceTest` (order-revert+redelivery-idempotency, bill-release,
+already-captured no-op, wrong-vertical skip, unknown-payment park). *Still deferred, by design:*
+true partial refunds (SaleRefunded v2 prorated legs) — an enhancement, not a bug.
+
+**ArchUnit layering debt cleared** (the three long-standing violations): `ClosedSessionSummaryResponse`'s
+projection→dto `from()` factory moved to `RegisterSessionWriter.toClosedSummary` (a dto must not
+reach into the projection layer); `BillAttachmentWriter.upload` now returns the DTO so
+`BillAttachmentController` never touches the `@Entity`; `OfflineReplayGuard` (an `order.service`
+class, not a `*Writer/*Service/*Reader`) no longer injects `RegisterSessionRepository` — the open
+session's `openedAt` is supplied lazily by `OrderWriter` via a `Supplier`, so the extra query still
+runs only on the accepted-backdate replay path. `LayeredArchitectureTest` fully green.
+
+**Inventory shrinkage double-expense** (the third open item) needed no new work — ADR 0068
+(periodic-safe default + stock-opname variance guard) was already Accepted AND shipped in
+`40901209`; the finance `StocktakeWriter`/`StockReceivedWriter`/`SaleCogsRecordedWriter`/AP
+`BillWriter` gates on `PerpetualInventoryReader.isActiveFor` are in place, so a non-activated
+tenant's opname no longer posts to the GL.
+
+## 2026-08-31 — Functional money-flow audit → fixes: atomic cancel, full-only refunds, reservation TTL
+
+A three-dimension functional audit (bill lifecycle / money-GL seam / concurrency-idempotency)
+found the core posture strong (Money type, round-once pricing, reconciliation identity at both
+ends, symmetric reversals, complete CashWindowLock coverage, outbox+processOnce everywhere) and a
+handful of real flaws, all fixed:
+**C1/H1 (CRITICAL) — cancel TOCTOU.** `Bill.cancel()`'s paid/reserved-line guard read an
+in-memory snapshot while a PARTIAL split-pay (`markLinesPaidForCash`) and a gateway reservation
+mutate `bill_line` via native UPDATEs that never bump `bill.version` — a racing cancel passed its
+guard AND its optimistic check, committing a CANCELLED bill with a recorded sale (or live PSP
+reservation) stranded on it. Fix: `BillRepository#findWithLockById` (bill row FOR UPDATE) is now
+the serialization point of every bill write path (cancelBill, payBill, initiatePendingPayment,
+BillPaymentCaptureWriter.capture); canonical lock order bill → bill_line → payment. Pinned by
+`BillCancelRaceTest` (barrier-raced, exactly-one-winner, invariant asserted via BYPASSRLS).
+`BillGatewayConcurrencyTest`'s loser-exception set widened: losers now observe the winner's
+committed state at their post-lock checks instead of losing at the guarded UPDATE.
+**#2 (HIGH) — partial refunds.** `VoidRefundWriter.refund` accepted CASH/QRIS/CARD partials (200
+OK, drawer/Z-report updated) while finance DLT'd the event (`PartialRefundNotSupportedException`)
+— the GL silently kept full revenue+clearing forever; the old ONLINE-only guard's comment even
+documented the mechanism. Refunds are now ALL-OR-NOTHING, once, for every tender
+(`RefundEdgeGuardTest`); the two register tests that exercised partials via the real path now
+refund in full. Real partial support = SaleRefunded v2 with prorated legs (future).
+**#3 (HIGH) — PENDING reservation TTL.** No server-side expiry existed: an abandoned QRIS left
+bill lines reserved forever (cash-blocked AND — post-lockdown — uncancellable).
+`releaseExpiredPendingReservation` (TTL `native.bill.pending-reservation-ttl`, default PT30M) now
+self-heals inside cash `payBill` and `cancelBill` under the bill lock; fresh reservations still
+block. (`BillPendingReservationTtlTest` pins it at PT0S. The ORDER-side stuck-AWAITING_PAYMENT +
+a `PaymentChargeExpired` event remain a follow-up.)
+**#4 — capture-vs-abandon deadlock**: `doAbandon` reordered to release lines BEFORE the payment
+update (line → payment, matching capture). **#5 — offline replay orphan**: `OfflineReplayGuard`
+clamps a `clientOccurredAt` predating the current OPEN session's `openedAt` to that `openedAt`
+(the cash IS in this drawer; no open session = unchanged, the inherent gap)
+(`OfflineReplayClampTest`). **#6** — FE group-remove now tolerates per-line 409s instead of
+stranding a half-trimmed group. **LOW**: sealed-period quarantine also surfaces the sale's parked
+reversals to the error inbox (they stranded silently); dead `Bill.setDiscountMinor` removed (the
+bill-level discount column is an always-null legacy — discounts are per-check); CashWindowLock
+javadoc participant list completed.
+**Known-open, unchanged by design:** inventory shrinkage double-expense (awaits the ADR 0050/0067
+inventory-method decision), labor GL supersession contra TODO, deliberate Z-report-vs-GL
+divergence, ArchUnit layering debt (register dto→projection, BillAttachmentController→entity),
+two stocktake tests that flake on local Postgres connection slots (green in isolation).
+
+## 2026-08-31 — Open-bill lockdown: once a bill has items, its flow must end in payment
+
+Owner rule: the POS open-bill flow was too loose — ANY operator (cashier included) could cancel an
+open bill or trim its lines, with no server-side role check, and cancel even succeeded on a
+partially-paid split-check (stranding the recorded sales) or under an in-flight gateway
+reservation. Now (server = the real boundary, `restaurant-service`):
+**Cancel** — a bill WITH lines requires owner/manager (403 `bill-mutation-forbidden`); an EMPTY
+bill (wrong table opened) stays cancellable by anyone; a bill with PAID lines is uncancellable for
+EVERY role (409 `bill-has-paid-lines`), as is one with payment-reserved lines (409
+`bill-line-reserved`). **Remove/decrement lines** — owner/manager only; removing a PAID line is
+refused server-side (409 `bill-line-paid`). Guards live in `BillWriter` (role, via
+`ActorRolesProvider`) + `Bill.cancel()/removeLine()` (money invariants); pinned by
+`BillLockdownTest` (10 cases incl. the reserved-line path, `X-Roles` MockHttpServletRequest
+idiom). Frontend mirrors the policy as pure functions (`pos/lib/billPermissions.ts`, vitest):
+cancel link becomes a visible "needs owner/manager" explainer for cashiers (touch has no
+tooltips), disappears entirely on partially-paid bills, and −/trash affordances hide for cashiers
+(+ stays — taking orders is still cashier work); `canVoid` uses
+`effectiveRoles(auth.roles, auth.elevatedRoles)` so elevated device terminals light up (same as
+return-sale). Lockdown problem slugs map to i18n copy instead of raw server English.
+**Explicit ack (review W2):** the role guard inherits `ManualDiscountGuard`'s empty-roles-pass —
+a request with NO `X-Roles` header is trusted (gateway-less dev recipe / direct service tests);
+the gateway always stamps the header on authenticated routes, so a real cashier token is denied.
+Making these guards JWT-authoritative is a deliberate follow-up, not an accident. Also noted:
+full local suite surfaces PRE-EXISTING failures unrelated to this change — LayeredArchitectureTest
+(register dto→projection since cbca8f42; BillAttachmentController→entity since d7cc142d) and two
+stocktake tests that flake on local Postgres connection exhaustion (green in isolation).
+
 > **For an AI agent:** this is the durable record of *what was built, why, and where we are* — the
 > decisions especially (the code shows the *what*; this shows the *why*, which you can't re-derive).
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
+
+## 2026-08-30 — UI-bug audit fixed fleet-wide (web + both Android shells)
+
+A four-dimension audit (i18n/formatting, layout/stacking/theme, Android-WebView quirks, plus a
+45-screen runtime walk) found and fixed, in one sweep:
+**Shell-dead flows (the big ones):** every CSV/bank-file export and every `window.print()` was a
+silent no-op in the Android apps (WebView ignores `<a download>`/blob and print). NativeShell
+plugin v2 (both shells) adds `saveFile` (base64 → MediaStore Downloads, API 29+ gate, orphan-row
+cleanup) and `printPage` (PrintManager over the same @media print CSS); web routes through
+`lib/nativeShell.ts` — `deliverDownload` (lib/csv.ts, also used by `apiDownload`) saves via the
+shell with a `FileSaveToast` confirmation and falls back to the browser anchor path, and 12
+`window.print()` sites became `printCurrentPage()` (incl. "Cetak slip", the Employee app's only
+print action). Old APKs degrade gracefully (bridge absent → browser path). Also shell-gated the
+POS "Customer display" `window.open` (single-WebView shell would navigate the till away) and PDF
+bill attachments now render in the in-app lightbox (blob URLs can't leave the WebView).
+**Crash safety:** a global `ErrorBoundary` (console + employee, outermost above providers,
+module-level `i18n.t`) replaces the white-screen-of-death with a recover+reload card.
+**Scroll & stacking:** new `useScrollLock` (counter-based body lock + scrollbar compensation)
+wired into every overlay (~50 — shared containers + bespoke) so touch flicks stop scroll-chaining
+behind modals; OfflineBanner/AppUpdatePrompt now stack in one fixed banner rail instead of
+covering each other; the Employee app gained the ADR-0062 update prompt.
+**Safe-area, single source of truth:** `--safe-area-inset-*` gets stylesheet `env()` defaults
+(Capacitor's injected values override), `viewport-fit=cover` added to console+employee, and every
+fixed bottom surface (POS SummaryBar dock, BillDetail bar, staff tab bar/FAB/footer, self-order
+CTA, BackGuard hint) pads with the var — bare `env()` read 0 inside the shells. Employee's
+double-counted inset removed (body already contributes it).
+**Layout/theme:** six finance tables (Customers/Vendors/Channels/BankAccounts/Expenses/Categories)
+were phone-clipped with unreachable columns → `overflow-x-auto`; `min-h-screen` → `min-h-[100dvh]`
+sweep (~13 files + body); TableFloor's Tailwind-default greens → brand tokens; global
+`touch-action: manipulation` kills POS double-tap zoom without sacrificing pinch.
+**i18n/formatting:** raw ISO dates → `formatDate` (staff Beranda/Profile, /me, groups, loyalty —
+loyalty also labels the `9999-12-31` sentinel "tanpa tanggal akhir"); payslip periods share one
+`periodLabel` helper (console /me showed raw "2026-07"); commission % via `formatPercent`;
+printer test receipt uses Intl + company currency (was hardcoded `Rp`); self-order stepper
+aria + plural keys. Verified: 594 vitest, lint/build green ×3 apps, both shells compile,
+back-guard smoke 20/20, runtime walk clean. The saveFile/printPage upgrades ride the SAME APK
+rebuild the back-guard's `minimize()` is already waiting on; everything else ships with the web.
+
+## 2026-08-30 — Hardware-Back guard: confirm-before-leave + every overlay back-dismissable
+
+Owner complaint: in the Android apps a stray Back press silently left a menu (or backgrounded the
+app) — e.g. falling out of the POS mid-shift. Decision (owner-approved): EVERY page-changing Back
+shows a confirm dialog ("Keluar dari halaman ini?" / at home "Keluar aplikasi?"), only open
+overlays auto-close, and the guard runs ONLY in the native shells (browsers unchanged). Mechanism:
+the shells translate Back into `webView.goBack()` → `popstate`, so the guard generalizes
+`useBackDismiss`'s History-API trick to routes — `useBackGuard` parks a sentinel entry
+(`{...routerState, backGuard:true}`, same URL so react-router never navigates) above every route
+entry; a Back press pops the sentinel, the guard eagerly re-parks and asks. Confirm = `go(-2)`;
+at root (pathname==home or `idx<=0` — never step back into Keycloak) the exit dialog backgrounds
+the app via a new 2-method Capacitor plugin (`NativeShell.minimize()` → `moveTaskToBack`, both
+shells; web falls back to a "tekan back sekali lagi" hint + 2.5s guard suspension on old APKs).
+Deliberate in-app back arrows use `guardedNavigateBack` (`navigate(-2)` over the sentinel). All
+protocol pieces (markers, LIFO overlay registry, per-event self-pop consumption) live in
+`components/mobile/backGuardProtocol.ts` (unit-tested); ~50 overlays gained `useBackDismiss`
+(now with an `enabled` param — payment surfaces pass `useIsMutating()===0` so Back can't dismiss
+a mid-post charge and invite a double-sale re-attempt). Two latent `useBackDismiss` bugs fixed en
+route: (1) stacked sheets all closed on one Back (every instance heard every popstate — now only
+the registry's topmost reacts); (2) StrictMode's unmount→remount raced the async unwind
+`history.back()` and stranded the overlay entry in forward history (verified in Chrome) — the
+unwind is now deferred one tick and ADOPTABLE by a same-tick remount. Verified by
+`scripts/backguard-smoke.mjs` (playwright walk of the full state machine against the dev server
+with the guard forced via `?backGuardDev=1` — 20/20). Web ships first (thin clients pick it up
+immediately); the APK rebuild only upgrades the exit button from hint-fallback to instant
+minimize.
+
+## 2026-08-23 — FIELD BUG: ONLINE-tender checkout born broken — channelCode nested vs top-level
+
+Owner (merchant `c1e01e6e`) created their first sales channel (`SHOPEE`) and tried to ring an
+ONLINE-tender sale from the POS → 400 "channelCode is required when tenderType is ONLINE", twice.
+Edge-log + prod-DB trace: the channel row is valid+active, but **prod has never recorded a single
+ONLINE sale** (62 CASH, 1 QRIS) — the flow was born broken in `61ee6939` (2026-08-03, ADR 0036 B3).
+Root cause: a straight CONTRACT MISMATCH — the server reads `channelCode` from the request's TOP
+LEVEL (`CheckoutRequest`/`PayParkedRequest`/`PayBillRequest`; `PaymentRequest` has no such field),
+while the console always nested it inside the `payment` block, where Jackson silently ignores it.
+Both sides shipped in the same commit, each with its own tests (backend tests post top-level,
+frontend tests exercise the picker in isolation) — no test ever crossed the seam, the same blind
+spot as the Midtrans-webhook outage. **Fix (frontend-only, v0.1.30):** the three tender-carrying
+bodies are now built by pure, unit-tested builders (`pos/lib/tenderRequestBodies.ts`) that mirror
+`payment.channelCode` to the top level; contract tests pin the mirror for all three (ONLINE →
+code, non-ONLINE/no-payment → null). Sending the top-level field for non-ONLINE tenders is safe
+(`OrderWriter`/`BillWriter` null it for any non-ONLINE tender). Old cached shells are equally
+broken either way (the flow never worked), so no server-side back-compat shim is needed.
+
+## 2026-08-22 — Reversed-sale visibility: history badge, receipt banner, net day total
+
+Owner bug report: a successful "Kembalikan penjualan" (ADR 0061 return) left NO trace — the
+today's-sales list showed the sale as if nothing happened, and a reprinted receipt gave no clue which
+transaction was reversed. Root cause: a reversal is a status flip on the `payment` aggregate
+(`CAPTURED → VOIDED | REFUNDED | PARTIALLY_REFUNDED` + cumulative `refunded_minor`), but
+`SaleRepository.findHistory` never joined `payment`, and the receipt rendered the status only as one
+12px label/value row buried under the tender lines. **Fix (read-model surfacing only — no `sale`
+schema change, no new events):** `findHistory` LEFT JOINs `payment` (V45 adds the missing
+`idx_payment_sale_id`; 1:0..1 today by writer discipline — per-payment sale idempotency keys — with
+the split-tender revisit documented in the javadoc and non-duplication pinned by the acceptance
+test) surfacing additive `paymentStatus` + `refundedMinor` (COALESCEd to 0); `PaymentResponse` /
+`PaymentReceiptView` now carry `refundedMinor` too. Console: red `Badge tone="loss"`
+("Dibatalkan"/"Dikembalikan"/"Dikembalikan sebagian") on rows in both history sheets, full
+reversals struck through; a solid reversal banner on the receipt (mirrors the ADR 0028 provisional
+banner) on screen AND in the ESC/POS output, the partial variant interpolating the refunded amount.
+The "Penjualan hari ini" header total is now NET via pure `netSaleAmountMinor` (`VOIDED → 0`, else
+`amount − refunded`; safe: `ck_payment_refunded` + `Payment.refund()` cap refunded ≤ amount, and a
+VOIDED payment is terminal with refunded 0), and a partially-refunded row shows its −delta so the
+visible rows still foot to the header. Documented divergence (deliberate): the register Z-report
+attributes refund DELTAS to the day they happened (V22) and does not subtract voids — the two agree
+on every shape the POS UI can produce (live-day full returns only; no UI issues voids). Beranda P&L
+untouched — finance's `SaleVoided`/`SaleRefunded` reversal listeners already net the GL. Carwash
+deliberately out of scope (no void/refund flow ported).
+
+## 2026-08-22 — INCIDENT: Midtrans webhooks (and self-order submits) 401 — chunked-refusing body filters
+
+Midtrans emailed the merchant: every notification to `POST /api/v1/psp-webhooks/midtrans/{companyId}`
+got HTTP 401 (12 retries over 3h for one expire notification — an unpaid Rp 12.000 QR, no money
+moved). Tracing hop by hop (edge access log → gateway metrics → payment-service metrics → a
+throwaway copy of the prod gateway image wired to the real payment-service with security DEBUG):
+the gateway's security chain and `pspWebhookRoute` are CORRECT — the request dies inside
+payment-service, before its servlet pipeline (invisible to http_server_requests; the filter runs at
+HIGHEST_PRECEDENCE, ahead of the observation filter). Root cause: **`PspWebhookBodySizeFilter`
+refused any `Transfer-Encoding: chunked` request with 411** ("Midtrans always sends
+Content-Length") — true at the edge, false one hop later: **the gateway's proxy re-streams EVERY
+forwarded body as chunked** (captured on the wire). The 411's `sendError` then ERROR-dispatched to
+`/error`, which is not in `native.security.public-paths`, so the security chain morphed it into the
+bodyless 401 Midtrans saw. Net: **the settlement webhook never worked in ANY deployed environment**
+— QRIS still settled because the POS `/sync` polling fallback masked it. Same defect in
+`SelfOrderBodySizeFilter` (O-2 hardening): **anonymous self-order ORDER SUBMISSION through the
+gateway was equally dead** (browse GETs fine, POST → empty 401), verified against prod. **Fix:**
+both filters now enforce the cap WHILE reading — bounded O(cap) buffering per request (the bound IS
+the heap-DoS protection), replay the buffered body to the chain (`BufferedBodyRequest`); a genuine
+oversize is written DIRECTLY as a 413 problem+json (never `sendError`, so it can't morph into a
+401). Self-order filter ordering flipped (header-only token check first, so bad-token junk never
+pays the buffering). Regression tests cover the chunked-passes / streamed-oversize-413 /
+lying-Content-Length / direct-write shapes.
+Diagnosis rule of thumb this bought: an anonymous route answering an EMPTY 401 despite permitAll =
+suspect a `sendError`/error-dispatch morph or a pre-security filter, and check the service's
+http_server_requests for the request's ABSENCE. Also flagged: the affected company's QRIS gateway
+runs with `provider_environment=SANDBOX` active in prod — a real customer can never pay a sandbox
+QR; the owner must flip to Production credentials for real sales.
+
+## 2026-08-21 — FIELD BUG: app "redirects to the web" after restart → allowNavigation fix
+
+Field report: on some devices, opening the app after a restart lands the user in Chrome (the web
+console) instead of the app. Root cause: Capacitor keeps a top-frame navigation inside the WebView
+only when its **host** equals `server.url`'s host or is listed in `server.allowNavigation`
+(`Bridge.launchIntent` — HOST-only, ports ignored); anything else fires `ACTION_VIEW` → system
+browser. Prod Keycloak lives on the Business origin (`env.js` → `https://app.native-app.my.id/auth`,
+= `PUBLIC_URL`), and the interactive login is a top-frame `signinRedirect`. On a normal open the
+stored offline token renews **silently** (XHR — never navigates), so nothing breaks; after a restart
+where that renew fails (offline session idled out / OEM cleared WebView storage) the user taps
+sign-in → cross-host redirect → Chrome, and after login Keycloak sends them back to the origin *in
+Chrome* — they stay on the web. Affected: (1) the **Employee app in prod** — its origin
+`emp.native-app.my.id` differs from the auth host **by design** (ADR 0049 P5 shared issuer) and its
+config had **no allowNavigation at all**; UAT never reproduced it because the employee origin and
+Keycloak share `a8.tailbf9662.ts.net` (only ports differ, and ports are ignored). (2) **Old Business
+APKs** baked with the funnel origin `native-prod.tailbf9662.ts.net` — cross-host ever since
+`PUBLIC_URL` migrated to Cloudflare; those installs need the current APK reinstalled (origin is baked
+in), and the funnel origin was found **down** during diagnosis anyway. **Fix:** both apps'
+`capacitor.config.ts` now bake the auth host into `server.allowNavigation`, wired through
+`build-app.mjs` (`--auth-url` / `NATIVE_*_AUTH_ORIGIN`; employee prod default
+`https://app.native-app.my.id`, till default = its own origin — a no-op guard today, but required for
+the ADR 0051 bundled shell where the WebView origin is `https://localhost`). External links stay
+un-whitelisted on purpose (they belong in the browser). The Employee prod APK/AAB must be rebuilt
+with this fix **before** the Play upload (still gated on its own upload keystore).
+
+## 2026-08-16 — INCIDENT: fleet-wide Debezium CDC outage on deploy + hardening
+
+Investigating a "corrected closing but P&L still wrong" report surfaced a bigger problem: **every
+Debezium outbox connector task was FAILED** (`Couldn't obtain encoding for database … connect timed
+out`). Root cause: a prod deploy earlier today **recreated the `native-prod-postgres` container** (new
+IP), but the `native-prod-connect` container was NOT recreated/restarted, so Debezium held stale JDBC
+connections → all tasks FAILED → **the outbox stopped flowing to Kafka fleet-wide** (sales, closings,
+corrections stopped reaching finance). It went undetected because both `prod-deploy.sh` `wait_healthy`
+and `ops-watch` only assert the connect **container** is "healthy" (the worker), never that the
+connector **tasks** are RUNNING — so the deploy reported SUCCESS while CDC was dead. **Remediation
+(live):** `docker restart native-prod-connect` → re-established connectivity → then restarted the
+FAILED tasks via `POST /connectors/<c>/restart?includeTasks=true` → all 8 RUNNING. **Long-term fixes:**
+(1) `prod-deploy.sh` now runs `recover_cdc` after the health gate — verifies every connector task is
+RUNNING and, if not, restarts connect + the failed tasks (best-effort; never fails the app-tier
+deploy, logs loudly). (2) `ops-watch.yml` gains a "Debezium CDC health" step that alerts when any
+connector task is FAILED (the detection gap that hid this). **Follow-up:** the deploy ideally should
+avoid recreating postgres at all, or restart connect whenever it does — the recover step covers it
+either way. Also surfaced: register sessions closed **before** ADR 0064 shipped (v0.1.21) have a NULL
+`close_event_id` so the correct-close feature refuses them (`RegisterCloseCorrectionNotAllowedException`)
+— the affected Bara Kebab session was unblocked by backfilling `close_event_id` from its outbox row id
+(which matches the finance journal's `source_event_id`); a broader backfill migration for pre-0064
+sessions is a deferred follow-up.
+
+## 2026-08-16 — Dashboard P&L is GL-derived — one "Laba bersih" (ADR 0065)
+
+Owner report (Bara Kebab, rfkih23@gmail.com): the beranda net profit ≠ the Laba-Rugi (income
+statement) net profit for the same month. Root cause: `GET /api/v1/pnl` (dashboard) read the
+`consolidated_pnl` **accumulator**, fed only by hand-picked POS writers (SaleRecorded net revenue,
+reversals, ExpenseRecorded, expense claims, labor, stocktake shrinkage), while the income statement is
+GL-derived. Everything that hits the GL but no accumulator writer — register-close cash variance
+(5700/4300), QRIS/platform fees, depreciation, disposal, service charge, AR/AP — showed on the
+statement but not the dashboard. Classic "accumulator fed by selected writers" anti-pattern (each new
+writer must remember to feed it). **Fix (Option A, consistency-first):** `PnlReader.pnlForPeriod` now
+delegates to the same `IncomeStatementReader` the statement uses, returning a new immutable
+`pnl.domain.PnlFigures`; beranda == Laba-Rugi **by construction**. `PnlResponse` HTTP contract
+byte-identical (incl. the presentation-currency lens) → **zero frontend change**. `consolidated_pnl`
++ its writers stay, now serving only the two write-path currency guards (read via the new
+`PnlReader.accumulatedPnlForPeriod`); retiring the accumulator is deferred. Behaviour deltas (all
+improvements): multi-currency period 500→**422**; a GL-nonempty zero-P&L period 204→**200 zeros**.
+New `PnlMatchesIncomeStatementTest` seeds a sale + a register-close cash short and proves
+`pnl.net == income.net` while the old accumulator missed the short; the 9 writer-acceptance suites
+repoint to `accumulatedPnlForPeriod`. Full finance-service `test` (unit + ArchUnit + Testcontainers)
+green. **Known follow-ups (pre-existing GL bugs the unified number inherits, NOT introduced here):**
+labor supersession posts no GL contra (`TODO(GL-labor-reversal)` → GL overstates labor on payroll
+re-runs); labor `Dr 6000 / Cr 6900` (both EXPENSE) nets to zero until `PayrollLiabilitiesPosted`
+clears 6900 (accrual-vs-liability timing). Both already affected the income statement; deferred.
+
+## 2026-08-16 — Auto stock-tracking (1:1 auto-link) + per-day usage aggregate (ADR 0050 follow-up)
+
+Owner ask: "aku mau setiap menu sudah otomatis mengurangi stock … jadi ketika stock opname sudah di
+prefil sama system jadi cuma verifikasi dan adjust" + "di riwayat stock opname harian tampilkan juga
+stock yang terpakai di hari itu". Per-sale ingredient depletion (ADR 0050) and the opname prefill
+already existed; the gap was menu items with **no recipe** — those never moved any stock, so their
+opname figures never pre-filled. **Part A — "Lacak stok otomatis" (1:1 auto-link):** for a recipe-less
+menu item, mint a same-named ingredient (unit `pcs`, stock 0, uncosted) + a 1-per-portion base recipe
+line, so the EXISTING depletion starts moving it. Bulk sweep ("Lacak stok semua menu"), per-item
+1-klik (RecipeDrawer), and a create-menu checkbox (default ON, best-effort — a link failure never
+fails the create). Idempotent; existing recipes untouched; an ACTIVE same-named `pcs` ingredient is
+REUSED case-insensitively (the V31 unique is on `lower(name)`); a same-named **non-`pcs`** ingredient
+(e.g. raw "Ayam" in grams) is **BLOCKED**, never silently depleted (bulk tallies `blockedCount`;
+1-klik → 422 `recipe-auto-link-blocked`). **Part B — per-day usage aggregate:** new table
+`ingredient_usage_day` (V42, `Auditable` + FORCE RLS), UPSERTed in the SAME transaction as each
+depletion (`ON CONFLICT (ingredient_id, usage_date) DO UPDATE qty_used = existing + EXCLUDED`),
+surfaced as "terpakai hari ini" in the opname sheet and "terpakai hari itu" in a new opname-history
+sheet. Usage accrues from deploy forward (prior days unreconstructable). Business-date zone is a fixed
+`Asia/Jakarta` v1 (a per-outlet zone is the additive follow-up); the console read key pins the same
+zone so read/write agree. Sale-path safety: the usage UPSERT runs per-ingredient right after each
+deplete, holding the same ascending-UUID lock order (no batch — would risk the cross-sale deadlock);
+concurrency test proves additive accumulation, atomicity test proves a rolled-back sale leaves no
+usage row. Dual code-reviewed (PASS; C1 case-sensitivity, W1 create-fail, W2 raw-material-collision
+all fixed). restaurant-service tests + console tsc/lint/vitest green.
+
+## 2026-08-14 — Persistent login: staff ~30 days, owner capped 1 day
+
+Native/Android sessions were logging out after the phone sat inactive, even though the offline token
++ localStorage persistence + `offline_access` were already in place (Keycloak's default offline idle is
+30 days). Root cause was **client-side**, two bugs in `auth.tsx`: (1) `recoverOrLogout` called
+`manager.removeUser()` — which **deletes the offline token** — on ANY `signinSilent()` failure, so one
+transient blip (no signal on reopen, IdP momentarily down) permanently ended a session with weeks left;
+(2) nothing refreshed on resume, so a backgrounded WebView came back with a dead 5-min access token and
+401'd before renewing. Fixes: only a TERMINAL error (`invalid_grant`/`invalid_token`/`login_required`/
+`interaction_required`) logs out — a transient failure KEEPS the session and retries; a
+`visibilitychange`/`focus` listener proactively renews via the offline token on foreground (no
+`@capacitor/app` dep). **Owner 1-day cap** (owner request "owner auth only 1 day max"): an `owner`-role
+login re-authenticates daily — `auth_time` (or a stored fresh-login stamp) > 24h → `removeUser()` +
+`signinRedirect({prompt:'login'})`; managers, cashiers, staff, and kiosk `device` logins ride the
+30-day session. Decision logic lives in a new pure `authSession.ts` (14 unit tests); no Keycloak
+timeout change (30d == the default). Client-enforced (the shared `native-console` KC client can't do
+per-role limits — a dedicated client is the follow-up if a hard server cap is needed). Dual-reviewed
+(code + security PASS); console tsc + lint + vitest (498) green. Ships to devices via the console-web /
+employee-web deploy (the native apps are thin clients).
+
+## 2026-08-14 — POS daily transaction summary / Z-report at closing (ADR 0060)
+
+Owner ("Bara Kebab") asked for a menu to **print today's transaction summary when closing the POS**.
+Built as a printable **Z-report**: transaction count, revenue breakdown (Bruto − Diskon − Loyalti +
+Servis + Pajak PB1 = TOTAL), per-tender net sales, refunds, net, and the cash-drawer reconciliation.
+**Key decision (ADR 0060):** the price breakdown was already computed at ring time and put on the
+`SaleRecorded` event but **thrown away on the row** — so instead of re-deriving it per order at report
+time (rounding drift, promo/loyalty reconstruction, per-sale rule-version loss), we **snapshot it onto
+`sale`** and `SUM` exactly. restaurant-service **V39** adds 6 nullable columns (`subtotal/discount/
+service_charge/tax/loyalty_redeemed_minor`, `uses_illustrative_rules`) + covering index
+`idx_sale_business_window`; `SaleWriter.stampBreakdown` mirrors the event's promo-only decomposition.
+New **session-scoped** endpoint `GET /api/v1/register-sessions/{id}/summary` (works OPEN=live X-report /
+CLOSED=final Z-report; window `[openedAt, closedAt ?? now)`) reuses the existing per-tender/cash sums.
+Reporting-only (finance GL stays authoritative); tax is **PB1 "Pajak Restoran" (not PPN)**, badged
+**"estimasi"** when the rate is illustrative, footer "bukan faktur pajak" (domain-specialist review).
+Snapshot is **forward-only** (legacy rows fall back to `subtotal == amount`). Console: `DailySummary`
+overlay prints through the existing `ThermalReceipt`/`usePrinter` pipeline (device + `window.print`
+fallback + retry), reached from **both** the closing sheet ("Cetak ringkasan" on the close form +
+verdict) and a till-menu item ("Ringkasan hari ini"); i18n en+id. **Code + security review PASS.**
+Review W1/W2: the settlement block was reworked from per-tender NET to per-tender **GROSS + an explicit
+gift-card settlement line** so `Σ tenders == total` foots even with refunds or a gift-card split (the
+whole point of a drawer-reconciliation document). Backend `:check` green (checkstyle + ArchUnit + all
+tests incl. the gift-card-footing case); console tsc+lint+vitest green (193). Branch
+`feat/business-employee-apps`, NOT committed/deployed. `servicepos`/carwash entry points = fast-follow.
+
+## 2026-08-14 — Dynamic QRIS gateway for BILLS/tabs, full-bill (ADR 0045 amendment, closes ADR 0036 residual)
+
+Owner ("Bara Kebab") kept getting the manual "Demo · penyedia tertunda" panel when paying a **bill
+("tagihan")** with QRIS — even after the per-env fix (v0.1.14) and confirming the effective endpoint
+returns `GATEWAY, connected:true`. Root cause: dynamic QRIS was never built for bills — `BillWriter.
+payBill` records a `Sale` directly (one-step, **no `Payment` row**), so a gateway charge had nothing
+to attach to (the ADR 0036 residual). Orders work only because checkout mints a PENDING
+`Payment(paymentId)` the charge keys on. This extends the two-step gateway flow to bills, **full-bill
+only** (split checks = follow-up), with **zero payment-service change** (a bill's gateway payment is
+a restaurant `Payment` row keyed by `paymentId`; the charge/`PaymentChargeSucceeded`/consumer plumbing
+is reused, vertical stays `restaurant`). Migration **V38** (restaurant): `payment.order_id` nullable
++ `bill_id`/`discount_minor`/`check_idempotency_key` + `CHECK` exactly-one, and `bill_line.
+pending_payment_id` (line reservation). `POST /bills/{id}/pay-pending` reserves the unpaid lines +
+mints the PENDING bill payment; `BillPaymentCaptureWriter.capture` records the check Sale + closes the
+bill on settlement (reusing `recordCheck` extracted from `payBill` — cash path byte-for-byte
+unchanged); `PaymentChargeSucceededWriter` dispatches order-vs-bill by `isForBill()`; `POST
+/payments/{id}/abandon` releases the reservation on cancel; `payBill` now excludes reserved lines
+(real double-settle fix caught in review). Capture recompute-and-asserts at the mint instant and
+parks on drift; idempotent by already-CAPTURED + the sale unique key. Console: `BillPaymentModal`
+gained a gateway branch mirroring the order `RestaurantDigitalAttempt`. Built by two parallel agents,
+dual-reviewed; restaurant-service `:check` green (693 tests, ArchUnit 14/14), console tsc+vitest+lint
+green. Branch `feat/bill-gateway-qris`, NOT yet deployed (deploy gated on the prod Tailscale-Funnel
+edge being committed to the release branch first — else a deploy would delete the tailscale container).
+
+## 2026-08-13 — Per-environment QRIS gateway credentials + verify + honest degrade (ADR 0045 amendment)
+
+First real go-live (company "Bara Kebab", GATEWAY + PRODUCTION) exposed a silent human-error trap in
+the Midtrans settings: ONE credential slot + a write-only key (blank on save keeps the stored value),
+so flipping `environment` without re-typing the key left the OTHER environment's key in place →
+Midtrans auth failed at the till, surfaced only as the confusing "Demo · pending provider" MANUAL
+fallback (which also masked the day's disk-full outage). Owner chose the full fix: **two credential
+slots** (Sandbox + Production, migration **V6** — nullable ADD + RLS-wrapped backfill; legacy columns
+kept dead for rollback safety), `provider_environment` demoted to the **active** selector, and a
+domain guard (`activateEnvironment` → 422) so an environment can never be activated against another
+environment's (or no) key. Switching active env now needs no key re-entry. Domain
+`getServerKey()/hasServerKey()/getServerKeyLast4()` resolve the active slot, leaving ChargeWriter /
+WebhookService untouched. Added an owner-only **"Test connection"** (`POST …/gateway/verify` →
+`MidtransClient.verify`, a side-effect-free status probe: 404→VALID, 401/403→INVALID, else
+UNREACHABLE — catches a wrong/mis-environment key at the settings page, not the till). Console: a
+two-section gateway card (each env: keys + Connected·last4 + Test koneksi) + an "Environment aktif"
+switch with a Save guard (`canActivateEnvironment`) + a PRODUCTION "real money" warning; and an
+honest **"gateway unavailable — confirm manually"** till badge (PaymentModal / ServicePaymentModal /
+BillPaymentModal) replacing the misleading "Demo" copy when a configured GATEWAY degrades. All gates
+green (payment-service suite incl. Testcontainers + V6; console tsc + 31 vitest + lint). Branch
+`feat/qris-per-env-credentials`, NOT pushed. ADR 0045 amended.
+
+## 2026-08-13 — English-first localization; Indonesian gated to Indonesia (ADR 0059)
+
+Taking the product global. Native was Indonesia-first: the console auto-picked Bahasa for any
+`navigator.language=id` browser and showed the EN/ID switcher to everyone, everywhere. New policy —
+**English is the global default; Indonesian is offered only in Indonesia** (and where offered, users
+may still choose English). "Indonesia" resolves by context: in-app it's the active company's country
+via the exact `baseCurrency === 'IDR'` proxy (ADR 0025 — no backend read change); on public pages
+(landing + signup pre-country) it's the browser IANA time zone (`Asia/Jakarta·Pontianak·Makassar·
+Jayapura`), which tracks physical location, not phone locale.
+
+One predicate, `offeredLangs(indonesia)` (`frontend/console/src/lib/geo.ts`), feeds every gate: the
+`LanguageSwitcher` (renders nothing when English is the only option), the signup/add-company chooser
+(shown only for an ID country; other countries locked to English, mirroring the locked-currency
+note), and `SessionProvider`, which on company-resolve **adopts the company's `defaultLanguage`**
+(finally wired to the UI — it was stored but never applied) and **clamps** anything not offered here
+to English. A manual toggle persists and wins; auto-selection never writes storage. Because the
+employee app reuses `SessionProvider` + `@/i18n` via the `@` alias, it follows for free.
+
+Server invariant lives in `CountryDefaults` beside the currency derivation — English for any country,
+Indonesian only for `ID`. `SignupService` applies it at the same **derive-before-create** point as
+the country check (a bad language `400`s before any Keycloak user exists — no compensation spent);
+the `Company` aggregate enforces it on every create path. No DB/schema/event change (`default_language`
+stays `en|id`, now country-gated). Behavior change: a non-ID company can no longer be created in
+Indonesian (`SignupAcceptanceTest.countryUsDerivesUsdBooks` updated to English + a new
+reject-with-no-residue case; `CountryDefaultsTest` + `geo.test.ts` cover the policy). Not pushed.
 
 ## 2026-08-12 — Close the ADR 0040 org-service error-inbox gap (500s → error_log fleet-complete)
 

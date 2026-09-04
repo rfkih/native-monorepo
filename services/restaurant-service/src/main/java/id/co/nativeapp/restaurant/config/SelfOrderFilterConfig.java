@@ -21,12 +21,13 @@ import org.springframework.core.Ordered;
  * libs.security.TenantBindingFilter} skips it entirely; see {@code application.yml}) — so this
  * filter is the FIRST and ONLY authentication step {@code /api/v1/self-order/**} sees.
  *
- * <p><strong>Ordering.</strong> The body-size filter is registered at {@code
- * Ordered.HIGHEST_PRECEDENCE} and the token filter one below it, at {@code
- * Ordered.HIGHEST_PRECEDENCE + 1} — NOT {@code HIGHEST_PRECEDENCE - 1}, which would silently
- * underflow past {@code Integer.MIN_VALUE} to {@code Integer.MAX_VALUE} (the LOWEST precedence) and
- * put the body-size guard dead last instead of first. This way the body-size filter (the cheapest
- * possible rejection) genuinely runs BEFORE the token filter.
+ * <p><strong>Ordering.</strong> The TOKEN filter runs first ({@code Ordered.HIGHEST_PRECEDENCE})
+ * and the body-size filter second ({@code HIGHEST_PRECEDENCE + 1} — never {@code HIGHEST_PRECEDENCE
+ * - 1}, which silently underflows to the LOWEST precedence). Cheapest rejection first: the token
+ * check reads a single header, while the body-size filter now BUFFERS the body to enforce its cap
+ * (it must — chunked bodies carry no Content-Length; see {@link SelfOrderBodySizeFilter}), so
+ * bad-token junk is dropped before a single body byte is read and only token-validated requests pay
+ * the bounded buffering.
  */
 @Configuration
 public class SelfOrderFilterConfig {
@@ -39,21 +40,21 @@ public class SelfOrderFilterConfig {
     FilterRegistrationBean<SelfOrderTokenFilter> registration = new FilterRegistrationBean<>();
     registration.setFilter(new SelfOrderTokenFilter(reader));
     registration.addUrlPatterns(URL_PATTERN);
-    registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+    registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
     return registration;
   }
 
   /**
-   * Body-size guard for the same anonymous surface, ordered BEFORE the token filter (a huge body
-   * should be refused without even validating the token — cheapest rejection first). See {@link
-   * SelfOrderBodySizeFilter}.
+   * Body-size guard for the same anonymous surface, ordered AFTER the token filter: the cap is
+   * enforced by BUFFERING the body (chunked = no Content-Length to check), so it must not run for
+   * requests the header-only token check can reject for free. See {@link SelfOrderBodySizeFilter}.
    */
   @Bean
   public FilterRegistrationBean<SelfOrderBodySizeFilter> selfOrderBodySizeFilterRegistration() {
     FilterRegistrationBean<SelfOrderBodySizeFilter> registration = new FilterRegistrationBean<>();
     registration.setFilter(new SelfOrderBodySizeFilter());
     registration.addUrlPatterns(URL_PATTERN);
-    registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+    registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
     return registration;
   }
 }

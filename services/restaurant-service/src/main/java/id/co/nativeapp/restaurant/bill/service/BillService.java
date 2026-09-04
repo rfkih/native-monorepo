@@ -7,6 +7,7 @@ import id.co.nativeapp.restaurant.bill.dto.OpenBillRequest;
 import id.co.nativeapp.restaurant.bill.dto.PayBillRequest;
 import id.co.nativeapp.restaurant.bill.projection.BillSummaryView;
 import id.co.nativeapp.restaurant.bill.repository.BillRepository;
+import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.UUID;
@@ -106,6 +107,23 @@ public class BillService {
   public BillResponse payBill(UUID billId, PayBillRequest request) {
     TenantContext.require();
     return writer.payBill(billId, request);
+  }
+
+  /**
+   * Initiates a PENDING gateway (QRIS/CARD) payment for the FULL bill (V38) — mints a {@code
+   * payment} row for the check's grand total and reserves every unpaid line against it. Records NO
+   * sale; revenue is recognised only when the payment is captured (webhook or manual capture).
+   *
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillNotFoundException if not found
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillNotOpenException if not OPEN
+   * @throws IllegalArgumentException if the bill has no unpaid lines or {@code request.payment()}
+   *     is missing/not a digital (QRIS/CARD) tender
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillLineReservationConflictException on a
+   *     concurrent reservation conflict (409; safe to retry)
+   */
+  public PaymentResponse initiatePendingPayment(UUID billId, PayBillRequest request) {
+    TenantContext.require();
+    return writer.initiatePendingPayment(billId, request);
   }
 
   /**

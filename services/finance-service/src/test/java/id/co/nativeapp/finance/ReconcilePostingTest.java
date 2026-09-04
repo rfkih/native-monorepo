@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.finance.bank.domain.BankStatementLine;
 import id.co.nativeapp.finance.bank.domain.ReconciliationCategory;
 import id.co.nativeapp.finance.bank.repository.BankStatementLineRepository;
@@ -16,6 +17,7 @@ import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import java.time.Clock;
 import java.time.Instant;
@@ -40,10 +42,11 @@ class ReconcilePostingTest {
   private static final UUID BANK_ACCOUNT = UUID.randomUUID();
 
   private ReconciliationWriter writer;
+  private RoleAccountResolver roleResolver;
 
   @BeforeEach
   void setUp() {
-    RoleAccountResolver roleResolver = mock(RoleAccountResolver.class);
+    roleResolver = mock(RoleAccountResolver.class);
     when(roleResolver.resolve(eq(AccountRole.BANK), any())).thenReturn("1000");
     when(roleResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
     when(roleResolver.resolve(eq(AccountRole.INTEREST_INCOME), any())).thenReturn("4100");
@@ -55,8 +58,11 @@ class ReconcilePostingTest {
         new ReconciliationWriter(
             mock(BankStatementLineRepository.class),
             roleResolver,
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             mock(JdbcTemplate.class),
             Clock.fixed(NOW, ZoneOffset.UTC));
   }
@@ -77,6 +83,36 @@ class ReconcilePostingTest {
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
     assertThat(lineFor(lines, "1000").getDebitMinor()).isEqualTo(1_000_000L); // Dr BANK
     assertThat(lineFor(lines, "1900").getCreditMinor()).isEqualTo(1_000_000L); // Cr CASH_CLEARING
+    // Provenance-derived (was hardcoded true): every resolved role above is OFFICIAL, so the entry
+    // is not badged provisional.
+    assertThat(entry.isUsesIllustrativeRules()).isFalse();
+  }
+
+  @Test
+  void anIllustrativeMappingBadgesTheReconciliationEntryProvisional() {
+    RoleAccountResolver illustrativeResolver = mock(RoleAccountResolver.class);
+    when(illustrativeResolver.resolve(eq(AccountRole.BANK), any())).thenReturn("1000");
+    when(illustrativeResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
+    when(illustrativeResolver.anyIllustrative(any(), any(), any())).thenReturn(true);
+    ReconciliationWriter illustrativeWriter =
+        new ReconciliationWriter(
+            mock(BankStatementLineRepository.class),
+            illustrativeResolver,
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
+            mock(JdbcTemplate.class),
+            Clock.fixed(NOW, ZoneOffset.UTC));
+
+    JournalEntry entry =
+        illustrativeWriter.buildEntry(
+            line(1_000_000L), ReconciliationCategory.CLEARING, NOW, UUID.randomUUID());
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative BANK/CASH_CLEARING mapping flags the entry provisional")
+        .isTrue();
   }
 
   @Test
@@ -139,6 +175,16 @@ class ReconcilePostingTest {
 
   @Test
   void depositQrisClearingWithFeeDebitsBankAndFeeCreditsGrossToQrisClearing() {
+    // QRIS_FEE_EXPENSE (5720) was seeded illustrative (V52) and superseded official by V55 (bucket
+    // A
+    // of the go-live SME review) — prod no longer badges a QRIS-fee reconciliation provisional.
+    // This
+    // test keeps RoleAccountResolver mocked (unit test, no DB), so it independently proves the
+    // writer
+    // still DERIVES uses_illustrative_rules from whatever the resolver reports (rather than
+    // hardcoding it) by forcing the illustrative branch here; see PerpetualInventoryGlConfigTest /
+    // GlConfigOfficialiseTest for the real-DB provenance assertion against the live V55 data.
+    when(roleResolver.anyIllustrative(any(), any(), any(), any())).thenReturn(true);
     JournalEntry entry =
         writer.buildEntry(
             line(1_000_000L),
@@ -154,6 +200,9 @@ class ReconcilePostingTest {
     assertThat(lineFor(lines, "5720").getDebitMinor()).isEqualTo(20_000L); // Dr QRIS_FEE_EXPENSE
     assertThat(lineFor(lines, "1901").getCreditMinor())
         .isEqualTo(1_020_000L); // Cr QRIS_CLEARING (gross)
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("when the fee leg's role resolves illustrative, the entry is badged provisional")
+        .isTrue();
   }
 
   @Test

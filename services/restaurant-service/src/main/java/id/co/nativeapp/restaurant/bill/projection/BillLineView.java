@@ -28,4 +28,12 @@ public interface BillLineView {
   boolean isPaid();
 
   UUID getPaidSaleId();
+
+  /**
+   * The in-flight gateway payment this line is currently RESERVED against (V38), or {@code null}
+   * when unreserved. {@link id.co.nativeapp.restaurant.bill.service.BillWriter#payBill} excludes a
+   * reserved-but-unpaid line from a cash/manual check — the reservation holds until the gateway
+   * payment is either captured or abandoned.
+   */
+  UUID getPendingPaymentId();
 }

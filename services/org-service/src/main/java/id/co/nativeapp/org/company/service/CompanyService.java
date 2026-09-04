@@ -1,8 +1,6 @@
 package id.co.nativeapp.org.company.service;
 
-import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.dto.CompanyResponse;
-import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyResult;
 import id.co.nativeapp.org.company.projection.CompanyView;
@@ -16,7 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Creates companies (bootstrapping a new tenant) and adds businesses — the M1.2 core.
+ * Creates companies (bootstrapping a new tenant) and reads/updates the bound one — the M1.2 core.
  *
  * <p>The actual transactional units of work live in {@link CompanyWriter}; this service
  * orchestrates them and owns the <em>tenant-bootstrap</em> contract.
@@ -138,19 +136,6 @@ public class CompanyService {
     }
     throw new IllegalStateException(
         "create-company: exhausted " + MAX_COMPANY_CODE_ATTEMPTS + " unique company-code attempts");
-  }
-
-  /**
-   * Adds a business (org unit) under an existing company. The tenant scope is already bound at the
-   * request edge for this tenant-scoped endpoint; this just delegates to the transactional writer.
-   *
-   * @param command the create-business command
-   * @return the org unit just added
-   */
-  public OrgUnit addBusiness(CreateBusinessCommand command) {
-    // Fail loudly here if no tenant is bound, rather than deep inside the transaction.
-    TenantContext.require();
-    return writer.addBusiness(command);
   }
 
   /**

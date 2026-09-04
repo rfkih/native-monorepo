@@ -7,6 +7,8 @@ import id.co.nativeapp.restaurant.loyaltyref.messaging.LoyaltyRefDecodeException
 import id.co.nativeapp.restaurant.loyaltyref.messaging.LoyaltyRefMissingEventIdException;
 import id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentDecodeException;
 import id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentMissingEventIdException;
+import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeExpiredDecodeException;
+import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeExpiredMissingEventIdException;
 import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeSucceededDecodeException;
 import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeSucceededMissingEventIdException;
 import java.util.HashMap;
@@ -59,6 +61,12 @@ import org.springframework.util.backoff.FixedBackOff;
  *       {@code id} header. Business-level anomalies on this event (unknown payment, state/amount
  *       mismatch, a failed capture) are parked in the error inbox instead of thrown, so they never
  *       reach this classifier.
+ *   <li>{@link PaymentChargeExpiredDecodeException} — a {@code PaymentChargeExpired} payload is not
+ *       valid Avro (ADR 0045, the un-happy-path counterpart);
+ *   <li>{@link PaymentChargeExpiredMissingEventIdException} — same as above, missing/invalid {@code
+ *       id} header. Business-level anomalies on this event (unknown payment/order, a state
+ *       divergence) are parked in the error inbox instead of thrown, so they never reach this
+ *       classifier.
  * </ul>
  */
 @Configuration
@@ -116,7 +124,9 @@ public class KafkaConfig {
         EntitlementDecodeException.class,
         EntitlementMissingEventIdException.class,
         PaymentChargeSucceededDecodeException.class,
-        PaymentChargeSucceededMissingEventIdException.class);
+        PaymentChargeSucceededMissingEventIdException.class,
+        PaymentChargeExpiredDecodeException.class,
+        PaymentChargeExpiredMissingEventIdException.class);
     return handler;
   }
 

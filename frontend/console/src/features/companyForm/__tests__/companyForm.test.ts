@@ -3,23 +3,23 @@ import { invalidCompanyFields, symbolOf } from '../companyForm'
 
 describe('invalidCompanyFields — the shared Company-step required rule', () => {
   it('flags both fields when blank (incl. whitespace-only)', () => {
-    expect(invalidCompanyFields({ companyName: '', firstBusinessName: '   ' })).toEqual([
+    expect(invalidCompanyFields({ companyName: '' })).toEqual([
       'companyName',
-      'firstBusinessName',
+      
     ])
   })
 
   it('flags only the blank field', () => {
-    expect(invalidCompanyFields({ companyName: 'Acme', firstBusinessName: '' })).toEqual([
-      'firstBusinessName',
+    expect(invalidCompanyFields({ companyName: 'Acme' })).toEqual([
+      
     ])
-    expect(invalidCompanyFields({ companyName: '', firstBusinessName: 'Outlet 1' })).toEqual([
+    expect(invalidCompanyFields({ companyName: '' })).toEqual([
       'companyName',
     ])
   })
 
   it('accepts when both are present', () => {
-    expect(invalidCompanyFields({ companyName: 'Acme', firstBusinessName: 'Outlet 1' })).toEqual([])
+    expect(invalidCompanyFields({ companyName: 'Acme' })).toEqual([])
   })
 })
 

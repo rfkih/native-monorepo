@@ -54,7 +54,8 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
                     occurredAt)))
         .isTrue();
     ConsolidatedPnl afterRun1 =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(afterRun1.expense()).isEqualTo(Money.ofMinor(run1Amount, "IDR"));
 
     // RUN 2 (run_seq=2) supersedes run 1: finance reverses run 1 (contra) then posts run 2.
@@ -73,7 +74,8 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
 
     // The P&L now reflects ONLY run 2: run1 (+20M) + reversal (-20M) + run2 (+22M) = 22M.
     ConsolidatedPnl afterRun2 =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(afterRun2.expense()).isEqualTo(Money.ofMinor(run2Amount, "IDR"));
 
     // The audit trail: 3 ledger rows — run1 PRIMARY, the REVERSAL contra, run2 PRIMARY. The contra
@@ -112,7 +114,8 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
 
     // The net per period is exactly the highest active run's labor cost.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(run2Amount, "IDR"));
   }
 
@@ -144,7 +147,8 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
                     occurredAt)))
         .isTrue();
     ConsolidatedPnl afterRun2 =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(afterRun2.expense()).isEqualTo(Money.ofMinor(run2Amount, "IDR"));
 
     // RUN 1 (run_seq=1) arrives LATE. A higher-seq run is already active, so run 1 is already
@@ -165,7 +169,8 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
         .isTrue();
 
     ConsolidatedPnl afterLateRun1 =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(afterLateRun1.expense())
         .as("period nets to run 2 only — late run 1 contributes zero")
         .isEqualTo(Money.ofMinor(run2Amount, "IDR"));
@@ -204,7 +209,8 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
     assertThat(ledgerCountAsAdmin()).isEqualTo(3L);
     assertThat(reversalCountAsAdmin()).isEqualTo(1L);
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(22_000_000L, "IDR"));
   }
 
@@ -248,7 +254,8 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
     // The period nets to run 2 ONLY: B1a(+12M) + reversal(-12M) + B2(+22M) + B1b(+8M) + B1b
     // self-reversal(-8M) = 22M. The late B1b contributes zero.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense())
         .as("period nets to run 2 only — the late B1b self-supersedes to zero")
         .isEqualTo(Money.ofMinor(b2, "IDR"));

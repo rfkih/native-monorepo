@@ -81,6 +81,19 @@ public class RoutingConfig {
   private static final String[] POS_ROLES = {"owner", "manager", "cashier", "chef", "waitress"};
 
   /**
+   * Roles allowed to REVERSE a captured sale — the refund/void money-out actions ({@code POST
+   * /api/v1/payments/*}{@code /refund}, {@code /void}). {@code owner}/{@code manager} only: a
+   * refund returns money to a customer and posts a GL reversal (ADR 0006, ADR 0061), so it is a
+   * MANAGER decision — narrower than the general {@link #POS_ROLES} till surface (which a {@code
+   * cashier}/{@code chef}/{@code waitress} rings). Capture and the receipt read stay POS_ROLES;
+   * only these two reversal sub-paths escalate, via a HIGHEST_PRECEDENCE route ordered before
+   * {@link #paymentsRoute}. On a shared device terminal a cashier must have an owner/manager
+   * ELEVATION (ADR 0049 P3b) on their bearer to pass — the console gates the affordance
+   * identically.
+   */
+  private static final String[] SALE_REVERSAL_ROLES = {"owner", "manager"};
+
+  /**
    * Roles allowed on the OPERATIONS surface — org structure/team, promotions, entitlements,
    * consolidation groups, self-order-access administration. {@code owner}/{@code manager} only: a
    * manager runs operations but does not see the detailed books, HR, or payroll (preset role-based
@@ -474,6 +487,33 @@ public class RoutingConfig {
   // ---------------------------------------------------------------------------
   // restaurant-service (cashier POS)
   // ---------------------------------------------------------------------------
+
+  /**
+   * {@code GET /api/v1/sales/channel-summary} (EXACT) — the company-wide per-platform online-sales
+   * report (GoFood/GrabFood/ShopeeFood gross by channel). Unlike the outlet-scoped POS reads on
+   * {@code /api/v1/sales/**}, this aggregates EVERY outlet's online sales, so it is management
+   * financial data — gated to {@link #REPORTS_ROLES} (owner/manager/accountant), mirroring the
+   * finance-service settlement-summary twin ({@link #FINANCE_ROLES}).
+   * {@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: this exact-path carve-out must be matched
+   * before the general {@link #salesRoute} ({@code /api/v1/sales/**}, {@link #POS_ROLES}) so a
+   * {@code cashier}/{@code chef}/{@code waitress} token cannot read the company-wide report; every
+   * other {@code /api/v1/sales/...} path still falls through to the POS route unchanged.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> salesChannelSummaryRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-sales-channel-summary")
+        .route(GET("/api/v1/sales/channel-summary"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(REPORTS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> salesRoute(
       GatewayRouteProperties routes,
@@ -520,6 +560,34 @@ public class RoutingConfig {
         .before(uri(routes.restaurantService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * The register-close CORRECTION sub-path — {@code POST /api/v1/register-sessions/*}{@code
+   * /correct-close} — escalated to {@link #OPS_ROLES} (owner/manager). A correction reverses and
+   * re-posts a finance cash-variance journal (ADR 0064); a cashier opens/closes the till but never
+   * amends a completed close (the cashier's own mistake is what a manager fixes here).
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: RouterFunction beans match in order
+   * (first match wins, NOT most-specific wins), so this specific route must precede the general
+   * {@link #registerSessionsRoute} ({@code /register-sessions/**}, POS_ROLES) below — otherwise the
+   * wildcard route would swallow {@code /correct-close} and let a cashier correct a close. Every
+   * OTHER {@code /register-sessions/**} path (open, close, summary, history) falls through to that
+   * POS_ROLES route unchanged — the same first-match pattern as {@link #paymentReversalRoute}.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> registerCloseCorrectionRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-register-close-correction")
+        .route(path("/api/v1/register-sessions/*/correct-close"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -629,6 +697,34 @@ public class RoutingConfig {
         .before(uri(routes.restaurantService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * The two money-OUT reversal sub-paths — {@code POST /api/v1/payments/*}{@code /refund} and
+   * {@code /void} — escalated to {@link #SALE_REVERSAL_ROLES} (owner/manager). A refund returns
+   * money to a customer and drives the finance GL reversal (ADR 0006/0061); a {@code
+   * cashier}/{@code chef}/{@code waitress} rings sales but never reverses one.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: RouterFunction beans match in order
+   * (first match wins, NOT most-specific wins), so this specific route must precede the general
+   * {@link #paymentsRoute} ({@code /payments/**}, POS_ROLES) below — otherwise the wildcard route
+   * would swallow {@code /refund} and let a cashier reverse a sale. Every OTHER {@code
+   * /payments/**} path (capture, receipt) falls through to that POS_ROLES route unchanged — same
+   * first-match pattern as {@link #userMeOutletsRoute} and the owner-only payroll bank-file route.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> paymentReversalRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-payment-reversal")
+        .route(path("/api/v1/payments/*/refund").or(path("/api/v1/payments/*/void")), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(SALE_REVERSAL_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1447,6 +1543,62 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * {@code POST /api/v1/inventory-method/activate} — perpetual-inventory ACTIVATION (ADR 0067 §5,
+   * Phase D4) — OWNER-ONLY, narrower than the general {@link #FINANCE_ROLES} surface {@link
+   * #inventoryMethodRoute} sits behind (the {@link #paymentSettingsRoute}/{@link
+   * #payrollRunBankFileRoute} precedent). Activation books a one-time opening {@code Dr 1100 / Cr
+   * 3900} entry and is an effectively-irreversible, once-per-company election (no
+   * deactivate/re-activate flow) — an {@code accountant} reads the books but does not get to elect
+   * the company's accounting method or decide when its opening inventory posts, so it is excluded
+   * exactly like the QRIS payment-settings admin and the payroll bank file.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: RouterFunction beans are matched in
+   * declaration order across the WHOLE bean set (first match wins, NOT most-specific-path wins), so
+   * without this the general {@link #inventoryMethodRoute} ({@code /api/v1/inventory-method/**},
+   * {@link #FINANCE_ROLES}) below would swallow this exact path FIRST and let an {@code accountant}
+   * token through — this route must be checked before that one for its narrower {@link
+   * #OWNER_ROLES} gate to apply. Every OTHER {@code /api/v1/inventory-method/**} path (today just
+   * the {@code GET} status read) falls through to that route unchanged — the {@link
+   * #registerCloseCorrectionRoute} first-match pattern.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> inventoryMethodActivateRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-inventory-method-activate")
+        .route(path("/api/v1/inventory-method/activate"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * The rest of {@code /api/v1/inventory-method/**} (today just {@code GET
+   * /api/v1/inventory-method}, the election status + live {@code 1100} balance read, ADR 0067 §5
+   * Phase D4/D5) — {@link #FINANCE_ROLES} (owner/accountant), the same back-office-books surface as
+   * {@link #openingBalancesRoute}: an accountant reads the books, including whether perpetual
+   * inventory is active and its negative-asset monitor flag, but does not activate it (see {@link
+   * #inventoryMethodActivateRoute}).
+   */
+  @Bean
+  RouterFunction<ServerResponse> inventoryMethodRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-inventory-method")
+        .route(path("/api/v1/inventory-method/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> groupsRoute(
       GatewayRouteProperties routes,
@@ -1550,6 +1702,26 @@ public class RoutingConfig {
       TenantContextHeaderFilter tenantFilter) {
     return GatewayRouterFunctions.route("finance-service-ap")
         .route(path("/api/v1/ap/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Company expenses under {@code /api/v1/company-expenses/**} (finance-service, ADR 0072) —
+   * owner/accountant only, mirroring AP: recording an expense posts the GL and (for an INVENTORY
+   * submit) instructs the stock receive. Distinct from the employee expense-claims routes ({@code
+   * /api/v1/expense-claims/**} → employee-service).
+   */
+  @Bean
+  RouterFunction<ServerResponse> companyExpensesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-company-expenses")
+        .route(path("/api/v1/company-expenses/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(FINANCE_ROLES))

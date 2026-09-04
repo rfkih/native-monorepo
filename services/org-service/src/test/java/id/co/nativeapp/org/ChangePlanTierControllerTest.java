@@ -109,7 +109,8 @@ class ChangePlanTierControllerTest {
             LEGAL_EMPLOYER_ID,
             FIRST_BUSINESS_ID,
             "FREE",
-            "acme07");
+            "acme07",
+            "restaurant");
     when(companyService.changePlanTier("FREE")).thenReturn(updated);
 
     TenantContext.callAs(

@@ -23,17 +23,13 @@ export interface CompanySession {
   name: string
   baseCurrency: string
   defaultLanguage: string
-  /** The company's first business (org unit) — the POS records sales/orders against it. */
-  businessId: string
   /**
-   * ADR 0045 amendment (division-layer QRIS resolution): `businessId`'s parent business-unit id,
-   * when known. Null on the base (pre-`OutletGate`) session and whenever the resolved outlet's
-   * division is unknown (e.g. an older server that omits `divisionId` on `/api/v1/outlets`) —
-   * every payments hook treats `undefined`/`null` as "no division context" and resolves
-   * outlet → company exactly as before this amendment. Set by `OutletGate` from the SAME
-   * resolved-outlet list `businessId` itself comes from.
+   * The active OUTLET id — the POS records sales/orders/bills against it. Since ADR 0070 the org
+   * structure is flat (`company > outlet`), so this is always a real outlet: there is no division
+   * layer above it and nothing else it could ever be. (The name is historical; the wire field on
+   * `/api/v1/companies` is still `firstBusinessId`.)
    */
-  divisionId?: string | null
+  businessId: string
   actor: string
   /**
    * The company's plan tier (P1 tier-mode, `~/.claude/plans/umkm-tier-mode.md`) — FREE shows a
@@ -49,6 +45,15 @@ export interface CompanySession {
    * Empty string only for a stale server that predates the column (`toSession` defaults it).
    */
   companyCode: string
+  /**
+   * The company's immutable business vertical (`restaurant` | `carwash` | `barbershop`), which
+   * decides WHICH POS surface its outlets get. ADR 0070 moved it here from the org unit: one
+   * company = one vertical = N outlets, so it is read once per session instead of per outlet.
+   *
+   * Optional for wire compat with an older server that omits it; every consumer FAILS OPEN to
+   * `'restaurant'` on a missing value — never brick a POS on a read gap.
+   */
+  vertical?: string | null
 }
 
 export interface SessionContextValue {

@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/Button'
 import { ToggleRow } from '@/components/ui/ToggleRow'
 import { usePrinter } from '@/lib/escpos/printerContext'
 import type { PaperWidth } from '@/lib/escpos/receipt'
+import { localeOf } from '@/i18n'
+import { formatMoney } from '@/lib/money'
+import { useSession } from '@/lib/session'
 import {
   classifyConnectError,
   isNativeShell,
@@ -20,7 +23,10 @@ import {
  * copy via i18n (rule 9); the browser owns the device grant, we persist only reconnection hints.
  */
 export function PrinterSettings() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = localeOf(i18n.language)
+  const { company } = useSession()
+  const currency = company?.baseCurrency ?? 'IDR'
   const printer = usePrinter()
   const [paper, setPaper] = useState<PaperWidth>(printer.config?.paper ?? 80)
   const [error, setError] = useState<string | null>(null)
@@ -118,22 +124,36 @@ export function PrinterSettings() {
 
   const testPrint = async () => {
     setTestState('printing')
+    // Sample figures for a throwaway test receipt (never a real sale) — still real Money (rule 8:
+    // minor units + the company's own base currency) run through formatMoney (rule 9), never a
+    // hardcoded "Rp" string that would misrepresent a USD-book company.
+    const lineTotalMinor = 50_000
+    const modifierDeltaMinor = 2_000
+    const subtotalMinor = lineTotalMinor + modifierDeltaMinor
+    const dateTime = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
+      new Date(),
+    )
     const bytesOk = await printer.printReceipt({
       businessName: t('settings.printer.testBusiness'),
       title: t('settings.printer.testTitle'),
       reference: 'TEST-0001',
-      dateTime: new Date().toLocaleString(),
+      dateTime,
       metaRows: [{ label: t('settings.printer.testRow'), valueLabel: t('settings.printer.testRowValue') }],
       lineItems: [
         {
           qty: 2,
           name: t('settings.printer.testItem'),
-          priceLabel: 'Rp 50.000',
-          modifiers: [{ label: t('settings.printer.testModifier'), deltaLabel: '+Rp 2.000' }],
+          priceLabel: formatMoney(lineTotalMinor, currency, locale),
+          modifiers: [
+            {
+              label: t('settings.printer.testModifier'),
+              deltaLabel: `+${formatMoney(modifierDeltaMinor, currency, locale)}`,
+            },
+          ],
         },
       ],
-      totalRows: [{ label: t('pos.receipt.subtotal'), valueLabel: 'Rp 52.000' }],
-      grandTotalLabel: 'Rp 52.000',
+      totalRows: [{ label: t('pos.receipt.subtotal'), valueLabel: formatMoney(subtotalMinor, currency, locale) }],
+      grandTotalLabel: formatMoney(subtotalMinor, currency, locale),
       grandTotalCaption: t('pos.receipt.total'),
       paymentRows: [{ label: t('pos.receipt.tender'), valueLabel: t('settings.printer.testTender') }],
       footerNote: t('settings.printer.testFooter'),

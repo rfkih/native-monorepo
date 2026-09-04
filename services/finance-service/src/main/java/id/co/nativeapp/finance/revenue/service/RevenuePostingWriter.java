@@ -5,8 +5,7 @@ import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
 import id.co.nativeapp.finance.platform.service.PlatformReceivableWriter;
@@ -106,8 +105,7 @@ public class RevenuePostingWriter {
   private final GlAccountResolver glAccountResolver;
   private final PnlReadModelWriter pnlReadModel;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final ErrorInboxWriter errorInbox;
   private final PlatformReceivableWriter platformReceivable;
   private final PendingSaleReversalRepository pendingReversals;
@@ -124,20 +122,18 @@ public class RevenuePostingWriter {
       GlAccountResolver glAccountResolver,
       PnlReadModelWriter pnlReadModel,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       ErrorInboxWriter errorInbox,
       PlatformReceivableWriter platformReceivable,
       PendingSaleReversalRepository pendingReversals,
       ReversalPostingWriter reversalWriter) {
     this.ledgerRepository = ledgerRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
     this.glAccountResolver = glAccountResolver;
     this.pnlReadModel = pnlReadModel;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
     this.errorInbox = errorInbox;
     this.platformReceivable = platformReceivable;
     this.pendingReversals = pendingReversals;
@@ -195,6 +191,29 @@ public class RevenuePostingWriter {
           "finance.revenue.sealed-period-quarantine",
           companyId,
           null);
+      // 2026-08-31 audit: a reversal that arrived BEFORE this sale is PARKED awaiting it
+      // (pending_sale_reversal); with the sale quarantined the drain loop below never runs, so the
+      // parked reversal would strand SILENTLY (its event id is already claimed by processOnce).
+      // Surface each one to the error inbox alongside the sale, so the accountant handling the
+      // quarantine sees the whole picture — the rows stay parked for the same manual action.
+      pendingReversals
+          .findBySaleIdAndAppliedAtIsNullOrderByOccurredAtAsc(event.saleId())
+          .forEach(
+              parked ->
+                  errorInbox.record(
+                      new IllegalStateException(
+                          "Parked "
+                              + parked.getKind()
+                              + " reversal (event "
+                              + parked.getReversalEventId()
+                              + ") awaits sale "
+                              + event.saleId()
+                              + ", which was quarantined into sealed period "
+                              + period
+                              + " — resolve together with the sale"),
+                      "finance.revenue.sealed-period-quarantine",
+                      companyId,
+                      null));
       return;
     }
 
@@ -302,14 +321,7 @@ public class RevenuePostingWriter {
     glEntry.setGrandTotalMinor(amount.amountMinor());
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
-    journalEntryRepository.saveAndFlush(glEntry);
-    glEntry
-        .getLines()
-        .forEach(
-            line -> {
-              line.setCompanyId(companyId);
-              journalLineRepository.save(line);
-            });
+    generalLedgerWriter.post(glEntry, companyId);
 
     // ADR 0036 Phase B: an ONLINE sale accrues the per-channel receivable sub-ledger by the GROSS
     // amount (ONLINE carries no gift-card legs — the producer rejects the combination), atomically

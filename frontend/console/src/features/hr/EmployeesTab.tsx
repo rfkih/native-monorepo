@@ -1,7 +1,7 @@
 /**
  * Employees tab — the Odoo-style HR list scoped to the current unit. Reused by both the org-unit
  * hub (`OrgUnitDetail`, owner/manager) and the standalone People page (`PeoplePage`, ADR 0052 —
- * owner/manager/hr). The BU rollup is CLIENT-computed: a business unit's scope is [itself,
+ * owner/manager/hr). The scope is CLIENT-computed: since ADR 0070 an outlet's scope is [itself,
  * ...its child outlets] from the org tree the hub already has (employee-service's projection holds
  * no parent_id). Employees are HR RECORDS, deliberately separate from the Team page's login users.
  * No PII renders here — the list endpoint never returns NIK / bank account / amounts.
@@ -24,6 +24,7 @@ import { ListSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import type { OrgUnit } from '@/features/org/api'
 import { useTeam, type TeamMember } from '@/features/team/api'
+import { displayLoginId } from '@/lib/loginId'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { hasAccessRoleMismatch } from './accessRoleMatch'
@@ -67,7 +68,6 @@ export interface GroupedEmployee {
 
 export function EmployeesTab({
   unit,
-  childOutlets,
   units,
   companyId,
   actor,
@@ -75,7 +75,6 @@ export function EmployeesTab({
   canManageLogins = true,
 }: {
   unit: OrgUnit
-  childOutlets: OrgUnit[]
   units: OrgUnit[]
   companyId: string
   actor: string
@@ -101,12 +100,8 @@ export function EmployeesTab({
         : null,
     )
 
-  // BU scope = the unit + its child outlets; an outlet scopes to itself only.
-  const unitIds = useMemo(
-    () =>
-      unit.type === 'BUSINESS_UNIT' ? [unit.id, ...childOutlets.map((o) => o.id)] : [unit.id],
-    [unit, childOutlets],
-  )
+  // ADR 0070: flat tree — a unit IS an outlet, so its scope is just itself.
+  const unitIds = useMemo(() => [unit.id], [unit])
   const query = useEmployees({ companyId, actor, orgUnitIds: unitIds, enabled: true })
 
   // Resolve each linked login's USERNAME (userId → username) so the list shows the login id inline —
@@ -120,10 +115,7 @@ export function EmployeesTab({
   const usernameByUserId = useMemo(() => {
     const code = company?.companyCode
     return new Map(
-      (team.data ?? []).map((m) => {
-        const full = !code || m.username.includes('@') ? m.username : `${code}.${m.username}`
-        return [m.id, full] as const
-      }),
+      (team.data ?? []).map((m) => [m.id, displayLoginId(m.username, code)] as const),
     )
   }, [team.data, company?.companyCode])
   // Phase 1 (HR-job-title vs. app-access-role visibility) — reuses the SAME team list above (no
@@ -174,18 +166,12 @@ export function EmployeesTab({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-ink-3">{t('hr.list.subtitle', { unit: unit.name })}</p>
-        {/* Create only at the business-unit level; an outlet assigns an EXISTING employee. */}
-        {unit.type === 'BUSINESS_UNIT' ? (
-          <Button type="button" onClick={() => setDialog({ kind: 'create' })}>
-            <Plus className="size-4" />
-            {t('hr.list.add')}
-          </Button>
-        ) : (
-          <Button type="button" onClick={() => setDialog({ kind: 'assignExisting' })}>
-            <Plus className="size-4" />
-            {t('hr.list.assignExisting')}
-          </Button>
-        )}
+        {/* ADR 0070: every unit is an outlet, so create is available on every unit — there is
+            no division tier that used to be the only place a new employee could be created. */}
+        <Button type="button" onClick={() => setDialog({ kind: 'create' })}>
+          <Plus className="size-4" />
+          {t('hr.list.add')}
+        </Button>
       </div>
 
       {!query.isLoading && !query.isError && grouped.length > 0 ? (
@@ -242,7 +228,6 @@ export function EmployeesTab({
       {dialog?.kind === 'create' || dialog?.kind === 'edit' ? (
         <EmployeeFormDialog
           unit={unit}
-          childOutlets={childOutlets}
           companyId={companyId}
           actor={actor}
           edit={dialog.kind === 'edit' ? dialog.employee : null}
@@ -253,7 +238,6 @@ export function EmployeesTab({
         <AssignDialog
           employee={dialog.employee}
           unit={unit}
-          childOutlets={childOutlets}
           companyId={companyId}
           actor={actor}
           onClose={closeDialog}

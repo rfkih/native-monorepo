@@ -11,9 +11,10 @@
  *   BillLineModifierResponse — modifier snapshot on a line
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, apiUpload } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
-import type { PriceBreakdownResponse, OrderLineInput } from './api'
+import { payBillRequestBody } from './lib/tenderRequestBodies'
+import type { PriceBreakdownResponse, OrderLineInput, PaymentResponse } from './api'
 
 // ---------------------------------------------------------------------------
 // Response types — mirroring backend DTOs exactly
@@ -107,6 +108,27 @@ export interface PayBillInput {
   idempotencyKey?: string
 }
 
+/**
+ * Request body for {@link usePayBillPending} — full-bill only (no `lineIds`; see
+ * `features/pos/lib/billGatewayQris.ts`'s `shouldUseBillGatewayFlow` guard). `discountMinor` mirrors
+ * {@link PayBillInput}'s field verbatim; BillPaymentModal does not currently source a discount for
+ * this leg (same as the existing one-step `usePayBill` call it mirrors), but the field is wired
+ * through for parity with the backend contract.
+ */
+export interface PayBillPendingInput {
+  billId: string
+  payment: { tenderType: 'QRIS' }
+  discountMinor?: number
+  /**
+   * The SAME key BillDetail mints per pay-initiation (`freshIdempotencyKey`), reused across retries
+   * of this attempt — sent for consistency with every other bill/order write on this contract, but
+   * INERT server-side for `pay-pending` specifically: the backend ignores it and self-heals by
+   * minting its own key (coordination note, 2026-08-14). Keep sending it (harmless); don't treat it
+   * as meaningful retry-dedup for THIS endpoint the way it is for `usePayBill`/`useCheckout`.
+   */
+  idempotencyKey?: string
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -151,6 +173,67 @@ export function useBill(session: CompanySession, billId: string | null) {
       apiFetch<BillResponse>(`/api/v1/bills/${billId}`, {
         tenant: tenantOf(session),
       }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Bill attachments (ADR 0063) — photos/PDF of the real receipt or a supporting document.
+// Metadata list is JSON; the bytes stream from an authenticated per-attachment endpoint (fetched as
+// a Blob in the component). Uploads are multipart; the image is compressed client-side first.
+// ---------------------------------------------------------------------------
+
+export interface BillAttachmentMeta {
+  id: string
+  contentType: string
+  byteSize: number
+  sha256: string
+  originalFilename: string | null
+  uploadedAt: string
+}
+
+function billAttachmentsKey(session: CompanySession, billId: string) {
+  return ['billAttachments', session.companyId, billId] as const
+}
+
+export function useBillAttachments(session: CompanySession, billId: string | null) {
+  return useQuery({
+    enabled: billId != null,
+    queryKey: billAttachmentsKey(session, billId ?? ''),
+    staleTime: 30_000,
+    queryFn: () =>
+      apiFetch<BillAttachmentMeta[]>(`/api/v1/bills/${billId}/attachments`, {
+        tenant: tenantOf(session),
+      }),
+  })
+}
+
+export function useUploadBillAttachment(session: CompanySession, billId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return apiUpload<BillAttachmentMeta>(`/api/v1/bills/${billId}/attachments`, formData, {
+        tenant: tenantOf(session),
+      })
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: billAttachmentsKey(session, billId) })
+    },
+  })
+}
+
+export function useDeleteBillAttachment(session: CompanySession, billId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      apiFetch<void>(`/api/v1/bills/${billId}/attachments/${attachmentId}`, {
+        method: 'DELETE',
+        tenant: tenantOf(session),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: billAttachmentsKey(session, billId) })
+    },
   })
 }
 
@@ -225,22 +308,70 @@ export function useRemoveLine(session: CompanySession) {
 export function usePayBill(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ billId, payment, discountMinor, lineIds, idempotencyKey }: PayBillInput) =>
-      apiFetch<BillResponse>(`/api/v1/bills/${billId}/pay`, {
+    mutationFn: (input: PayBillInput) =>
+      apiFetch<BillResponse>(`/api/v1/bills/${input.billId}/pay`, {
         method: 'POST',
         tenant: tenantOf(session),
-        body: {
-          payment: payment ?? null,
-          discountMinor: discountMinor != null && discountMinor > 0 ? discountMinor : null,
-          lineIds: lineIds && lineIds.length > 0 ? lineIds : null,
-          idempotencyKey: idempotencyKey ?? null,
-        },
+        body: payBillRequestBody(input),
       }),
     onSuccess: (_res, { billId }) => {
       void qc.invalidateQueries({ queryKey: billKey(session, billId) })
       void qc.invalidateQueries({ queryKey: billsKey(session) })
       void qc.invalidateQueries({ queryKey: ['pnl'] })
     },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Pay a bill — GATEWAY QRIS two-step leg (ADR 0045 extension to bills, full-bill only):
+// POST /api/v1/bills/{id}/pay-pending → 201 PaymentResponse (creates a PENDING payment WITHOUT
+// settling the bill) + POST /api/v1/payments/{id}/abandon (releases the reservation on a clean
+// cancel/close). Mirrors the order checkout's two-step digital leg (features/pos/api.ts's
+// useCheckout + useCapturePayment) — capture/receipt for the resulting payment reuse THOSE hooks
+// verbatim (BillPaymentModal imports useCapturePayment/useReceipt from ./api), nothing here
+// duplicates them.
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/v1/bills/{id}/pay-pending — creates a PENDING payment for the bill's current unpaid
+ * total (the full, un-split bill) without settling it. The response is the SAME `PaymentResponse`
+ * shape `useCapturePayment`/`useReceipt` (features/pos/api.ts) already return — reused verbatim
+ * rather than redeclared, so `useGatewayQris` and `GatewayQrisPendingView` drive off one consistent
+ * type across the order and bill flows. Only `paymentId`/`amountMinor`/`currency`/`status` are ever
+ * read off a bill-originated payment here — `orderId` is null (a bill is not an order; `billId` is
+ * its bill-side counterpart, unread here too).
+ * No cache invalidation on success: creating the PENDING payment doesn't change anything the bill
+ * read shows yet (unlike capture, which the caller invalidates on the CAPTURED transition).
+ */
+export function usePayBillPending(session: CompanySession) {
+  return useMutation({
+    mutationFn: ({ billId, payment, discountMinor, idempotencyKey }: PayBillPendingInput) =>
+      apiFetch<PaymentResponse>(`/api/v1/bills/${billId}/pay-pending`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: {
+          payment,
+          discountMinor: discountMinor != null && discountMinor > 0 ? discountMinor : null,
+          idempotencyKey: idempotencyKey ?? null,
+        },
+      }),
+  })
+}
+
+/**
+ * POST /api/v1/payments/{id}/abandon — releases a bill's line reservation after a PENDING GATEWAY
+ * QRIS payment (from {@link usePayBillPending}) is cleanly cancelled, or the payment modal closes
+ * mid-pending — BillPaymentModal's `handleGatewayCancel`. No order-side caller exists yet, so this
+ * lives here rather than in features/pos/api.ts; the plain shape otherwise matches
+ * `useCapturePayment`/`useReceipt` exactly (same payment-id path param, same response type).
+ */
+export function useAbandonPayment(session: CompanySession) {
+  return useMutation({
+    mutationFn: (paymentId: string) =>
+      apiFetch<PaymentResponse>(`/api/v1/payments/${paymentId}/abandon`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+      }),
   })
 }
 

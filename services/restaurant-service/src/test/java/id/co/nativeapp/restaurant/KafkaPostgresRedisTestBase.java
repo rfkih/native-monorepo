@@ -40,7 +40,12 @@ public abstract class KafkaPostgresRedisTestBase {
 
   @SuppressWarnings("resource") // reaped by the Testcontainers/Ryuk shutdown hook at JVM exit
   protected static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+          // Same connection-slot headroom as PostgresRlsTestBase (see its POSTGRES javadoc):
+          // cached @SpringBootTest contexts each pin a Hikari pool against this container.
+          // withCommand REPLACES the constructor's command, so fsync=off (Testcontainers' own
+          // default, a large test-time speedup) must be restated alongside it.
+          .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=500");
 
   @SuppressWarnings("resource") // reaped by the Testcontainers/Ryuk shutdown hook at JVM exit
   public static final KafkaContainer KAFKA =
@@ -103,6 +108,10 @@ public abstract class KafkaPostgresRedisTestBase {
     registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
     registry.add("spring.data.redis.host", REDIS::getHost);
     registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+    // Cap the per-context Hikari pool (defaults: minimumIdle == maximumPoolSize == 10) so cached
+    // test contexts cannot exhaust the container's connection slots — see PostgresRlsTestBase.
+    registry.add("spring.datasource.hikari.maximum-pool-size", () -> "8");
+    registry.add("spring.datasource.hikari.minimum-idle", () -> "2");
   }
 
   private static Connection adminConnection() throws SQLException {

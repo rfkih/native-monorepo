@@ -1,6 +1,8 @@
 package id.co.nativeapp.payment.settings.controller;
 
 import id.co.nativeapp.payment.settings.dto.EffectiveSettingsResponse;
+import id.co.nativeapp.payment.settings.dto.GatewayVerifyRequest;
+import id.co.nativeapp.payment.settings.dto.GatewayVerifyResponse;
 import id.co.nativeapp.payment.settings.dto.PaymentSettingsResponse;
 import id.co.nativeapp.payment.settings.dto.QrImageContentResponse;
 import id.co.nativeapp.payment.settings.dto.QrImageMetaResponse;
@@ -27,12 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * The payment-settings surface (ADR 0045, DIVISION-scope amendment). Route-level authorization
- * lives at the gateway: {@code /api/v1/payment-settings/**} is owner-only EXCEPT the two POS reads
- * ({@code /effective} and {@code /static-qr/image}), which ride their own POS_ROLES routes; the
- * service layer re-checks the owner guard on every admin operation (defense in depth). {@code
- * /units/{unitId}} covers BOTH an outlet and a division override — payment-service holds no org
- * read model, so the caller (the console) is trusted to pass whichever org-unit id the owner
+ * The payment-settings surface (ADR 0045; DIVISION rung removed by ADR 0070). Route-level
+ * authorization lives at the gateway: {@code /api/v1/payment-settings/**} is owner-only EXCEPT the
+ * two POS reads ({@code /effective} and {@code /static-qr/image}), which ride their own POS_ROLES
+ * routes; the service layer re-checks the owner guard on every admin operation (defense in depth).
+ * {@code /units/{unitId}} covers BOTH an outlet and a division override — payment-service holds no
+ * org read model, so the caller (the console) is trusted to pass whichever org-unit id the owner
  * picked.
  */
 @RestController
@@ -62,6 +64,13 @@ public class PaymentSettingsController {
   public PaymentSettingsResponse upsertUnitOverride(
       @PathVariable UUID unitId, @RequestBody UpsertSettingsRequest request) {
     return service.upsertUnitOverride(unitId, request);
+  }
+
+  @Operation(
+      summary = "Verify a Midtrans key against the provider without saving or charging (owner)")
+  @PostMapping("/gateway/verify")
+  public GatewayVerifyResponse verifyGateway(@RequestBody GatewayVerifyRequest request) {
+    return service.verifyGateway(request);
   }
 
   @Operation(summary = "Delete a unit's (outlet or division) QRIS override (owner)")
@@ -98,22 +107,18 @@ public class PaymentSettingsController {
     return ResponseEntity.noContent().build();
   }
 
-  @Operation(
-      summary = "Effective QRIS mode/availability for the till's outlet/division (POS roles)")
+  @Operation(summary = "Effective QRIS mode/availability for the till's outlet (POS roles)")
   @GetMapping("/effective")
   public EffectiveSettingsResponse effective(
-      @RequestParam(name = "businessId", required = false) UUID businessId,
-      @RequestParam(name = "divisionId", required = false) UUID divisionId) {
-    return service.effective(businessId, divisionId);
+      @RequestParam(name = "businessId", required = false) UUID businessId) {
+    return service.effective(businessId);
   }
 
-  @Operation(
-      summary = "Effective static QRIS image blob for the till's outlet/division (POS roles)")
+  @Operation(summary = "Effective static QRIS image blob for the till's outlet (POS roles)")
   @GetMapping("/static-qr/image")
   public ResponseEntity<byte[]> effectiveImage(
-      @RequestParam(name = "businessId", required = false) UUID businessId,
-      @RequestParam(name = "divisionId", required = false) UUID divisionId) {
-    QrImageContentResponse image = service.effectiveImage(businessId, divisionId);
+      @RequestParam(name = "businessId", required = false) UUID businessId) {
+    QrImageContentResponse image = service.effectiveImage(businessId);
     return ResponseEntity.ok()
         // Private: an authenticated, tenant-scoped blob — never shared-cacheable. The sha256 ETag
         // lets the till revalidate cheaply after the 5-minute freshness window.

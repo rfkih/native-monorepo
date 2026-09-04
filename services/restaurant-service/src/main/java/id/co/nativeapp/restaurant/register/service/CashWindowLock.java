@@ -34,8 +34,9 @@ import org.springframework.stereotype.Component;
  *   <li>{@link #acquireForCommit} — {@code pg_advisory_xact_lock_shared} — taken by every
  *       sale/refund-COMMITTING transaction ({@code SaleWriter.create}, {@code
  *       OrderWriter.checkout}, {@code OrderWriter.payParked}, {@code BillWriter.payBill}, {@code
- *       PaymentCaptureWriter.capture}, {@code VoidRefundWriter.refund}). Any number of these may
- *       hold the SHARED lock simultaneously — they never block each other.
+ *       PaymentCaptureWriter.capture}, {@code BillPaymentCaptureWriter.capture}, {@code
+ *       VoidRefundWriter.refund}, {@code GiftCardSaleWriter.sell}). Any number of these may hold
+ *       the SHARED lock simultaneously — they never block each other.
  *   <li>{@link #acquireForClose} — {@code pg_advisory_xact_lock} (EXCLUSIVE) — taken by {@link
  *       RegisterSessionWriter#close} (and, defensively, {@link RegisterSessionWriter#open}). An
  *       EXCLUSIVE acquisition blocks until every currently-held SHARED lock on the same key is

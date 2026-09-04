@@ -3,8 +3,7 @@ package id.co.nativeapp.finance.opening.service;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.opening.domain.CompanyOpeningBalance;
 import id.co.nativeapp.finance.opening.domain.OpeningBalanceAlreadyRecordedException;
@@ -57,20 +56,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class OpeningBalanceWriter {
 
   private final CompanyOpeningBalanceRepository repository;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final JdbcTemplate jdbcTemplate;
 
   public OpeningBalanceWriter(
       CompanyOpeningBalanceRepository repository,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       JdbcTemplate jdbcTemplate) {
     this.repository = repository;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.roleAccountResolver = roleAccountResolver;
     this.jdbcTemplate = jdbcTemplate;
   }
@@ -190,6 +186,12 @@ public class OpeningBalanceWriter {
         journalLines.add(JournalLine.credit(entryId, lineNo++, line.accountCode(), amount));
       }
     }
+    // Every user-supplied line targets its OWN account_code directly (no role resolution — the
+    // user picks the balance-sheet account), so only the auto-plug OPENING_BALANCE_EQUITY leg (when
+    // present) is a role-resolved posting whose provenance can be derived; with no plug, no role
+    // was
+    // resolved at all and the entry is not badged provisional.
+    boolean usesIllustrative = false;
     if (plug != 0) {
       String obe = requireMapped(AccountRole.OPENING_BALANCE_EQUITY, occurredAt);
       Money plugAmount = Money.ofMinor(Math.abs(plug), currency);
@@ -198,9 +200,18 @@ public class OpeningBalanceWriter {
       } else {
         journalLines.add(JournalLine.debit(entryId, lineNo, obe, plugAmount));
       }
+      usesIllustrative =
+          roleAccountResolver.anyIllustrative(occurredAt, AccountRole.OPENING_BALANCE_EQUITY);
     }
     return JournalEntry.balanced(
-        entryId, period, occurredAt, "Opening balances", currency, entryId, true, journalLines);
+        entryId,
+        period,
+        occurredAt,
+        "Opening balances",
+        currency,
+        entryId,
+        usesIllustrative,
+        journalLines);
   }
 
   private static long sumSide(List<OpeningBalanceLine> lines, OpeningBalanceSide side) {
@@ -298,12 +309,7 @@ public class OpeningBalanceWriter {
   }
 
   private void persistEntry(JournalEntry entry, String companyId) {
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   private void requireConsistentGlCurrency(String period, Money amount) {

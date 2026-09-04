@@ -1,4 +1,4 @@
-# Native UAT — bring up (or re-wire) the public UAT stack.
+﻿# Native UAT — bring up (or re-wire) the public UAT stack.
 #
 #   .\scripts\uat-up.ps1              full run: build jars + images, start, wire, smoke
 #   .\scripts\uat-up.ps1 -SkipBuild   restart/re-wire only (e.g. after the tunnel died)
@@ -333,6 +333,17 @@ try {
 } catch {
     $mediaStatus = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
     if ($mediaStatus -ne 404 -and $mediaStatus -ne 403) { $smokeFailures += "/api/media bogus key returned $mediaStatus (expected 403/404)" }
+}
+
+# ADR 0063 (flaw-audit W5): a BILL-prefix key must be anonymously DENIED (403), never a 404 key-miss
+# — 404 here means the env still runs the pre-0063 broad `restaurant/*` anon policy and bill
+# receipts are publicly fetchable. Re-run minio-init on this stack if this fires.
+try {
+    Invoke-WebRequest -Uri "$publicUrl/api/media/restaurant/smoke/bill/$bogusKey.jpg" -UseBasicParsing -TimeoutSec 10 | Out-Null
+    $smokeFailures += '/api/media BILL key returned success (expected 403 — anon policy too broad!)'
+} catch {
+    $billStatus = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+    if ($billStatus -ne 403) { $smokeFailures += "/api/media BILL key returned $billStatus (expected 403 — re-run minio-init: anon policy must cover menu/* only)" }
 }
 
 if ($smokeFailures) {

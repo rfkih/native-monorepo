@@ -18,7 +18,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
+import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import { Gift } from 'lucide-react'
 import { GiftCardField } from '@/components/GiftCardField'
 import type { CompanySession } from '@/lib/session'
@@ -132,6 +132,10 @@ export function PaymentModal({
 }: Props) {
   const { t } = useTranslation()
   const [tender, setTender] = useState<PosTender>('CASH')
+  // The checkout/capture mutations live in the attempt sub-components, so the frame can't read
+  // them — any in-flight mutation while this surface is open is payment work: hardware Back must
+  // not dismiss the surface mid-post (a re-attempt would mint a fresh idempotency key).
+  const mutationsInFlight = useIsMutating()
 
   // ADR 0036 Phase B3: the ONLINE tender's channel roster — fetched only while this payment
   // surface is mounted (component-scoped, like usePaymentAttempt's key), and never while offline
@@ -142,13 +146,22 @@ export function PaymentModal({
   // never while offline (a digital mode is unreachable offline anyway, mirroring the channel
   // roster above). `currency` is the sale's own currency (rule 8) — GATEWAY degrades to MANUAL
   // for anything but IDR regardless of what the company configured. ADR 0045 amendment:
-  // `divisionId` (the outlet's parent business unit, from OutletGate) extends the resolution to
-  // outlet → division → company; undefined on an older server degrades to outlet → company.
   const qrisEffectiveQuery = useQrisEffective(session, session.businessId, {
     enabled: !offline,
-    divisionId: session.divisionId,
   })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
+  // ADR 0045 amendment: the company's CONFIGURED mode is GATEWAY but the till resolved to MANUAL
+  // (effective query erroring/offline/disconnected/non-IDR) — surface an honest "gateway
+  // unavailable, confirm manually" badge instead of the demo "pending provider" copy. TanStack
+  // Query keeps the last GATEWAY value in `data` across a failed refetch, so a warm till still knows
+  // it degraded even while the effective read is erroring.
+  // Gated on IDR: for a non-IDR sale GATEWAY→MANUAL is a currency limitation (QRIS is IDR-only),
+  // not a gateway outage — showing "gateway unavailable" there would misattribute the reason.
+  const degradedFromGateway =
+    qrisEffectiveQuery.data?.mode === 'GATEWAY' &&
+    qrisMode !== 'GATEWAY' &&
+    !offline &&
+    currency === 'IDR'
 
   // ADR 0045: while a GATEWAY charge is live, `RestaurantDigitalAttempt` registers its cancel
   // function here so the FRAME's own X close button cancels the charge before closing (matching the
@@ -229,7 +242,7 @@ export function PaymentModal({
   }
 
   return (
-    <PaymentSurfaceFrame onClose={handleFrameClose}>
+    <PaymentSurfaceFrame onClose={handleFrameClose} backDismissEnabled={mutationsInFlight === 0}>
       {/* Offline: `breakdown` is already the caller's provisional breakdown, so this renders
           unchanged with its "estimated" badge doing double duty. */}
       <PaymentBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
@@ -311,6 +324,7 @@ export function PaymentModal({
               locale={locale}
               tenderType={tender}
               qrisMode={qrisMode}
+              degradedFromGateway={degradedFromGateway}
               displayPublisher={displayPublisher}
               registerGatewayCancel={registerGatewayCancel}
             />
@@ -467,6 +481,7 @@ function RestaurantDigitalAttempt({
   locale,
   tenderType,
   qrisMode,
+  degradedFromGateway = false,
   displayPublisher,
   registerGatewayCancel,
 }: {
@@ -477,6 +492,9 @@ function RestaurantDigitalAttempt({
   tenderType: 'QRIS' | 'CARD'
   /** ADR 0045: irrelevant for CARD — only a QRIS tender in STATIC/GATEWAY mode changes this panel. */
   qrisMode: QrisMode
+  /** ADR 0045 amendment: configured GATEWAY degraded to MANUAL — show the honest "gateway
+   *  unavailable" badge/hint instead of the demo "pending provider" copy. */
+  degradedFromGateway?: boolean
   /** Phase 6 (ADR 0029): forwarded so a QR becoming visible here (STATIC or GATEWAY) mirrors to the
    *  customer display, same as PaymentModal's own PAYMENT_STARTED effect. */
   displayPublisher?: DisplayPublisher
@@ -577,13 +595,11 @@ function RestaurantDigitalAttempt({
   }
 
   // ADR 0045: fetched once the PENDING order exists — the same businessId checkout used.
-  // ADR 0045 amendment: divisionId extends the fallback to outlet → division → company.
   const staticQr = useStaticQrImageUrl(
     session,
     session.businessId,
     showStaticQr && pendingPayment != null,
     0,
-    session.divisionId,
   )
   const staticQrSlot = showStaticQr ? (
     staticQr.status === 'ready' && staticQr.url ? (
@@ -609,7 +625,6 @@ function RestaurantDigitalAttempt({
     vertical: 'restaurant',
     paymentId: gatewayActive && pendingPayment ? pendingPayment.paymentId : null,
     businessId: session.businessId,
-    divisionId: session.divisionId,
     amountMinor: pendingPayment?.amountMinor ?? chargeMinor,
     currency,
   })
@@ -690,6 +705,8 @@ function RestaurantDigitalAttempt({
           ) : null
         }
         onInitiate={initiatePayment}
+        hintText={degradedFromGateway ? t('pos.payment.qris.gatewayDegradedHint') : undefined}
+        badgeText={degradedFromGateway ? t('pos.payment.qris.gatewayDegradedBadge') : undefined}
       />
     )
   }
@@ -729,8 +746,20 @@ function RestaurantDigitalAttempt({
       onConfirm={confirmPayment}
       onCancel={onClose}
       qrSlot={staticQrSlot}
-      hintText={showStaticQr ? t('pos.payment.qris.staticHint') : undefined}
-      badgeText={showStaticQr ? null : undefined}
+      hintText={
+        showStaticQr
+          ? t('pos.payment.qris.staticHint')
+          : degradedFromGateway
+            ? t('pos.payment.qris.gatewayDegradedHint')
+            : undefined
+      }
+      badgeText={
+        showStaticQr
+          ? null
+          : degradedFromGateway
+            ? t('pos.payment.qris.gatewayDegradedBadge')
+            : undefined
+      }
     />
   )
 }

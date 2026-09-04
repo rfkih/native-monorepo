@@ -136,7 +136,7 @@ class RecipeCascadeAndGuardTest extends PostgresRlsTestBase {
         ACTOR,
         () ->
             ingredientService
-                .create(new CreateIngredientRequest(BUSINESS_ID, name, "g", 10L, "IDR", 1000))
+                .create(new CreateIngredientRequest(BUSINESS_ID, name, "g", null, 10L, "IDR", 1000))
                 .id());
   }
 

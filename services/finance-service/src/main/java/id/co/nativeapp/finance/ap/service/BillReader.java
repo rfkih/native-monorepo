@@ -70,7 +70,11 @@ public class BillReader {
                         l.getDescription(),
                         l.getQuantity(),
                         l.getUnitPriceMinor(),
-                        l.getLineTotalMinor()))
+                        l.getLineTotalMinor(),
+                        l.getIsInventory(),
+                        l.getIngredientId(),
+                        l.getIngredientName(),
+                        l.getIngredientQtyBase()))
             .toList();
 
     List<PaymentResponse> payments =

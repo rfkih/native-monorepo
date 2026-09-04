@@ -9,11 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
 import id.co.nativeapp.finance.fx.service.PresentationConverter;
 import id.co.nativeapp.finance.pnl.controller.PnlController;
-import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.domain.PnlFigures;
 import id.co.nativeapp.finance.pnl.service.PnlReader;
+import id.co.nativeapp.money.Money;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -40,12 +40,10 @@ class PnlControllerTest {
 
   @Test
   void returnsTheConsolidatedPnlWithRevenueExpenseAndNet() throws Exception {
-    ConsolidatedPnl pnl = Mockito.mock(ConsolidatedPnl.class);
-    when(pnl.getPeriod()).thenReturn("2026-06");
-    when(pnl.revenue()).thenReturn(id.co.nativeapp.money.Money.ofMinor(2_000_000L, "IDR"));
-    when(pnl.expense()).thenReturn(id.co.nativeapp.money.Money.ofMinor(750_000L, "IDR"));
-    when(pnl.net()).thenReturn(id.co.nativeapp.money.Money.ofMinor(1_250_000L, "IDR"));
-    when(pnl.usesIllustrativeRules()).thenReturn(true);
+    // net() is derived on the carrier: 2_000_000 − 750_000 = 1_250_000.
+    PnlFigures pnl =
+        new PnlFigures(
+            "2026-06", Money.ofMinor(2_000_000L, "IDR"), Money.ofMinor(750_000L, "IDR"), true);
     when(pnlReader.pnlForPeriod("2026-06")).thenReturn(Optional.of(pnl));
 
     mockMvc

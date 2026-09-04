@@ -88,8 +88,7 @@ public class OrgUnitController {
   public ResponseEntity<OrgUnitResponse> createOrgUnit(
       @Valid @RequestBody CreateOrgUnitRequest request) {
     CreateOrgUnitCommand command =
-        new CreateOrgUnitCommand(
-            request.name(), request.type(), request.parentId(), request.vertical());
+        new CreateOrgUnitCommand(request.name(), request.type(), request.parentId());
     OrgUnit created = orgUnitService.create(command);
     OrgUnitResponse body = OrgUnitResponse.from(created);
     return ResponseEntity.created(URI.create("/api/v1/org-units/" + body.id())).body(body);

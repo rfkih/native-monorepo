@@ -56,7 +56,20 @@ public class BillController {
   public ResponseEntity<BillDetailResponse> create(@Valid @RequestBody CreateBillRequest request) {
     List<BillLineInput> lines =
         request.lines().stream()
-            .map(l -> new BillLineInput(l.description(), l.quantity(), l.unitPriceMinor()))
+            .map(
+                l ->
+                    new BillLineInput(
+                        l.description(),
+                        l.quantity(),
+                        l.unitPriceMinor(),
+                        // Boolean.TRUE.equals(...) — a null (an old client that omitted the field,
+                        // ADR 0067 Phase B §3) safely defaults to false, never an NPE.
+                        Boolean.TRUE.equals(l.inventory()),
+                        // ADR 0072 P4: the optional ingredient linkage rides through verbatim; the
+                        // writer enforces flagged-only + id-with-qty (mirroring the V59 CHECKs).
+                        l.ingredientId(),
+                        l.ingredientName(),
+                        l.ingredientQtyBase()))
             .toList();
     UUID id =
         billWriter.createDraft(request.vendorId(), request.currency(), request.taxable(), lines);

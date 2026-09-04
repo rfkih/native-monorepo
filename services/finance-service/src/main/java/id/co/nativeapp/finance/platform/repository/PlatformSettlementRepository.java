@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.platform.repository;
 
 import id.co.nativeapp.finance.platform.domain.PlatformSettlement;
+import id.co.nativeapp.finance.platform.projection.PlatformSettlementSummaryView;
 import id.co.nativeapp.finance.platform.projection.PlatformSettlementView;
 import java.util.List;
 import java.util.Optional;
@@ -38,4 +39,32 @@ public interface PlatformSettlementRepository extends JpaRepository<PlatformSett
           """,
       nativeQuery = true)
   List<PlatformSettlementView> findHistoryViews(@Param("channelCode") String channelCode);
+
+  /**
+   * The per-channel settlement summary for a {@code YYYY-MM} period ({@code GET
+   * /api/v1/platform-settlements/summary}) — one row per {@code (channel_code, currency)} bucket:
+   * settled gross/fee/net totals (plain {@code SUM}s, never a float) and settlement count. The
+   * month bucket is the OUTLET-LOCAL calendar month: {@code settled_at} is {@code TIMESTAMPTZ}, so
+   * it is shifted to {@code Asia/Jakarta} BEFORE {@code to_char} — a UTC session TZ would bucket a
+   * payout stamped 00:00–07:00 WIB on the 1st into the prior month. Mirrors the {@code
+   * Asia/Jakarta} business-date convention (NOT the DATE-column {@code BillRepository} idiom, which
+   * is timezone-immune). RLS-scoped automatically (rule 5) — no manual {@code company_id}
+   * predicate, matching this repository's other native queries.
+   */
+  @Query(
+      value =
+          """
+          SELECT s.channel_code      AS channel_code,
+                 SUM(s.gross_minor)  AS settled_gross_minor,
+                 SUM(s.fee_minor)    AS fee_minor,
+                 SUM(s.net_minor)    AS net_minor,
+                 COUNT(*)            AS settlement_count,
+                 s.currency          AS currency
+            FROM platform_settlement s
+           WHERE to_char(s.settled_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM') = :period
+           GROUP BY s.channel_code, s.currency
+           ORDER BY s.channel_code
+          """,
+      nativeQuery = true)
+  List<PlatformSettlementSummaryView> findSummary(@Param("period") String period);
 }

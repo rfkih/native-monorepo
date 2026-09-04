@@ -11,6 +11,8 @@
  */
 import { useTranslation } from 'react-i18next'
 import { X, ShoppingBag, Table2, Smartphone } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Badge } from '@/components/ui/Badge'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { formatMoney } from '@/lib/money'
@@ -28,6 +30,8 @@ interface Props {
 
 export function ParkedTray({ session, locale, onResume, onClose }: Props) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
+  useScrollLock()
   const parkedQuery = useParkedOrders(session)
   const parked = parkedQuery.data ?? []
 

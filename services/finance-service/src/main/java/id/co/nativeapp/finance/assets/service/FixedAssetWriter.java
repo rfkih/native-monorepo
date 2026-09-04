@@ -6,8 +6,7 @@ import id.co.nativeapp.finance.assets.repository.FixedAssetRepository;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -40,8 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class FixedAssetWriter {
 
   private final FixedAssetRepository assetRepository;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
@@ -49,16 +47,12 @@ public class FixedAssetWriter {
   @SuppressWarnings("checkstyle:ParameterNumber")
   public FixedAssetWriter(
       FixedAssetRepository assetRepository,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.assetRepository = Objects.requireNonNull(assetRepository, "assetRepository");
-    this.journalEntryRepository =
-        Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
-    this.journalLineRepository =
-        Objects.requireNonNull(journalLineRepository, "journalLineRepository");
+    this.generalLedgerWriter = Objects.requireNonNull(generalLedgerWriter, "generalLedgerWriter");
     this.roleAccountResolver = Objects.requireNonNull(roleAccountResolver, "roleAccountResolver");
     this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
     this.clock = Objects.requireNonNull(clock, "clock");
@@ -257,6 +251,11 @@ public class FixedAssetWriter {
         List.of(
             JournalLine.debit(entryId, 1, assetCode, cost),
             JournalLine.credit(entryId, 2, clearingCode, cost));
+    // Derived from the provenance of the FIXED_ASSET_COST/CASH_CLEARING mappings actually resolved
+    // above, rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(
+            now, AccountRole.FIXED_ASSET_COST, AccountRole.CASH_CLEARING);
     return JournalEntry.balanced(
         entryId,
         period,
@@ -264,7 +263,7 @@ public class FixedAssetWriter {
         "Fixed asset acquired",
         cost.currency().getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 
@@ -289,6 +288,8 @@ public class FixedAssetWriter {
     List<JournalLine> lines = new java.util.ArrayList<>();
     lines.add(
         JournalLine.debit(entryId, 1, requireMapped(AccountRole.FIXED_ASSET_COST, now), cost));
+    List<AccountRole> rolesPosted =
+        new java.util.ArrayList<>(List.of(AccountRole.FIXED_ASSET_COST));
     int lineNo = 2;
     if (openingAccumulated.isPositive()) {
       lines.add(
@@ -297,12 +298,18 @@ public class FixedAssetWriter {
               lineNo++,
               requireMapped(AccountRole.ACCUMULATED_DEPRECIATION, now),
               openingAccumulated));
+      rolesPosted.add(AccountRole.ACCUMULATED_DEPRECIATION);
     }
     if (net.isPositive()) {
       lines.add(
           JournalLine.credit(
               entryId, lineNo, requireMapped(AccountRole.OPENING_BALANCE_EQUITY, now), net));
+      rolesPosted.add(AccountRole.OPENING_BALANCE_EQUITY);
     }
+    // Derived from the provenance of the roles actually posted above (the conditional
+    // ACCUMULATED_DEPRECIATION/OPENING_BALANCE_EQUITY legs only count when present).
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
     return JournalEntry.balanced(
         entryId,
         period,
@@ -310,7 +317,7 @@ public class FixedAssetWriter {
         "Fixed asset brought forward",
         cost.currency().getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 
@@ -326,11 +333,7 @@ public class FixedAssetWriter {
   private void persistEntry(JournalEntry entry, String companyId) {
     entry.setCompanyId(companyId);
     // saveAndFlush forces the journal_entry INSERT before the FK'd line INSERTs (same tx).
-    journalEntryRepository.saveAndFlush(entry);
-    for (var line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   /**

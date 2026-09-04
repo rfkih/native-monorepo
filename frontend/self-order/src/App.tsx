@@ -259,7 +259,7 @@ function MenuScreen({
       </main>
 
       {cartCount > 0 ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.10)]">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-[0_-8px_24px_rgba(15,23,42,0.10)]">
           {submitError ? (
             <p className="mb-2 text-xs font-medium text-rose-600" role="alert">
               {submitError === 'queueFull' ? t('queueFull') : t('submitError')}
@@ -272,7 +272,9 @@ function MenuScreen({
             className="flex w-full items-center justify-between rounded-xl bg-brand-600 px-5 py-3.5 text-white shadow-sm transition-colors hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:opacity-60"
           >
             <span className="text-sm font-semibold">
-              {submitting ? t('sending') : `${t('sendOrder')} · ${t('cartCount', { n: cartCount })}`}
+              {submitting
+                ? t('sending')
+                : `${t('sendOrder')} · ${t(cartCount === 1 ? 'cartCountOne' : 'cartCountMany', { n: cartCount })}`}
             </span>
             <span className="tnum font-mono text-base font-bold">
               {formatMoney(cartTotalMinor, currency, INTL_LOCALE)}
@@ -280,7 +282,7 @@ function MenuScreen({
           </button>
         </div>
       ) : (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white px-4 py-3 text-center text-xs text-ink-3">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] text-center text-xs text-ink-3">
           {t('cartEmptyHint')}
         </div>
       )}
@@ -334,7 +336,7 @@ function StepperButton({ label, onClick }: { label: string; onClick: () => void 
     <button
       type="button"
       onClick={onClick}
-      aria-label={label === '+' ? 'plus' : 'minus'}
+      aria-label={label === '+' ? t('qtyPlus') : t('qtyMinus')}
       className="grid size-7 shrink-0 place-items-center rounded-full border border-line bg-white text-sm font-bold text-ink transition-colors hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
     >
       {label}

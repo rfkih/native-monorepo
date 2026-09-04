@@ -1,11 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, BookOpen, Check } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { ChoiceCards } from '@/components/ui/ChoiceCards'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorDetails } from '@/components/ErrorDetails'
 import { CompanyFields, CompanyReview, RegionFields } from '@/features/companyForm/fields'
@@ -16,6 +15,8 @@ import { AUTH_MODE } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
 import { toPlanTier } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
+import { type Lang } from '@/i18n'
+import { isIndonesiaByTimeZone, langsForCountry } from '@/lib/geo'
 import { derivedCurrency } from '@/lib/countries'
 import { createCompany, type CompanyResponse } from './api'
 
@@ -25,30 +26,29 @@ import { createCompany, type CompanyResponse } from './api'
 // keeps the in-console frame (centered card + Stepper), not sign-up's standalone brand page.
 const REVIEW_STEP = REGION_STEP + 1
 
-type StepErrors = { companyName?: string; firstBusinessName?: string }
+type StepErrors = { companyName?: string }
 
 export function OnboardingWizard() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { company, setCompany, companies } = useSession()
+  const { setCompany, companies } = useSession()
   const auth = useAuth()
   // With ≥1 existing company this wizard is the "Add another company" flow (ADR 0021).
   const isAdditional = companies.length > 0
 
-  // Company vs division gate (shown only when adding to an existing portfolio): a COMPANY is a
-  // separate legal entity with its own NPWP, taxes, and books; a DIVISION shares the current
-  // company's books and tax filing and is created on the Organization page instead. Asking here —
-  // the single entry point for "add" — stops legally-separate businesses being modeled as
-  // divisions and vice versa.
-  const [entityConfirmed, setEntityConfirmed] = useState(false)
+  // ADR 0070 removed the division level, so "add" has exactly one meaning: add a COMPANY (a
+  // separate legal entity with its own NPWP, taxes and books). There is no longer a second kind
+  // of thing to disambiguate against, so the chooser that used to gate this step is gone.
 
+  // Seed the country from the browser location (ADR 0059) — Indonesia when the time zone says so,
+  // else an English-market default; the language follows (Indonesian only for an ID company).
+  const detectedCountry = useMemo(() => (isIndonesiaByTimeZone() ? 'ID' : 'US'), [])
   const [step, setStep] = useState(COMPANY_STEP)
   const [name, setName] = useState('')
-  const [bizName, setBizName] = useState('')
   const [vertical, setVertical] = useState<string>('restaurant')
-  const [country, setCountry] = useState<string>('ID')
+  const [country, setCountry] = useState<string>(detectedCountry)
   const [defaultLanguage, setDefaultLanguage] = useState<string>(
-    i18n.language === 'id' ? 'id' : 'en',
+    detectedCountry === 'ID' && i18n.language === 'id' ? 'id' : 'en',
   )
   const [errors, setErrors] = useState<StepErrors>({})
   const [created, setCreated] = useState<CompanyResponse | null>(null)
@@ -65,7 +65,7 @@ export function OnboardingWizard() {
           country,
           baseCurrency,
           defaultLanguage,
-          firstBusiness: { name: bizName.trim(), vertical },
+          vertical,
         },
         DEV_ACTOR,
       ),
@@ -91,6 +91,10 @@ export function OnboardingWizard() {
         actor: AUTH_MODE === 'oidc' ? auth.actor : DEV_ACTOR,
         planTier: toPlanTier(res.planTier),
         companyCode: res.companyCode ?? '',
+        // Load-bearing (ADR 0070): the vertical is the POS discriminator now, and this manual
+        // session is what the console runs on until /companies/mine catches up — omit it and a
+        // just-created carwash company opens the RESTAURANT POS.
+        vertical: res.vertical ?? vertical,
       })
     },
   })
@@ -101,7 +105,7 @@ export function OnboardingWizard() {
   // Validate the Company step (the same required rule as sign-up) before advancing.
   function advance() {
     if (step === COMPANY_STEP) {
-      const missing = invalidCompanyFields({ companyName: name, firstBusinessName: bizName })
+      const missing = invalidCompanyFields({ companyName: name })
       if (missing.length > 0) {
         const next: StepErrors = {}
         for (const field of missing) next[field] = t('signup.fieldRequired')
@@ -115,47 +119,6 @@ export function OnboardingWizard() {
 
   if (created) {
     return <SuccessPanel company={created} onContinue={() => navigate('/')} />
-  }
-
-  // The company-vs-division gate: only when a portfolio already exists (a first-ever login has
-  // nothing to add a division TO).
-  if (isAdditional && !entityConfirmed) {
-    return (
-      <div className="mx-auto max-w-[680px]">
-        <header className="mb-8 text-center">
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
-            {t('onboarding.chooser.title')}
-          </h1>
-          <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-ink-3">
-            {t('onboarding.chooser.subtitle')}
-          </p>
-        </header>
-        <Card className="rounded-[20px] p-7">
-          <ChoiceCards
-            name="entityKind"
-            value=""
-            onChange={(v) => {
-              if (v === 'company') setEntityConfirmed(true)
-              else navigate('/org')
-            }}
-            options={[
-              {
-                value: 'company',
-                title: t('onboarding.chooser.companyOption'),
-                subtitle: t('onboarding.chooser.companyOptionHint'),
-              },
-              {
-                value: 'division',
-                title: t('onboarding.chooser.divisionOption', {
-                  company: company?.name ?? '',
-                }),
-                subtitle: t('onboarding.chooser.divisionOptionHint'),
-              },
-            ]}
-          />
-        </Card>
-      </div>
-    )
   }
 
   return (
@@ -179,20 +142,13 @@ export function OnboardingWizard() {
           {step === COMPANY_STEP && (
             <CompanyFields
               companyName={name}
-              firstBusinessName={bizName}
               vertical={vertical}
               onCompanyName={(v) => {
                 setName(v)
                 if (errors.companyName) setErrors((p) => ({ ...p, companyName: undefined }))
               }}
-              onFirstBusinessName={(v) => {
-                setBizName(v)
-                if (errors.firstBusinessName)
-                  setErrors((p) => ({ ...p, firstBusinessName: undefined }))
-              }}
               onVertical={setVertical}
               companyNameError={errors.companyName}
-              firstBusinessNameError={errors.firstBusinessName}
             />
           )}
 
@@ -200,14 +156,19 @@ export function OnboardingWizard() {
             <RegionFields
               country={country}
               defaultLanguage={defaultLanguage}
-              onCountry={setCountry}
+              onCountry={(c) => {
+                setCountry(c)
+                setDefaultLanguage((prev) =>
+                  langsForCountry(c).includes(prev as Lang) ? prev : c === 'ID' ? 'id' : 'en',
+                )
+              }}
               onDefaultLanguage={setDefaultLanguage}
             />
           )}
 
           {step === REVIEW_STEP && (
             <CompanyReview
-              basics={{ companyName: name, firstBusinessName: bizName, vertical, country, defaultLanguage }}
+              basics={{ companyName: name, vertical, country, defaultLanguage }}
               hint={t('onboarding.reviewHint')}
               onEdit={(s) => {
                 setErrors({})
@@ -322,6 +283,9 @@ function SuccessPanel({
           {t('onboarding.createdTitle')}
         </h2>
         <p className="mt-1.5 text-sm text-ink-3">{t('onboarding.createdBody')}</p>
+        {/* ADR 0070: the bootstrap seeds ONE outlet named after the company. Saying so here stops
+            the owner hunting for a "create your first outlet" step that no longer exists. */}
+        <p className="mt-1 text-sm text-ink-3">{t('onboarding.createdOutlet')}</p>
 
         {/* Company summary pill */}
         <div className="mx-auto mt-6 max-w-xs rounded-xl border border-line bg-paper px-4 py-3 text-left">

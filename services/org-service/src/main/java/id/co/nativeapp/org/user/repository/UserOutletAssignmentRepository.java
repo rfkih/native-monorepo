@@ -62,10 +62,12 @@ public interface UserOutletAssignmentRepository extends JpaRepository<UserOutlet
   List<UserOutletAssignmentView> findActiveByUserId(String userId);
 
   /**
-   * Active assignments under an org unit — the unit itself (an OUTLET) or, for a BUSINESS_UNIT, its
-   * child outlets via {@code ou.parent_id} (assignments only ever target outlets by aggregate
-   * invariant, so the parent disjunct is exactly "child outlets"; the tree is one level below a
-   * business unit — ADR 0012). Joined to {@code org_unit} for the outlet name. Served by {@code
+   * Active assignments for one org unit. Since ADR 0070 the tree is flat ({@code company >
+   * outlet}), so "under a unit" means the unit itself — the {@code OR ou.parent_id = :orgUnitId}
+   * disjunct this query used to carry (rolling a business unit up over its child outlets) is gone
+   * with the division level, along with the only kind of node that could ever have matched it.
+   *
+   * <p>Joined to {@code org_unit} for the outlet name. Served by {@code
    * idx_user_outlet_assignment_outlet (company_id, org_unit_id)} — the index created for this admin
    * view. No {@code WHERE company_id} — RLS scopes both tables (rule 5). Used by the org-unit hub's
    * People tab ({@code GET /api/v1/org-units/{id}/users}).
@@ -79,7 +81,7 @@ public interface UserOutletAssignmentRepository extends JpaRepository<UserOutlet
             FROM user_outlet_assignment ua
             JOIN org_unit ou ON ou.id = ua.org_unit_id
            WHERE ua.active = true
-             AND (ua.org_unit_id = :orgUnitId OR ou.parent_id = :orgUnitId)
+             AND ua.org_unit_id = :orgUnitId
            ORDER BY ou.name, ua.user_id
           """,
       nativeQuery = true)

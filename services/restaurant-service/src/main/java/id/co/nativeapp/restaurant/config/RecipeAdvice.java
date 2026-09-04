@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.restaurant.inventory.domain.IngredientInUseException;
+import id.co.nativeapp.restaurant.recipe.domain.RecipeAutoLinkBlockedException;
 import id.co.nativeapp.restaurant.recipe.domain.RecipeValidationException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -34,6 +35,16 @@ public class RecipeAdvice {
       RecipeValidationException ex, HttpServletRequest request) {
     ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, "recipe-validation", request);
     problem.setTitle("Recipe validation failed");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  @ExceptionHandler(RecipeAutoLinkBlockedException.class)
+  public ProblemDetail handleAutoLinkBlocked(
+      RecipeAutoLinkBlockedException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "recipe-auto-link-blocked", request);
+    problem.setTitle("Cannot auto-link stock");
     problem.setDetail(ex.getMessage());
     return problem;
   }

@@ -135,23 +135,25 @@ export function ExpensesList() {
         <EmptyState title={t('expenses.list.empty')} hint={t('expenses.list.emptyHint')} />
       ) : (
         <Card className="overflow-hidden rounded-[20px]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
-                <th className="px-4 py-3">{t('expenses.list.colEmployee')}</th>
-                <th className="px-4 py-3">{t('expenses.list.colCategory')}</th>
-                <th className="px-4 py-3">{t('expenses.list.colOrgUnit')}</th>
-                <th className="px-4 py-3">{t('expenses.list.colStatus')}</th>
-                <th className="px-4 py-3">{t('expenses.list.colDate')}</th>
-                <th className="px-4 py-3 text-right">{t('expenses.list.colAmount')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {page0.content.map((c) => (
-                <ClaimRow key={c.id} claim={c} locale={locale} onOpen={() => setSelectedId(c.id)} orgUnitName={orgUnitName} />
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                  <th className="px-4 py-3">{t('expenses.list.colEmployee')}</th>
+                  <th className="px-4 py-3">{t('expenses.list.colCategory')}</th>
+                  <th className="px-4 py-3">{t('expenses.list.colOrgUnit')}</th>
+                  <th className="px-4 py-3">{t('expenses.list.colStatus')}</th>
+                  <th className="px-4 py-3">{t('expenses.list.colDate')}</th>
+                  <th className="px-4 py-3 text-right">{t('expenses.list.colAmount')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {page0.content.map((c) => (
+                  <ClaimRow key={c.id} claim={c} locale={locale} onOpen={() => setSelectedId(c.id)} orgUnitName={orgUnitName} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 

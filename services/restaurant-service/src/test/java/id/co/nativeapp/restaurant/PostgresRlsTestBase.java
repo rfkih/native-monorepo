@@ -35,10 +35,21 @@ public abstract class PostgresRlsTestBase {
    * Protected (not package-private) so test classes in feature sub-packages — e.g. {@code
    * id.co.nativeapp.restaurant.order} — can read the container's JDBC coordinates to open an
    * admin/BYPASSRLS connection for cross-tenant row-count assertions.
+   *
+   * <p>{@code max_connections} is raised from Postgres's default 100: ~90 test classes share this
+   * one container, Spring's context cache keeps up to 32 distinct {@code @SpringBootTest} contexts
+   * alive, and each holds a Hikari pool — at default pool sizing that exceeds 100 and the suite
+   * dies mid-run with {@code FATAL: remaining connection slots are reserved for roles with the
+   * SUPERUSER attribute} (two contexts then fail Flyway's connect, and any raw {@code app_user}
+   * DriverManager connection is refused). The Hikari cap in {@link #datasourceProperties} is the
+   * other half of the same fix.
    */
   @SuppressWarnings("resource") // reaped by the Testcontainers/Ryuk shutdown hook at JVM exit
   protected static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+          // withCommand REPLACES the constructor's command (it does not append), so fsync=off —
+          // Testcontainers' own default, a large test-time speedup — must be restated here.
+          .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=500");
 
   static {
     POSTGRES.start();
@@ -64,6 +75,7 @@ public abstract class PostgresRlsTestBase {
               + " payment, order_line_modifier, order_line, restaurant_order,"
               + " stocktake_line, stocktake,"
               + " recipe_line,"
+              + " goods_receipt,"
               + " ingredient_stocktake_line, ingredient_stocktake, ingredient,"
               + " restaurant_table, menu_item_modifier_option, menu_item_modifier_group, menu_item,"
               + " menu_category, sale, sales_channel, gift_card_sale, gift_card_ref,"
@@ -92,6 +104,11 @@ public abstract class PostgresRlsTestBase {
     registry.add("spring.datasource.password", () -> APP_PASSWORD);
     registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
     registry.add("spring.kafka.bootstrap-servers", () -> "localhost:1");
+    // Hikari defaults to minimumIdle == maximumPoolSize == 10, so every CACHED test context
+    // pins 10 idle connections for the rest of the run. Cap the pool and let idle connections
+    // drain so 32 cached contexts stay well under the container's max_connections (see POSTGRES).
+    registry.add("spring.datasource.hikari.maximum-pool-size", () -> "8");
+    registry.add("spring.datasource.hikari.minimum-idle", () -> "2");
   }
 
   private static void provisionAppRole() {

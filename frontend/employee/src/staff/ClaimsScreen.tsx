@@ -142,7 +142,7 @@ export function ClaimsScreen() {
           type="button"
           onClick={() => setShowNew(true)}
           className="fixed right-4 z-40 flex items-center gap-2 rounded-full bg-brand-600 px-5 py-3.5 text-[14px] font-bold text-white shadow-lg transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
-          style={{ bottom: 'calc(82px + env(safe-area-inset-bottom))' }}
+          style={{ bottom: 'calc(82px + var(--safe-area-inset-bottom, 0px))' }}
         >
           <Plus className="size-[18px]" aria-hidden />
           {t('staff.claims.newClaim')}

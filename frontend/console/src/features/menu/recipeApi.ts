@@ -93,6 +93,54 @@ export function usePutRecipe(session: CompanySession) {
   })
 }
 
+/** Result of the "Lacak stok semua menu" sweep — idempotent (a second run links 0). */
+export interface AutoLinkResult {
+  linkedCount: number
+  skippedCount: number
+  /** Recipe-less items whose name collides with a non-pcs ingredient — not linked, not corrupted. */
+  blockedCount: number
+}
+
+/**
+ * POST /api/v1/menu/recipes/auto-link?businessId — "Lacak stok semua menu": every ACTIVE
+ * recipe-less item gets a same-named 1:1 pcs ingredient + a 1/portion base line, so its sales start
+ * depleting stock and the opname prefill starts moving. Items with recipes are never touched.
+ * Invalidates recipes + HPP + the ingredient catalog (new bahan appear there).
+ */
+export function useAutoLinkAll(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<AutoLinkResult>('/api/v1/menu/recipes/auto-link', {
+        method: 'POST',
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['recipe', session.companyId] })
+      void qc.invalidateQueries({ queryKey: HPP_SUMMARY_KEY(session) })
+      void qc.invalidateQueries({ queryKey: ['ingredients', session.companyId, session.businessId] })
+    },
+  })
+}
+
+/** POST /{itemId}/recipe/auto-link — 1-klik "Lacak stok" for ONE item (no-op if it has a recipe). */
+export function useAutoLinkItem(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (itemId: string) =>
+      apiFetch<Recipe>(`/api/v1/menu/${itemId}/recipe/auto-link`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+      }),
+    onSuccess: (_data, itemId) => {
+      void qc.invalidateQueries({ queryKey: RECIPE_KEY(session, itemId) })
+      void qc.invalidateQueries({ queryKey: HPP_SUMMARY_KEY(session) })
+      void qc.invalidateQueries({ queryKey: ['ingredients', session.companyId, session.businessId] })
+    },
+  })
+}
+
 /** GET /api/v1/menu/hpp-summary?businessId= — only items WITH a recipe appear. */
 export function useHppSummary(session: CompanySession) {
   return useQuery({

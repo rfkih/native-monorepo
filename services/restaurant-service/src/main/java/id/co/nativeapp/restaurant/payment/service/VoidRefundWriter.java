@@ -5,7 +5,6 @@ import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.payment.domain.Payment;
 import id.co.nativeapp.restaurant.payment.domain.PaymentRefund;
-import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.messaging.SaleRefundedSchema;
 import id.co.nativeapp.restaurant.payment.messaging.SaleVoidedSchema;
@@ -146,16 +145,29 @@ public class VoidRefundWriter {
             .findById(paymentId)
             .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
 
-    // ADR 0036 review W4: an ONLINE payment refunds ALL-OR-NOTHING. Finance rejects partial
-    // refunds (PartialRefundNotSupportedException → DLT), so a partial ONLINE refund would leave
-    // the per-channel platform receivable permanently overstated — restaurant and finance would
-    // silently diverge. Reject at the edge instead; the platform's own ledger settles per order.
-    if (payment.getTenderType() == TenderType.ONLINE
-        && refundAmount.amountMinor() != payment.getAmount().amountMinor()) {
+    // 2026-08-31 audit #2 (extends ADR 0036 review W4 to EVERY tender): refunds are
+    // ALL-OR-NOTHING, once. Finance's ReversalPostingWriter rejects any SaleRefunded whose amount
+    // is below the sale's grand total (PartialRefundNotSupportedException → DLT), so a partial
+    // CASH/QRIS/CARD refund used to succeed here (200 OK, drawer + Z-report updated) while the GL
+    // silently kept the full revenue and clearing forever — the exact divergence the original
+    // ONLINE-only guard documented. The UI has only ever offered full refunds; this closes the
+    // API path until SaleRefunded v2 carries prorated legs finance can post.
+    if (payment.getRefundedMinor() != 0) {
       throw new IllegalArgumentException(
-          "an ONLINE payment can only be refunded in full ("
+          "payment "
+              + paymentId
+              + " has already been refunded ("
+              + payment.getRefundedMinor()
+              + " of "
               + payment.getAmount().amountMinor()
-              + " minor units) — partial platform refunds are not supported");
+              + " minor units) — a payment is refunded at most once");
+    }
+    if (refundAmount.amountMinor() != payment.getAmount().amountMinor()) {
+      throw new IllegalArgumentException(
+          "a payment can only be refunded in full ("
+              + payment.getAmount().amountMinor()
+              + " minor units) — partial refunds are not supported (finance posts full reversals"
+              + " only)");
     }
 
     // CashWindowLock (verified HIGH race fix) — SHARED, FIRST lock-acquiring statement, strictly

@@ -58,9 +58,10 @@ public final class OrgUnitChangedSchema {
     record.put("change_kind", changeKind.name());
     record.put("name", orgUnit.getName());
     record.put("active", orgUnit.isActive());
-    // LOWERCASE module-key value (Vertical.key()) — deliberately NOT the .name() casing 'type'
-    // uses; immutable, carried on every change so consumers stay stateless.
-    record.put("vertical", orgUnit.getVertical() == null ? null : orgUnit.getVertical().key());
+    // ADR 0070: the vertical moved to the COMPANY, so an org unit no longer carries one.
+    // The field stays on the wire (nullable, defaulted) so no consumer needed a migration;
+    // it is now always null. Consumers read the vertical from CompanyCreated instead.
+    record.put("vertical", null);
     return record;
   }
 

@@ -20,6 +20,17 @@ const BUNDLED = process.env.NATIVE_TILL_BUNDLED === '1' || process.env.NATIVE_TI
 // notifyAppReady() on boot (lib/nativeUpdater.ts) so a good bundle is not rolled back.
 const UPDATE_URL = process.env.NATIVE_TILL_UPDATE_URL ?? '';
 
+// Host allowed to load INSIDE the WebView beyond server.url's own host. Capacitor throws any other
+// top-frame navigation into the SYSTEM BROWSER (Bridge.launchIntent, host-only check) — that is
+// what stranded old funnel-origin installs on the web once PUBLIC_URL moved to Cloudflare: their
+// env.js started pointing Keycloak at app.native-app.my.id, so the interactive login redirect left
+// the allowed host. Today the till's origin IS the token issuer (${PUBLIC_URL}/auth, same host), so
+// the default (= the app origin) is a no-op; it exists so a future origin/issuer split can't
+// silently reintroduce the breakout, and because the bundled shell (ADR 0051, https://localhost)
+// will need the real auth host whitelisted on EVERY login.
+const AUTH_ORIGIN = process.env.NATIVE_TILL_AUTH_ORIGIN ?? SERVER_URL;
+const ALLOW_NAVIGATION = [new URL(AUTH_ORIGIN).hostname];
+
 const config: CapacitorConfig = {
   // appId is the app's permanent technical identity — NEVER rename it (a change = a different
   // app to Android + Play). The user-facing launcher name is appName / strings.xml app_name.
@@ -36,8 +47,8 @@ const config: CapacitorConfig = {
   // Both keep errorPath: a branded retry page (www/error.html) instead of Chromium's raw
   // net::ERR_* — the primary path when thin, a broken-install fallback when bundled.
   server: BUNDLED
-    ? { errorPath: 'error.html' }
-    : { url: SERVER_URL, errorPath: 'error.html' },
+    ? { errorPath: 'error.html', allowNavigation: ALLOW_NAVIGATION }
+    : { url: SERVER_URL, errorPath: 'error.html', allowNavigation: ALLOW_NAVIGATION },
   android: {
     // The console is HTTPS-only; nothing in the shell talks cleartext.
     allowMixedContent: false,

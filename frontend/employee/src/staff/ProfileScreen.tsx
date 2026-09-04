@@ -15,8 +15,10 @@ import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState } from '@/features/_shared/financeUi'
+import { formatDate } from '@/features/expenses/format'
 import { isNotLinked, useMyProfile, type MeProfile } from '@/features/me/api'
 import { useAuth } from '@/lib/authContext'
+import { localeOf } from '@/i18n'
 import { InfoTip, SectionLabel, useTenant } from './ui'
 
 export function ProfileScreen() {
@@ -75,7 +77,8 @@ export function ProfileScreen() {
 
 /** The loaded screen body — identity, personal data, assignments, language, actions. */
 function ProfileBody({ profile: p, onLogout }: { profile: MeProfile; onLogout: () => void }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = localeOf(i18n.language)
 
   const subline =
     p.assignments.length > 0 ? p.assignments.map((a) => a.role).join(' · ') : t('me.assignments.empty')
@@ -152,7 +155,7 @@ function ProfileBody({ profile: p, onLogout }: { profile: MeProfile; onLogout: (
                 className="rounded-full border border-line bg-surface px-2.5 py-[5px] text-[12px] font-medium text-ink-3"
               >
                 <span className="font-bold text-ink">{a.role}</span>{' '}
-                {t('staff.profile.since', { date: a.effectiveFrom })}
+                {t('staff.profile.since', { date: formatDate(a.effectiveFrom, locale) })}
               </span>
             ))}
           </div>

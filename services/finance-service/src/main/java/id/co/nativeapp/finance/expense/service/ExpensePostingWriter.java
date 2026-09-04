@@ -4,8 +4,7 @@ import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.expense.messaging.ExpenseRecordedEvent;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.mapping.domain.GlAccountResolution;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
@@ -52,8 +51,7 @@ public class ExpensePostingWriter {
   private final GlAccountResolver glAccountResolver;
   private final PnlReadModelWriter pnlReadModel;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public ExpensePostingWriter(
@@ -62,15 +60,13 @@ public class ExpensePostingWriter {
       GlAccountResolver glAccountResolver,
       PnlReadModelWriter pnlReadModel,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository) {
+      GeneralLedgerWriter generalLedgerWriter) {
     this.ledgerRepository = ledgerRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.processedEvents = processedEvents;
     this.glAccountResolver = glAccountResolver;
     this.pnlReadModel = pnlReadModel;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
   }
 
   /**
@@ -149,13 +145,6 @@ public class ExpensePostingWriter {
     glEntry.setCompanyId(companyId);
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
-    journalEntryRepository.saveAndFlush(glEntry);
-    glEntry
-        .getLines()
-        .forEach(
-            line -> {
-              line.setCompanyId(companyId);
-              journalLineRepository.save(line);
-            });
+    generalLedgerWriter.post(glEntry, companyId);
   }
 }

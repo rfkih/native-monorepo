@@ -22,6 +22,7 @@ events:
       - { name: legal_employer_id, type: "string" }
       - { name: base_currency, type: "string" }
       - { name: default_language, type: "string" }
+      - { name: vertical, type: "null|string" }
   - name: ConsolidationClosed
     namespace: id.co.nativeapp.events.finance
     schema: libs/contracts/src/main/resources/avro/ConsolidationClosed.avsc
@@ -151,6 +152,29 @@ events:
       - { name: change_kind, type: "string" }
       - { name: effective_from, type: "date" }
       - { name: effective_to, type: "date" }
+  - name: InventoryPurchaseRecorded
+    namespace: id.co.nativeapp.events.finance
+    schema: libs/contracts/src/main/resources/avro/InventoryPurchaseRecorded.avsc
+    fields:
+      - { name: purchase_id, type: "string" }
+      - { name: source, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: currency, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+      - { name: lines, type: "array<record:InventoryPurchaseLine>" }
+  - name: JournalEntryPosted
+    namespace: id.co.nativeapp.events.finance
+    schema: libs/contracts/src/main/resources/avro/JournalEntryPosted.avsc
+    fields:
+      - { name: journal_entry_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "null|string" }
+      - { name: period, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+      - { name: currency, type: "string" }
+      - { name: posting_role, type: "string" }
+      - { name: source_event_id, type: "string" }
+      - { name: lines, type: "array<record:JournalEntryLine>" }
   - name: LaborCostAllocated
     namespace: id.co.nativeapp.events.employee
     schema: libs/contracts/src/main/resources/avro/LaborCostAllocated.avsc
@@ -223,6 +247,28 @@ events:
       - { name: legal_employer_id, type: "string" }
       - { name: name, type: "string" }
       - { name: vertical, type: "null|string" }
+  - name: OrgUnitDeleted
+    namespace: id.co.nativeapp.events.org
+    schema: libs/contracts/src/main/resources/avro/OrgUnitDeleted.avsc
+    fields:
+      - { name: org_unit_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: type, type: "string" }
+      - { name: parent_id, type: "null|string" }
+  - name: PaymentChargeExpired
+    namespace: id.co.nativeapp.events.payment
+    schema: libs/contracts/src/main/resources/avro/PaymentChargeExpired.avsc
+    fields:
+      - { name: charge_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: vertical, type: "string" }
+      - { name: payment_id, type: "string" }
+      - { name: reference_id, type: "null|string" }
+      - { name: business_id, type: "string" }
+      - { name: amount_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: reason, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
   - name: PaymentChargeSucceeded
     namespace: id.co.nativeapp.events.payment
     schema: libs/contracts/src/main/resources/avro/PaymentChargeSucceeded.avsc
@@ -294,6 +340,19 @@ events:
       - { name: over_short_minor, type: "long" }
       - { name: currency, type: "string" }
       - { name: tenders, type: "array<record:TenderReconciliation>" }
+      - { name: supersedes_event_id, type: "null|string" }
+      - { name: close_seq, type: "int" }
+      - { name: reason, type: "null|string" }
+  - name: SaleCogsRecorded
+    namespace: id.co.nativeapp.events.restaurant
+    schema: libs/contracts/src/main/resources/avro/SaleCogsRecorded.avsc
+    fields:
+      - { name: sale_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+      - { name: cogs_minor, type: "long" }
+      - { name: currency, type: "string" }
   - name: SaleRecorded
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/SaleRecorded.avsc
@@ -347,6 +406,18 @@ events:
       - { name: occurred_at, type: "timestamp-millis" }
       - { name: tender_type, type: "null|string" }
       - { name: channel, type: "null|string" }
+  - name: StockReceived
+    namespace: id.co.nativeapp.events.restaurant
+    schema: libs/contracts/src/main/resources/avro/StockReceived.avsc
+    fields:
+      - { name: receipt_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: ingredient_id, type: "string" }
+      - { name: qty, type: "long" }
+      - { name: value_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: received_at, type: "timestamp-millis" }
   - name: StocktakeCompleted
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/StocktakeCompleted.avsc

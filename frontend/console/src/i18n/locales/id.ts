@@ -194,6 +194,13 @@ export const id = {
         button: 'Ubah kata sandi',
         hint: 'Membuka halaman aman Keycloak — Anda akan kembali ke sini setelah selesai.',
       },
+      privacy: {
+        title: 'Privasi & penghapusan akun',
+        body: 'Cara kami menangani data Anda, dan cara meminta akun Anda dihapus.',
+        policy: 'Kebijakan privasi',
+        delete: 'Hapus akun Anda',
+        hint: 'Penghapusan diproses lewat permintaan email dan selesai dalam 30 hari. Akun karyawan ditutup oleh perusahaan Anda.',
+      },
     },
   },
   app: {
@@ -204,6 +211,11 @@ export const id = {
     navProduct: 'Produk',
     navCompliance: 'Kepatuhan',
     navPricing: 'Harga',
+    // SEO — judul <title> + meta description (features/landing/Landing.tsx#useLandingSeo). Kata
+    // kunci untuk pasar Indonesia; dijaga ≤60 / ≤160 karakter agar tampil penuh di hasil pencarian.
+    seoTitle: 'Native — Software Akuntansi, Kasir (POS) & Payroll',
+    seoDescription:
+      'Satukan pembukuan semua perusahaan Anda: kasir (POS), payroll, dan konsolidasi keuangan real-time dalam satu sistem. Multi-mata uang, siap PPh 21 & BPJS.',
     /** ADR 0047 — bagian harga di landing, dirender dari lib/pricing.ts (tidak pernah manual). */
     pricing: {
       kicker: 'Harga',
@@ -224,6 +236,7 @@ export const id = {
     heroPrimary: 'Jadwalkan demo 30 menit',
     heroSecondary: 'Lihat produknya',
     heroNote: 'Tanpa kartu kredit. Data Anda dapat diekspor kapan saja.',
+    downloadAndroid: 'Unduh aplikasi Android',
     mockPeriod: 'Juli 2026 · 3 outlet',
     mockLive: 'Langsung',
     mockRevenue: 'Pendapatan',
@@ -294,7 +307,7 @@ export const id = {
     quoteText:
       'Kami membangun Native karena tutup buku bulanan tidak seharusnya berarti tiga spreadsheet dan lembur di akhir bulan.',
     quoteAuthor: 'Tim Native',
-    quoteRole: 'PT Native Aplikasi Indonesia · Jakarta',
+    quoteRole: 'Native · Indonesia',
     outcome1Value: '1 sumber',
     outcome1Label: 'Data kasir, gaji, dan jurnal tidak lagi disalin antar sistem',
     outcome2Value: '5 modul',
@@ -307,8 +320,8 @@ export const id = {
     ctaPrimary: 'Jadwalkan demo',
     ctaSecondary: 'Coba gratis',
     demoMailSubject: 'Permintaan demo Native',
-    footerCompany: 'PT Native Aplikasi Indonesia',
-    footerAddress: 'Jl. Kemang Raya 41, Jakarta Selatan 12730',
+    footerCompany: 'Native',
+    footerAddress: 'Dioperasikan oleh Rifki · Indonesia',
     fProductHeading: 'Produk',
     fPos: 'Kasir',
     fPayroll: 'Payroll',
@@ -323,7 +336,10 @@ export const id = {
     fDocs: 'Dokumentasi',
     fStatus: 'Status layanan',
     fSales: 'Hubungi sales',
-    footerRights: '© {{year}} PT Native Aplikasi Indonesia',
+    fLegalHeading: 'Legal',
+    fPrivacy: 'Kebijakan privasi',
+    fDeleteAccount: 'Hapus akun Anda',
+    footerRights: '© {{year}} Native',
     footerPhotoCredit: 'Foto: Unsplash · lisensi tercantum di SOURCES.md',
   },
   common: {
@@ -332,6 +348,7 @@ export const id = {
     copyDetails: 'Salin detail',
     traceId: 'ID pelacakan',
     errorReference: 'Referensi',
+    language: 'Bahasa',
     back: 'Kembali',
     continue: 'Lanjut',
     cancel: 'Batal',
@@ -342,6 +359,22 @@ export const id = {
     done: 'Selesai',
     save: 'Simpan',
     submit: 'Kirim',
+    fileSaved: 'Tersimpan di Unduhan: {{filename}}',
+    fileSaveFailed: 'Gagal menyimpan {{filename}} — cek ruang penyimpanan lalu coba lagi',
+  },
+  appCrash: {
+    title: 'Terjadi kesalahan',
+    body: 'Aplikasi mengalami galat tak terduga. Muat ulang untuk melanjutkan — data Anda aman di server.',
+    reload: 'Muat ulang',
+  },
+  backGuard: {
+    leaveTitle: 'Keluar dari halaman ini?',
+    leaveBody: 'Tombol kembali akan meninggalkan halaman ini.',
+    leaveConfirm: 'Keluar',
+    exitTitle: 'Keluar aplikasi?',
+    exitBody: 'Aplikasi akan ditutup ke latar belakang.',
+    exitConfirm: 'Keluar',
+    exitHint: 'Tekan kembali sekali lagi untuk keluar',
   },
   nav: {
     dashboard: 'Dasbor',
@@ -354,6 +387,7 @@ export const id = {
     printer: 'Printer',
     payments: 'Pembayaran',
     features: 'Fitur',
+    inventoryMethod: 'Akuntansi persediaan',
     switchCompany: 'Ganti perusahaan',
     language: 'Bahasa',
     actingAs: 'Bertindak sebagai',
@@ -366,6 +400,7 @@ export const id = {
     groupAr: 'Piutang',
     groupAp: 'Utang',
     groupCashTax: 'Kas & pajak',
+    groupCatalog: 'Menu & stok',
     groupSales: 'Penjualan',
     groupPlanning: 'Perencanaan',
     groupOrg: 'Organisasi',
@@ -375,7 +410,8 @@ export const id = {
     employees: 'Karyawan',
     payroll: 'Penggajian',
     attendance: 'Cuti & absensi',
-    menu: 'Menu',
+    menu: 'Menu & harga',
+    inventory: 'Inventaris',
     kitchen: 'Dapur',
     expenses: 'Pengeluaran',
     invoices: 'Faktur',
@@ -393,6 +429,7 @@ export const id = {
     deferrals: 'Tangguhan',
     channels: 'Channel Penjualan',
     platformSettlements: 'Settlement Platform',
+    marketplace: 'Marketplace / Platform Online',
     openingBalances: 'Saldo awal',
   },
   a11y: {
@@ -402,7 +439,7 @@ export const id = {
   shell: {
     switchCompany: 'Ganti perusahaan',
     yourBusinesses: 'Perusahaan Anda',
-    addBusiness: 'Tambah perusahaan atau divisi',
+    addBusiness: 'Tambah perusahaan',
   },
   dashboardPhone: {
     perOutlet: 'Per outlet',
@@ -575,19 +612,6 @@ export const id = {
         usingCompany: 'Memakai gambar perusahaan',
         overrideSet: 'Gambar gerai diatur',
       },
-      divisions: {
-        heading: 'Divisi',
-        hint:
-          'Setiap divisi dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah. Gerai kemudian otomatis mengikuti divisinya, kecuali punya pengaturan sendiri.',
-        empty: 'Belum ada divisi.',
-      },
-      division: {
-        modeHeading: 'Mode QRIS untuk {{division}}',
-        gatewayHint: 'Transaksi divisi ini memakai koneksi Midtrans perusahaan:',
-        inheritConfirmMessage:
-          'Kembali ke default perusahaan? Gambar QRIS khusus divisi ini akan dihapus.',
-        imageOwnSet: 'Gambar divisi diatur',
-      },
       outlets: {
         heading: 'Gerai',
         hint: 'Setiap gerai dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah.',
@@ -596,18 +620,14 @@ export const id = {
       outlet: {
         effectiveOwn: 'Mode sendiri: {{mode}}',
         effectiveInherits: 'Mengikuti default perusahaan ({{mode}})',
-        effectiveInheritsDivision: 'Mengikuti default divisi ({{mode}})',
         modeHeading: 'Mode QRIS untuk {{outlet}}',
         inheritOption: 'Ikuti default perusahaan',
         inheritDesc: 'Mengikuti default perusahaan, saat ini {{mode}}.',
-        inheritOptionDivision: 'Ikuti default divisi',
-        inheritDescDivision: 'Mengikuti default divisi, saat ini {{mode}}.',
         inheritConfirmMessage:
           'Kembali ke default perusahaan? Gambar QRIS khusus outlet ini akan dihapus.',
         inheritConfirmYes: 'Ya, kembali ke default',
         gatewayHint: 'Transaksi gerai ini memakai koneksi Midtrans perusahaan:',
         imageHeading: 'Gambar QRIS',
-        imageInheritsDivision: 'Memakai gambar divisi',
       },
       company: {
         heading: 'Default perusahaan',
@@ -615,37 +635,87 @@ export const id = {
       },
       gateway: {
         heading: 'Payment gateway (Midtrans)',
-        environment: 'Environment',
+        activeEnvironment: 'Environment aktif',
         sandbox: 'Sandbox',
         production: 'Production',
         serverKey: 'Server key',
         serverKeySavedHint: 'Tersimpan — isi lagi hanya untuk mengganti',
         clientKey: 'Client key',
+        testConnection: 'Test koneksi',
+        verify: {
+          valid: 'Kunci valid',
+          invalid: 'Kunci ditolak — cek kunci & environment-nya.',
+          unreachable: 'Gateway tak bisa dijangkau — coba lagi.',
+        },
+        activateNeedsKey: 'Isi server key environment ini dulu sebelum mengaktifkannya.',
+        productionLiveWarning: 'Production memakai uang asli — pelanggan benar-benar terdebit.',
         save: 'Simpan pengaturan gateway',
         saveError: 'Tidak dapat menyimpan pengaturan gateway. Coba lagi.',
         connected: 'Terhubung',
+        connectedWithLast4: 'Terhubung · •••• {{last4}}',
         notConnected: 'Belum terhubung',
+      },
+    },
+    inventoryMethod: {
+      /** ADR 0067 §5, Fase D4/D5 — konsol pemilihan & aktivasi akuntansi persediaan perpetual.
+       * HANYA OWNER: aktivasi membukukan entri GL nyata dan sifatnya nyaris tak bisa dibatalkan
+       * (tidak ada alur nonaktifkan/ubah), jadi ini tidak pernah ditampilkan sebagai tombol biasa. */
+      title: 'Akuntansi persediaan',
+      subtitle:
+        'Akuntansi persediaan perpetual mengkapitalisasi pembelian ke akun aset Persediaan dan membebankannya sebagai Harga Pokok Penjualan (HPP) hanya saat terjual — bukan langsung dibebankan sebagai biaya saat dibeli.',
+      loadError: 'Tidak dapat memuat status akuntansi persediaan. Coba lagi.',
+      status: {
+        activeBadge: 'Persediaan perpetual aktif',
+        cutoverLabel: 'Bulan cutover',
+        activatedLabel: 'Diaktifkan',
+        assetLabel: 'Aset persediaan (1100)',
+        negativeWarning: 'Aset persediaan negatif',
+        negativeHint:
+          'Akun aset persediaan bernilai negatif — periksa penerimaan stok terbaru dan harga pokok penjualan untuk pembelian yang belum ditandai atau kelebihan jual.',
+      },
+      inactive: {
+        heading: 'Belum diaktifkan',
+        body: 'Saat ini, setiap pembelian langsung dibebankan sebagai biaya dan akun aset persediaan tidak dilacak. Mengaktifkan persediaan perpetual mengubah cara pembelian dan penjualan dibukukan mulai sekarang: sistem membukukan satu entri pembukaan untuk stok yang ada saat ini, lalu mengkapitalisasi pembelian persediaan berikutnya dan membebankannya sebagai HPP hanya setelah terjual.',
+        bullet1: 'Perubahan akuntansi yang disengaja dan hanya bisa dilakukan owner — bukan sekadar tombol.',
+        bullet2:
+          'Berlaku sejak bulan cutover yang Anda pilih ke depan; periode yang sudah disegel tetap memakai entri lama.',
+        bullet3: 'Tidak bisa dimatikan setelah diaktifkan.',
+        action: 'Aktifkan persediaan perpetual',
+      },
+      activate: {
+        formTitle: 'Aktifkan persediaan perpetual',
+        formIntro:
+          'Pilih bulan mulai berlaku dan nilai persediaan yang sudah Anda hitung ada di tangan per bulan itu. Biarkan 0 jika belum pernah dihitung.',
+        cutoverLabel: 'Bulan cutover',
+        cutoverHint: 'Akuntansi perpetual berlaku sejak bulan ini.',
+        openingValueLabel: 'Nilai persediaan awal terhitung ({{currency}})',
+        openingValueHint:
+          'Nilai bahan/stok yang ada per bulan cutover, dari hitung stok terakhir Anda. Membukukan satu entri pembukaan ke Persediaan.',
+        confirmTitle: 'Konfirmasi aktivasi',
+        confirmWarning:
+          'Ini permanen. Akuntansi persediaan perpetual tidak bisa dimatikan setelah diaktifkan.',
+        confirmCutover: 'Bulan cutover',
+        confirmOpeningValue: 'Nilai persediaan awal',
+        confirmNote:
+          'Pembelian yang Anda tandai sebagai persediaan (atau dicatat sebagai penerimaan stok) akan dikapitalisasi ke pembukuan sejak {{period}}, dan harga pokok penjualan akan otomatis dibukukan saat barang terjual.',
+        acknowledge: 'Saya paham perubahan ini permanen dan memengaruhi pembukuan perusahaan.',
+        confirmAction: 'Aktifkan persediaan perpetual',
+      },
+      error: {
+        alreadyActive: 'Persediaan perpetual sudah aktif untuk perusahaan ini.',
+        sealedPeriod:
+          'Bulan cutover itu sudah disegel (sudah lapor pajak) dan tidak bisa dipakai lagi — pilih bulan berikutnya.',
+        generic: 'Tidak dapat mengaktifkan persediaan perpetual. Coba lagi.',
       },
     },
   },
   onboarding: {
     title: 'Buat perusahaan',
     addTitle: 'Tambah perusahaan baru',
-    chooser: {
-      title: 'Apa yang ingin Anda tambahkan?',
-      subtitle:
-        'Perusahaan membayar pajaknya sendiri dan memiliki pembukuan sendiri. Divisi beroperasi di dalam perusahaan yang sudah ada — pembukuan dan pelaporan pajaknya menyatu.',
-      companyOption: 'Perusahaan terpisah',
-      companyOptionHint: 'Badan usaha sendiri (NPWP sendiri) — pembukuan, pajak, dan laporan terpisah.',
-      divisionOption: 'Divisi dari {{company}}',
-      divisionOptionHint:
-        'Badan usaha yang sama — pembukuan dan pajak menyatu; punya gerai dan laporan laba-ruginya sendiri.',
-    },
     subtitle:
-      'Mata uang dasar dan bahasa ditetapkan sekarang — keduanya dikunci saat pembuatan dan tidak dapat diubah lagi.',
+      'Mata uang, bahasa, dan jenis bisnis ditetapkan sekarang — keduanya dikunci saat pembuatan dan tidak dapat diubah lagi.',
     stepCompany: 'Perusahaan',
     stepSettings: 'Pengaturan',
-    stepBusiness: 'Divisi pertama',
     stepReview: 'Tinjau',
     companyName: 'Nama perusahaan',
     companyNamePlaceholder: 'mis. Nusantara Holdings',
@@ -657,8 +727,6 @@ export const id = {
       'Pembukuan Anda memakai {{currency}} — ditentukan oleh negara Anda dan dikunci saat pembuatan.',
     defaultLanguage: 'Bahasa bawaan',
     defaultLanguageHint: 'Bawaan untuk anggota tim baru. Tiap pengguna bisa menggantinya sendiri.',
-    firstBusinessName: 'Nama divisi',
-    firstBusinessNamePlaceholder: 'mis. Restoran Jakarta',
     vertical: 'Jenis bisnis apa ini?',
     verticalHint: 'Menentukan point of sale yang dipakai gerainya. Tidak dapat diubah nanti.',
     reviewHint: 'Perusahaan dan bisnis pertamanya dibuat bersamaan, dalam satu langkah.',
@@ -666,6 +734,7 @@ export const id = {
     creating: 'Membuat…',
     createdTitle: 'Perusahaan dibuat',
     createdBody: 'Ruang kerja Anda siap.',
+    createdOutlet: 'Gerai pertama Anda dinamai sesuai perusahaan — ganti namanya kapan saja di Gerai.',
     goToDashboard: 'Buka dasbor',
     fixedNote: 'Dikunci saat pembuatan',
     errorTitle: 'Tidak dapat membuat perusahaan',
@@ -686,8 +755,7 @@ export const id = {
   },
   dashboard: {
     title: 'Posisi terkonsolidasi',
-    scopeAllUnits: 'Posisi terkonsolidasi · semua divisi perusahaan ini',
-    unitContribution: 'Kontribusi divisi',
+    scopeAllUnits: 'Posisi terkonsolidasi · semua gerai perusahaan ini',
     openUnitPnl: 'Buka L/R unit',
     period: 'Periode',
     prevPeriod: 'Periode sebelumnya',
@@ -747,7 +815,7 @@ export const id = {
     noCompanyHint: 'Buat perusahaan untuk melihat posisi terkonsolidasinya.',
   },
   statements: {
-    scopeAllUnits: 'semua divisi',
+    scopeAllUnits: 'semua gerai',
     incomeTitle: 'Laporan laba rugi',
     incomeSubtitle: 'Pendapatan, beban, dan laba bersih untuk periode ini.',
     balanceTitle: 'Neraca',
@@ -785,6 +853,13 @@ export const id = {
     expenseAccounts: 'Akun beban',
     lineItems: 'Rincian akun',
     noLines: 'Tidak ada akun',
+    /** Drill-down kartu ringkasan (Laba Rugi): klik kartu → drawer rincian per akun. */
+    viewDetail: 'Lihat rincian',
+    revenueDetailTitle: 'Rincian pendapatan',
+    expenseDetailTitle: 'Rincian beban',
+    netDetailTitle: 'Ringkasan laba-rugi',
+    detailShareNote: '% dari total',
+    netDetailHint: 'Pendapatan dikurangi beban untuk periode ini. Ketuk Pendapatan atau Beban untuk melihat tiap akun.',
     cashFlow: {
       title: 'Laporan arus kas',
       disposalProceeds: 'Hasil pelepasan aset',
@@ -907,6 +982,9 @@ export const id = {
         staticHint:
           'Minta pelanggan memindai kode QRIS ini, lalu ketuk "Tandai lunas" setelah aplikasi pelanggan menampilkan berhasil.',
         imageError: 'Gambar QRIS tidak dapat dimuat — Anda tetap bisa konfirmasi manual.',
+        gatewayDegradedBadge: 'Gateway tak tersedia',
+        gatewayDegradedHint:
+          'Gateway QRIS sedang tak bisa dijangkau — konfirmasi manual. Ketuk "Tandai lunas" setelah pelanggan membayar.',
         gatewayInitiateHint:
           'Minta pelanggan memindai QR ini dengan aplikasi apa pun yang mendukung QRIS. Pembayaran dikonfirmasi otomatis — Anda tetap bisa menandainya lunas secara manual bila perlu.',
         gatewayWaiting: 'Membuat kode QR…',
@@ -934,6 +1012,32 @@ export const id = {
       disabledOffline: 'Riwayat penjualan membutuhkan koneksi.',
       capNote: '200 terbaru ditampilkan',
     },
+    closingHistory: {
+      tillMenuLabel: 'Riwayat closing',
+      title: 'Riwayat closing',
+      emptyTitle: 'Belum ada closing',
+      emptyHint: 'Sesi kasir yang sudah ditutup akan muncul di sini, terbaru lebih dulu.',
+      error: 'Tidak dapat memuat riwayat closing.',
+      disabledOffline: 'Riwayat closing membutuhkan koneksi.',
+      denied: 'Hanya pemilik atau manajer yang dapat melihat riwayat closing.',
+      txnCount: '{{formatted}} transaksi',
+      viewTransactions: 'Lihat transaksi',
+      txnEmptyHint: 'Tidak ada transaksi pada hari ini.',
+      correctAction: 'Perbaiki',
+    },
+    return: {
+      action: 'Kembalikan penjualan',
+      confirmTitle: 'Kembalikan penjualan ini?',
+      confirmBody:
+        'Ini mengembalikan {{amount}} untuk penjualan #{{reference}} ke pelanggan dan membatalkannya di pembukuan. Tindakan ini tidak bisa dibatalkan.',
+      confirmAction: 'Kembalikan penjualan',
+      successTitle: 'Penjualan dikembalikan',
+      successBody: '{{amount}} telah dikembalikan ke pelanggan.',
+      errorForbidden: 'Hanya pemilik atau manajer yang bisa mengembalikan penjualan.',
+      errorRejected:
+        'Penjualan ini tidak bisa dikembalikan penuh — mungkin sudah dikembalikan, atau dibayar (sebagian) dengan kartu hadiah.',
+      errorGeneric: 'Gagal mengembalikan penjualan. Silakan coba lagi.',
+    },
     receipt: {
       title: 'Struk',
       orderRef: 'Pesanan',
@@ -949,6 +1053,9 @@ export const id = {
       statusVoided: 'Dibatalkan',
       statusRefunded: 'Dikembalikan',
       statusPartiallyRefunded: 'Dikembalikan sebagian',
+      voidedBanner: 'Transaksi dibatalkan',
+      refundedBanner: 'Penjualan dikembalikan',
+      partiallyRefundedBanner: 'Dikembalikan sebagian — {{amount}}',
       pendingNote: 'Pembayaran menunggu konfirmasi penyedia — pendapatan diakui saat ditangkap.',
       newOrder: 'Pesanan baru',
       print: 'Cetak',
@@ -1134,6 +1241,32 @@ export const id = {
     selectAddonLabel: 'Tambah {{name}}',
     addonSelectedLabel: 'Hapus {{name}}',
   },
+  closeCorrection: {
+    title: 'Perbaiki closing',
+    loadError: 'Gagal memuat data closing. Coba lagi.',
+    cashTitle: 'Uang tunai',
+    currentCounted: 'Terhitung saat ini',
+    currentOverShort: 'Selisih saat ini',
+    newCounted: 'Jumlah terhitung yang benar',
+    newOverShort: 'Selisih baru',
+    reasonLabel: 'Alasan koreksi',
+    reasonPlaceholder: 'mis. kasir salah hitung laci',
+    save: 'Simpan koreksi',
+    saving: 'Menyimpan…',
+    saveError: 'Gagal menyimpan koreksi. Coba lagi.',
+    invalidAmount: 'Masukkan jumlah yang valid.',
+    successTitle: 'Koreksi tersimpan',
+    successNote:
+      'Angka closing sudah diperbarui. Pembukuan diperbarui otomatis beberapa saat lagi; jika periode tersebut sudah dilaporkan (mis. SPT sudah difile), koreksi menunggu penanganan akuntan dan belum masuk pembukuan.',
+    errorNotClosed: 'Sesi kasir ini belum ditutup — tidak ada yang bisa diperbaiki.',
+    errorNotAllowed:
+      'Closing ini tidak bisa diperbaiki (mungkin sudah terlalu lama). Hubungi akuntan Anda untuk jurnal penyesuaian.',
+    unchangedHint: 'Ubah jumlah untuk menyimpan koreksi.',
+    stockTitle: 'Stok opname',
+    stockHint:
+      'Salah input stok opname? Hitung ulang stok — sistem otomatis membukukan penyesuaian selisihnya.',
+    stockAction: 'Perbaiki stok opname',
+  },
   register: {
     /** ADR 0036 — closing kasir (sesi kasir). `title` = label menu kasir & layar mandiri;
      * judul sheet mengikuti keadaan (form buka vs form tutup). */
@@ -1155,6 +1288,14 @@ export const id = {
     countedLabel: 'Uang tunai terhitung di laci',
     countedHint: 'Hitung SELURUH isi laci termasuk modal awal. Jumlah seharusnya dan selisihnya dihitung oleh sistem.',
     closeAction: 'Tutup kasir',
+    /** Permintaan owner — konfirmasi selisih: bila kas terhitung ≠ kas seharusnya menurut sistem,
+     * kasir harus mengonfirmasi jumlah yang dimasukkan sebelum closing dijalankan. Sistem tetap
+     * sumber kebenaran; ini hanya jaring pengaman salah ketik. Pakai ulang `expected`/`counted`/`result*`. */
+    confirmMismatchTitle: 'Periksa lagi hitungan kas',
+    confirmMismatchBody:
+      'Uang tunai terhitung tidak sama dengan yang seharusnya ada di laci menurut sistem. Pastikan jumlah yang Anda masukkan sudah benar sebelum menutup kasir.',
+    confirmProceed: 'Ya, tutup kasir',
+    confirmRecount: 'Periksa lagi hitungannya',
     cashSales: 'Penjualan tunai',
     cashRefunds: 'Refund tunai',
     expected: 'Seharusnya di laci',
@@ -1174,12 +1315,36 @@ export const id = {
     tenderCard: 'Kartu',
     tenderQris: 'QRIS',
     tenderOnline: 'Online',
+    /** Tipe setelmen ke-5 pada ringkasan harian (penukaran gift card). */
+    tenderGiftCard: 'Gift card',
     errorDayClosed:
       'Outlet ini sudah ditutup untuk hari ini. Closing dilakukan sekali sehari — buat entri koreksi bila ada yang perlu diperbaiki.',
     errorAlreadyOpen: 'Sesi kasir sudah terbuka di outlet ini. Muat ulang untuk melihatnya.',
     errorNotOpen: 'Sesi kasir ini sudah tidak terbuka. Muat ulang untuk melihat kondisi terkini.',
     errorKeyConflict:
       'Penutupan itu sudah tercatat dengan jumlah berbeda. Muat ulang untuk melihat kondisi terkini.',
+    /** Ringkasan transaksi harian POS (Z-report) — dicetak saat tutup kasir dan dari menu kasir. */
+    summaryTillMenuLabel: 'Ringkasan hari ini',
+    summaryTitle: 'Ringkasan Harian',
+    summaryPrint: 'Cetak ringkasan',
+    summaryInterim: 'Sementara — kasir masih buka',
+    summaryClosedAt: 'Ditutup',
+    summaryAsOf: 'Per pukul',
+    summaryTransactions: 'Transaksi',
+    summaryGross: 'Penjualan bruto',
+    summaryDiscount: 'Diskon',
+    summaryLoyalty: 'Poin loyalti',
+    summaryService: 'Biaya layanan',
+    summaryTax: 'Pajak (PB1)',
+    summaryEstimated: 'estimasi',
+    summaryTaxEstimatedNote: 'Tarif pajak masih estimasi ilustratif — belum diverifikasi untuk pelaporan.',
+    summaryRefunds: 'Refund',
+    summaryNet: 'Penjualan bersih',
+    summaryCashSection: 'Kas laci',
+    summarySelisih: 'Selisih',
+    summaryFooter: 'Ringkasan manajemen internal — bukan faktur pajak.',
+    summaryEmpty: 'Buka kasir untuk melihat ringkasan hari ini.',
+    summaryError: 'Ringkasan gagal dimuat. Coba lagi.',
   },
   stocktake: {
     /** ADR 0038 fase 3 + ADR 0046 — stock opname sekarang menghitung BAHAN, bukan item menu.
@@ -1188,7 +1353,16 @@ export const id = {
     tillMenuLabel: 'Stock opname',
     entryHint:
       'Jumlah terisi otomatis dengan kuantitas sistem — ubah hanya yang berbeda dari hasil hitung fisik Anda. Untuk menu yang sudah punya resep, selisih bahan berbiaya dibaca sebagai pemborosan/kehilangan; untuk yang lain, selisih masih mencakup pemakaian normal, bukan hanya kehilangan.',
+    soldTodayTitle: 'Barang terjual hari ini',
+    soldTodayEmpty: 'Belum ada penjualan hari ini.',
     systemQty: 'Sistem: {{qty}} {{unit}}',
+    usedToday: 'Terpakai hari ini: {{qty}} {{unit}}',
+    usedThatDay: 'Terpakai hari itu: {{qty}} {{unit}}',
+    historyTitle: 'Riwayat opname',
+    historyAction: 'Riwayat opname',
+    historyError: 'Tidak dapat memuat riwayat opname.',
+    historyEmpty: 'Belum ada stock opname tercatat.',
+    historyVariedCount: '{{formatted}} barang selisih',
     countedForItem: 'Jumlah terhitung untuk {{name}}',
     notCounted: 'Belum dihitung',
     submitAction: 'Kirim stock opname',
@@ -1206,6 +1380,15 @@ export const id = {
     done: 'Selesai',
     varianceLinesTitle: 'Item dengan selisih',
     lineCounts: 'Sistem {{system}} → terhitung {{counted}}',
+    /** ADR 0068 fase 3 — jaring pengaman konfirmasi selisih sebelum submit
+     * (stocktakeVarianceGuard.ts): satu atau lebih jumlah terhitung tampak tidak masuk akal
+     * (salah kg/g, kelebihan angka nol...). Jaring pengaman salah ketik, bukan penghalang keras —
+     * operator selalu bisa "Simpan saja". */
+    varianceGuardTitle: 'Periksa lagi hitungan ini',
+    varianceGuardBody:
+      'Hitungan untuk satu atau lebih barang tampak jauh di luar perkiraan — penyebab umumnya salah kg/g atau kelebihan angka nol. Periksa jumlahnya di bawah ini sebelum menyimpan:',
+    varianceGuardRecount: 'Periksa lagi',
+    varianceGuardProceed: 'Simpan saja',
   },
   inventory: {
     /** ADR 0046 fase 1 — katalog barang stok per gerai di balik stock opname. Penamaan owner:
@@ -1238,14 +1421,23 @@ export const id = {
       'Dipakai menilai selisih stock opname di pembukuan. Kosongkan untuk menghitung tanpa membukukan apa pun.',
     costPlaceholder: 'Opsional',
     initialQtyLabel: 'Jumlah awal',
+    // Cara isi biaya saat menambah barang: masukkan TOTAL yang dibayar ke pemasok (biaya per
+    // satuan dihitung otomatis dari jumlah) atau biaya per satuan langsung.
+    costModeLabel: 'Cara isi biaya',
+    costModeTotal: 'Harga total',
+    costModeUnit: 'Per satuan',
+    qtyBoughtLabel: 'Jumlah dibeli ({{unit}})',
+    totalCostLabel: 'Total harga beli ({{currency}}, opsional)',
+    totalCostHint: 'Total yang dibayar ke pemasok — biaya per satuan dihitung otomatis dari jumlah.',
+    totalNeedsQty: 'Isi jumlah dibeli di atas untuk menghitung biaya per satuan.',
     removeAction: 'Hapus barang',
     removeConfirm: 'Ketuk lagi untuk menghapus — hilang dari daftar dan hitungan berikutnya.',
     receiveTitle: 'Terima — {{name}}',
     receiveHint: 'Stok saat ini: {{qty}} {{unit}}. Masukkan jumlah yang diterima (atau koreksi negatif).',
     receiveAmountLabel: 'Jumlah ({{unit}})',
-    receivePriceLabel: 'Total dibayar ({{currency}}, opsional)',
-    receivePriceHint: 'Total harga pembelian ini — dipakai menghitung biaya rata-rata. Kosongkan jika tidak ada harga.',
     receiveUnitPriceHint: '≈ {{price}} / {{unit}}',
+    receivePricedHint: 'Membeli ini dengan pembayaran yang perlu dicatat?',
+    receivePricedHintLink: 'Catat sebagai pengeluaran',
     receiveSubmit: 'Tambahkan ke stok',
     setTitle: 'Atur jumlah — {{name}}',
     setHint: 'Stok saat ini: {{qty}} {{unit}}. Masukkan jumlah absolut yang baru.',
@@ -1253,6 +1445,15 @@ export const id = {
     setSubmit: 'Atur jumlah',
     errorGeneric: 'Tidak dapat menyimpan. Silakan coba lagi.',
     nameTaken: 'Barang dengan nama ini sudah ada di gerai ini.',
+  },
+  inventoryPicker: {
+    addNew: '+ Tambah bahan baru',
+    createTitle: 'Bahan baru',
+    createHint: 'Stok & harga bahan baru akan terisi dari pembelian ini — tidak perlu diisi di sini.',
+    createSubmit: 'Buat dan gunakan',
+    createError: 'Gagal membuat bahan ini. Silakan coba lagi.',
+    matchesExisting: 'Bahan bernama "{{name}}" sudah ada.',
+    selectInstead: 'Gunakan yang sudah ada',
   },
   posShell: {
     /** Redesign P4 — kerangka POS bersama (bilah status, menu kasir, dok tiket). */
@@ -1397,7 +1598,7 @@ export const id = {
       employees: 'Karyawan',
       people: 'Akses aplikasi',
       net: 'Neto periode ini',
-      parentUnit: 'Divisi',
+      parentUnit: 'Perusahaan',
     },
     overview: {
       revenue: 'Pendapatan',
@@ -1415,7 +1616,7 @@ export const id = {
     outletsTab: {
       add: 'Tambah gerai',
       empty: 'Belum ada gerai',
-      emptyHint: 'Tambahkan gerai pertama untuk mulai berjualan di bawah divisi ini.',
+      emptyHint: 'Tambahkan gerai pertama untuk mulai berjualan.',
     },
     people: {
       empty: 'Belum ada yang ditugaskan di unit ini',
@@ -1453,7 +1654,7 @@ export const id = {
     },
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk melihat data SDM-nya.',
-    noBusinessUnit: {
+    noOutlet: {
       title: 'Belum ada bisnis yang dibuat',
       hint: 'Buat unit bisnis dari menu Organisasi untuk mulai menambah karyawan.',
     },
@@ -1550,8 +1751,10 @@ export const id = {
     hub: {
       subtitle: 'Tinjau klaim, selesaikan yang sudah disetujui, dan kelola katalog kategori.',
       manageCategories: 'Kelola kategori',
+      recordExpense: 'Catat pengeluaran',
       tabInbox: 'Kotak masuk',
       tabAll: 'Semua klaim',
+      tabCompany: 'Perusahaan',
       tabsLabel: 'Tampilan pengeluaran',
     },
     inbox: {
@@ -1672,6 +1875,95 @@ export const id = {
         confirm: 'Batalkan klaim',
       },
     },
+    record: {
+      noCompany: 'Gagal memuat perusahaan Anda',
+      noCompanyHint: 'Coba muat ulang halaman.',
+      title: 'Catat pengeluaran',
+      subtitle: 'Catat pengeluaran perusahaan — pengeluaran kategori, atau belanja bahan yang juga memperbarui stok.',
+      modeLabel: 'Jenis pengeluaran',
+      modeGeneral: 'Kategori',
+      modeInventory: 'Belanja bahan',
+      outletLabel: 'Gerai',
+      outletPlaceholder: 'Pilih gerai',
+      noOutlets: 'Belum ada gerai — tambahkan dulu dari Struktur organisasi.',
+      dateLabel: 'Tanggal (opsional)',
+      descriptionLabel: 'Keterangan',
+      descriptionPlaceholder: 'Untuk apa pengeluaran ini?',
+      errorGeneric: 'Gagal mencatat pengeluaran ini. Periksa isian dan coba lagi.',
+      submit: 'Catat pengeluaran',
+      general: {
+        categoryLabel: 'Kategori',
+        categoryPlaceholder: 'Pilih kategori',
+        categoriesEmpty: 'Belum ada kategori — buat dari Kelola kategori.',
+        amountLabel: 'Jumlah ({{currency}})',
+      },
+      inventory: {
+        descriptionPlaceholder: 'mis. Belanja bahan mingguan',
+        lines: 'Bahan',
+        pickOutletFirst: 'Pilih gerai di atas untuk memilih bahannya.',
+        ingredientsError: 'Gagal memuat bahan gerai ini.',
+        noIngredients: 'Gerai ini belum punya bahan.',
+        addIngredientLink: 'Tambahkan dari Inventori',
+        ingredientLabel: 'Bahan',
+        ingredientPlaceholder: 'Pilih bahan',
+        qtyLabel: 'Jumlah ({{unit}})',
+        totalLabel: 'Total dibayar ({{currency}})',
+        lineValue: 'Total baris',
+        removeLine: 'Hapus baris {{n}}',
+        addLine: 'Tambah bahan',
+        total: 'Total',
+        totalNote: 'Server menjumlahkan setiap baris sebagai jumlah yang dicatat — total ini hanya pratinjau.',
+      },
+      success: {
+        title: 'Pengeluaran tercatat',
+        body: 'Pengeluaran {{id}} telah dicatat dan dibukukan.',
+        stockNote: 'Stok diperbarui otomatis dalam beberapa detik.',
+        backToList: 'Kembali ke Pengeluaran',
+        recordAnother: 'Catat lagi',
+      },
+    },
+    company: {
+      title: 'Pengeluaran perusahaan',
+      subtitle: 'Pengeluaran kategori dan belanja bahan yang dicatat lewat "Catat pengeluaran".',
+      noCompany: 'Gagal memuat perusahaan Anda',
+      noCompanyHint: 'Coba muat ulang halaman.',
+      error: 'Gagal memuat pengeluaran perusahaan.',
+      empty: 'Belum ada pengeluaran perusahaan',
+      emptyHint: 'Pengeluaran yang dicatat lewat "Catat pengeluaran" muncul di sini.',
+      colNo: 'No.',
+      colDate: 'Tanggal',
+      colKind: 'Jenis',
+      colOutlet: 'Gerai',
+      colDescription: 'Keterangan',
+      colStatus: 'Status',
+      colAmount: 'Jumlah',
+      kind: {
+        GENERAL: 'Kategori',
+        INVENTORY: 'Belanja bahan',
+      },
+      status: {
+        POSTED: 'Terbukukan',
+        VOID: 'Dibatalkan',
+      },
+      void: 'Batalkan',
+      detail: {
+        title: 'Detail pengeluaran',
+        expenseNo: 'No. pengeluaran',
+        date: 'Tanggal',
+        glHint: 'Kategori',
+        lineQty: 'Jumlah (satuan dasar)',
+      },
+      voidDialog: {
+        title: 'Batalkan pengeluaran ini?',
+        body: 'Membukukan kebalikan persis dari posting asal — gunakan ini untuk mengoreksi entri yang keliru.',
+        confirm: 'Batalkan pengeluaran',
+        doneTitle: 'Pengeluaran dibatalkan',
+        doneBody: 'Entri sisi uang telah dibalik.',
+        stockGuidance:
+          'Stok TIDAK dikembalikan — ini hanya koreksi sisi uang. Sesuaikan jumlah lewat "Atur jumlah" atau stock opname bila perlu.',
+        stockGuidanceLink: 'Buka Inventori',
+      },
+    },
   },
   hr: {
     list: {
@@ -1700,7 +1992,7 @@ export const id = {
     },
     createLogin: {
       title: 'Buat login — {{name}}',
-      username: 'Nama pengguna',
+      username: 'ID login',
       usernameHint:
         'Karyawan masuk dengan ini plus kata sandi sekali pakai. Huruf, angka, dan titik — tanpa spasi.',
       email: 'Alamat email (opsional)',
@@ -1777,7 +2069,7 @@ export const id = {
       // ADR 0052 — ditampilkan untuk login yang hanya punya peran hr (`!canManageLogins`):
       // membuat login adalah tindakan khusus pemilik/manajer (org-service).
       noLoginReadOnly: 'Belum ada login. Minta pemilik atau manajer untuk membuatnya.',
-      username: 'Nama pengguna',
+      username: 'ID login',
       tempPassword: 'Kata sandi sekali pakai',
       tempPasswordHint:
         'Terlihat sampai karyawan pertama kali masuk dan mengganti sandinya — bagikan sekarang.',
@@ -1876,10 +2168,10 @@ export const id = {
     },
     assignExisting: {
       title: 'Tugaskan ke {{unit}}',
-      subtitle: 'Pilih karyawan yang sudah ada di perusahaan ini. Karyawan baru ditambahkan di divisi.',
+      subtitle: 'Pilih karyawan yang sudah ada di perusahaan ini.',
       employee: 'Karyawan',
       pick: 'Pilih karyawan…',
-      empty: 'Tidak ada karyawan untuk ditugaskan. Tambahkan dulu di divisi.',
+      empty: 'Tidak ada karyawan untuk ditugaskan. Tambahkan karyawan dulu.',
       submit: 'Tugaskan',
     },
     endAssignment: {
@@ -2163,7 +2455,7 @@ export const id = {
   posVertical: {
     badge: 'Segera hadir',
     title: 'Point of sale {{vertical}} segera hadir',
-    body: 'Gerai ini milik divisi {{vertical}}. Penjualan, menu, dan tiket dapur saat ini hanya mendukung gerai restoran, cuci mobil, dan barbershop.',
+    body: 'Perusahaan ini adalah bisnis {{vertical}}. Penjualan, menu, dan tiket dapur saat ini hanya mendukung gerai restoran, cuci mobil, dan barbershop.',
     switchHint: 'Layani di gerai lain',
   },
   outletGate: {
@@ -2175,15 +2467,14 @@ export const id = {
     retry: 'Coba lagi',
   },
   org: {
-    title: 'Struktur organisasi',
-    subtitle: 'Hierarki organisasi untuk perusahaan ini.',
+    title: 'Gerai',
+    subtitle: 'Lokasi penjualan yang dioperasikan perusahaan ini.',
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk mengelola struktur organisasinya.',
     empty: 'Belum ada unit organisasi',
-    emptyHint: 'Tambahkan divisi tingkat atas untuk memulai.',
+    emptyHint: 'Tambahkan gerai pertama untuk memulai.',
     error: 'Tidak dapat memuat struktur organisasi.',
     addUnit: 'Tambah unit',
-    addChild: 'Tambah anak',
     expand: 'Buka',
     collapse: 'Tutup',
     rename: 'Ubah nama',
@@ -2194,19 +2485,12 @@ export const id = {
     inactive: 'Tidak aktif',
     active: 'Aktif',
     type: {
-      BUSINESS_UNIT: 'Divisi',
       OUTLET: 'Gerai',
-      TEAM: 'Tim',
     },
     addDialog: {
       title: 'Tambah unit organisasi',
       nameLabel: 'Nama',
       namePlaceholder: 'mis. Gerai Jakarta',
-      verticalLabel: 'Vertikal bisnis',
-      typeLabel: 'Jenis',
-      parentLabel: 'Induk',
-      noParent: 'Tidak ada (tingkat atas)',
-      noChildAllowed: 'Tim adalah tingkat terbawah — tidak ada yang bisa dibuat di bawahnya.',
       submit: 'Buat',
       submitting: 'Membuat…',
       errorTitle: 'Tidak dapat membuat unit',
@@ -2237,7 +2521,6 @@ export const id = {
       checking: 'Memeriksa apakah unit ini kosong…',
       verifyError: 'Tidak dapat memeriksa apakah unit ini kosong, jadi belum bisa dihapus sekarang. Tutup dan coba lagi.',
       body: 'Hapus "{{name}}" secara permanen? Ini menghapusnya untuk selamanya dan tidak dapat dibatalkan. Gunakan hanya untuk menghapus unit yang dibuat karena kesalahan.',
-      bodyBu: 'Hapus "{{name}}" beserta gerai kosongnya secara permanen? Ini menghapusnya untuk selamanya dan tidak dapat dibatalkan. Gunakan hanya untuk menghapus unit yang dibuat karena kesalahan.',
       blockedIntro: '"{{name}}" masih memiliki data, jadi hanya dapat dinonaktifkan (yang menjaga riwayatnya):',
       blockedLogins: 'Login yang ditugaskan: {{count}}',
       blockedEmployees: 'Karyawan yang ditugaskan: {{count}}',
@@ -2383,6 +2666,8 @@ export const id = {
       'Pembukuan Anda memakai {{currency}} — ditentukan oleh negara Anda dan dikunci saat pembuatan.',
     defaultLanguage: 'Bahasa bawaan',
     defaultLanguageHint: 'Bawaan untuk anggota tim baru. Tiap pengguna bisa menggantinya sendiri.',
+    languageEnglishOnlyNote:
+      'Bahasa workspace Anda adalah Inggris. Bahasa Indonesia tersedia untuk bisnis yang berbasis di Indonesia.',
     permanentNote:
       'Negara, mata uang dasar turunannya, dan bahasa bawaan dikunci saat pembuatan dan tidak dapat diubah lagi.',
     firstBusinessName: 'Nama bisnis',
@@ -2603,10 +2888,30 @@ export const id = {
       previewAlt: 'Pratinjau {{name}}',
       placeholderAlt: 'Belum ada foto',
     },
+    autoLink: {
+      action: 'Lacak stok semua menu',
+      actionShort: 'Lacak stok',
+      title: 'Lacak stok semua menu',
+      explain:
+        'Setiap menu yang belum punya resep akan otomatis ditautkan ke bahan senama (satuan pcs, stok awal 0) dengan resep 1 per porsi — sehingga setiap penjualan langsung mengurangi stok dan angka stock opname terisi otomatis.',
+      skipNote:
+        'Menu yang sudah punya resep tidak akan disentuh. Resep 1:1 ini titik awal — Anda bisa mengubahnya jadi resep bahan sungguhan kapan saja.',
+      confirm: 'Tautkan sekarang',
+      running: 'Menautkan…',
+      result: '{{linked}} menu ditautkan, {{skipped}} dilewati (sudah punya resep).',
+      blocked:
+        '{{blocked}} menu tidak bisa ditautkan — namanya sama dengan bahan bersatuan lain (mis. gram). Beri nama berbeda atau buat resep manual.',
+      afterHint:
+        'Isi stok awal tiap bahan lewat halaman Inventaris atau stock opname pertama. Setelah itu, opname tinggal verifikasi.',
+      error: 'Gagal menautkan. Coba lagi.',
+    },
     createItem: {
       title: 'Tambah item menu',
       nameLabel: 'Nama item',
       namePlaceholder: 'mis. Nasi Goreng',
+      autoTrackLabel: 'Lacak stok item ini',
+      autoTrackHint:
+        'Otomatis membuat bahan senama (1 per porsi) sehingga setiap penjualan mengurangi stok.',
       categoryLabel: 'Kategori',
       categoryPlaceholder: 'Pilih kategori…',
       priceLabel: 'Harga ({{currency}})',
@@ -2760,6 +3065,11 @@ export const id = {
     baseSection: 'Bahan dasar',
     baseSectionHint: 'Setiap porsi item ini memakai bahan-bahan berikut, dalam jumlah ini.',
     baseEmpty: 'Belum ada bahan dasar — tambahkan yang pertama di bawah.',
+    autoLinkAction: 'Lacak stok 1:1 otomatis',
+    autoLinkRunning: 'Menautkan…',
+    autoLinkError: 'Gagal menautkan. Coba lagi.',
+    autoLinkBlocked:
+      'Nama item sama dengan bahan bersatuan lain — beri nama berbeda atau buat resep manual.',
     addLine: 'Tambah bahan',
     roundingHint:
       'Jumlah selalu berupa bilangan bulat. Untuk bahan yang dipakai dalam jumlah sangat kecil per porsi (sejumput, secolek), lacak dalam pcs atau pack, bukan g/ml, agar jumlahnya bisa dibulatkan ke angka yang wajar.',
@@ -2817,6 +3127,10 @@ export const id = {
     noLines: 'Belum ada item — ketuk menu untuk menambahkan item ke tagihan ini.',
     pay: 'Bayar',
     cancelBill: 'Batalkan tagihan',
+    cancelNeedsManager: 'Tagihan yang sudah berisi item hanya bisa dibatalkan owner/manajer',
+    errNeedsManager: 'Aksi ini butuh owner atau manajer',
+    errHasPaidLines: 'Sebagian item sudah dibayar — lunasi sisanya atau balikkan pembayaran dulu',
+    errLinePaid: 'Item itu sudah dibayar dan tidak bisa dihapus',
     cancelBillTitle: 'Batalkan tagihan',
     cancelBillBody: 'Batalkan tagihan untuk "{{label}}"? Tidak ada penjualan yang akan dicatat.',
     cancelBillConfirm: 'Batalkan tagihan',
@@ -2830,6 +3144,14 @@ export const id = {
     decreaseQty: 'Kurangi jumlah',
     viewBill: 'Lihat tagihan',
     split: 'Pisah',
+    attach: {
+      title: 'Lampiran',
+      action: 'Lampirkan',
+      remove: 'Hapus lampiran',
+      tooLarge: 'Berkas terlalu besar (maks 5 MB).',
+      imageError: 'Gagal memproses gambar. Coba foto lain.',
+      uploadError: 'Gagal mengunggah lampiran. Silakan coba lagi.',
+    },
     splitToggle: 'Aktifkan mode pisah per item',
     splitHint: 'Centang item yang akan dibayar di putaran ini, lalu ketuk "Bayar terpilih".',
     splitSelected: '{{n}} item dipilih',
@@ -3149,6 +3471,22 @@ export const id = {
       quantityLabel: 'Jml',
       unitPriceLabel: 'Harga satuan',
       lineTotal: 'Total baris',
+      inventoryLabel: 'Persediaan',
+      inventoryHint:
+        'Dikapitalisasi ke aset persediaan, bukan langsung dibebankan sebagai biaya — hanya berlaku setelah akuntansi persediaan perpetual diaktifkan.',
+      ingredientOutletLabel: 'Gerai (untuk pemilih bahan)',
+      ingredientOutletHint: 'Hanya menyaring bahan yang tampil di bawah — tidak dikirim bersama tagihan; tagihan tidak punya gerai sendiri.',
+      ingredientOutletPlaceholder: 'Pilih gerai…',
+      ingredientLinkNote: 'Opsional, kaitkan sebuah bahan — stok ditambahkan otomatis setelah tagihan ini diposting.',
+      ingredientLinkPickOutlet: 'Pilih gerai di atas untuk memilih bahannya.',
+      ingredientLinkError: 'Gagal memuat bahan gerai ini.',
+      ingredientLineIncomplete: 'Pilih (atau tambah) bahan dan isi jumlah serta total harganya untuk melengkapi baris ini.',
+      ingredientLabel: 'Bahan',
+      ingredientComboboxPlaceholder: 'Ketik untuk mencari bahan…',
+      ingredientComboboxEmpty: 'Gerai ini belum punya bahan — mulai ketik untuk menambahkannya.',
+      ingredientCreateHint: 'Tidak cocok — tambahkan "{{name}}" sebagai bahan baru',
+      ingredientQtyLabel: 'Jumlah ({{unit}})',
+      ingredientTotalLabel: 'Total harga',
       preview: 'Pratinjau',
       subtotal: 'Subtotal',
       tax: 'Pajak (11%)',
@@ -3178,6 +3516,11 @@ export const id = {
       colQuantity: 'Jml',
       colUnitPrice: 'Harga satuan',
       colLineTotal: 'Total baris',
+      inventoryBadge: 'Persediaan',
+      resolveOutletLabel: 'Tampilkan jumlah untuk gerai',
+      resolveOutletHint: 'Opsional — menerjemahkan jumlah bahan terkait ke satuan biasanya (mis. kg). Tagihan tidak punya gerai sendiri, ini hanya pilihan tampilan.',
+      resolveOutletPlaceholder: 'Jumlah satuan dasar',
+      ingredientQtyBaseUnit: '{{qty}} (satuan dasar)',
       payments: 'Pembayaran',
       noPayments: 'Belum ada pembayaran tercatat.',
       colPaymentDate: 'Tanggal',
@@ -3213,6 +3556,13 @@ export const id = {
         body: 'Batalkan tagihan {{number}}? Tindakan ini tidak dapat dibatalkan.',
         confirm: 'Batalkan tagihan',
         submitting: 'Membatalkan…',
+        stockGuidanceNote:
+          'Tagihan ini memiliki baris yang terkait bahan dan sudah menerima stok — pembatalan hanya membalik sisi uang. Stok tidak akan dikembalikan.',
+        doneTitle: 'Tagihan dibatalkan',
+        doneBody: 'Entri sisi uang telah dibalik.',
+        stockGuidance:
+          'Stok TIDAK dikembalikan — ini hanya koreksi sisi uang. Sesuaikan jumlah lewat "Atur jumlah" atau stock opname bila perlu.',
+        stockGuidanceLink: 'Buka Inventori',
       },
       errors: {
         invalidState:
@@ -3350,6 +3700,11 @@ export const id = {
     deactivate: 'Nonaktifkan',
     deactivateConfirm:
       'Nonaktifkan {{name}}? Channel ini tidak akan lagi ditawarkan sebagai metode pembayaran ONLINE saat checkout.',
+    suggestions: {
+      title: 'Tambah platform populer',
+      hint: 'Satu ketukan langsung menambahkannya ke daftar channel Anda — bisa diubah nama, dinonaktifkan, atau diabaikan kapan saja.',
+      addAria: 'Tambahkan {{name}} sebagai channel penjualan',
+    },
     dialog: {
       createTitle: 'Channel penjualan baru',
       editTitle: 'Ubah channel penjualan',
@@ -3415,6 +3770,25 @@ export const id = {
       colNet: 'Bersih',
       colFee: 'Komisi',
     },
+  },
+  marketplace: {
+    title: 'Marketplace / Platform Online',
+    subtitle:
+      'Ringkasan per platform untuk periode ini: penjualan kotor online, komisi platform, bersih diterima, dan yang masih belum cair.',
+    noCompany: 'Belum ada perusahaan dipilih',
+    noCompanyHint: 'Buat perusahaan untuk melihat laporan marketplace.',
+    error: 'Tidak dapat memuat laporan marketplace.',
+    empty: 'Belum ada aktivitas marketplace',
+    emptyHint:
+      'Laporan ini akan terisi setelah ada penjualan ONLINE lewat sebuah channel atau settlement yang tercatat.',
+    prevPeriod: 'Periode sebelumnya',
+    nextPeriod: 'Periode berikutnya',
+    colPlatform: 'Platform',
+    colGross: 'Penjualan',
+    colFee: 'Komisi/Fee',
+    colNet: 'Diterima',
+    colOutstanding: 'Belum cair',
+    totalsLabel: 'Total',
   },
   tax: {
     report: {
@@ -3790,6 +4164,7 @@ export const id = {
       rateSummary: '{{pct}} dari setiap penjualan kembali dalam bentuk poin',
       minSaleLabel: 'Minimum penjualan untuk memperoleh poin',
       effectiveRange: 'Berlaku {{from}} – {{to}}',
+      effectiveOpenEnded: 'Berlaku {{from}} – tanpa tanggal akhir',
       fields: {
         rate: 'Tarif poin',
         rateHint: 'Persentase dari setiap penjualan yang dikembalikan sebagai poin, misalnya 1 untuk 1%. 1 poin = 1 satuan minor mata uang.',
@@ -3819,6 +4194,10 @@ export const id = {
       title: 'Pencarian kartu hadiah',
       subtitle: 'Cari kartu hadiah berdasarkan kodenya.',
     },
+  },
+  appUpdate: {
+    available: 'Versi baru tersedia.',
+    action: 'Perbarui',
   },
   offline: {
     banner: {
@@ -3916,11 +4295,11 @@ export const id = {
       none: 'Belum ada login mesin kasir untuk gerai ini.',
       create: 'Buat login mesin kasir',
       creating: 'Membuat…',
-      username: 'Nama pengguna',
+      username: 'ID login',
       password: 'Kata sandi',
       showPassword: 'Tampilkan kata sandi',
       hidePassword: 'Sembunyikan kata sandi',
-      copyUsername: 'Salin nama pengguna',
+      copyUsername: 'Salin ID login',
       copyPassword: 'Salin kata sandi',
       resetPassword: 'Setel ulang kata sandi',
       resetting: 'Menyetel ulang…',

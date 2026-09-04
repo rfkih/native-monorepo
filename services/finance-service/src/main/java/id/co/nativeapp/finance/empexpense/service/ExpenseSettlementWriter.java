@@ -6,8 +6,7 @@ import id.co.nativeapp.finance.empexpense.messaging.ExpenseReimbursementSettledE
 import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseClaimLedgerRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.tenant.TenantContext;
@@ -68,20 +67,17 @@ public class ExpenseSettlementWriter {
   private final ProcessedEventStore processedEvents;
   private final EmployeeExpenseClaimLedgerRepository claimLedgerRepository;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
 
   public ExpenseSettlementWriter(
       ProcessedEventStore processedEvents,
       EmployeeExpenseClaimLedgerRepository claimLedgerRepository,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository) {
+      GeneralLedgerWriter generalLedgerWriter) {
     this.processedEvents = processedEvents;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.claimLedgerRepository = claimLedgerRepository;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
   }
 
   /**
@@ -167,15 +163,7 @@ public class ExpenseSettlementWriter {
       claimLedgerRepository.saveAndFlush(row);
     }
 
-    glEntry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(glEntry);
-    glEntry
-        .getLines()
-        .forEach(
-            line -> {
-              line.setCompanyId(companyId);
-              journalLineRepository.save(line);
-            });
+    generalLedgerWriter.post(glEntry, companyId);
   }
 
   /**

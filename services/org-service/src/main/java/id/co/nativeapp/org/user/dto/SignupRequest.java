@@ -35,17 +35,19 @@ import jakarta.validation.constraints.Size;
  * deserialization, not rejected (same posture as the removed {@code firstBusinessType}); the
  * server-side derivation always wins.
  *
- * <p>The first business is ALWAYS created as the root {@code business_unit} with a seeded default
- * outlet (ADR 0012).
+ * <p><strong>One name, not two (ADR 0070).</strong> There is deliberately no {@code
+ * firstBusinessName}: the org tree is flat ({@code company > outlet}), so the bootstrap seeds ONE
+ * outlet named after the company, which the owner renames on the Outlets page. An old request body
+ * still carrying {@code firstBusinessName} is ignored by deserialization, not rejected — the same
+ * posture as the removed {@code firstBusinessType} and {@code baseCurrency}.
  *
  * @param companyName the company display name (used as-is in the tenant bootstrap)
  * @param country the ISO 3166-1 alpha-2 country code where the company operates; the base currency
  *     is derived from it and both are immutable once set
  * @param defaultLanguage the default language code for the new company; must be one of the
  *     platform-supported languages
- * @param firstBusinessName the name of the first business (org-unit) to create under the company
- * @param vertical the business vertical of the first business (lowercase {@code restaurant} |
- *     {@code carwash} | {@code barbershop}); drives which POS its outlets get
+ * @param vertical the COMPANY's business vertical (lowercase {@code restaurant} | {@code carwash} |
+ *     {@code barbershop}); drives which POS its outlets get. Immutable once set (ADR 0070)
  * @param ownerFirstName the owner's first (or only) name — becomes the Keycloak user's native
  *     {@code firstName}
  * @param ownerLastName the owner's last name; OPTIONAL — Indonesian mononyms are common, so a
@@ -69,7 +71,6 @@ public record SignupRequest(
     @NotBlank String companyName,
     @NotBlank @Pattern(regexp = "[A-Z]{2}", message = "must be an ISO 3166-1 alpha-2 code") String country,
     @NotBlank @Pattern(regexp = "en|id", message = "unsupported language") String defaultLanguage,
-    @NotBlank String firstBusinessName,
     @NotBlank @Pattern(regexp = "restaurant|carwash|barbershop", message = "unsupported vertical") String vertical,
     @NotBlank @Size(max = 100) String ownerFirstName,
     @Size(max = 100) String ownerLastName,

@@ -54,30 +54,29 @@ public class SettingsReader {
   }
 
   /**
-   * What the till needs at tender time, resolved for {@code businessId} (the outlet, nullable) and
-   * {@code divisionId} (the outlet's parent business unit, nullable). Facet fallbacks per the ADR
-   * amendment: mode = outlet ?? division ?? company ?? implicit MANUAL; static-image availability
-   * is {@code true} when ANY of the three rows carries one; gateway state comes from the COMPANY
-   * row only (credentials are company-level).
+   * What the till needs at tender time, resolved for {@code businessId} (the outlet, nullable).
+   * Facet fallbacks: mode = outlet ?? company ?? implicit MANUAL; static-image availability is
+   * {@code true} when EITHER row carries one; gateway state comes from the COMPANY row only
+   * (credentials are company-level).
+   *
+   * <p>ADR 0070 removed the middle DIVISION rung: the division level no longer exists, so there are
+   * two scopes, not three.
    */
   @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-  public EffectiveSettingsResponse effective(UUID businessId, UUID divisionId) {
+  public EffectiveSettingsResponse effective(UUID businessId) {
     TenantContext.require();
     List<SettingsView> views = repository.findAllViews();
     Optional<SettingsView> companyRow =
         views.stream().filter(v -> v.getOrgUnitId() == null).findFirst();
-    Optional<SettingsView> divisionRow = findByUnitId(views, divisionId);
     Optional<SettingsView> outletRow = findByUnitId(views, businessId);
 
     String mode =
         outletRow
             .map(SettingsView::getMode)
-            .or(() -> divisionRow.map(SettingsView::getMode))
             .or(() -> companyRow.map(SettingsView::getMode))
             .orElse(QrisMode.MANUAL.name());
     boolean staticAvailable =
         outletRow.map(SettingsView::getHasStaticImage).orElse(false)
-            || divisionRow.map(SettingsView::getHasStaticImage).orElse(false)
             || companyRow.map(SettingsView::getHasStaticImage).orElse(false);
     EffectiveSettingsResponse.EffectiveGatewayResponse gateway =
         companyRow
@@ -91,24 +90,34 @@ public class SettingsReader {
   }
 
   /**
-   * The effective static QRIS image for {@code businessId} (outlet, nullable) / {@code divisionId}
-   * (nullable): outlet's own image wins, else the division image, else the company image — a row
-   * WITHOUT an image still falls through to the next scope (the per-facet rule).
+   * The effective static QRIS image for {@code businessId} (outlet, nullable): the outlet's own
+   * image wins, else the company image — a row WITHOUT an image still falls through to the next
+   * scope (the per-facet rule). ADR 0070 removed the middle DIVISION rung.
    *
-   * @throws PaymentSettingsNotFoundException when none of the three scopes carries an image (→ 404)
+   * @throws PaymentSettingsNotFoundException when neither scope carries an image (→ 404)
    */
   @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-  public QrImageView effectiveImage(UUID businessId, UUID divisionId) {
+  public QrImageView effectiveImage(UUID businessId) {
     TenantContext.require();
     Optional<QrImageView> outletImage =
         businessId == null ? Optional.empty() : repository.findImageByOrgUnitId(businessId);
     return outletImage
-        .or(
-            () ->
-                divisionId == null ? Optional.empty() : repository.findImageByOrgUnitId(divisionId))
         .or(repository::findCompanyDefaultImage)
         .orElseThrow(
             () -> new PaymentSettingsNotFoundException("No static QRIS image is configured."));
+  }
+
+  /**
+   * The ACTIVE environment's server-key last4 — the pre-V6 single-slot mirror (§1.3 back-compat).
+   */
+  private static String activeLast4(SettingsView view) {
+    if ("SANDBOX".equals(view.getProviderEnvironment())) {
+      return view.getSandboxServerKeyLast4();
+    }
+    if ("PRODUCTION".equals(view.getProviderEnvironment())) {
+      return view.getProductionServerKeyLast4();
+    }
+    return null;
   }
 
   private static Optional<SettingsView> findByUnitId(List<SettingsView> views, UUID unitId) {
@@ -124,7 +133,13 @@ public class SettingsReader {
             : new SettingsRowResponse.GatewayInfoResponse(
                 view.getProvider(),
                 view.getProviderEnvironment(),
-                view.getServerKeyLast4(),
+                new SettingsRowResponse.GatewayInfoResponse.EnvCredentialResponse(
+                    view.getSandboxServerKeyLast4(), view.getSandboxConnected()),
+                new SettingsRowResponse.GatewayInfoResponse.EnvCredentialResponse(
+                    view.getProductionServerKeyLast4(), view.getProductionConnected()),
+                // Pre-V6 single-slot mirror of the ACTIVE environment (§1.3 additive back-compat).
+                view.getProviderEnvironment(),
+                activeLast4(view),
                 view.getGatewayConnected());
     return new SettingsRowResponse(
         view.getId(),

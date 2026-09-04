@@ -28,9 +28,20 @@ public record BillDetailResponse(
     List<LineResponse> lines,
     List<PaymentResponse> payments) {
 
-  /** One billed line of the bill. */
+  /**
+   * One billed line of the bill. {@code inventory} + the ingredient triple surface the ADR 0072
+   * linkage (ingredient fields null for a plain or unlinked line).
+   */
   public record LineResponse(
-      int lineNo, String description, int quantity, long unitPriceMinor, long lineTotalMinor) {}
+      int lineNo,
+      String description,
+      int quantity,
+      long unitPriceMinor,
+      long lineTotalMinor,
+      boolean inventory,
+      UUID ingredientId,
+      String ingredientName,
+      Long ingredientQtyBase) {}
 
   /** One payment recorded against the bill. */
   public record PaymentResponse(

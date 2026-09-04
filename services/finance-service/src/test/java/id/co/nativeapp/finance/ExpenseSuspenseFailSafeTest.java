@@ -68,7 +68,8 @@ class ExpenseSuspenseFailSafeTest extends PostgresRlsTestBase {
 
     // The P&L expense leg reflects the suspense-posted amount — the money is visible, not lost.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(amountMinor, "IDR"));
     assertThat(pnl.net()).isEqualTo(Money.ofMinor(-amountMinor, "IDR"));
   }

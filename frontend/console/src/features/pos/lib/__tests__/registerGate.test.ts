@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { noConfirmedOpenSession, type RegisterQueryState } from '../registerGate'
+import { noConfirmedOpenSession, registerMenuLabelKey, type RegisterQueryState } from '../registerGate'
 
 function state(partial: Partial<RegisterQueryState>): RegisterQueryState {
   return { offline: false, isLoading: false, isError: false, session: null, ...partial }
@@ -28,5 +28,23 @@ describe('noConfirmedOpenSession', () => {
 
   it('fails OPEN on an unresolved (undefined) session even if not flagged loading/error', () => {
     expect(noConfirmedOpenSession(state({ session: undefined }))).toBe(false)
+  })
+})
+
+describe('registerMenuLabelKey', () => {
+  it('offers to CLOSE ("Closing kasir") when a session is open', () => {
+    expect(registerMenuLabelKey(state({ session: { id: 'abc' } }))).toBe('register.titleClose')
+  })
+
+  it('offers to OPEN ("Buka kasir") once the drawer is confirmed closed (null)', () => {
+    expect(registerMenuLabelKey(state({ session: null }))).toBe('register.titleOpen')
+  })
+
+  it('keeps the neutral combined label while the state is still loading', () => {
+    expect(registerMenuLabelKey(state({ isLoading: true, session: undefined }))).toBe('register.title')
+  })
+
+  it('keeps the neutral combined label on a read error rather than guess the action', () => {
+    expect(registerMenuLabelKey(state({ isError: true, session: undefined }))).toBe('register.title')
   })
 })

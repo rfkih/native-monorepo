@@ -19,8 +19,10 @@ const TABS = [
 export function StaffShell() {
   return (
     <div className="min-h-[100dvh] bg-paper">
-      {/* Content clears the fixed tab bar (bar height + the phone's home-indicator safe area). */}
-      <div className="pb-[calc(66px+env(safe-area-inset-bottom))]">
+      {/* Content clears the fixed tab bar: 66px here + the safe-area inset that index.css's body
+          padding already contributes (this wrapper is in-flow, so adding the inset again would
+          double it — only the FIXED tab bar below needs its own inset). */}
+      <div className="pb-[66px]">
         <Outlet />
       </div>
       <StaffTabBar />
@@ -31,7 +33,7 @@ export function StaffShell() {
 function StaffTabBar() {
   const { t } = useTranslation()
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[var(--safe-area-inset-bottom,0px)] backdrop-blur">
       <div className="mx-auto flex h-[66px] max-w-md items-stretch">
         {TABS.map(({ to, end, icon: Icon, key }) => (
           <NavLink

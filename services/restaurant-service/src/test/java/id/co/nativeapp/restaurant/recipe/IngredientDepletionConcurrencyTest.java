@@ -41,6 +41,11 @@ import org.springframework.boot.test.context.SpringBootTest;
  * in the SAME order and can never deadlock. This test proves: both checkouts complete without error
  * (no deadlock, no lock-order abort) and the final depletion is the exact sum of both sales'
  * contributions — no lost update, no double-count.
+ *
+ * <p>It also proves the V42 per-day usage aggregate accumulates ADDITIVELY under the same race:
+ * both concurrent sales UPSERT the same {@code ingredient_usage_day} rows ({@code ON CONFLICT DO
+ * UPDATE qty_used = existing + EXCLUDED}), so the day's {@code terpakai} figure must equal the
+ * exact same per-ingredient sum as the depletion — no lost update on the read-modify-write.
  */
 @SpringBootTest
 class IngredientDepletionConcurrencyTest extends PostgresRlsTestBase {
@@ -115,6 +120,11 @@ class IngredientDepletionConcurrencyTest extends PostgresRlsTestBase {
     assertThat(stockOfIngredient(ingredient1)).isEqualTo(1_000_000 - 78);
     // ingredient2: (5 * 4 from X) + (7 * 6 from Y) = 20 + 42 = 62.
     assertThat(stockOfIngredient(ingredient2)).isEqualTo(1_000_000 - 62);
+
+    // V42: the day's usage UPSERT accumulated the exact same per-ingredient sum — both concurrent
+    // sales added to the same ingredient_usage_day rows with no lost update.
+    assertThat(usageOfIngredient(ingredient1)).isEqualTo(78);
+    assertThat(usageOfIngredient(ingredient2)).isEqualTo(62);
   }
 
   // ---------------------------------------------------------------------------
@@ -128,7 +138,8 @@ class IngredientDepletionConcurrencyTest extends PostgresRlsTestBase {
         () ->
             ingredientService
                 .create(
-                    new CreateIngredientRequest(BUSINESS_ID, name, "g", 10L, "IDR", initialStock))
+                    new CreateIngredientRequest(
+                        BUSINESS_ID, name, "g", null, 10L, "IDR", initialStock))
                 .id());
   }
 
@@ -171,6 +182,23 @@ class IngredientDepletionConcurrencyTest extends PostgresRlsTestBase {
             st.executeQuery("SELECT stock_qty FROM ingredient WHERE id = '" + ingredientId + "'")) {
       rs.next();
       return rs.getInt(1);
+    }
+  }
+
+  /** Total {@code qty_used} across all usage-day rows for this ingredient (a single day here). */
+  private long usageOfIngredient(UUID ingredientId) throws Exception {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        Statement st = admin.createStatement();
+        ResultSet rs =
+            st.executeQuery(
+                "SELECT COALESCE(SUM(qty_used), 0) FROM ingredient_usage_day"
+                    + " WHERE ingredient_id = '"
+                    + ingredientId
+                    + "'")) {
+      rs.next();
+      return rs.getLong(1);
     }
   }
 }

@@ -80,7 +80,8 @@ class PostingCurrencyGuardTest extends PostgresRlsTestBase {
     // And the P&L read stays clean (does NOT throw the multi-currency 500): revenue intact, the
     // rejected expense never landed.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(company.toString(), ACTOR, () -> pnlReader.pnlForPeriod(PERIOD))
+        TenantContext.callAs(
+                company.toString(), ACTOR, () -> pnlReader.accumulatedPnlForPeriod(PERIOD))
             .orElseThrow();
     assertThat(pnl.revenue()).isEqualTo(Money.ofMinor(10_000_000L, "IDR"));
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(0L, "IDR"));
@@ -141,7 +142,8 @@ class PostingCurrencyGuardTest extends PostgresRlsTestBase {
 
     assertThat(pnlRowCountAsAdmin(company)).isEqualTo(1L);
     ConsolidatedPnl pnl =
-        TenantContext.callAs(company.toString(), ACTOR, () -> pnlReader.pnlForPeriod(PERIOD))
+        TenantContext.callAs(
+                company.toString(), ACTOR, () -> pnlReader.accumulatedPnlForPeriod(PERIOD))
             .orElseThrow();
     assertThat(pnl.revenue()).isEqualTo(Money.ofMinor(10_000_000L, "IDR"));
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(4_000_000L, "IDR"));

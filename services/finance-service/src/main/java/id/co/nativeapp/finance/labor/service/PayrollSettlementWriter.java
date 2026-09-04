@@ -6,6 +6,7 @@ import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.labor.domain.LiabilityState;
 import id.co.nativeapp.finance.labor.domain.NegativeLiabilityBucketException;
@@ -99,6 +100,7 @@ public class PayrollSettlementWriter {
   private final PayrollSettlementRepository settlementRepository;
   private final RoleAccountResolver roleAccountResolver;
   private final JournalEntryRepository journalEntryRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final JournalLineRepository journalLineRepository;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
@@ -109,15 +111,17 @@ public class PayrollSettlementWriter {
       PayrollSettlementRepository settlementRepository,
       RoleAccountResolver roleAccountResolver,
       JournalEntryRepository journalEntryRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       JournalLineRepository journalLineRepository,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.runLedgerRepository = Objects.requireNonNull(runLedgerRepository, "runLedgerRepository");
+    this.journalEntryRepository =
+        Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
+    this.generalLedgerWriter = Objects.requireNonNull(generalLedgerWriter, "generalLedgerWriter");
     this.settlementRepository =
         Objects.requireNonNull(settlementRepository, "settlementRepository");
     this.roleAccountResolver = Objects.requireNonNull(roleAccountResolver, "roleAccountResolver");
-    this.journalEntryRepository =
-        Objects.requireNonNull(journalEntryRepository, "journalEntryRepository");
     this.journalLineRepository =
         Objects.requireNonNull(journalLineRepository, "journalLineRepository");
     this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
@@ -232,9 +236,20 @@ public class PayrollSettlementWriter {
     UUID entryId = UUID.randomUUID();
     // The Dr leg debits the SAME as-of-occurred_at bucketAccountCode computed above — NEVER a
     // fresh role→code resolution at "now" (P5 review C1; see the class javadoc). Only the Cr
-    // CASH_CLEARING leg resolves at "now" inside buildSettlementEntry.
+    // CASH_CLEARING leg resolves at "now" inside buildSettlementEntry. The bucket's own provenance
+    // travels as liabilityEntry.isUsesIllustrativeRules() — the flag PayrollLiabilityWriter derived
+    // when it resolved kind.liabilityRole() AT ACCRUAL TIME — so a settlement of an illustrative
+    // payroll run stays flagged even if the bucket role's mapping has since gone OFFICIAL (or
+    // expired); buildSettlementEntry ORs it with whatever CASH_CLEARING resolves to now.
     JournalEntry entry =
-        buildSettlementEntry(kind, bucketAccountCode, amount, period, now, entryId);
+        buildSettlementEntry(
+            kind,
+            bucketAccountCode,
+            liabilityEntry.isUsesIllustrativeRules(),
+            amount,
+            period,
+            now,
+            entryId);
     persistEntry(entry, companyId);
 
     PayrollSettlement settlement =
@@ -262,10 +277,17 @@ public class PayrollSettlementWriter {
    *
    * @param bucketAccountCode the bucket's account code, resolved by the caller as of the liability
    *     entry's {@code occurred_at} — never re-resolved here
+   * @param bucketIsIllustrative whether the bucket role's mapping was illustrative AT THE TIME the
+   *     liability entry resolved {@code bucketAccountCode} (the caller reads this off the liability
+   *     entry's own {@code uses_illustrative_rules}, since this method never re-resolves the bucket
+   *     role) — ORed with whether {@code CASH_CLEARING} resolves illustrative NOW, so a settlement
+   *     of an illustrative payroll run stays flagged
    */
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public JournalEntry buildSettlementEntry(
       SettlementKind kind,
       String bucketAccountCode,
+      boolean bucketIsIllustrative,
       Money amount,
       String period,
       Instant now,
@@ -275,6 +297,8 @@ public class PayrollSettlementWriter {
         List.of(
             JournalLine.debit(entryId, 1, bucketAccountCode, amount),
             JournalLine.credit(entryId, 2, clearingCode, amount));
+    boolean usesIllustrative =
+        bucketIsIllustrative || roleAccountResolver.anyIllustrative(now, AccountRole.CASH_CLEARING);
     return JournalEntry.balanced(
         entryId,
         period,
@@ -282,7 +306,7 @@ public class PayrollSettlementWriter {
         "Payroll settlement — " + kind.name(),
         amount.currency().getCurrencyCode(),
         entryId,
-        true,
+        usesIllustrative,
         lines);
   }
 
@@ -307,12 +331,7 @@ public class PayrollSettlementWriter {
   }
 
   private void persistEntry(JournalEntry entry, String companyId) {
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   private void requireConsistentGlCurrency(String period, Money amount) {

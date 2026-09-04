@@ -31,6 +31,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -54,6 +55,14 @@ class RegisterSessionWriterTest {
   private final CashWindowLock cashWindowLock = mock(CashWindowLock.class);
   private final RegisterSessionWriter writer =
       new RegisterSessionWriter(repository, tenderRepository, outboxWriter, guard, cashWindowLock);
+
+  @BeforeEach
+  void stubOutboxReturnsAnEventId() {
+    // close() now records the returned outbox event id on the session (ADR 0064); the mock must
+    // return a non-null UUID so recordCloseEventId() does not NPE.
+    when(outboxWriter.write(any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(UUID.randomUUID());
+  }
 
   private static RegisterSession openSession(long floatMinor) {
     RegisterSession session =

@@ -24,7 +24,8 @@ public record CompanyResponse(
     UUID legalEmployerId,
     UUID firstBusinessId,
     String planTier,
-    String companyCode) {
+    String companyCode,
+    String vertical) {
 
   public static CompanyResponse from(Company company, OrgUnit firstBusiness) {
     return new CompanyResponse(
@@ -35,6 +36,7 @@ public record CompanyResponse(
         company.getLegalEmployerId(),
         firstBusiness.getId(),
         company.getPlanTier(),
-        company.getCompanyCode());
+        company.getCompanyCode(),
+        company.getVertical() == null ? null : company.getVertical().key());
   }
 }

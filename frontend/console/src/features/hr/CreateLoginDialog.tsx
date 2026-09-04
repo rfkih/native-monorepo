@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
 import { DialogOverlay } from '@/features/org/parts'
+import { displayLoginId } from '@/lib/loginId'
 import { useSession } from '@/lib/session'
 import { useInviteMember, type InviteResponse } from '@/features/team/api'
 import { useLinkLogin, type EmployeeListRow } from './api'
@@ -103,7 +104,7 @@ export function CreateLoginDialog({
           <p className="text-sm text-ink-2">{t('hr.createLogin.doneBody')}</p>
           <Field label={t('hr.createLogin.signInWith')} hint={t('hr.createLogin.signInWithNote')}>
             <p className="select-all rounded-xl border border-line bg-paper px-3.5 py-2.5 font-mono text-sm text-ink">
-              {company?.companyCode ? `${company.companyCode}.${username.trim()}` : username.trim()}
+              {displayLoginId(invite.username || username, company?.companyCode)}
             </p>
           </Field>
           <Field label={t('hr.createLogin.tempPassword')}>

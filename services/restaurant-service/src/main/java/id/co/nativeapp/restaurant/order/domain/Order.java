@@ -327,6 +327,25 @@ public class Order extends Auditable {
   }
 
   /**
+   * Reverts an {@code AWAITING_PAYMENT} order back to {@code PENDING} — the recovery path when the
+   * digital tender it was waiting on will never settle (the gateway charge EXPIRED/CANCELED/FAILED,
+   * driven by the {@code PaymentChargeExpired} consumer). The order becomes payable again (cash, or
+   * a fresh QR); no sale was ever recorded (ADR 0006 revenue-at-capture), so nothing is reversed.
+   * Reverting to {@code PENDING} rather than {@code PARKED} is deliberate — the order returns to
+   * the plain open/payable state regardless of whether it reached AWAITING_PAYMENT from checkout
+   * ({@code PENDING}) or from {@code /pay} of a parked cart ({@code PARKED}).
+   *
+   * <p>Legal source state: {@code AWAITING_PAYMENT}.
+   */
+  public void revertAwaitingToPending() {
+    if (!"AWAITING_PAYMENT".equals(this.status)) {
+      throw new IllegalStateException(
+          "revertAwaitingToPending requires AWAITING_PAYMENT; current status: " + status);
+    }
+    this.status = "PENDING";
+  }
+
+  /**
    * Phase 4: Transitions this order to {@code PARKED} status. A parked order is a saved cart — it
    * carries NO sale, NO payment, and NO revenue. Revenue is recognised only when {@code /pay} is
    * called and the order is finalised. The {@code sale_id} remains null until {@link #linkSale} is

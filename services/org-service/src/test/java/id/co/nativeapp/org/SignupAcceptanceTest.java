@@ -74,7 +74,14 @@ class SignupAcceptanceTest {
 
   @SuppressWarnings("resource")
   protected static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+          // withCommand REPLACES the constructor's command (it does not append), so fsync=off —
+          // Testcontainers' own default and a large test-time speedup — must be restated here.
+          // max_connections is raised from Postgres's default 100 because cached @SpringBootTest
+          // contexts each pin a Hikari pool against this one container; restaurant-service died
+          // mid-run at ~90 sharing classes with "FATAL: remaining connection slots are reserved
+          // for roles with the SUPERUSER attribute" (48ac4add). The cap below is the other half.
+          .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=500");
 
   private static final OkHttpClient HTTP = new OkHttpClient();
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -120,6 +127,11 @@ class SignupAcceptanceTest {
     registry.add("native.keycloak-admin.realm", () -> REALM);
     registry.add("native.keycloak-admin.client-id", () -> ADMIN_CLIENT_ID);
     registry.add("native.keycloak-admin.client-secret", () -> ADMIN_CLIENT_SECRET);
+    // Hikari defaults to minimumIdle == maximumPoolSize == 10, so every CACHED test context
+    // pins 10 idle connections for the rest of the run. Cap the pool and let idle connections
+    // drain so cached contexts stay well under the container's max_connections (see above).
+    registry.add("spring.datasource.hikari.maximum-pool-size", () -> "8");
+    registry.add("spring.datasource.hikari.minimum-idle", () -> "2");
   }
 
   // ---------------------------------------------------------------------------
@@ -140,7 +152,7 @@ class SignupAcceptanceTest {
 
     // Company row was persisted (root business unit + its seeded default outlet, ADR 0012).
     assertThat(rowCountAsAdmin("company")).isEqualTo(1L);
-    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(2L);
+    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(1L);
 
     // Country-derived defaults + funnel fields landed on the company row (ADR 0025).
     String companyId = node.get("companyId").asString();
@@ -227,11 +239,32 @@ class SignupAcceptanceTest {
 
   @Test
   void countryUsDerivesUsdBooks() throws Exception {
-    String body = signupBody(uniqueEmail()).replace("\"country\": \"ID\"", "\"country\": \"US\"");
+    // A non-Indonesian company signs up in English (ADR 0059 — Indonesian is gated to Indonesia),
+    // so the US variant switches BOTH the country and the language off the Indonesian defaults.
+    String body =
+        signupBody(uniqueEmail())
+            .replace("\"country\": \"ID\"", "\"country\": \"US\"")
+            .replace("\"defaultLanguage\": \"id\"", "\"defaultLanguage\": \"en\"");
     String responseBody = callSignup(body);
     String companyId = JSON.readValue(responseBody, JsonNode.class).get("companyId").asString();
     assertThat(companyColumnAsAdmin(companyId, "country")).isEqualTo("US");
     assertThat(companyColumnAsAdmin(companyId, "base_currency")).isEqualTo("USD");
+    assertThat(companyColumnAsAdmin(companyId, "default_language")).isEqualTo("en");
+  }
+
+  @Test
+  void indonesianLanguageForANonIndonesianCountryReturns400WithNoResidue() throws Exception {
+    // ADR 0059: Indonesian is available ONLY for an Indonesian company. A US company asking for
+    // "id" is rejected at the same derive-before-create point as an invalid country — a clean 400
+    // while NOTHING exists yet, so no company row and no Keycloak user may be left behind.
+    String email = uniqueEmail();
+    assertBadRequest(signupBody(email).replace("\"country\": \"ID\"", "\"country\": \"US\""));
+    try {
+      assertThat(rowCountAsAdmin("company")).isZero();
+    } catch (SQLException ignored) {
+      // Tables not created yet — equally proves nothing was persisted.
+    }
+    assertThat(keycloakUsersFor(email).size()).isZero();
   }
 
   @Test

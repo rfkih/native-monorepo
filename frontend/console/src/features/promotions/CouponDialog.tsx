@@ -7,6 +7,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, TriangleAlert } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -48,6 +50,8 @@ function fromDatetimeLocalValue(value: string): string | null {
 }
 
 export function CouponDialog({ session, vertical, coupon, rules, onClose }: Props) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const isEdit = coupon != null
   const createCoupon = useCreateCoupon(vertical, session)

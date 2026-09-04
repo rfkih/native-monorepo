@@ -50,7 +50,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class PayrollSetupController {
 
   /** The OFFICIAL dataset a fresh tenant's setup-gate activates by default (ADR 0042 go-live). */
-  private static final String DEFAULT_DATASET_VERSION = "ID-2026.1";
+  private static final String DEFAULT_DATASET_VERSION =
+      PayrollSetupService.DEFAULT_OFFICIAL_DATASET_VERSION;
 
   private final PayrollSetupReader reader;
   private final PayrollSetupService service;

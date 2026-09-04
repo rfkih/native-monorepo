@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData, type UseQueryO
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
+import { checkoutRequestBody, payParkedRequestBody } from './lib/tenderRequestBodies'
 import { stashCatalog } from './offline/catalogCache'
 import type { EffectiveRulesResponse } from './offline/provisionalPricing'
 
@@ -171,7 +172,13 @@ export interface PriceBreakdownResponse {
 /** Matches backend PaymentResponse record (ADR 0006). All money is integer minor units. */
 export interface PaymentResponse {
   paymentId: string
-  orderId: string
+  /** Null for a bill-originated payment (ADR 0045 extension to bills — a bill is not an order); set
+   *  for an order-originated payment. See `billId`, its bill-side counterpart. */
+  orderId: string | null
+  /** ADR 0045 extension to bills: set for a bill-originated payment (`/bills/{id}/pay-pending` and
+   *  its `/receipt`); null for an order-originated payment. Optional/undefined on any response that
+   *  predates this field so a stale cache never crashes a reader. */
+  billId?: string | null
   /** String name of TenderType enum: CASH | QRIS | CARD | ONLINE */
   tenderType: string
   /** String name of Payment.Status enum: PENDING | CAPTURED | VOIDED | REFUNDED | PARTIALLY_REFUNDED | ABANDONED | FAILED */
@@ -186,6 +193,9 @@ export interface PaymentResponse {
   providerPending: boolean
   /** null until the payment is CAPTURED */
   saleId: string | null
+  /** Cumulative amount refunded so far, minor units. Optional/undefined on any response that
+   *  predates this field (same stale-cache convention as `billId` above) — treat as 0 when absent. */
+  refundedMinor?: number
 }
 
 export interface OrderResponse {
@@ -223,7 +233,9 @@ export interface CheckoutPaymentInput {
   /**
    * Required for ONLINE — the picked sales channel's immutable UPPERCASE code (ADR 0036 Phase B).
    * Sent ONLY with tenderType 'ONLINE'; the server rejects ONLINE combined with a gift-card or
-   * loyalty-points redemption, or a missing/inactive channel.
+   * loyalty-points redemption, or a missing/inactive channel. NOTE: the server reads the code from
+   * the request's TOP LEVEL, not from this payment block — the request-body builders
+   * (lib/tenderRequestBodies.ts) mirror this field up; never build one of those bodies by hand.
    */
   channelCode?: string
 }
@@ -367,6 +379,39 @@ export function useItemPopularity(session: CompanySession) {
   })
 }
 
+/** One row of the per-item sales breakdown over a window (GET /api/v1/orders/item-sales). */
+export interface ItemSalesResponse {
+  menuItemId: string
+  /** Sold-time name snapshot — survives a menu rename/delete. */
+  name: string
+  soldQty: number
+  /** Gross revenue for the item, minor units (sum of line totals). */
+  revenueMinor: number
+}
+
+/**
+ * Per-menu-item units sold + gross revenue whose SALE occurred in [from, to), best-sellers first —
+ * the Z-report items section (the register session's window) and the stock-opname "sold today"
+ * reference (the local-day window). `from`/`to` are ISO instants; disabled until both are known.
+ */
+export function useItemSales(
+  session: CompanySession,
+  from: string | null,
+  to: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    enabled: enabled && from != null && to != null,
+    queryKey: ['itemSales', session.companyId, session.businessId, from, to],
+    staleTime: 60_000,
+    queryFn: () =>
+      apiFetch<ItemSalesResponse[]>('/api/v1/orders/item-sales', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId, from: from ?? undefined, to: to ?? undefined },
+      }),
+  })
+}
+
 export function useMenu(session: CompanySession) {
   return useQuery({
     queryKey: ['menu', session.companyId, session.businessId],
@@ -455,36 +500,11 @@ export interface CheckoutInput {
 export function useCheckout(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({
-      idempotencyKey,
-      lines,
-      payment,
-      discountMinor,
-      orderType,
-      tableId,
-      couponCode,
-      loyaltyMemberId,
-      loyaltyRedeemPoints,
-      giftCardId,
-      giftCardRedeemMinor,
-    }: CheckoutInput) =>
+    mutationFn: (input: CheckoutInput) =>
       apiFetch<OrderResponse>('/api/v1/orders', {
         method: 'POST',
         tenant: tenantOf(session),
-        body: {
-          businessId: session.businessId,
-          idempotencyKey,
-          lines,
-          payment: payment ?? null,
-          discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
-          orderType: orderType ?? null,
-          tableId: tableId ?? null,
-          couponCode: couponCode || null,
-          loyaltyMemberId: loyaltyMemberId || null,
-          loyaltyRedeemPoints: loyaltyRedeemPoints && loyaltyRedeemPoints > 0 ? loyaltyRedeemPoints : null,
-          giftCardId: giftCardId || null,
-          giftCardRedeemMinor: giftCardRedeemMinor && giftCardRedeemMinor > 0 ? giftCardRedeemMinor : null,
-        },
+        body: checkoutRequestBody(session.businessId, input),
       }),
     onSuccess: (res) => {
       // A CAPTURED payment recorded a Sale → consolidated dashboard revenue changes.
@@ -583,26 +603,11 @@ export interface PayParkedInput {
 export function usePayParked(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({
-      orderId,
-      payment,
-      couponCode,
-      loyaltyMemberId,
-      loyaltyRedeemPoints,
-      giftCardId,
-      giftCardRedeemMinor,
-    }: PayParkedInput) =>
-      apiFetch<OrderResponse>(`/api/v1/orders/${orderId}/pay`, {
+    mutationFn: (input: PayParkedInput) =>
+      apiFetch<OrderResponse>(`/api/v1/orders/${input.orderId}/pay`, {
         method: 'POST',
         tenant: tenantOf(session),
-        body: {
-          payment: payment ?? null,
-          couponCode: couponCode || null,
-          loyaltyMemberId: loyaltyMemberId || null,
-          loyaltyRedeemPoints: loyaltyRedeemPoints && loyaltyRedeemPoints > 0 ? loyaltyRedeemPoints : null,
-          giftCardId: giftCardId || null,
-          giftCardRedeemMinor: giftCardRedeemMinor && giftCardRedeemMinor > 0 ? giftCardRedeemMinor : null,
-        },
+        body: payParkedRequestBody(input),
       }),
     onSuccess: (res) => {
       if (res?.payment?.status === 'CAPTURED') {
@@ -694,7 +699,12 @@ export function useCapturePayment(session: CompanySession) {
   })
 }
 
-/** Voids a CAPTURED payment — full reversal before settlement. */
+/**
+ * Voids a CAPTURED payment — full reversal before settlement. Manager-gated at the gateway alongside
+ * refund (ADR 0061, SALE_REVERSAL_ROLES), so it rides the PERSONAL/elevated bearer for the same
+ * reason (see useRefundPayment). Currently unused by the UI, which standardizes on refund for the
+ * customer-return case.
+ */
 export function useVoidPayment(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -702,6 +712,7 @@ export function useVoidPayment(session: CompanySession) {
       apiFetch<PaymentResponse>(`/api/v1/payments/${paymentId}/void`, {
         method: 'POST',
         tenant: tenantOf(session),
+        auth: 'personal',
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['pnl'] })
@@ -715,7 +726,13 @@ export interface RefundInput {
   currency: string
 }
 
-/** Refunds part or all of a CAPTURED payment. */
+/**
+ * Refunds part or all of a CAPTURED payment. Manager-gated at the gateway (ADR 0061,
+ * SALE_REVERSAL_ROLES) — sent on the PERSONAL bearer (`auth: 'personal'`) so an owner/manager
+ * identity is what the gateway authorizes: on a normal login that IS the login's token; on a shared
+ * device terminal it is the owner/manager ELEVATION token (ADR 0049 P3b), never the outlet
+ * credential a cashier holds.
+ */
 export function useRefundPayment(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -724,9 +741,16 @@ export function useRefundPayment(session: CompanySession) {
         method: 'POST',
         tenant: tenantOf(session),
         body: { amountMinor, currency },
+        auth: 'personal',
       }),
     onSuccess: () => {
+      // The sale is now reversed — refresh the surfaces that show its state. The register/daily
+      // read models update asynchronously off SaleRefunded, so this only refreshes what the client
+      // can re-read directly (P&L, today's-sales list, and the reprinted receipt/order).
       void qc.invalidateQueries({ queryKey: ['pnl'] })
+      void qc.invalidateQueries({ queryKey: ['salesHistory'] })
+      void qc.invalidateQueries({ queryKey: ['orderReceipt'] })
+      void qc.invalidateQueries({ queryKey: ['receipt'] })
     },
   })
 }

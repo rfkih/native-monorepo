@@ -19,6 +19,7 @@ import {
   ArrowLeftRight,
   Banknote,
   BookOpen,
+  Boxes,
   Building2,
   CalendarCheck,
   CalendarClock,
@@ -36,6 +37,8 @@ import {
   LineChart,
   type LucideProps,
   Network,
+  NotebookText,
+  Package,
   Percent,
   Printer,
   QrCode,
@@ -43,6 +46,7 @@ import {
   Receipt,
   Scale,
   SlidersHorizontal,
+  Store,
   Tag,
   Target,
   Truck,
@@ -128,6 +132,35 @@ export function useNavGroups(): {
                   end: true,
                   page: 'dashboard' as const,
                   feature: 'dashboard' as const,
+                },
+              ]
+            : [],
+        },
+        {
+          // POS catalog — the menu (items + prices) and the stock-item inventory an owner edits from
+          // the desktop console. On a phone these are the MoreSheet's quick-access TILES, so this
+          // group is filtered OUT of MoreSheet's "all pages" list to avoid showing them twice — the
+          // desktop sidebar (which has no such tiles) is the surface this group exists for. Gate
+          // mirrors the /menu + /inventory routes exactly: POS capability ∧ `menu` grant ∧ `products`
+          // tier (see App.tsx `menuAllowed` and MoreSheet's tiles).
+          key: 'catalog',
+          heading: t('nav.groupCatalog'),
+          icon: Package,
+          items: posOk
+            ? [
+                {
+                  to: '/menu',
+                  label: t('nav.menu'),
+                  icon: NotebookText,
+                  page: 'menu' as const,
+                  feature: 'products' as const,
+                },
+                {
+                  to: '/inventory',
+                  label: t('nav.inventory'),
+                  icon: Package,
+                  page: 'menu' as const,
+                  feature: 'products' as const,
                 },
               ]
             : [],
@@ -245,6 +278,15 @@ export function useNavGroups(): {
                     icon: HandCoins,
                     feature: 'channels' as const,
                   },
+                  // Marketplace / Platform Online — the per-channel period report joining ONLINE
+                  // sales, settlements, and outstanding. Same gate as platform-settlements (FINANCE,
+                  // not OPS): it reads finance-service's settlement/outstanding figures.
+                  {
+                    to: '/marketplace',
+                    label: t('nav.marketplace'),
+                    icon: Store,
+                    feature: 'channels' as const,
+                  },
                 ]
               : []),
           ],
@@ -323,7 +365,7 @@ export function useNavGroups(): {
           heading: t('nav.groupPeople'),
           icon: IdCard,
           // HR (owner/manager/hr) — employee records + payroll + leave/overtime. `/people` mounts the
-          // standalone PeoplePage (which resolves its own default business unit via useOrgUnits and
+          // standalone PeoplePage (which resolves its own default outlet via useOrgUnits and
           // never calls the OPS-gated /users). Payroll is additionally gated PAYROLL (owner/hr only)
           // so a manager sees People-minus-payroll, matching the gateway exactly.
           items: hrOk
@@ -367,6 +409,12 @@ export function useNavGroups(): {
                 // deliberately UNTAGGED (no `page`, no `feature`) like the escape hatch below.
                 ...(isOwner
                   ? [{ to: '/settings/payments', label: t('nav.payments'), icon: QrCode }]
+                  : []),
+                // Owner-only (ADR 0067 §5) — perpetual-inventory election & activation is an
+                // irreversible accounting decision, not a plan-tier feature: same UNTAGGED
+                // treatment as payments above.
+                ...(isOwner
+                  ? [{ to: '/settings/inventory', label: t('nav.inventoryMethod'), icon: Boxes }]
                   : []),
                 // The escape hatch (plan Risk 1): owner-only, and deliberately UNTAGGED (no `page`,
                 // no `feature`) so it is never hidden by the grant or tier filters below — a

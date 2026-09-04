@@ -30,4 +30,19 @@ public interface SaleHistoryView {
 
   /** The sales-channel code, or {@code null} for a non-ONLINE tender. */
   String getChannelCode();
+
+  /**
+   * The settling payment's lifecycle status ({@code CAPTURED | VOIDED | REFUNDED |
+   * PARTIALLY_REFUNDED}), or {@code null} when no payment backs the sale (LEFT JOIN — e.g.
+   * bill-cash and legacy {@code POST /api/v1/sales} sales have no payment row).
+   */
+  String getPaymentStatus();
+
+  /**
+   * The settling payment's cumulative refunded amount in minor units — 0 when nothing was refunded
+   * AND for a sale with no payment row (the query COALESCEs the LEFT JOIN's null), so the client's
+   * net-of-reversals day total can subtract it unconditionally. A void leaves this at 0 (a void is
+   * not a refund); {@link #getPaymentStatus} is what zeroes a voided sale out of a net figure.
+   */
+  long getRefundedMinor();
 }

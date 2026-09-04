@@ -34,7 +34,7 @@ function buildTree(units: OrgUnit[]): Map<string | null, OrgUnit[]> {
 
 /** Dialog state union — null = no dialog open. */
 type DialogState =
-  | { kind: 'add'; parentId: string | null }
+  | { kind: 'add' }
   | { kind: 'rename'; unit: OrgUnit }
   | { kind: 'deactivate'; unit: OrgUnit }
   | { kind: 'reactivate'; unit: OrgUnit }
@@ -43,14 +43,12 @@ type DialogState =
 /** Action buttons that appear on hover over a node row. */
 function NodeActions({
   unit,
-  onAddChild,
   onRename,
   onDeactivate,
   onReactivate,
   onDelete,
 }: {
   unit: OrgUnit
-  onAddChild: (parentId: string) => void
   onRename: (unit: OrgUnit) => void
   onDeactivate: (unit: OrgUnit) => void
   onReactivate: (unit: OrgUnit) => void
@@ -59,17 +57,6 @@ function NodeActions({
   const { t } = useTranslation()
   return (
     <div className="flex flex-wrap items-center gap-1 w-full order-last mt-1 pl-8 sm:w-auto sm:order-none sm:mt-0 sm:pl-0 sm:opacity-0 sm:transition-opacity sm:focus-within:opacity-100 sm:[div:hover>&]:opacity-100">
-      {unit.active ? (
-        <button
-          type="button"
-          aria-label={t('org.addChild')}
-          title={t('org.addChild')}
-          className="grid size-7 place-items-center rounded-md text-ink-3 hover:bg-emerald-tint/60 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-brand-500"
-          onClick={() => onAddChild(unit.id)}
-        >
-          <Plus className="size-3.5" />
-        </button>
-      ) : null}
       <button
         type="button"
         aria-label={t('org.rename')}
@@ -118,7 +105,6 @@ function OrgNode({
   unit,
   treeMap,
   depth,
-  onAddChild,
   onRename,
   onDeactivate,
   onReactivate,
@@ -127,7 +113,6 @@ function OrgNode({
   unit: OrgUnit
   treeMap: Map<string | null, OrgUnit[]>
   depth: number
-  onAddChild: (parentId: string) => void
   onRename: (unit: OrgUnit) => void
   onDeactivate: (unit: OrgUnit) => void
   onReactivate: (unit: OrgUnit) => void
@@ -169,31 +154,20 @@ function OrgNode({
           )}
         </button>
 
-        {/* node name — BU/outlet click through to the unit hub (teams have no detail page) */}
-        {unit.type === 'TEAM' ? (
-          <span
-            className={cn(
-              'min-w-0 flex-1 truncate text-[14.5px] font-semibold',
-              unit.active ? 'text-ink' : 'text-ink-3',
-            )}
-          >
-            {unit.name}
-          </span>
-        ) : (
-          <Link
-            to={`/org/${unit.id}`}
-            className={cn(
-              'min-w-0 flex-1 truncate text-[14.5px] font-semibold transition-colors',
-              'hover:text-brand-700 hover:underline',
-              unit.active ? 'text-ink' : 'text-ink-3',
-            )}
-          >
-            {unit.name}
-          </Link>
-        )}
+        {/* node name — every outlet clicks through to its detail page (ADR 0070: no teams) */}
+        <Link
+          to={`/org/${unit.id}`}
+          className={cn(
+            'min-w-0 flex-1 truncate text-[14.5px] font-semibold transition-colors',
+            'hover:text-brand-700 hover:underline',
+            unit.active ? 'text-ink' : 'text-ink-3',
+          )}
+        >
+          {unit.name}
+        </Link>
 
         {/* type + vertical badges + status dot as ONE shrink-0 cluster — keeps the name's width and
-            stops the row overlapping at phone width (vertical renders only on business units) */}
+            stops the row overlapping at phone width */}
         <div className="flex shrink-0 items-center gap-2">
           <OrgUnitTypeBadge type={unit.type} />
           <VerticalBadge vertical={unit.vertical} />
@@ -210,7 +184,6 @@ function OrgNode({
 
         <NodeActions
           unit={unit}
-          onAddChild={onAddChild}
           onRename={onRename}
           onDeactivate={onDeactivate}
           onReactivate={onReactivate}
@@ -226,7 +199,6 @@ function OrgNode({
               unit={child}
               treeMap={treeMap}
               depth={depth + 1}
-              onAddChild={onAddChild}
               onRename={onRename}
               onDeactivate={onDeactivate}
               onReactivate={onReactivate}
@@ -265,9 +237,6 @@ export function OrgTree() {
   const treeMap = buildTree(units)
   const roots = treeMap.get(null) ?? []
 
-  function openAddChild(parentId: string) {
-    setDialog({ kind: 'add', parentId })
-  }
   function openRename(unit: OrgUnit) {
     setDialog({ kind: 'rename', unit })
   }
@@ -294,7 +263,7 @@ export function OrgTree() {
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('org.subtitle')}</p>
         </div>
-        <Button type="button" onClick={() => setDialog({ kind: 'add', parentId: null })}>
+        <Button type="button" onClick={() => setDialog({ kind: 'add' })}>
           <Plus className="size-4" />
           {t('org.addUnit')}
         </Button>
@@ -318,7 +287,6 @@ export function OrgTree() {
               unit={root}
               treeMap={treeMap}
               depth={0}
-              onAddChild={openAddChild}
               onRename={openRename}
               onDeactivate={openDeactivate}
               onReactivate={openReactivate}
@@ -335,8 +303,6 @@ export function OrgTree() {
       {/* Dialogs */}
       {dialog?.kind === 'add' ? (
         <AddUnitDialog
-          parentId={dialog.parentId}
-          allUnits={units}
           companyId={company.companyId}
           actor={company.actor}
           onClose={closeDialog}

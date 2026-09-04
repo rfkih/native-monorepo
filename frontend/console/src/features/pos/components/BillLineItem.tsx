@@ -27,6 +27,7 @@ export function BillLineItem({
   onToggleSelect,
   onRemove,
   isRemoving,
+  canRemove = true,
 }: {
   line: BillLineResponse
   locale: string
@@ -36,6 +37,8 @@ export function BillLineItem({
   onToggleSelect: () => void
   onRemove: () => void
   isRemoving: boolean
+  /** Open-bill lockdown: false hides the remove affordance (cashier — owner/manager only). */
+  canRemove?: boolean
 }) {
   const { t } = useTranslation()
   const isPaid = line.paid
@@ -96,8 +99,9 @@ export function BillLineItem({
           </Badge>
         ) : null}
 
-        {/* Remove button — only for unpaid in non-split mode */}
-        {!splitMode && !isPaid ? (
+        {/* Remove button — only for unpaid in non-split mode, and only when the actor may trim
+            lines (open-bill lockdown: owner/manager; the server 403s regardless). */}
+        {!splitMode && !isPaid && canRemove ? (
           <button
             type="button"
             onClick={onRemove}

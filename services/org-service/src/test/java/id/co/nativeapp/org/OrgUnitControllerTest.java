@@ -15,7 +15,6 @@ import id.co.nativeapp.org.company.config.OrgUnitExceptionAdvice;
 import id.co.nativeapp.org.company.controller.OrgUnitController;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
-import id.co.nativeapp.org.company.domain.Vertical;
 import id.co.nativeapp.org.company.service.OrgUnitHasDataException;
 import id.co.nativeapp.org.company.service.OrgUnitService;
 import id.co.nativeapp.org.user.config.UserExceptionAdvice;
@@ -51,15 +50,8 @@ class OrgUnitControllerTest {
   @MockitoBean private OrgUnitService orgUnitService;
 
   private OrgUnit businessUnit() {
-    OrgUnit unit =
-        new OrgUnit(
-            "North Unit",
-            OrgUnitType.BUSINESS_UNIT,
-            Vertical.RESTAURANT,
-            null,
-            null,
-            COMPANY,
-            LocalDate.of(2026, 1, 1));
+    // ADR 0070: every org unit is a flat, top-level OUTLET.
+    OrgUnit unit = new OrgUnit("North Unit", OrgUnitType.OUTLET, COMPANY, LocalDate.of(2026, 1, 1));
     unit.setCompanyId(COMPANY.toString());
     return unit;
   }
@@ -77,7 +69,7 @@ class OrgUnitControllerTest {
         .andExpect(status().isCreated())
         .andExpect(header().string("Location", "/api/v1/org-units/" + created.getId()))
         .andExpect(jsonPath("$.name").value("North Unit"))
-        .andExpect(jsonPath("$.type").value("BUSINESS_UNIT"));
+        .andExpect(jsonPath("$.type").value("OUTLET"));
   }
 
   @Test
