@@ -1,0 +1,14 @@
+-- restaurant-service V45 — payment.sale_id index (POS sales-history join).
+--
+-- SaleRepository.findHistory (the sales-history sheet, polled every 30s while open) now does
+-- `LEFT JOIN payment p ON p.sale_id = s.id` to surface tender detail alongside each sale. There is
+-- no index on `payment.sale_id` today — V3 only indexed order_id and (company_id, status) — so that
+-- join would hash-scan the tenant's entire payment table on every poll.
+--
+-- Plain single-column index, matching this table's own idx_payment_order_id (V3): sale_id is
+-- nullable (a payment exists PENDING before its sale is recorded), but that's also true of
+-- restaurant_order.sale_id and applied_promotion.sale_id, and neither uses a partial predicate for
+-- its FK index (applied_promotion's idx_applied_promotion_sale is a plain index over a nullable
+-- column) — following that existing idiom rather than introducing a new partial-index pattern here.
+-- Additive only; no table or column changes.
+CREATE INDEX idx_payment_sale_id ON payment (sale_id);

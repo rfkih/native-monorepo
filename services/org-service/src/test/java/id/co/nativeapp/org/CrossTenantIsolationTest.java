@@ -38,14 +38,12 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
     // Bootstrap company A and company B, each creating its own tenant.
     UUID companyA =
         companyService
-            .createCompany(
-                new CreateCompanyCommand("Alpha", "IDR", "id", "A Outlet", "restaurant", "owner-a"))
+            .createCompany(new CreateCompanyCommand("Alpha", "IDR", "id", "restaurant", "owner-a"))
             .company()
             .getId();
     UUID companyB =
         companyService
-            .createCompany(
-                new CreateCompanyCommand("Beta", "USD", "en", "B Outlet", "restaurant", "owner-b"))
+            .createCompany(new CreateCompanyCommand("Beta", "USD", "en", "restaurant", "owner-b"))
             .company()
             .getId();
 
@@ -71,7 +69,7 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
                     .toList());
     // A sees exactly its two org units (the first business + its seeded default outlet,
     // ADR 0012); none of B's.
-    assertThat(orgUnitsVisibleToA).hasSize(2);
+    assertThat(orgUnitsVisibleToA).hasSize(1);
 
     UUID aOrgUnitId = orgUnitsVisibleToA.getFirst();
 
@@ -95,7 +93,7 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
                 companyService.findOrgUnitsForCurrentTenant().stream()
                     .map(OrgUnitView::getId)
                     .toList());
-    assertThat(orgUnitsVisibleToB).hasSize(2);
+    assertThat(orgUnitsVisibleToB).hasSize(1);
     assertThat(orgUnitsVisibleToB).doesNotContain(aOrgUnitId);
   }
 }

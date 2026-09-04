@@ -62,3 +62,7 @@ chmod 600 "$OUT"
 ls -1t backups/nightly/native-*.tar.gz.enc 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -f
 
 log "backup OK: $OUT ($(du -h "$OUT" | cut -f1)) — $(ls backups/nightly | wc -l) archives retained"
+
+# Outbox retention (ADR 0071 P1) — deliberately AFTER a successful backup, so every pruned row is
+# inside tonight's archive. Best-effort: a prune failure must never fail the backup exit code.
+bash "$DEPLOY_DIR/scripts/prod-outbox-prune.sh" || log "WARN: outbox prune failed (backup itself is OK)"

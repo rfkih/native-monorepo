@@ -24,27 +24,26 @@ export function visiblePeopleTabs(roles: readonly string[]): PeopleTabKey[] {
   return canPayroll(roles) ? ['employees', 'attendance', 'payroll'] : ['employees', 'attendance']
 }
 
-/** Every `BUSINESS_UNIT` row from the flat org-units list, in the order the server returned them. */
-export function businessUnitsOf(units: readonly OrgUnit[]): OrgUnit[] {
-  return units.filter((u) => u.type === 'BUSINESS_UNIT')
-}
-
-/** A business unit's direct `OUTLET` children — the same shape `OrgUnitDetail` passes its tabs. */
-export function childOutletsOf(units: readonly OrgUnit[], unitId: string): OrgUnit[] {
-  return units.filter((u) => u.parentId === unitId && u.type === 'OUTLET')
+/**
+ * The outlets a person can be scoped to, in the order the server returned them. Since ADR 0070 the
+ * org structure is flat (`company > outlet`), so that is simply every active org unit — kept as a
+ * named helper so callers read intent rather than an identity filter.
+ */
+export function outletsOf(units: readonly OrgUnit[]): OrgUnit[] {
+  return units.filter((u) => u.type === 'OUTLET')
 }
 
 /**
- * The business unit the picker should default to: the session's own business unit when it IS one
- * of the company's business units, else the first business unit (server order), else `null` (no
- * business unit exists yet — a fresh/mid-onboarding tenant).
+ * The outlet the picker should default to: the session's own outlet when it IS one of the
+ * company's outlets, else the first outlet (server order), else `null` (no outlet exists yet — a
+ * fresh/mid-onboarding tenant).
  */
-export function defaultBusinessUnitId(
-  businessUnits: readonly OrgUnit[],
-  sessionBusinessId: string | null,
+export function defaultOutletId(
+  outlets: readonly OrgUnit[],
+  sessionOutletId: string | null,
 ): string | null {
-  if (sessionBusinessId && businessUnits.some((u) => u.id === sessionBusinessId)) {
-    return sessionBusinessId
+  if (sessionOutletId && outlets.some((u) => u.id === sessionOutletId)) {
+    return sessionOutletId
   }
-  return businessUnits[0]?.id ?? null
+  return outlets[0]?.id ?? null
 }

@@ -19,8 +19,4 @@ public interface OutletView {
   UUID getId();
 
   String getName();
-
-  String getVertical();
-
-  UUID getDivisionId();
 }

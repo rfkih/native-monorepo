@@ -18,12 +18,18 @@ export function ChoiceCards<T extends string>({
   value,
   onChange,
   columns = 2,
+  onDeselect,
 }: {
   name: string
   options: Choice<T>[]
   value: T
   onChange: (value: T) => void
   columns?: 1 | 2
+  /** When provided, clicking the already-selected card clears the selection by invoking this
+   *  callback (instead of `onChange`, which would need to fabricate a `T`). Radios don't fire
+   *  `change` on re-click, so this is wired via `onClick`. Omit it to keep the pure single-choice
+   *  (radio) semantics for callers that require exactly one selection. */
+  onDeselect?: () => void
 }) {
   return (
     <div className={cn('grid gap-2.5', columns === 2 && 'sm:grid-cols-2')}>
@@ -51,6 +57,7 @@ export function ChoiceCards<T extends string>({
               checked={active}
               disabled={option.disabled}
               onChange={() => onChange(option.value)}
+              onClick={onDeselect && active && !option.disabled ? onDeselect : undefined}
               className="sr-only"
             />
             <span

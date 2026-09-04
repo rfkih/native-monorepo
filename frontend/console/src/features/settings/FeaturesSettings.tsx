@@ -81,7 +81,7 @@ export function FeaturesSettings() {
         : t('settings.tier.fullPlanName')
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-[100dvh] bg-paper">
       {/* Own minimal topbar — this route renders OUTSIDE the dashboard Shell (owner-only). */}
       <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur lg:px-8">
         <Wordmark />

@@ -36,7 +36,6 @@ public record CreateCompanyCommand(
     String phone,
     String companySize,
     String primaryInterest,
-    String businessName,
     String vertical,
     String actor) {
 
@@ -53,13 +52,7 @@ public record CreateCompanyCommand(
    * @param actor the acting principal from the request edge
    */
   public CreateCompanyCommand(
-      String name,
-      String baseCurrency,
-      String defaultLanguage,
-      String businessName,
-      String vertical,
-      String actor) {
-    this(
-        name, baseCurrency, defaultLanguage, "ID", null, null, null, businessName, vertical, actor);
+      String name, String baseCurrency, String defaultLanguage, String vertical, String actor) {
+    this(name, baseCurrency, defaultLanguage, "ID", null, null, null, vertical, actor);
   }
 }

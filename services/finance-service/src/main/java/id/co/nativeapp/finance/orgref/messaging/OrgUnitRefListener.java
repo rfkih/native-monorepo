@@ -12,11 +12,12 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Consumes {@code OrgUnitCreated} / {@code OrgUnitChanged} off Kafka and applies them to
- * finance-service's local {@code org_unit_ref} read model (Phase 2 of the outlet-scoping
- * increment). The read model backs the {@code outletName} field on {@code GET /api/v1/pnl/outlets}:
- * each outlet revenue row is LEFT-JOINed against {@code org_unit_ref} to resolve its display name
- * without a synchronous call to org-service (rule 2 — a locally cached read model).
+ * Consumes {@code OrgUnitCreated} / {@code OrgUnitChanged} / {@code OrgUnitDeleted} off Kafka and
+ * applies them to finance-service's local {@code org_unit_ref} read model (Phase 2 of the
+ * outlet-scoping increment). The read model backs the {@code outletName} field on {@code GET
+ * /api/v1/pnl/outlets}: each outlet revenue row is LEFT-JOINed against {@code org_unit_ref} to
+ * resolve its display name without a synchronous call to org-service (rule 2 — a locally cached
+ * read model).
  *
  * <p><strong>Raw Avro bytes.</strong> The message value is the org-service outbox payload — raw
  * Avro bytes shipped by Debezium — so the container delivers a {@code byte[]} value; this listener
@@ -76,6 +77,41 @@ public class OrgUnitRefListener {
       containerFactory = "kafkaListenerContainerFactory")
   public void onOrgUnitChanged(ConsumerRecord<String, byte[]> record) {
     handle(record, OrgUnitRefSchemas::decodeChanged);
+  }
+
+  /**
+   * Handles one {@code OrgUnitDeleted} (ADR 0070): PURGES the org unit from {@code org_unit_ref}.
+   * Terminal for the aggregate — nothing follows it — so a purge cannot be undone by a later
+   * upsert. A delete for a unit finance never cached is a clean no-op.
+   */
+  @KafkaListener(
+      topics = OrgUnitRefSchemas.DELETED_TOPIC,
+      containerFactory = "kafkaListenerContainerFactory")
+  public void onOrgUnitDeleted(ConsumerRecord<String, byte[]> record) {
+    UUID eventId = eventIdOf(record);
+    OrgUnitRefRemoval removal;
+    try {
+      removal = OrgUnitRefSchemas.decodeDeleted(eventId, record.value());
+    } catch (RuntimeException decodeFailure) {
+      throw new OrgUnitRefDecodeException(
+          "Failed to decode OrgUnitDeleted payload at "
+              + record.topic()
+              + "-"
+              + record.partition()
+              + "@"
+              + record.offset()
+              + " (eventId="
+              + eventId
+              + "); routing to DLT",
+          decodeFailure);
+    }
+    boolean applied = orgUnitRefService.remove(removal);
+    if (!applied) {
+      log.debug(
+          "Skipped re-delivered OrgUnitDeleted eventId={} orgUnitId={} (already processed)",
+          eventId,
+          removal.orgUnitId());
+    }
   }
 
   private void handle(

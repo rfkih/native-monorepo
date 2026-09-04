@@ -26,26 +26,24 @@ export const VERTICALS = ['restaurant', 'carwash', 'barbershop'] as const
 /** The company facts both flows collect (signup layers owner-account fields on top of these). */
 export interface CompanyBasics {
   companyName: string
-  firstBusinessName: string
   vertical: string
   country: string
   defaultLanguage: string
 }
 
 /** A field on the Company step that can fail the required-check. */
-export type CompanyBasicsField = 'companyName' | 'firstBusinessName'
+export type CompanyBasicsField = 'companyName'
 
 /**
  * The required-field rule for the Company step — identical for signup and the add-company wizard.
  * Returns the fields that are blank so each flow can render its own localized "required" message.
+ *
+ * ADR 0070 dropped the separate "first business name": the org structure is flat, so the company
+ * name IS the business name and the bootstrap seeds one outlet from it.
  */
-export function invalidCompanyFields(basics: {
-  companyName: string
-  firstBusinessName: string
-}): CompanyBasicsField[] {
+export function invalidCompanyFields(basics: { companyName: string }): CompanyBasicsField[] {
   const missing: CompanyBasicsField[] = []
   if (!basics.companyName.trim()) missing.push('companyName')
-  if (!basics.firstBusinessName.trim()) missing.push('firstBusinessName')
   return missing
 }
 

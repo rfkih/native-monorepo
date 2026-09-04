@@ -63,6 +63,12 @@ export interface PhoneSheetProps {
   onPayModal: () => void
   onClose: () => void
   onBack: () => void
+  /** Open-bill lockdown: whether THIS actor may cancel the bill (owner/manager, or an empty bill). */
+  canCancel: boolean
+  /** Show the needs-manager explainer (role-blocked cashier; hidden on partially-paid bills). */
+  cancelHintVisible: boolean
+  /** Open-bill lockdown: whether THIS actor may remove/decrement lines (owner/manager only). */
+  canRemoveLines: boolean
 }
 
 export function PhoneSheetContent({
@@ -93,6 +99,9 @@ export function PhoneSheetContent({
   onCancel,
   onPayModal,
   onClose,
+  canCancel,
+  cancelHintVisible,
+  canRemoveLines,
 }: PhoneSheetProps) {
   const { t } = useTranslation()
 
@@ -164,6 +173,7 @@ export function PhoneSheetContent({
                     onToggleSelect={() => onToggleLineSelect(line.id)}
                     onRemove={() => onRemoveLine(line.id)}
                     isRemoving={isRemoving}
+                    canRemove={canRemoveLines}
                   />
                 ))
               : [
@@ -177,6 +187,7 @@ export function PhoneSheetContent({
                       onDecrement={() => onDecrementGroup(g)}
                       onRemove={() => onRemoveGroup(g)}
                       busy={busy}
+                      canRemove={canRemoveLines}
                     />
                   )),
                   ...paidLines.map((line) => (
@@ -263,13 +274,18 @@ export function PhoneSheetContent({
           )}
         </div>
         <div className="pb-4 text-center">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="text-xs text-ink-3 underline hover:text-loss"
-          >
-            {t('bills.cancelBill')}
-          </button>
+          {canCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="text-xs text-ink-3 underline hover:text-loss"
+            >
+              {t('bills.cancelBill')}
+            </button>
+          ) : cancelHintVisible ? (
+            // Touch screens have no tooltips — the lockdown explains itself in-line.
+            <p className="px-4 text-[11px] text-ink-3">{t('bills.cancelNeedsManager')}</p>
+          ) : null}
         </div>
       </div>
     </>

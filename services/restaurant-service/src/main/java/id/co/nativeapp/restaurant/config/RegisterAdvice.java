@@ -1,7 +1,9 @@
 package id.co.nativeapp.restaurant.config;
 
+import id.co.nativeapp.restaurant.register.domain.RegisterCloseCorrectionNotAllowedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionAlreadyOpenException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -69,6 +71,25 @@ public class RegisterAdvice {
       RegisterSessionNotFoundException ex, HttpServletRequest request) {
     ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "register-session-not-found", request);
     problem.setTitle("Register session not found");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  @ExceptionHandler(RegisterSessionNotClosedException.class)
+  public ProblemDetail handleNotClosed(
+      RegisterSessionNotClosedException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "register-session-not-closed", request);
+    problem.setTitle("The register session is not closed");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  @ExceptionHandler(RegisterCloseCorrectionNotAllowedException.class)
+  public ProblemDetail handleCorrectionNotAllowed(
+      RegisterCloseCorrectionNotAllowedException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "register-close-correction-not-allowed", request);
+    problem.setTitle("This closing cannot be corrected");
     problem.setDetail(ex.getMessage());
     return problem;
   }

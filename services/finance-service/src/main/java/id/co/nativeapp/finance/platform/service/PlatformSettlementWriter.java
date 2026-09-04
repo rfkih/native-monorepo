@@ -3,8 +3,7 @@ package id.co.nativeapp.finance.platform.service;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.platform.domain.PlatformNetExceedsGrossException;
 import id.co.nativeapp.finance.platform.domain.PlatformOverSettlementException;
@@ -13,6 +12,8 @@ import id.co.nativeapp.finance.platform.domain.PlatformSettlementIdempotencyKeyC
 import id.co.nativeapp.finance.platform.dto.PlatformOutstandingResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResult;
+import id.co.nativeapp.finance.platform.dto.PlatformSettlementSummaryResponse;
+import id.co.nativeapp.finance.platform.projection.PlatformSettlementSummaryView;
 import id.co.nativeapp.finance.platform.repository.PlatformSettlementRepository;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -50,22 +51,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class PlatformSettlementWriter {
 
   private final PlatformSettlementRepository settlementRepository;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
 
   public PlatformSettlementWriter(
       PlatformSettlementRepository settlementRepository,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.settlementRepository = settlementRepository;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.roleAccountResolver = roleAccountResolver;
     this.jdbcTemplate = jdbcTemplate;
     this.clock = clock;
@@ -209,6 +207,31 @@ public class PlatformSettlementWriter {
   }
 
   /**
+   * The per-channel settlement summary for a {@code YYYY-MM} period ({@code GET
+   * /api/v1/platform-settlements/summary}) — one row per {@code (channelCode, currency)} bucket:
+   * settled gross/fee/net totals and settlement count. RLS-scoped automatically; no manual {@code
+   * company_id} predicate. Read path: a native-query projection, never {@code SELECT *}.
+   */
+  @Transactional(readOnly = true)
+  public List<PlatformSettlementSummaryResponse> summary(String period) {
+    return settlementRepository.findSummary(period).stream()
+        .map(PlatformSettlementWriter::toSummaryResponse)
+        .toList();
+  }
+
+  /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
+  private static PlatformSettlementSummaryResponse toSummaryResponse(
+      PlatformSettlementSummaryView view) {
+    return new PlatformSettlementSummaryResponse(
+        view.getChannelCode(),
+        view.getSettledGrossMinor(),
+        view.getFeeMinor(),
+        view.getNetMinor(),
+        view.getSettlementCount(),
+        view.getCurrency() == null ? null : view.getCurrency().strip());
+  }
+
+  /**
    * Builds (but does not persist) the balanced settlement entry — public + pure (no DB beyond the
    * role resolver lookups) so a unit test can assert the exact legs, mirroring {@code
    * PayrollSettlementWriter#buildSettlementEntry}. Zero-amount legs are omitted. {@code
@@ -221,19 +244,27 @@ public class PlatformSettlementWriter {
             Math.subtractExact(gross.amountMinor(), net.amountMinor()),
             gross.currency().getCurrencyCode());
     List<JournalLine> lines = new ArrayList<>();
+    List<AccountRole> rolesPosted = new ArrayList<>();
     int lineNo = 1;
     if (net.amountMinor() > 0) {
       lines.add(
           JournalLine.debit(entryId, lineNo++, requireMapped(AccountRole.CASH_CLEARING, now), net));
+      rolesPosted.add(AccountRole.CASH_CLEARING);
     }
     if (fee.amountMinor() > 0) {
       lines.add(
           JournalLine.debit(
               entryId, lineNo++, requireMapped(AccountRole.PLATFORM_FEE_EXPENSE, now), fee));
+      rolesPosted.add(AccountRole.PLATFORM_FEE_EXPENSE);
     }
     lines.add(
         JournalLine.credit(
             entryId, lineNo, requireMapped(AccountRole.PLATFORM_RECEIVABLE, now), gross));
+    rolesPosted.add(AccountRole.PLATFORM_RECEIVABLE);
+    // Derived from the provenance of the roles actually posted above (the conditional
+    // CASH_CLEARING/PLATFORM_FEE_EXPENSE legs only count when present), rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
     return JournalEntry.balanced(
         entryId,
         period,
@@ -241,7 +272,7 @@ public class PlatformSettlementWriter {
         "Platform settlement — " + channelCode,
         gross.currency().getCurrencyCode(),
         entryId,
-        true,
+        usesIllustrative,
         lines);
   }
 
@@ -255,12 +286,7 @@ public class PlatformSettlementWriter {
   }
 
   private void persistEntry(JournalEntry entry, String companyId) {
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   private void requireConsistentGlCurrency(String period, Money amount) {

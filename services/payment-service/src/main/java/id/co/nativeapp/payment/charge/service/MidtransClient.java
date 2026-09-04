@@ -190,6 +190,41 @@ public class MidtransClient implements QrisGatewayPort {
     }
   }
 
+  @Override
+  public GatewayVerification verify(GatewayCredentials credentials) {
+    // A side-effect-free credential probe: the status of a throwaway order id the provider cannot
+    // know. A key that authenticates gets an order-not-found answer (VALID); a rejected key gets
+    // 401/403 (INVALID) — this also catches a PRODUCTION key pointed at the SANDBOX base URL and
+    // vice-versa. No charge is ever created.
+    String probeOrderId = "native-verify-" + UUID.randomUUID();
+    try {
+      JsonNode response =
+          parse(
+              restClient
+                  .get()
+                  .uri(baseUrl(credentials) + "/v2/" + probeOrderId + "/status")
+                  .header("Authorization", basicAuth(credentials.serverKey()))
+                  .accept(MediaType.APPLICATION_JSON)
+                  .retrieve()
+                  .body(String.class));
+      // Some deployments answer HTTP 200 with a body-level status_code (401 == auth failed).
+      return "401".equals(text(response, "status_code"))
+          ? GatewayVerification.INVALID
+          : GatewayVerification.VALID;
+    } catch (RestClientResponseException e) {
+      int code = e.getStatusCode().value();
+      if (code == 404) {
+        return GatewayVerification.VALID; // authenticated — the probe order is simply unknown
+      }
+      if (code == 401 || code == 403) {
+        return GatewayVerification.INVALID;
+      }
+      return GatewayVerification.UNREACHABLE;
+    } catch (ResourceAccessException | GatewayUnavailableException e) {
+      return GatewayVerification.UNREACHABLE;
+    }
+  }
+
   private String baseUrl(GatewayCredentials credentials) {
     return credentials.environment() == ProviderEnvironment.PRODUCTION
         ? properties.midtrans().productionBaseUrl()

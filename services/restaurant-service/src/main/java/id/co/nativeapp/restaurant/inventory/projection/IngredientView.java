@@ -20,6 +20,9 @@ public interface IngredientView {
 
   String getUnit();
 
+  /** Display-unit label (e.g. {@code kg} over a base of {@code g}); {@code null} = base unit. */
+  @Nullable String getDisplayUnit();
+
   int getStockQty();
 
   @Nullable Long getUnitCostMinor();

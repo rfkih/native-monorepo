@@ -46,6 +46,7 @@ import id.co.nativeapp.restaurant.promotion.repository.CouponRepository;
 import id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard;
 import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
 import id.co.nativeapp.restaurant.recipe.service.IngredientDepletionWriter;
+import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
@@ -151,6 +152,7 @@ public class OrderWriter {
   private final SelfOrderProperties selfOrderProperties;
   private final SalesChannelRepository salesChannelRepository;
   private final CashWindowLock cashWindowLock;
+  private final RegisterSessionRepository registerSessionRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public OrderWriter(
@@ -174,7 +176,8 @@ public class OrderWriter {
       OfflineReplayGuard offlineReplayGuard,
       SelfOrderProperties selfOrderProperties,
       SalesChannelRepository salesChannelRepository,
-      CashWindowLock cashWindowLock) {
+      CashWindowLock cashWindowLock,
+      RegisterSessionRepository registerSessionRepository) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -196,6 +199,7 @@ public class OrderWriter {
     this.selfOrderProperties = selfOrderProperties;
     this.salesChannelRepository = salesChannelRepository;
     this.cashWindowLock = cashWindowLock;
+    this.registerSessionRepository = registerSessionRepository;
   }
 
   /**
@@ -259,7 +263,16 @@ public class OrderWriter {
     // (GL period), so a replayed offline sale posts into the day it actually happened. NOTE: an
     // offline-replayed (client-backdated) occurredAt is explicit historical data, independent of
     // lock timing — the CashWindowLock protects the live/"now" case, not deliberate backdating.
-    Instant now = offlineReplayGuard.resolveOccurredAt(request, Instant.now());
+    // The open-session openedAt is supplied LAZILY — the guard only pulls it on the accepted
+    // backdated-replay path, so the normal checkout pays no extra query.
+    Instant now =
+        offlineReplayGuard.resolveOccurredAt(
+            request,
+            Instant.now(),
+            () ->
+                registerSessionRepository
+                    .findOpenViewByBusinessId(request.businessId())
+                    .map(open -> open.getOpenedAt()));
     boolean offlineReplay = Boolean.TRUE.equals(request.offlineReplay());
 
     // ------------------------------------------------------------------
@@ -338,8 +351,10 @@ public class OrderWriter {
         stockDeductionWriter.deductForLines(cart.linesToAdd(), cart.itemViews());
       }
       // ADR 0050: recipe-driven ingredient depletion — ONE behavior for online and offline replay
-      // (floors at 0, never throws for stock), same tx as the sale + outbox rows.
-      ingredientDepletionWriter.depleteForLines(toDepletionLines(cart.linesToAdd()));
+      // (floors at 0, never throws for stock), same tx as the sale + outbox rows. ADR 0067 Phase C:
+      // the SAME call folds COGS (null when nothing costed) — threaded into the sale command below.
+      IngredientDepletionWriter.CogsResult cogs =
+          ingredientDepletionWriter.depleteForLines(toDepletionLines(cart.linesToAdd()));
 
       String tenderTypeName =
           (request.payment() != null && !residual.giftCardFullyCovers())
@@ -360,7 +375,8 @@ public class OrderWriter {
               request.loyaltyMemberId(),
               request.giftCardId(),
               cart,
-              onlineChannel);
+              onlineChannel,
+              cogs);
       RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
       // Link the sale id back to the order → status COMPLETED.
@@ -673,8 +689,10 @@ public class OrderWriter {
             && request.payment().tenderType().isDigital();
 
     if (!isDigitalPayment) {
-      // Deduct stock for tracked items (same tx — roll back everything on shortfall).
-      deductStockForParkedLines(parkedLineViews, currencyCode);
+      // Deduct stock for tracked items (same tx — roll back everything on shortfall). ADR 0067
+      // Phase C: the SAME depletion call folds COGS — threaded into the sale command below.
+      IngredientDepletionWriter.CogsResult cogs =
+          deductStockForParkedLines(parkedLineViews, currencyCode);
 
       // CASH / gift-card-fully-covers / no-payment: record the sale now — revenue recognised here.
       String tenderTypeName =
@@ -696,7 +714,8 @@ public class OrderWriter {
               request.loyaltyMemberId(),
               request.giftCardId(),
               er,
-              onlineChannel);
+              onlineChannel,
+              cogs);
       RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
       order.linkSale(saleResult.sale().id()); // PARKED → COMPLETED
@@ -1234,10 +1253,14 @@ public class OrderWriter {
    * <p>The lines are represented as {@link OrderLineView}s at this point (the order's lines were
    * persisted at park time); we adapt them to the interface {@link StockDeductionWriter} expects by
    * constructing a list of lightweight adapters carrying only menuItemId and qty.
+   *
+   * @return the ADR 0067 Phase C COGS fold from the ingredient depletion call below, or {@code
+   *     null} when {@code lineViews} is empty or nothing was costed
    */
-  private void deductStockForParkedLines(List<OrderLineView> lineViews, String currencyCode) {
+  private IngredientDepletionWriter.CogsResult deductStockForParkedLines(
+      List<OrderLineView> lineViews, String currencyCode) {
     if (lineViews.isEmpty()) {
-      return;
+      return null;
     }
     // Load current item views to get stock_quantity state (RLS-scoped).
     List<UUID> menuItemIds = lineViews.stream().map(OrderLineView::getMenuItemId).toList();
@@ -1265,7 +1288,8 @@ public class OrderWriter {
 
     // ADR 0050: recipe-driven ingredient depletion for the parked lines — the adapters above
     // deliberately drop modifiers, so the option ids are re-read from the persisted snapshots.
-    ingredientDepletionWriter.depleteForLines(
+    // ADR 0067 Phase C: the SAME call folds COGS — returned to the caller.
+    return ingredientDepletionWriter.depleteForLines(
         toDepletionLinesFromViews(lineViews, loadOptionIdsByLineId(lineViews)));
   }
 
@@ -1427,7 +1451,8 @@ public class OrderWriter {
       UUID loyaltyMemberId,
       UUID giftCardId,
       CartContext cart,
-      String channel) {
+      String channel,
+      IngredientDepletionWriter.CogsResult cogs) {
     return recordSaleCommand(
         businessId,
         amountMinor,
@@ -1440,7 +1465,8 @@ public class OrderWriter {
         giftCardId,
         cart.loyaltyRedeemedMinor(),
         cart.giftCardRedeemedMinor(),
-        channel);
+        channel,
+        cogs);
   }
 
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -1455,7 +1481,8 @@ public class OrderWriter {
       UUID loyaltyMemberId,
       UUID giftCardId,
       EngineRecompute er,
-      String channel) {
+      String channel,
+      IngredientDepletionWriter.CogsResult cogs) {
     return recordSaleCommand(
         businessId,
         amountMinor,
@@ -1468,7 +1495,8 @@ public class OrderWriter {
         giftCardId,
         er.loyaltyRedeemedMinor(),
         er.giftCardRedeemedMinor(),
-        channel);
+        channel,
+        cogs);
   }
 
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -1484,7 +1512,8 @@ public class OrderWriter {
       UUID giftCardId,
       long loyaltyRedeemedMinor,
       long giftCardRedeemedMinor,
-      String channel) {
+      String channel,
+      IngredientDepletionWriter.CogsResult cogs) {
     return new RecordSaleCommand(
         businessId,
         amountMinor,
@@ -1502,7 +1531,11 @@ public class OrderWriter {
         // ADR 0049 P4: OrderWriter's CASH/ONLINE checkout/park-pay paths record the sale
         // synchronously (the operator, if any, is read live by SaleWriter itself) — soldByUserId is
         // exclusively the async-capture-carried field PaymentCaptureWriter threads through.
-        null);
+        null,
+        // ADR 0067 Phase C: the COGS fold from the SAME ingredient-depletion call this sale's
+        // recording follows — null when nothing was costed.
+        cogs != null ? cogs.cogsMinor() : null,
+        cogs != null ? cogs.currency() : null);
   }
 
   // -------------------------------------------------------------------------

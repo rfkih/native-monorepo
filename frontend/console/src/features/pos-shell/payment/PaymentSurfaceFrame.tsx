@@ -3,17 +3,21 @@
  * backdrop overlay + Card + title row + close button. Extracted VERBATIM from the three payment
  * modals (their frames differed only in z-index and an optional subtitle).
  *
- * pos-shell rule: stateless presentation only — no hooks beyond i18n, no fetching, no mutations.
+ * pos-shell rule: stateless presentation only — no hooks beyond i18n/back-dismiss, no fetching,
+ * no mutations.
  */
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { cn } from '@/lib/cn'
 
 export function PaymentSurfaceFrame({
   zIndexClass = 'z-40',
   subtitle,
   onClose,
+  backDismissEnabled = true,
   children,
 }: {
   /** Restaurant/service modals sit at z-40; the bill modal stacks over the bill sheet at z-[60]. */
@@ -21,9 +25,13 @@ export function PaymentSurfaceFrame({
   /** Optional second line under the title (the bill modal shows the guest label). */
   subtitle?: string | null
   onClose: () => void
+  /** Pass false while a charge is in flight — Back must not dismiss a payment mid-capture. */
+  backDismissEnabled?: boolean
   children: React.ReactNode
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose, backDismissEnabled)
+  useScrollLock()
   return (
     <div
       className={cn('fixed inset-0 grid place-items-center bg-black/40 p-4 backdrop-blur-sm', zIndexClass)}

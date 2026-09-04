@@ -64,7 +64,8 @@ class WebhookAcceptanceTest extends PostgresRlsTestBase {
         ACTOR,
         () ->
             settingsService.upsertCompanyDefault(
-                new UpsertSettingsRequest("GATEWAY", "MIDTRANS", "SANDBOX", SERVER_KEY, null)));
+                new UpsertSettingsRequest(
+                    "GATEWAY", "MIDTRANS", "SANDBOX", SERVER_KEY, null, null, null)));
   }
 
   @AfterEach
@@ -90,7 +91,6 @@ class WebhookAcceptanceTest extends PostgresRlsTestBase {
                   UUID.randomUUID(),
                   null,
                   OUTLET,
-                  null,
                   amountMinor,
                   "IDR",
                   "wh:" + UUID.randomUUID());
@@ -193,7 +193,8 @@ class WebhookAcceptanceTest extends PostgresRlsTestBase {
   }
 
   @Test
-  void aLateSettlementAfterALocalCancelParksForAHumanRefund() throws Exception {
+  void aLateSettlementAfterALocalCancelParksForAHumanRefundAndEmitsNoSecondEvent()
+      throws Exception {
     UUID chargeId = issueCharge(42_000L);
     TenantContext.callAs(
         TENANT,
@@ -206,19 +207,24 @@ class WebhookAcceptanceTest extends PostgresRlsTestBase {
     webhookService.handleMidtrans(
         UUID.fromString(TENANT), notification(chargeId, 42_000L, "settlement"));
 
-    // Money moved at the PSP with no local capture: parked, stays CANCELED, no event.
+    // The local cancel of the QR_ISSUED charge already emitted ONE PaymentChargeExpired (reason=
+    // CANCELED) so the vertical releases its hold. The late settlement then finds the charge
+    // terminal: money moved at the PSP with no local capture → parked for a human refund, NO
+    // additional event (in particular no PaymentChargeSucceeded).
     assertThat(statusOf(chargeId)).isEqualTo(ChargeStatus.CANCELED);
-    assertThat(outboxCount()).isZero();
+    assertThat(outboxEventTypes()).containsExactly("PaymentChargeExpired");
     assertThat(errorLogSources()).contains("payment.psp-webhook.late-settlement");
   }
 
   @Test
-  void anExpireNotificationExpiresALiveChargeWithoutAnEvent() throws Exception {
+  void anExpireNotificationExpiresALiveChargeAndEmitsPaymentChargeExpired() throws Exception {
     UUID chargeId = issueCharge(42_000L);
     webhookService.handleMidtrans(
         UUID.fromString(TENANT), notification(chargeId, 42_000L, "expire"));
+    // The QR was issued, so a vertical PENDING tender is waiting on it — expiring the charge emits
+    // exactly one PaymentChargeExpired so that tender is released (no error-inbox park).
     assertThat(statusOf(chargeId)).isEqualTo(ChargeStatus.EXPIRED);
-    assertThat(outboxCount()).isZero();
+    assertThat(outboxEventTypes()).containsExactly("PaymentChargeExpired");
     assertThat(errorLogCount()).isZero();
   }
 
@@ -242,6 +248,20 @@ class WebhookAcceptanceTest extends PostgresRlsTestBase {
         ResultSet rs = ps.executeQuery()) {
       rs.next();
       return rs.getLong(1);
+    }
+  }
+
+  /** Every outbox row's {@code event_type}, insertion order — for asserting exactly-which-event. */
+  private static java.util.List<String> outboxEventTypes() throws Exception {
+    try (Connection admin = adminConnection();
+        PreparedStatement ps =
+            admin.prepareStatement("SELECT event_type FROM outbox ORDER BY occurred_at");
+        ResultSet rs = ps.executeQuery()) {
+      java.util.List<String> types = new java.util.ArrayList<>();
+      while (rs.next()) {
+        types.add(rs.getString(1));
+      }
+      return types;
     }
   }
 

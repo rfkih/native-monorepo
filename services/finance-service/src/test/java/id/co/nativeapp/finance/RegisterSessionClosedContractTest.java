@@ -39,6 +39,10 @@ class RegisterSessionClosedContractTest {
     record.put("over_short_minor", overShort);
     record.put("currency", "IDR");
     record.put("tenders", java.util.List.of());
+    // ADR 0064 correction fields — an original close: supersedes nothing, seq 1, no reason.
+    record.put("supersedes_event_id", null);
+    record.put("close_seq", 1);
+    record.put("reason", null);
     return record;
   }
 
@@ -144,6 +148,27 @@ class RegisterSessionClosedContractTest {
     assertThatThrownBy(event::assertReconciliationIdentity)
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("tender variance identity violated");
+  }
+
+  @Test
+  void correctionMarkerDecodes() {
+    // ADR 0064: a correction event carries supersedes_event_id + close_seq 2 + a reason.
+    UUID prior = UUID.fromString("cccccccc-0000-0000-0000-000000000009");
+    GenericRecord record = producerRecord(0L, 100_000L, 0L, 100_000L, 100_000L, 0L);
+    record.put("supersedes_event_id", prior.toString());
+    record.put("close_seq", 2);
+    record.put("reason", "cashier miscount");
+
+    RegisterSessionClosedEvent event =
+        RegisterSessionClosedEvent.from(
+            EVENT_ID,
+            AvroSerde.deserialize(
+                AvroSerde.serialize(record), RegisterSessionClosedSchema.schema()));
+
+    event.assertReconciliationIdentity(); // must not throw
+    assertThat(event.supersedesEventId()).isEqualTo(prior);
+    assertThat(event.closeSeq()).isEqualTo(2);
+    assertThat(event.reason()).isEqualTo("cashier miscount");
   }
 
   @Test

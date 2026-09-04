@@ -77,8 +77,7 @@ class UserPageGrantTest extends PostgresRlsTestBase {
 
   private UUID createCompany(String name, String actor) {
     return companyService
-        .createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "restaurant", actor))
+        .createCompany(new CreateCompanyCommand(name, "IDR", "id", "restaurant", actor))
         .company()
         .getId();
   }

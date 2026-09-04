@@ -9,6 +9,7 @@ import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaField;
 import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchCondition;
@@ -37,6 +38,31 @@ import org.junit.jupiter.api.Test;
 class LayeredArchitectureTest {
 
   private static final String BASE_PACKAGE = "id.co.nativeapp.finance";
+
+  /** The GL's one persistence door (ADR 0071) — the sole class allowed to write a journal. */
+  private static final String GENERAL_LEDGER_WRITER =
+      "id.co.nativeapp.finance.gl.service.GeneralLedgerWriter";
+
+  /**
+   * Spring Data write methods. The guard is deliberately write-side only: several classes
+   * legitimately READ the journal repositories (trial-balance aggregation, prior-entry lookups for
+   * ADR 0064 supersession), and forbidding a dependency outright would be wrong.
+   */
+  private static final Set<String> JOURNAL_WRITE_METHODS =
+      Set.of(
+          "save",
+          "saveAndFlush",
+          "saveAll",
+          "saveAllAndFlush",
+          "delete",
+          "deleteAll",
+          "deleteById",
+          "deleteAllById",
+          "flush");
+
+  /** The two repositories that own the double-entry GL tables. */
+  private static final Set<String> JOURNAL_REPOSITORIES =
+      Set.of("JournalEntryRepository", "JournalLineRepository");
 
   /**
    * Fully-qualified names of types that must NEVER hold a monetary amount on a persistent
@@ -243,6 +269,25 @@ class LayeredArchitectureTest {
             .as(
                 "every @RequestMapping handler on a business @RestController carries an @Operation"
                     + " (OpenAPI docs — ENGINEERING-STANDARDS §1.3)")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  @Test
+  void onlyTheGeneralLedgerWriterPersistsJournals() {
+    // NOTE: classes(), not noClasses(). ArchUnit NEGATES a noClasses() condition — it flags a class
+    // when the condition reports SATISFIED — so a custom condition that only ever emits violated()
+    // events silently never fires there. (Caught by pointing GENERAL_LEDGER_WRITER at a
+    // non-existent class: the rule still passed, i.e. it was vacuous.)
+    ArchRule rule =
+        classes()
+            .that()
+            .doNotHaveFullyQualifiedName(GENERAL_LEDGER_WRITER)
+            .should(writeThroughTheJournalRepositories())
+            .as(
+                "only GeneralLedgerWriter persists a journal entry — every posting writer goes"
+                    + " through that one door, so a per-entry GL emission is complete by"
+                    + " construction (ADR 0071; the ADR 0065 anti-pattern one level down)")
             .allowEmptyShould(true);
     rule.check(classes);
   }
@@ -472,6 +517,33 @@ class LayeredArchitectureTest {
                         item.getName(),
                         method.getName(),
                         method.getRawReturnType().getSimpleName())));
+          }
+        }
+      }
+    };
+  }
+
+  /**
+   * Flags any call to a Spring Data WRITE method on {@code JournalEntryRepository} / {@code
+   * JournalLineRepository}. Reads are untouched by design — see {@link #JOURNAL_WRITE_METHODS}.
+   */
+  private static ArchCondition<JavaClass> writeThroughTheJournalRepositories() {
+    return new ArchCondition<>("persist a journal entry or line directly") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        for (JavaMethodCall call : item.getMethodCallsFromSelf()) {
+          String owner = call.getTargetOwner().getSimpleName();
+          if (JOURNAL_REPOSITORIES.contains(owner)
+              && JOURNAL_WRITE_METHODS.contains(call.getName())) {
+            events.add(
+                SimpleConditionEvent.violated(
+                    call,
+                    String.format(
+                        "%s calls %s.%s directly — the GL has ONE persistence door:"
+                            + " GeneralLedgerWriter.post(entry, companyId). Route it through that"
+                            + " (ADR 0071), or a future JournalEntryPosted emission silently"
+                            + " misses this posting.",
+                        item.getName(), owner, call.getName())));
           }
         }
       }

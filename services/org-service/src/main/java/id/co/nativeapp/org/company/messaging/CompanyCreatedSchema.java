@@ -52,6 +52,9 @@ public final class CompanyCreatedSchema {
     record.put("legal_employer_id", company.getLegalEmployerId().toString());
     record.put("base_currency", company.getBaseCurrency());
     record.put("default_language", company.getDefaultLanguage());
+    // LOWERCASE module-key value (Vertical.key()) — the same vocabulary org_unit.vertical used,
+    // deliberately NOT the .name() casing. ADR 0070 moved the vertical up to the company.
+    record.put("vertical", company.getVertical() == null ? null : company.getVertical().key());
     return record;
   }
 

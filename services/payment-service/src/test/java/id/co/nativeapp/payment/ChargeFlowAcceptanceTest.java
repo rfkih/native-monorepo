@@ -35,12 +35,12 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
- * The charge lifecycle end-to-end at the service layer against a stub Midtrans (ADR 0045,
- * DIVISION-scope amendment): the two-transaction create (INITIATED anchor → PSP call → QR_ISSUED),
- * replay-by-key and one-live-charge-per-payment, the IDR/mode/credential guards (including the
- * division-level GATEWAY fallback), FAILED on a dead PSP, the sync fallback settling with EXACTLY
- * ONE {@code PaymentChargeSucceeded} outbox row, the cancel-races-settlement money guarantee, and
- * RLS isolation.
+ * The charge lifecycle end-to-end at the service layer against a stub Midtrans (ADR 0045, ADR 0070
+ * flat scopes): the two-transaction create (INITIATED anchor → PSP call → QR_ISSUED), replay-by-key
+ * and one-live-charge-per-payment, the IDR/mode/credential guards (including the division-level
+ * GATEWAY fallback), FAILED on a dead PSP, the sync fallback settling with EXACTLY ONE {@code
+ * PaymentChargeSucceeded} outbox row, the cancel-races-settlement money guarantee, and RLS
+ * isolation.
  */
 @SpringBootTest
 class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
@@ -49,7 +49,6 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
   private static final String OTHER_TENANT = "88888888-8888-8888-8888-888888888888";
   private static final String ACTOR = "cashier@example.co.id";
   private static final UUID OUTLET = UUID.fromString("b555d5b8-e17b-4990-a7dd-2c4be199d7a6");
-  private static final UUID DIVISION = UUID.fromString("c666d5b8-e17b-4990-a7dd-2c4be199d7a6");
 
   /** The stub Midtrans the configurable base URL points at. */
   static final MockWebServer MIDTRANS = new MockWebServer();
@@ -101,6 +100,22 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
               chargeCalls.incrementAndGet();
               return switch (chargeBehavior) {
                 case "down" -> new MockResponse().setResponseCode(500);
+                case "already-expired" ->
+                    // A QR whose expiry_time is already well in the PAST (beyond the sweep's
+                    // grace):
+                    // the charge is born QR_ISSUED but the first poll's lazy expireIfPast flips it
+                    // to
+                    // EXPIRED. Used to exercise the lazy-sweep emit path.
+                    json(
+                        "{\"status_code\":\"201\",\"transaction_id\":\"mt-txn-1\","
+                            + "\"qr_string\":\"00020101021226QRIS-PAYLOAD\","
+                            + "\"expiry_time\":\""
+                            + java.time.LocalDateTime.now()
+                                .minusDays(2)
+                                .format(
+                                    java.time.format.DateTimeFormatter.ofPattern(
+                                        "yyyy-MM-dd HH:mm:ss"))
+                            + "\"}");
                 default ->
                     // expiry_time must be DYNAMIC (now + 1 day): a hardcoded date was a time
                     // bomb — once it passed, every stubbed charge was born expired and the
@@ -124,6 +139,8 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
                     json(
                         "{\"status_code\":\"200\",\"transaction_status\":\"settlement\","
                             + "\"transaction_id\":\"mt-txn-settled\"}");
+                case "expire" ->
+                    json("{\"status_code\":\"407\",\"transaction_status\":\"expire\"}");
                 default -> json("{\"status_code\":\"200\",\"transaction_status\":\"pending\"}");
               };
             }
@@ -145,7 +162,13 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
         () ->
             settingsService.upsertCompanyDefault(
                 new UpsertSettingsRequest(
-                    "GATEWAY", "MIDTRANS", "SANDBOX", "SB-Mid-server-acceptance", null)));
+                    "GATEWAY",
+                    "MIDTRANS",
+                    "SANDBOX",
+                    "SB-Mid-server-acceptance",
+                    null,
+                    null,
+                    null)));
     setRoles("cashier");
   }
 
@@ -161,7 +184,7 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
   }
 
   private static CreateChargeRequest request(UUID paymentId, long amount) {
-    return new CreateChargeRequest("restaurant", paymentId, null, OUTLET, null, amount, "IDR");
+    return new CreateChargeRequest("restaurant", paymentId, null, OUTLET, amount, "IDR");
   }
 
   @Test
@@ -227,14 +250,14 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
                   () ->
                       chargeService.create(
                           new CreateChargeRequest(
-                              "restaurant", paymentId, null, OUTLET, null, 10_000L, "USD"),
+                              "restaurant", paymentId, null, OUTLET, 10_000L, "USD"),
                           "k-usd"))
               .isInstanceOf(ChargeValidationException.class);
           assertThatThrownBy(
                   () ->
                       chargeService.create(
                           new CreateChargeRequest(
-                              "laundry", paymentId, null, OUTLET, null, 10_000L, "IDR"),
+                              "laundry", paymentId, null, OUTLET, 10_000L, "IDR"),
                           "k-vert"))
               .isInstanceOf(ChargeValidationException.class);
           return null;
@@ -247,7 +270,7 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
         ACTOR,
         () ->
             settingsService.upsertCompanyDefault(
-                new UpsertSettingsRequest("STATIC", null, null, null, null)));
+                new UpsertSettingsRequest("STATIC", null, null, null, null, null, null)));
     setRoles("cashier");
     TenantContext.callAs(
         TENANT,
@@ -261,24 +284,17 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
   }
 
   @Test
-  void divisionGatewayModeAllowsChargeCreationWhenTheOutletHasNoRow() throws Exception {
-    // (d) Downgrade the company default's MODE to STATIC (credentials stay — mode and
-    // credentials are independent fields on the same row), then set the DIVISION override to
-    // GATEWAY. An outlet with no row of its own, under that division, must still resolve to
-    // GATEWAY and successfully create a charge.
+  void theCompanyDefaultGatewayModeAllowsChargeCreationWhenTheOutletHasNoRow() throws Exception {
+    // (d) ADR 0070 removed the DIVISION rung, so resolution is outlet -> company. An outlet with
+    // no row of its own must inherit the COMPANY default's GATEWAY mode and create a charge.
+    // (This replaces the old division-override variant of the same guarantee.)
     setRoles("owner");
     TenantContext.callAs(
         TENANT,
         ACTOR,
         () ->
             settingsService.upsertCompanyDefault(
-                new UpsertSettingsRequest("STATIC", null, null, null, null)));
-    TenantContext.callAs(
-        TENANT,
-        ACTOR,
-        () ->
-            settingsService.upsertUnitOverride(
-                DIVISION, new UpsertSettingsRequest("GATEWAY", null, null, null, null)));
+                new UpsertSettingsRequest("GATEWAY", null, null, null, null, null, null)));
     setRoles("cashier");
 
     UUID outletWithNoRow = UUID.randomUUID();
@@ -290,7 +306,7 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
           ChargeService.CreateResult result =
               chargeService.create(
                   new CreateChargeRequest(
-                      "restaurant", paymentId, null, outletWithNoRow, DIVISION, 77_000L, "IDR"),
+                      "restaurant", paymentId, null, outletWithNoRow, 77_000L, "IDR"),
                   "charge:" + paymentId + ":1");
           assertThat(result.fresh()).isTrue();
           assertThat(result.response().status()).isEqualTo("QR_ISSUED");
@@ -300,6 +316,9 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
 
   @Test
   void aDeadPspFailsTheChargeAndANewKeyMintsAFreshOne() throws Exception {
+    // No PaymentChargeExpired is emitted here: the charge fails at the INITIATED stage (the PSP
+    // never issued a QR), so there is no vertical PENDING tender waiting on it — the create() call
+    // fails synchronously to the caller instead. The outboxCount()==0 below is that guarantee.
     chargeBehavior = "down";
     TenantContext.callAs(
         TENANT,
@@ -373,7 +392,7 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
   }
 
   @Test
-  void aCleanCancelGoesCanceledAndEmitsNothing() throws Exception {
+  void aCleanCancelOfAnIssuedQrEmitsPaymentChargeExpiredSoTheVerticalReleases() throws Exception {
     TenantContext.callAs(
         TENANT,
         ACTOR,
@@ -390,7 +409,67 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
           assertThat(fresh.fresh()).isTrue();
           return null;
         });
-    assertThat(outboxCount()).isZero();
+    // The QR was already issued, so cancelling it strands the vertical's PENDING tender — the
+    // cancel
+    // emits exactly ONE PaymentChargeExpired (reason=CANCELED) so the vertical releases it. The
+    // fresh charge that follows is QR_ISSUED and emits nothing.
+    assertThat(outboxCount()).isEqualTo(1);
+    assertThat(outboxEventType()).isEqualTo("PaymentChargeExpired");
+    assertThat(outboxExpiredReason()).isEqualTo("CANCELED");
+  }
+
+  @Test
+  void theLazyPollSweepExpiresAPastDueQrAndEmitsPaymentChargeExpired() throws Exception {
+    chargeBehavior = "already-expired";
+    TenantContext.callAs(
+        TENANT,
+        ACTOR,
+        () -> {
+          UUID paymentId = UUID.randomUUID();
+          ChargeService.CreateResult created =
+              chargeService.create(request(paymentId, 33_000L), "charge:" + paymentId + ":1");
+          // Born QR_ISSUED (the PSP issued a QR), but its expiry is already in the past.
+          assertThat(created.response().status()).isEqualTo("QR_ISSUED");
+
+          // The till's poll runs the lazy expireIfPast sweep first → EXPIRED, and emits.
+          ChargeResponse polled = chargeService.get(created.response().chargeId());
+          assertThat(polled.status()).isEqualTo("EXPIRED");
+
+          // A second poll is a no-op on the terminal charge — still exactly one event.
+          ChargeResponse again = chargeService.get(created.response().chargeId());
+          assertThat(again.status()).isEqualTo("EXPIRED");
+          return null;
+        });
+    assertThat(outboxCount()).isEqualTo(1);
+    assertThat(outboxEventType()).isEqualTo("PaymentChargeExpired");
+    assertThat(outboxExpiredReason()).isEqualTo("EXPIRED");
+  }
+
+  @Test
+  void syncFindingTheChargeExpiredEmitsPaymentChargeExpiredForTheVerticalToRelease()
+      throws Exception {
+    TenantContext.callAs(
+        TENANT,
+        ACTOR,
+        () -> {
+          UUID paymentId = UUID.randomUUID();
+          ChargeService.CreateResult created =
+              chargeService.create(request(paymentId, 55_000L), "charge:" + paymentId + ":1");
+          assertThat(created.response().status()).isEqualTo("QR_ISSUED");
+
+          // The reconcile sync finds Midtrans reporting the QR expired.
+          statusBehavior = "expire";
+          ChargeResponse afterSync = chargeService.sync(created.response().chargeId());
+          assertThat(afterSync.status()).isEqualTo("EXPIRED");
+
+          // A second sync is a no-op on the terminal charge — still exactly one event.
+          ChargeResponse again = chargeService.sync(created.response().chargeId());
+          assertThat(again.status()).isEqualTo("EXPIRED");
+          return null;
+        });
+    assertThat(outboxCount()).isEqualTo(1);
+    assertThat(outboxEventType()).isEqualTo("PaymentChargeExpired");
+    assertThat(outboxExpiredReason()).isEqualTo("EXPIRED");
   }
 
   @Test
@@ -435,6 +514,22 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
         ResultSet rs = ps.executeQuery()) {
       rs.next();
       return rs.getString(1);
+    }
+  }
+
+  /** Decodes the single PaymentChargeExpired outbox payload and returns its {@code reason}. */
+  private static String outboxExpiredReason() throws Exception {
+    try (Connection admin = adminConnection();
+        PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT payload FROM outbox WHERE event_type = 'PaymentChargeExpired' LIMIT 1");
+        ResultSet rs = ps.executeQuery()) {
+      rs.next();
+      byte[] payload = rs.getBytes(1);
+      return id.co.nativeapp.events.AvroSerde.deserialize(
+              payload, id.co.nativeapp.payment.charge.messaging.PaymentChargeExpiredSchema.schema())
+          .get("reason")
+          .toString();
     }
   }
 

@@ -1,8 +1,29 @@
-import { defineConfig, type ProxyOptions } from 'vite'
+import { defineConfig, type ProxyOptions, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
+
+// A per-build identity stamped into the bundle (`__APP_BUILD__`) AND emitted as /version.json, so a
+// running client can detect it is behind the deployed build and offer a self-healing reload
+// (ADR 0062). CI passes a git short SHA via VITE_APP_BUILD; a local/UAT `docker build` with no arg
+// falls back to a build timestamp (still unique per deploy). Date.now() here runs in Node at BUILD
+// time — this is the vite config, not app code.
+const APP_BUILD = process.env.VITE_APP_BUILD || Date.now().toString(36)
+
+// Emits dist/version.json = {build} so the deployed origin always advertises its current build id.
+// Served no-store (nginx) and fetched no-store (lib/appVersion) so a stale client never reads a
+// cached copy; kept out of the workbox precache via `globIgnores` below.
+const emitVersionJson: Plugin = {
+  name: 'native-version-json',
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'version.json',
+      source: JSON.stringify({ build: APP_BUILD }),
+    })
+  },
+}
 
 // Dev proxy targets. In the documented dev recipe each service runs directly (gradle bootRun) on a
 // port you choose, with NATIVE_DEV_TENANT_FILTER_ENABLED=true (no gateway / JWT in dev). The console
@@ -64,6 +85,14 @@ const pwa = VitePWA({
   injectRegister: null,
   devOptions: { enabled: false },
   workbox: {
+    // /version.json is the deploy's build advertiser — it MUST always come from the network (the
+    // whole point is to detect a stale precache), so keep it out of the precache manifest. It is a
+    // Rollup-EMITTED asset, which `globIgnores` doesn't catch, so filter the final manifest instead.
+    manifestTransforms: [
+      (manifest) => ({
+        manifest: manifest.filter((entry) => !entry.url.endsWith('version.json')),
+      }),
+    ],
     // Navigating to an API path (should never happen, defensive only) must not fall back to the
     // cached index.html the way a normal SPA route does. `/auth/` is the IdP when Keycloak is
     // co-hosted on the console origin (the UAT single-origin layout): without the denylist entry
@@ -124,7 +153,11 @@ function bootVendorChunk(id: string): string | undefined {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), pwa],
+  plugins: [react(), tailwindcss(), pwa, emitVersionJson],
+  define: {
+    // Baked into the bundle; read via lib/appVersion.ts. JSON.stringify so it inlines as a literal.
+    __APP_BUILD__: JSON.stringify(APP_BUILD),
+  },
   build: {
     rollupOptions: {
       output: { manualChunks: bootVendorChunk },

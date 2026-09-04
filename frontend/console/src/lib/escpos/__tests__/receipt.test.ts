@@ -137,4 +137,33 @@ describe('renderReceipt', () => {
     )
     expect(text).toContain('PROVISIONAL')
   })
+
+  it('prints the reversed-sale banner when present, and omits it when unset', () => {
+    const withNote = renderReceipt(
+      { ...DATA, reversedNote: 'Transaksi dibatalkan' },
+      58,
+      { drawerKick: false },
+    )
+    const text = printableText(withNote)
+    expect(text).toContain('TRANSAKSI DIBATALKAN')
+    for (const l of text.split('\n')) expect(l.length).toBeLessThanOrEqual(32)
+
+    const withoutNote = printableText(renderReceipt(DATA, 58, { drawerKick: false }))
+    expect(withoutNote).not.toContain('TRANSAKSI DIBATALKAN')
+  })
+
+  it('wraps a long partial-refund banner within 32 columns on 58mm paper', () => {
+    // The partial-refund variant interpolates a formatted amount (Intl output carries an
+    // em-dash and NBSP) and is the only banner long enough to force a wrap.
+    const text = printableText(
+      renderReceipt(
+        { ...DATA, reversedNote: 'Dikembalikan sebagian — Rp 125.000' },
+        58,
+        { drawerKick: false },
+      ),
+    )
+    expect(text).toContain('DIKEMBALIKAN SEBAGIAN')
+    expect(text).toContain('125.000')
+    for (const l of text.split('\n')) expect(l.length).toBeLessThanOrEqual(32)
+  })
 })

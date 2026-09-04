@@ -55,7 +55,8 @@ class RefundCashWindowLockConcurrencyTest extends PostgresRlsTestBase {
 
   @Test
   void refundBlocksUntilAManuallyHeldCashWindowLockIsReleased() throws Exception {
-    UUID paymentId =
+    // Full-refund amounts (2026-08-31 audit #2: the writer rejects partials at the edge).
+    PaymentResponse checkoutPayment =
         TenantContext.callAs(
             TENANT,
             ACTOR,
@@ -72,8 +73,9 @@ class RefundCashWindowLockConcurrencyTest extends PostgresRlsTestBase {
                       List.of(new OrderLineRequest(menuItemId, 1)),
                       new PaymentRequest(TenderType.CASH, 20_000L));
               CheckoutResult result = orderService.checkout(req);
-              return result.order().payment().paymentId();
+              return result.order().payment();
             });
+    UUID paymentId = checkoutPayment.paymentId();
 
     // Hold the SAME advisory lock CashWindowLock.acquire() would take, on a separate raw
     // connection/transaction — exactly mirroring the SQL the fix runs.
@@ -97,7 +99,9 @@ class RefundCashWindowLockConcurrencyTest extends PostgresRlsTestBase {
                     TenantContext.callAs(
                         TENANT,
                         ACTOR,
-                        () -> voidRefundService.refund(paymentId, Money.ofMinor(5_000L, "IDR")));
+                        () ->
+                            voidRefundService.refund(
+                                paymentId, Money.ofMinor(checkoutPayment.amountMinor(), "IDR")));
                 refundResult.set(response);
               } catch (Throwable t) {
                 refundError.set(t);
@@ -127,7 +131,7 @@ class RefundCashWindowLockConcurrencyTest extends PostgresRlsTestBase {
 
       assertThat(refundError.get()).as("refund() must not fail once unblocked").isNull();
       assertThat(refundResult.get()).isNotNull();
-      assertThat(refundResult.get().status()).isEqualTo("PARTIALLY_REFUNDED");
+      assertThat(refundResult.get().status()).isEqualTo("REFUNDED");
     }
   }
 }

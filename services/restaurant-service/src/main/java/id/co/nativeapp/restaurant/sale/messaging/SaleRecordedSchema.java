@@ -32,10 +32,11 @@ import org.apache.avro.generic.GenericRecord;
  *   <li>Phase B2 / ADR 0036: {@code channel} (nullable string) — the sales-channel code for an
  *       ONLINE-tender sale, threaded from {@code RecordSaleCommand.channel()}; {@code null} for
  *       every non-ONLINE tender and for legacy producers.
- *   <li>ADR 0049 P0: {@code sold_by_user_id} (nullable string) — the seller captured at ring time,
- *       read directly off {@link Sale#getSoldByUserId()}; {@code null} for every sale until ADR
- *       0049 P2 (the PIN / operator-session flow) starts populating it. Audit/reporting only —
- *       commission attribution still keys off {@code MetricPublished.subject_id}, unchanged.
+ *   <li>ADR 0049: {@code sold_by_user_id} (nullable string) — the seller captured at ring time,
+ *       read directly off {@link Sale#getSoldByUserId()}. POPULATED since ADR 0049 P4 for
+ *       operator-PIN sales ({@code PaymentWriter} stamps the ring-time operator); {@code null} for
+ *       non-operator sales. Audit/reporting only — commission attribution still keys off {@code
+ *       MetricPublished.subject_id} (an employee_id, a different id space), unchanged.
  * </ul>
  *
  * <p>Backward compatibility: legacy producers (carwash) set all Phase 2 fields to {@code null};
@@ -155,9 +156,10 @@ public final class SaleRecordedSchema {
     record.put("gift_card_redeemed_minor", giftCardRedeemedMinor);
     // ADR 0036 Phase B2: the real channel, threaded from RecordSaleCommand.
     record.put("channel", channel);
-    // ADR 0049 P0: the seller captured at ring time -- read straight off the aggregate (not a
-    // method parameter), so this stays wired to Sale.soldByUserId with zero call-site churn. Null
-    // today (P0 is an inert wire); ADR 0049 P2 is what starts setting Sale.soldByUserId.
+    // ADR 0049: the seller captured at ring time -- read straight off the aggregate (not a
+    // method parameter), so this stays wired to Sale.soldByUserId with zero call-site churn.
+    // Populated since P4 for operator-PIN sales (PaymentWriter stamps the ring-time operator);
+    // null for non-operator sales.
     record.put("sold_by_user_id", sale.getSoldByUserId());
     return record;
   }

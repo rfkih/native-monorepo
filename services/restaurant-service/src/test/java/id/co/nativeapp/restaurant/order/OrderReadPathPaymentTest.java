@@ -88,6 +88,8 @@ class OrderReadPathPaymentTest extends PostgresRlsTestBase {
     assertThat(fetched.saleId()).isEqualTo(checkout.order().saleId());
     // breakdown intentionally NOT recomputed on this path (out of scope for this fix).
     assertThat(fetched.breakdown()).isNull();
+    // A fresh capture has never been reversed — refundedMinor stays zero.
+    assertThat(fetched.payment().refundedMinor()).isZero();
   }
 
   @Test
@@ -166,5 +168,6 @@ class OrderReadPathPaymentTest extends PostgresRlsTestBase {
         .isEqualTo(secondPaymentId)
         .isNotEqualTo(firstPaymentId);
     assertThat(fetched.payment().tenderType()).isEqualTo("CARD");
+    assertThat(fetched.payment().refundedMinor()).isZero();
   }
 }

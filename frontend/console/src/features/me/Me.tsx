@@ -21,7 +21,7 @@ import { ClaimStatusBadge } from '@/features/expenses/parts'
 import { formatDate } from '@/features/expenses/format'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
-import { formatMoney } from '@/lib/money'
+import { formatMoney, formatPercent } from '@/lib/money'
 import { canFinance, canHr, canOps, canPos as canPosRole, canReports, ROLE_HOME } from '@/lib/rolePreset'
 import { localeOf } from '@/i18n'
 import { useIsPhone } from '@/components/mobile/useIsPhone'
@@ -56,7 +56,7 @@ export function Me() {
   if (isPhone) return <MeHomePhone />
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-[100dvh] bg-paper">
       {/* Topbar */}
       <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur lg:px-8">
         <Wordmark />
@@ -201,7 +201,7 @@ export function Me() {
                           className="rounded-full bg-surface px-3 py-1.5 text-sm text-ink-2 ring-1 ring-line"
                         >
                           <span className="font-semibold text-ink">{a.role}</span>
-                          <span className="text-ink-3"> · {a.effectiveFrom}</span>
+                          <span className="text-ink-3"> · {formatDate(a.effectiveFrom, locale)}</span>
                         </span>
                       ))}
                     </div>
@@ -282,7 +282,7 @@ function SalesRailCard({
         <>
           <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-3">
             <span className="text-xs text-ink-3">
-              {t('me.sales.estimate')} · {(commissionBasisPoints / 100).toLocaleString(locale)}%
+              {t('me.sales.estimate')} · {formatPercent(commissionBasisPoints / 10000, locale)}
             </span>
             <span className="tnum font-mono text-[13px] font-bold text-profit-ink">
               {formatMoney(commissionEstimateMinor ?? 0, currency, locale)}

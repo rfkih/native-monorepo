@@ -1,15 +1,22 @@
-// Build a signed, environment-specific Native Till APK (ADR 0058).
+// Build a signed, environment-specific Native Till artifact — APK (sideload) or AAB (Play). (ADR 0058)
 //
 // UAT and prod are SEPARATE installable apps (Gradle product flavors uat/prod → distinct
 // applicationId + launcher name + badged icon). This script pairs the right WebView origin with the
 // right flavor in ONE command, so a "UAT" app can never be built accidentally pointing at prod (or
 // vice-versa): it sets NATIVE_TILL_URL (read by capacitor.config.ts at sync time), runs `cap sync`,
-// then `assemble<Flavor>Release`, and copies the APK to dist/ with an environment-named filename.
+// then `assemble<Flavor>Release` (APK) or `bundle<Flavor>Release` (AAB), and copies the artifact to
+// dist/ with an environment-named filename.
+//
+// --format apk (default) → an installable/sideloadable .apk. --format aab → an Android App Bundle
+// for Google Play upload (Play no longer accepts APKs for new apps). Both are signed by the release
+// signingConfig when android/keystore.properties is present; without it the artifact is UNSIGNED
+// (fine for a compile check, NOT uploadable to Play nor installable as a release).
 //
 // Usage (PowerShell):
-//   npm run build:uat                             # → UAT origin default, Native UAT app
+//   npm run build:uat                             # → UAT origin default, Native UAT app (APK)
+//   npm run aab:prod                              # → prod AAB for Play (needs --url or NATIVE_TILL_URL)
 //   $env:NATIVE_TILL_URL="https://pos.example.com"; npm run build:prod
-//   node scripts/build-app.mjs --env prod --url https://pos.example.com
+//   node scripts/build-app.mjs --env prod --format aab --url https://pos.example.com
 //
 // Prod requires an EXPLICIT stable origin and refuses an ephemeral *.trycloudflare.com quick-tunnel
 // URL (which changes on every prod restart) unless --allow-ephemeral is passed. That is the guard
@@ -32,6 +39,10 @@ const arg = (name) => {
 }
 const env = (arg('--env') ?? '').toLowerCase()
 const type = (arg('--type') ?? 'release').toLowerCase()
+// --format apk (default, sideload/UAT edge) | aab (Android App Bundle, the ONLY format the Play
+// Store accepts for a new app upload). AAB is a publishing artifact — Play re-signs it with the app
+// signing key (Play App Signing) using our release key as the UPLOAD key, so it is release-only.
+const format = (arg('--format') ?? 'apk').toLowerCase()
 const allowEphemeral = argv.includes('--allow-ephemeral')
 if (env !== 'uat' && env !== 'prod') {
   console.error('build-app: --env must be "uat" or "prod"')
@@ -39,6 +50,14 @@ if (env !== 'uat' && env !== 'prod') {
 }
 if (type !== 'release' && type !== 'debug') {
   console.error('build-app: --type must be "release" or "debug"')
+  process.exit(1)
+}
+if (format !== 'apk' && format !== 'aab') {
+  console.error('build-app: --format must be "apk" or "aab"')
+  process.exit(1)
+}
+if (format === 'aab' && type !== 'release') {
+  console.error('build-app: --format aab is Play-only and must be release (drop --type debug)')
   process.exit(1)
 }
 
@@ -65,8 +84,18 @@ if (env === 'prod' && /trycloudflare\.com/i.test(origin) && !allowEphemeral) {
   process.exit(1)
 }
 
+// --- auth origin --------------------------------------------------------------------------------
+// The origin serving Keycloak (${PUBLIC_URL}/auth). For the till this IS the app origin today, so
+// the default is a no-op whitelist entry — override with --auth-url / NATIVE_TILL_AUTH_ORIGIN only
+// if the app origin and token issuer ever split hosts (see capacitor.config.ts AUTH_ORIGIN).
+const authOrigin = arg('--auth-url') ?? process.env.NATIVE_TILL_AUTH_ORIGIN ?? origin
+if (!/^https:\/\//.test(authOrigin)) {
+  console.error(`build-app: auth origin must be a full https:// URL, got: ${authOrigin}`)
+  process.exit(1)
+}
+
 // --- toolchain (match README: Android Studio JBR, NOT the backend JDK 25) ------------------------
-const buildEnv = { ...process.env, NATIVE_TILL_URL: origin }
+const buildEnv = { ...process.env, NATIVE_TILL_URL: origin, NATIVE_TILL_AUTH_ORIGIN: authOrigin }
 if (!buildEnv.JAVA_HOME) {
   const jbr = 'C:\\Program Files\\Android\\Android Studio\\jbr'
   if (process.platform === 'win32' && existsSync(jbr)) {
@@ -85,18 +114,29 @@ const run = (cmd, cwd) => {
   execSync(cmd, { cwd, env: buildEnv, stdio: 'inherit' })
 }
 
-console.log(`[build-app] env=${env}  type=${type}  origin=${origin}`)
+const isAab = format === 'aab'
+const gradleTask = isAab ? 'bundle' : 'assemble'
+console.log(`[build-app] env=${env}  type=${type}  format=${format}  origin=${origin}  auth=${authOrigin}`)
 run('npx cap sync android', app)
-run(`${gradlew} assemble${flavor}${typeCap}`, androidDir)
+run(`${gradlew} ${gradleTask}${flavor}${typeCap}`, androidDir)
 
-// --- collect the APK ----------------------------------------------------------------------------
-// AGP names an UNSIGNED release `app-<flavor>-release-unsigned.apk`; a signed one drops the suffix.
+// --- collect the artifact -----------------------------------------------------------------------
+// APK: AGP names an UNSIGNED release `app-<flavor>-release-unsigned.apk`; a signed one drops the
+// suffix, and outputs land under apk/<flavor>/<type>/.
+// AAB: the release bundle is always `app-<flavor>-<type>.aab` (no unsigned suffix — an unsigned AAB
+// keeps the same name), under bundle/<flavor><Type>/ (e.g. bundle/prodRelease/).
 const signed = type === 'release' && existsSync(join(androidDir, 'keystore.properties'))
-const outDir = join(androidDir, 'app', 'build', 'outputs', 'apk', env, type)
-const candidates = [`app-${env}-${type}.apk`, `app-${env}-${type}-unsigned.apk`]
+const outDir = isAab
+  ? join(androidDir, 'app', 'build', 'outputs', 'bundle', `${env}${typeCap}`)
+  : join(androidDir, 'app', 'build', 'outputs', 'apk', env, type)
+const candidates = isAab
+  ? [`app-${env}-${type}.aab`]
+  : [`app-${env}-${type}.apk`, `app-${env}-${type}-unsigned.apk`]
 const builtName = candidates.find((n) => existsSync(join(outDir, n)))
 if (!builtName) {
-  console.error(`[build-app] expected APK not found in ${outDir} (looked for: ${candidates.join(', ')})`)
+  console.error(
+    `[build-app] expected ${format.toUpperCase()} not found in ${outDir} (looked for: ${candidates.join(', ')})`,
+  )
   process.exit(1)
 }
 const built = join(outDir, builtName)
@@ -105,11 +145,20 @@ const versionCode = (gradleText.match(/versionCode\s+(\d+)/) ?? [])[1] ?? '0'
 const suffix = signed ? '' : '-unsigned'
 const distDir = join(app, 'dist')
 mkdirSync(distDir, { recursive: true })
-const out = join(distDir, `native-app-${env}-v${versionCode}${suffix}.apk`)
+const out = join(distDir, `native-app-${env}-v${versionCode}${suffix}.${format}`)
 copyFileSync(built, out)
 
-console.log(`\n[build-app] ✓ ${env} APK: ${out}`)
+console.log(`\n[build-app] ✓ ${env} ${format.toUpperCase()}: ${out}`)
 if (!signed) {
-  console.warn('[build-app] NOTE: UNSIGNED (no android/keystore.properties). Not installable as a release.')
+  console.warn(
+    `[build-app] NOTE: UNSIGNED (no android/keystore.properties). ${
+      isAab ? 'Play needs the release upload key — Play upload will reject it.' : 'Not installable as a release.'
+    }`,
+  )
 }
-console.log(`[build-app] next: copy it into docker/${env}/downloads/ and bump the edge "latest" alias.`)
+console.log(
+  isAab
+    ? '[build-app] next: upload this .aab to Play Console → Production/Testing → Create release. ' +
+        'Bump build.gradle versionCode before the NEXT upload (Play rejects a re-used versionCode).'
+    : `[build-app] next: copy it into docker/${env}/downloads/ and bump the edge "latest" alias.`,
+)

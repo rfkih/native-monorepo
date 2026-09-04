@@ -36,7 +36,7 @@ class OrgUnitUsersRlsIsolationTest extends PostgresRlsTestBase {
   void aUnitAndItsAssignmentsAreInvisibleToAnotherTenant() throws Exception {
     var a =
         companyService.createCompany(
-            new CreateCompanyCommand("RlsHubA", "IDR", "id", "A HQ", "restaurant", "a"));
+            new CreateCompanyCommand("RlsHubA", "IDR", "id", "restaurant", "a"));
     UUID rootA = a.firstBusiness().getId();
     UUID outletA =
         TenantContext.callAs(
@@ -50,7 +50,7 @@ class OrgUnitUsersRlsIsolationTest extends PostgresRlsTestBase {
 
     var b =
         companyService.createCompany(
-            new CreateCompanyCommand("RlsHubB", "USD", "en", "B HQ", "restaurant", "b"));
+            new CreateCompanyCommand("RlsHubB", "USD", "en", "restaurant", "b"));
 
     // Inside B's scope, A's root unit resolves as NOT FOUND — anti-enumeration.
     assertThatThrownBy(

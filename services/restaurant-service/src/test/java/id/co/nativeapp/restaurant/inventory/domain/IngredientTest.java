@@ -145,7 +145,7 @@ class IngredientTest {
 
   @Test
   void updateAppliesOnlyNonNullFields() {
-    ingredient.update("Roti Tawar", null, null, null);
+    ingredient.update("Roti Tawar", null, null, null, null);
     assertThat(ingredient.getName()).isEqualTo("Roti Tawar");
     assertThat(ingredient.getUnit()).isEqualTo("pcs");
   }
@@ -153,16 +153,33 @@ class IngredientTest {
   @Test
   void updateWithNullUnitCostLeavesCostUnchanged() {
     Ingredient costed = new Ingredient(BUSINESS_ID, "Patty", "pcs", 5_000L, "IDR");
-    costed.update("Patty Sapi", "pack", null, null);
+    costed.update("Patty Sapi", "pack", null, null, null);
     assertThat(costed.getUnitCostMinor()).isEqualTo(5_000L);
     assertThat(costed.getCostCurrency()).isEqualTo("IDR");
   }
 
   @Test
   void updateWithBothCostFieldsSetsTheNewCost() {
-    ingredient.update(null, null, 7_500L, "IDR");
+    ingredient.update(null, null, null, 7_500L, "IDR");
     assertThat(ingredient.getUnitCostMinor()).isEqualTo(7_500L);
     assertThat(ingredient.getCostCurrency()).isEqualTo("IDR");
+  }
+
+  @Test
+  void updateDisplayUnitLeavesOnNullClearsOnBlankAndSetsOnValue() {
+    ingredient.setDisplayUnit("kg");
+    // null = leave unchanged (PATCH): the display unit survives a plain rename.
+    ingredient.update("Tepung", null, null, null, null);
+    assertThat(ingredient.getDisplayUnit()).isEqualTo("kg");
+    // "" = CLEAR (switching a weight item to a base/count unit) — the console sends a blank for
+    // this,
+    // so a stale display_unit can never outlive its base unit and trip the pairing CHECK.
+    ingredient.update(null, "pcs", "", null, null);
+    assertThat(ingredient.getUnit()).isEqualTo("pcs");
+    assertThat(ingredient.getDisplayUnit()).isNull();
+    // a value sets it.
+    ingredient.update(null, "ml", "liter", null, null);
+    assertThat(ingredient.getDisplayUnit()).isEqualTo("liter");
   }
 
   // -----------------------------------------------------------------------
@@ -244,7 +261,7 @@ class IngredientTest {
     costed.setStock(10); // value = 10 × 5.000 = 50.000
     assertThat(costed.getStockValueMinor()).isEqualTo(50_000L);
 
-    costed.update(null, null, 6_000L, "IDR"); // PATCH manual revalue
+    costed.update(null, null, null, 6_000L, "IDR"); // PATCH manual revalue
 
     assertThat(costed.getStockValueMinor()).isEqualTo(60_000L); // 10 × 6.000
     assertThat(costed.getUnitCostMinor()).isEqualTo(6_000L);

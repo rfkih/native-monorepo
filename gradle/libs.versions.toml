@@ -28,6 +28,7 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 springdoc-starter-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 awssdk-s3 = { module = "software.amazon.awssdk:s3", version.ref = "awssdk" }
+awssdk-apache5-client = { module = "software.amazon.awssdk:apache5-client", version.ref = "awssdk" }
 bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 
 [plugins]

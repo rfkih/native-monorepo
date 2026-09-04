@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/Button'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useAuth } from '@/lib/authContext'
+import { DELETE_ACCOUNT_URL, PRIVACY_URL } from '@/lib/config'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
@@ -49,8 +50,21 @@ import { Photo } from './Photo'
 import { ctaPhoto, heroPhoto, posPhoto } from './photos'
 import { MOCK_REVENUE, money } from './mock'
 
-/** Demo-request mail target — the product's contact address (demonstration build). */
-const CONTACT_EMAIL = 'halo@native.id'
+/**
+ * Public contact address — demo requests, support, and the Play Store listing's required contact.
+ * It MUST be a mailbox that is actually read: Google Play emails it during review, and the account
+ * deletion page (public/delete-account.html) routes deletion requests here. The old halo@native.id
+ * was a domain we do not own, which would have failed both.
+ */
+const CONTACT_EMAIL = 'rfkih23@gmail.com'
+
+/**
+ * Android POS app download — ALWAYS the PROD app. Absolute on purpose: this same console build also
+ * serves the UAT origin, where a relative `/native-app-latest.apk` would silently hand out the UAT
+ * flavor (a different installable app, ADR 0058). The alias 302s to the current
+ * `native-app-prod-v<N>.apk` (docker/prod/edge.conf, bumped per release) so this URL never changes.
+ */
+const ANDROID_APP_URL = 'https://app.native-app.my.id/native-app-latest.apk'
 
 // ── Scroll-reveal (flash-free, reduced-motion-safe) ──────────────────────────────────────────────
 
@@ -285,6 +299,11 @@ function Hero() {
             <Check className="mt-0.5 size-4 shrink-0 text-profit-ink" strokeWidth={2.1} />
             {t('landing.heroNote')}
           </p>
+          <div className="reveal mt-4" style={{ animationDelay: '380ms' }}>
+            <CtaLink href={ANDROID_APP_URL} variant="outline">
+              <Download className="size-4" /> {t('landing.downloadAndroid')}
+            </CtaLink>
+          </div>
         </div>
 
         {/* Right — the product screenshot + floating accent cards */}
@@ -670,6 +689,12 @@ function CtaBand() {
             >
               {t('landing.ctaSecondary')}
             </Link>
+            <a
+              href={ANDROID_APP_URL}
+              className="inline-flex h-[54px] items-center justify-center gap-2 rounded-xl border border-white/35 px-6 text-[15px] font-semibold text-white transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <Download className="size-4" /> {t('landing.downloadAndroid')}
+            </a>
           </div>
         </div>
       </Reveal>
@@ -709,6 +734,13 @@ function Footer() {
         { label: t('landing.fDocs'), href: '#' },
         { label: t('landing.fStatus'), href: '#' },
         { label: t('landing.fSales'), href: salesMailto },
+      ],
+    },
+    {
+      heading: t('landing.fLegalHeading'),
+      links: [
+        { label: t('landing.fPrivacy'), href: PRIVACY_URL },
+        { label: t('landing.fDeleteAccount'), href: DELETE_ACCOUNT_URL },
       ],
     },
   ]
@@ -752,11 +784,50 @@ function Footer() {
   )
 }
 
+// ── SEO head sync ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Keeps the document head in step with the active language (react-i18next). index.html ships the
+ * English baseline a no-JS crawler / social scraper sees; once the SPA runs this rewrites the same
+ * tags IN PLACE (no duplicates) to the resolved language — <title>, meta description, the OG/Twitter
+ * title+description mirrors, `og:locale` — and stamps `<html lang>`. The `hreflang` cluster stays
+ * static in index.html (identical on both URLs, so the return links are reciprocal), but canonical +
+ * og:url are made SELF-REFERENTIAL per language: the Indonesian view canonicalises to `/?lng=id`
+ * (its own hreflang alternate) rather than the English `/`, so Google indexes it as a distinct
+ * language version instead of folding it into the default as a duplicate.
+ */
+const SEO_ORIGIN = 'https://app.native-app.my.id'
+
+function useLandingSeo() {
+  const { t, i18n } = useTranslation()
+  useEffect(() => {
+    const lang = i18n.language === 'id' ? 'id' : 'en'
+    const title = t('landing.seoTitle')
+    const description = t('landing.seoDescription')
+    const pageUrl = lang === 'id' ? `${SEO_ORIGIN}/?lng=id` : `${SEO_ORIGIN}/`
+    document.documentElement.lang = lang
+    document.title = title
+    const setMeta = (selector: string, content: string) => {
+      document.head.querySelector<HTMLMetaElement>(selector)?.setAttribute('content', content)
+    }
+    setMeta('meta[name="description"]', description)
+    setMeta('meta[property="og:title"]', title)
+    setMeta('meta[property="og:description"]', description)
+    setMeta('meta[name="twitter:title"]', title)
+    setMeta('meta[name="twitter:description"]', description)
+    setMeta('meta[property="og:locale"]', lang === 'id' ? 'id_ID' : 'en_US')
+    setMeta('meta[property="og:locale:alternate"]', lang === 'id' ? 'en_US' : 'id_ID')
+    setMeta('meta[property="og:url"]', pageUrl)
+    document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute('href', pageUrl)
+  }, [t, i18n.language])
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────────────────────────
 
 export function Landing() {
   const auth = useAuth()
   const onSignIn = () => auth.login()
+  useLandingSeo()
 
   useEffect(() => {
     if (!window.location.hash) window.scrollTo(0, 0)

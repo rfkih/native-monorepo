@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: makes env(safe-area-inset-*) live in browsers/PWA so the safe-area
+         defaults in index.css work outside the Capacitor shells too. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <!-- Set the theme BEFORE first paint to avoid a flash of the wrong colours (FOUC). Reads the
          same storage key as src/lib/theme.ts; falls back to the OS preference. -->
@@ -28,7 +30,7 @@
     <!-- Fonts are SELF-HOSTED (src/index.css @font-face → hashed /assets, immutable-cached):
          the Google Fonts CDN cost every cold start an external round trip + a visible font swap,
          worst in the Android shell which runs without a service worker. -->
-    <title>Native — Multi-entity finance, consolidated</title>
+    <title>Native — Multi-Entity Accounting, POS &amp; Payroll Software</title>
     <!-- Boot skeleton (perceived-performance pass): paints an app ghost the instant the HTML
          arrives — before the JS bundle downloads/parses — then React's first render replaces
          #root wholesale. Two variants sharing one markup: the default mirrors AppSkeleton in
@@ -85,20 +87,88 @@
         .bsk-tiles { grid-template-columns: repeat(4, 1fr); }
       }
     </style>
+    <!-- ── SEO ──────────────────────────────────────────────────────────────────────────────────
+         This is the English BASELINE a no-JS crawler (and social scraper) sees. Once the SPA runs,
+         features/landing/Landing.tsx#useLandingSeo rewrites <title>, the description, and the OG/
+         Twitter mirrors IN PLACE to the resolved language (id in Indonesia) and stamps <html lang>.
+         Canonical + hreflang stay static here — they must be present without JS. hreflang gives the
+         Indonesian version a distinct, crawlable URL (?lng=id, honoured by i18n/index.ts) so both the
+         international (English) and Indonesian markets can index cleanly. Absolute URLs throughout,
+         keyed to the production origin (app.native-app.my.id). -->
     <meta
       name="description"
-      content="Native consolidates revenue, expense, payroll and FX across all your companies in real time — from the point of sale to the group P&amp;L."
+      content="Native unifies point of sale, payroll and real-time financial consolidation across every company you run — multi-entity, multi-currency, one set of books."
     />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e1116" />
+    <link rel="canonical" href="https://app.native-app.my.id/" />
+    <link rel="alternate" hreflang="en" href="https://app.native-app.my.id/" />
+    <link rel="alternate" hreflang="id" href="https://app.native-app.my.id/?lng=id" />
+    <link rel="alternate" hreflang="x-default" href="https://app.native-app.my.id/" />
+    <!-- Open Graph / Facebook / WhatsApp / LinkedIn — raster image (1200×630); SVG previews are not
+         rendered by these scrapers, so og-image.png (generated from og-image.svg) is the shared card. -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Native — Multi-entity finance, consolidated" />
+    <meta property="og:site_name" content="Native" />
+    <meta property="og:url" content="https://app.native-app.my.id/" />
+    <meta property="og:title" content="Native — Multi-Entity Accounting, POS &amp; Payroll Software" />
     <meta
       property="og:description"
-      content="Run every entity's books as one. Real-time consolidation, multi-currency, and a built-in point of sale."
+      content="Run every company's books as one. Real-time consolidation, multi-currency, payroll, and a built-in point of sale."
     />
-    <meta property="og:image" content="/og-image.svg" />
+    <meta property="og:image" content="https://app.native-app.my.id/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Native — multi-entity finance consolidated in real time" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="id_ID" />
+    <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Native — Multi-entity finance, consolidated" />
-    <meta name="twitter:image" content="/og-image.svg" />
+    <meta name="twitter:title" content="Native — Multi-Entity Accounting, POS &amp; Payroll Software" />
+    <meta
+      name="twitter:description"
+      content="Run every company's books as one. Real-time consolidation, multi-currency, payroll, and a built-in point of sale."
+    />
+    <meta name="twitter:image" content="https://app.native-app.my.id/og-image.png" />
+    <!-- Structured data (schema.org). Machine-readable entity + product facts for rich results in
+         both markets; no invented ratings or reviews. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://app.native-app.my.id/#organization",
+            "name": "Native",
+            "url": "https://app.native-app.my.id/",
+            "logo": "https://app.native-app.my.id/og-image.png"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://app.native-app.my.id/#website",
+            "url": "https://app.native-app.my.id/",
+            "name": "Native",
+            "publisher": { "@id": "https://app.native-app.my.id/#organization" },
+            "inLanguage": ["en", "id"]
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Native",
+            "applicationCategory": "BusinessApplication",
+            "applicationSubCategory": "Accounting, Point of Sale & Payroll",
+            "operatingSystem": "Web, Android",
+            "url": "https://app.native-app.my.id/",
+            "description": "Multi-entity business platform: point of sale, payroll, and real-time financial consolidation in one set of books. Multi-currency and multi-company, with Indonesian PPh 21 and BPJS payroll built in.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "IDR"
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root">

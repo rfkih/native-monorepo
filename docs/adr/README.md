@@ -30,7 +30,7 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0009](0009-error-inbox-fleet-rollout.md) | Extract the error-inbox into `libs/error-inbox` and roll it out fleet-wide | Accepted |
 | [0010](0010-distributed-tracing-otel.md) | Wire distributed tracing (Micrometer Tracing + OpenTelemetry) fleet-wide | Accepted |
 | [0011](0011-keycloak-admin-via-spring-restclient.md) | Use Spring RestClient for Keycloak Admin API calls (no keycloak-admin-client library) | Accepted |
-| [0012](0012-flatten-org-tree-remove-branch.md) | Flatten the org tree: remove BRANCH and seed a default outlet per business unit | Accepted |
+| [0012](0012-flatten-org-tree-remove-branch.md) | Flatten the org tree: remove BRANCH and seed a default outlet per business unit | Superseded by [0070](0070-flatten-org-tree-to-company-outlet.md) |
 | [0013](0013-per-login-page-grants-subtractive-ui.md) | Per-login page grants are subtractive UI gating; roles remain the API authz boundary | Accepted |
 | [0014](0014-accounts-receivable-subledger.md) | Accounts Receivable sub-ledger + the customer/party dimension in finance-service | Accepted |
 | [0015](0015-accounts-payable-subledger.md) | Accounts Payable sub-ledger — the vendor-facing mirror of AR | Accepted |
@@ -77,3 +77,17 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0056](0056-moving-average-inventory-cost.md) | Moving weighted-average inventory cost (operational scope; value+qty source of truth) | Accepted |
 | [0057](0057-cloudflare-edge-rollback-first-prod-deploy.md) | Cloudflare-tunnel edge + rollback-first production deployment (co-located VPS) | Accepted |
 | [0058](0058-per-environment-android-app-identities.md) | Per-environment Android app identities (UAT vs Prod, side-by-side) | Accepted |
+| [0059](0059-english-first-localization.md) | English-first localization — Indonesian gated to Indonesia (company country in-app, browser time zone on public pages) | Accepted |
+| [0060](0060-sale-breakdown-snapshot-daily-summary.md) | Per-sale price-breakdown snapshot + POS daily summary (Z-report) | Accepted |
+| [0061](0061-manager-gated-pos-sale-return.md) | Manager-gated "Return sale" (full refund) in the POS — reversal sub-paths escalated to owner/manager at the gateway | Accepted |
+| [0062](0062-web-build-version-gate.md) | Web-build version gate — a soft "update available" prompt + self-healing reload; root `/` served no-store so the SW-less Native shell picks up deploys | Accepted |
+| [0063](0063-bill-attachments-private-media.md) | Bill attachments (photo/PDF real receipt) — private content-addressed media; anon MinIO policy narrowed to menu images only | Accepted |
+| [0064](0064-manager-close-correction-reverse-repost.md) | Manager/owner correction of a completed closing — reverse + re-post the cash variance (never mutate); stock opname self-compensates; recent/unsealed + owner/manager only | Accepted |
+| [0065](0065-gl-derived-dashboard-pnl.md) | Dashboard P&L is GL-derived (shares the income-statement computation) so beranda "Laba bersih" == Laba-Rugi report; `consolidated_pnl` demoted to write-path currency-guard state | Accepted |
+| [0066](0066-auto-official-payroll-on-company-created.md) | employee-service consumes `CompanyCreated` to auto-activate the OFFICIAL statutory payroll dataset for a new IDR tenant (no new tenant left illustrative); forward-only (dedicated group + `latest`), IDR-gated, idempotent; existing tenants activate via the console setup-gate | Accepted |
+| [0067](0067-perpetual-inventory-accounting.md) | Perpetual inventory accounting — capitalize purchases, COGS on consumption, stocktake trues the asset | Proposed |
+| [0068](0068-periodic-default-and-stocktake-controls.md) | Inventory accounting policy — periodic-safe default, perpetual opt-in, and a stock-opname control | Accepted |
+| [0069](0069-bill-row-pessimistic-serialization.md) | Bill-row pessimistic lock (`FOR UPDATE`) serializes every bill write path — cancel vs. split-pay vs. gateway reservation races fail with the correct domain 409, never a stranded sale | Accepted |
+| [0070](0070-flatten-org-tree-to-company-outlet.md) | Flatten the org tree to `company > outlet` — drop the division (business-unit) and team levels; the vertical moves to the company; `OrgUnitDeleted` closes the stale-ref gap | Accepted |
+| [0071](0071-analytics-star-schema.md) | Analytics: a GL-and-event-derived star schema in its own service — AR-1 (analytics never sources a GL-word figure), `JournalEntryPosted` from the `GeneralLedgerWriter` choke point, backup-first connector-guarded outbox retention, 8 role-gated curated pages | Accepted |
+| [0072](0072-purchase-linked-inventory-and-periodic-cogs-routing.md) | One-submit purchases — a company-expense input linked to inventory via `InventoryPurchaseRecorded` (finance → restaurant, priced goods receipt per line); periodic ingredient purchases post 5100 HPP; bills with ingredient lines auto-receive stock; priced Terima demoted | Accepted |

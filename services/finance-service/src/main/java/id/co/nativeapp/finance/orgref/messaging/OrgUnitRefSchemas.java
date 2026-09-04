@@ -38,11 +38,19 @@ public final class OrgUnitRefSchemas {
    */
   public static final String CHANGED_RESOURCE = "avro/OrgUnitChanged.avsc";
 
+  /**
+   * Classpath location of the {@code OrgUnitDeleted} consumer schema (from {@code libs/contracts}).
+   */
+  public static final String DELETED_RESOURCE = "avro/OrgUnitDeleted.avsc";
+
   /** The {@code OrgUnitCreated} Kafka topic (one topic per event type). */
   public static final String CREATED_TOPIC = "OrgUnitCreated";
 
   /** The {@code OrgUnitChanged} Kafka topic. */
   public static final String CHANGED_TOPIC = "OrgUnitChanged";
+
+  /** The {@code OrgUnitDeleted} Kafka topic (ADR 0070 — purges the cached ref). */
+  public static final String DELETED_TOPIC = "OrgUnitDeleted";
 
   private OrgUnitRefSchemas() {
     // static holder
@@ -52,6 +60,7 @@ public final class OrgUnitRefSchemas {
   private static final class Holder {
     private static final Schema CREATED_SCHEMA = parse(CREATED_RESOURCE);
     private static final Schema CHANGED_SCHEMA = parse(CHANGED_RESOURCE);
+    private static final Schema DELETED_SCHEMA = parse(DELETED_RESOURCE);
 
     private Holder() {}
   }
@@ -64,6 +73,11 @@ public final class OrgUnitRefSchemas {
   /** The parsed reader schema for {@code OrgUnitChanged} (finance's consumer view). */
   public static Schema changedSchema() {
     return Holder.CHANGED_SCHEMA;
+  }
+
+  /** The parsed reader schema for {@code OrgUnitDeleted} (finance's consumer view). */
+  public static Schema deletedSchema() {
+    return Holder.DELETED_SCHEMA;
   }
 
   /**
@@ -109,6 +123,22 @@ public final class OrgUnitRefSchemas {
             : null,
         record.get("name").toString(),
         (boolean) record.get("active"));
+  }
+
+  /**
+   * Decodes raw {@code OrgUnitDeleted} Avro bytes into the {@link OrgUnitRefRemoval} the consumer
+   * applies as a PURGE of {@code org_unit_ref} (ADR 0070). Unlike the created/changed decoders this
+   * projects no state: a deleted node has none, and the row is removed outright.
+   *
+   * @param eventId the event's UUID — the idempotency key
+   * @param payload the raw Avro bytes off the topic
+   */
+  public static OrgUnitRefRemoval decodeDeleted(UUID eventId, byte[] payload) {
+    GenericRecord record = AvroSerde.deserialize(payload, Holder.DELETED_SCHEMA);
+    return new OrgUnitRefRemoval(
+        eventId,
+        UUID.fromString(record.get("org_unit_id").toString()),
+        record.get("company_id").toString());
   }
 
   private static Schema parse(String resource) {

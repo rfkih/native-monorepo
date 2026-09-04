@@ -8,6 +8,11 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# Per-build id (ADR 0062): CI passes the git short SHA (`--build-arg APP_BUILD=$(git rev-parse
+# --short HEAD)`); unset falls back to a build timestamp in vite.config.ts. After COPY so the npm ci
+# layer stays cached; only `npm run build` re-runs when the id changes.
+ARG APP_BUILD=""
+ENV VITE_APP_BUILD=$APP_BUILD
 # Produces dist/ (mode=production → .env.production: real OIDC). Runtime URLs are injected later.
 RUN npm run build
 

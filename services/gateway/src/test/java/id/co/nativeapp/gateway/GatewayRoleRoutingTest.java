@@ -44,6 +44,12 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   private static final String EMPLOYEE_USERNAME = "employee-acme";
   private static final String EMPLOYEE_PASSWORD = "employee-password";
 
+  // An ACCOUNTANT-carrying user — proves the OWNER-ONLY inventory-method activate gate excludes
+  // the persona that otherwise reads the whole FINANCE_ROLES back-office surface (opening-balances,
+  // AP/AR, tax, bank, …). Same seeded realm user GatewayRoleExpansionTest already uses.
+  private static final String ACCOUNTANT_USERNAME = "accountant-acme";
+  private static final String ACCOUNTANT_PASSWORD = "accountant-password";
+
   @Test
   void aCashierCanReachThePosMenuRoute() throws Exception {
     String token =
@@ -232,6 +238,165 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payments/x");
   }
 
+  // ---------------------------------------------------------------------------
+  // /api/v1/payments/*/refund + /*/void — the money-OUT reversal sub-paths (ADR 0061): escalated to
+  // SALE_REVERSAL_ROLES (owner/manager) by a HIGHEST_PRECEDENCE route, narrower than the POS_ROLES
+  // paymentsRoute a cashier rings sales through. A refund returns money + posts a GL reversal, so a
+  // cashier/chef/waitress must NOT reach it.
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aManagerCanReachThePaymentRefundRoute() throws Exception {
+    // A manager-only token (no "owner") must pass — proves the gate is owner/manager, not
+    // owner-only.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/payments/some-payment-id/refund")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{\"amountMinor\":1000,\"currency\":\"IDR\"}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payments/some-payment-id/refund");
+  }
+
+  @Test
+  void anOwnerCanAlsoReachThePaymentRefundRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/payments/some-payment-id/refund")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{\"amountMinor\":1000,\"currency\":\"IDR\"}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payments/some-payment-id/refund");
+  }
+
+  @Test
+  void aCashierIsDeniedThePaymentRefundRouteWith403() throws Exception {
+    // The persona the SALE_REVERSAL_ROLES gate exists to exclude: a cashier rings sales but must
+    // not
+    // reverse one. The denial happens at the edge — the reversal never reaches restaurant-service.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/payments/some-payment-id/refund")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .body("{\"amountMinor\":1000,\"currency\":\"IDR\"}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aCashierIsDeniedThePaymentVoidRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/payments/some-payment-id/void")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aManagerCanReachThePaymentVoidRoute() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/payments/some-payment-id/void")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payments/some-payment-id/void");
+  }
+
+  @Test
+  void aCashierCanStillReachThePaymentCaptureRoute() throws Exception {
+    // Regression guard (route-precedence, the other direction): the narrow /payments/*/refund|void
+    // reversal route must NOT swallow the sibling /payments/*/capture — capture stays a POS_ROLES
+    // cashier action, falling through to paymentsRoute exactly as before this phase.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/payments/some-payment-id/capture")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payments/some-payment-id/capture");
+  }
+
+  @Test
+  void aCashierCanStillReachThePaymentReceiptRoute() throws Exception {
+    // Regression guard (the other read-path sibling): /payments/*/receipt must NOT be swallowed by
+    // the reversal route — a cashier reprints/polls receipts, so it falls through to POS_ROLES.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payments/some-payment-id/receipt")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payments/some-payment-id/receipt");
+  }
+
   @Test
   void aCashierCanReachThePosTablesRoute() throws Exception {
     String token =
@@ -270,6 +435,53 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
                     .isEqualTo(HttpStatus.FORBIDDEN));
 
     assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aCashierIsDeniedTheSalesChannelSummaryRouteWith403AndItNeverReachesTheDownstream()
+      throws Exception {
+    // The per-platform online-sales report is company-wide financial data (REPORTS_ROLES), NOT a
+    // POS
+    // read — a cashier ringing ONLINE orders must not read the whole company's GoFood/Grab/Shopee
+    // totals. The HIGHEST_PRECEDENCE carve-out denies at the edge before the general /sales/**
+    // route.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/sales/channel-summary?period=2026-06")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aManagerCanReachTheSalesChannelSummaryRoute() throws Exception {
+    // A manager-only token passes (REPORTS_ROLES = owner/manager/accountant) — proves the carve-out
+    // admits management, and that the exact-path GET does not fall through to the POS route.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/sales/channel-summary?period=2026-06")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).startsWith("/api/v1/sales/channel-summary");
   }
 
   @Test
@@ -2402,6 +2614,185 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
 
     assertThat(response).isEqualTo("ok");
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payment-settings");
+  }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/inventory-method/** — perpetual-inventory election & activation (ADR 0067 §5, Phase
+  // D4/D5). The status GET is FINANCE_ROLES (owner/accountant, the opening-balances precedent); the
+  // POST .../activate is narrower, OWNER-ONLY (the payment-settings/bank-file precedent) — it books
+  // a one-time opening entry and is an effectively-irreversible election.
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedTheInventoryMethodStatusRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/inventory-method")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anAccountantCanReachTheInventoryMethodStatusRoute() throws Exception {
+    // FINANCE_ROLES admits accountant — reading the election status/1100 balance is a books read,
+    // not the activation decision.
+    String token =
+        obtainAccessToken(
+            REALM, CLIENT_ID, CLIENT_SECRET, ACCOUNTANT_USERNAME, ACCOUNTANT_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/inventory-method")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/inventory-method");
+  }
+
+  @Test
+  void anOwnerCanReachTheInventoryMethodStatusRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/inventory-method")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/inventory-method");
+  }
+
+  @Test
+  void aCashierIsDeniedTheInventoryMethodActivateRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/inventory-method/activate")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .body("{}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aManagerIsDeniedTheInventoryMethodActivateRouteWith403() throws Exception {
+    // The persona the owner-only gate EXISTS to exclude (the bank-file precedent): manager-acme
+    // carries ONLY the "manager" realm role, unlike owner-acme (which also carries "manager").
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/inventory-method/activate")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .body("{}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anAccountantIsDeniedTheInventoryMethodActivateRouteWith403() throws Exception {
+    // The narrower gate this route exists to prove: FINANCE_ROLES (owner/accountant) reads the
+    // books, but an accountant does NOT get to elect perpetual inventory or book the opening entry
+    // — only OWNER_ROLES does.
+    String token =
+        obtainAccessToken(
+            REALM, CLIENT_ID, CLIENT_SECRET, ACCOUNTANT_USERNAME, ACCOUNTANT_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/inventory-method/activate")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .body("{}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheInventoryMethodActivateRoute() throws Exception {
+    // The HIGHEST_PRECEDENCE-ordered specific route must be checked BEFORE the general
+    // /api/v1/inventory-method/** (FINANCE_ROLES) route, so an owner token reaches it.
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/inventory-method/activate")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/inventory-method/activate");
+  }
+
+  @Test
+  void theInventoryMethodActivateRouteDoesNotShadowOtherInventoryMethodSubPaths() throws Exception {
+    // Route-precedence proof, the other direction: the narrow /activate carve-out must not swallow
+    // its PARENT /api/v1/inventory-method (the status read) — an accountant still reaches that.
+    String token =
+        obtainAccessToken(
+            REALM, CLIENT_ID, CLIENT_SECRET, ACCOUNTANT_USERNAME, ACCOUNTANT_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/inventory-method")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/inventory-method");
   }
 
   // ---------------------------------------------------------------------------

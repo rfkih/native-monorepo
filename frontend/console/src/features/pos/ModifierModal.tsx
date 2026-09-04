@@ -12,12 +12,15 @@
 import { useState, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Check } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { ChoiceCards } from '@/components/ui/ChoiceCards'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/cn'
+import { singleSelectionSet } from './lib/modifierSelection'
 import type { MenuItem, ModifierGroupResponse, ModifierOptionResponse } from './api'
 
 interface Props {
@@ -63,8 +66,8 @@ function collectOptionIds(
 }
 
 /**
- * Validate that all required groups meet minSelect.
- * Returns null when valid; returns an error key string when invalid.
+ * Validate that all required groups meet minSelect and no group exceeds maxSelect.
+ * Returns true when every group is satisfiable, false otherwise.
  */
 function validate(
   groups: ModifierGroupResponse[],
@@ -82,6 +85,8 @@ function validate(
 
 export function ModifierModal({ item, locale, onConfirm, onClose }: Props) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
+  useScrollLock()
 
   // Map: groupId → Set<optionId>
   const [selections, setSelections] = useState<Map<string, Set<string>>>(() => {
@@ -103,7 +108,9 @@ export function ModifierModal({ item, locale, onConfirm, onClose }: Props) {
   function setSingleSelection(groupId: string, optionId: string) {
     setSelections((prev) => {
       const next = new Map(prev)
-      next.set(groupId, new Set([optionId]))
+      // Empty id = deselect: an optional single-select group can be cleared
+      // (cashier re-taps the chosen option to "skip" the group).
+      next.set(groupId, singleSelectionSet(optionId))
       return next
     })
   }
@@ -249,6 +256,7 @@ function GroupSection({
         <SingleGroup
           group={group}
           selected={[...selections][0] ?? ''}
+          allowDeselect={!group.required}
           availableOptions={availableOptions}
           currency={currency}
           locale={locale}
@@ -274,6 +282,7 @@ function GroupSection({
 function SingleGroup({
   group,
   selected,
+  allowDeselect,
   availableOptions,
   currency,
   locale,
@@ -281,6 +290,7 @@ function SingleGroup({
 }: {
   group: ModifierGroupResponse
   selected: string
+  allowDeselect: boolean
   availableOptions: ModifierOptionResponse[]
   currency: string
   locale: string
@@ -309,6 +319,7 @@ function SingleGroup({
       options={choices}
       value={selected}
       onChange={onSelect}
+      onDeselect={allowDeselect ? () => onSelect('') : undefined}
       columns={2}
     />
   )

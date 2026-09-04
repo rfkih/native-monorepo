@@ -16,6 +16,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, ChevronDown, Store } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/lib/session'
 import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
@@ -60,6 +62,10 @@ export function OutletPicker() {
       document.removeEventListener('keydown', handleEscape)
     }
   }, [open])
+
+  // Back/hardware-back dismisses the pending switch-confirm, not the outlet dropdown itself.
+  useBackDismiss(cancelSwitch, pendingId != null)
+  useScrollLock(pendingId != null)
 
   // No outlets → no picker (the OutletGate blocks the surface in that state; this guard is
   // defense-in-depth for the brief window while queries resolve).

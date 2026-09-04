@@ -36,6 +36,9 @@ export interface EscposReceiptData {
   footerNote: string
   /** Rendered as a solid banner when set (offline provisional receipts — ADR 0028). */
   provisionalNote?: string
+  /** Rendered as a solid banner when set (voided/refunded/partially refunded sale), right after
+   *  the provisional banner. */
+  reversedNote?: string
 }
 
 export function columnsFor(paper: PaperWidth): number {
@@ -111,6 +114,12 @@ export function renderReceipt(
     e.bold(false).align('left').line(divider(cols))
   }
 
+  if (data.reversedNote) {
+    e.align('center').bold(true)
+    for (const l of wrap(data.reversedNote.toUpperCase(), cols)) e.line(l)
+    e.bold(false).align('left').line(divider(cols))
+  }
+
   // Meta — date/reference, then caller-provided rows.
   e.line(twoColumns(data.dateTime, data.reference, cols))
   for (const row of data.metaRows) {
@@ -141,7 +150,10 @@ export function renderReceipt(
       }
     }
   }
-  e.line(divider(cols))
+  // Only the ITEMS block's trailing divider is conditional: an item-less receipt (the daily
+  // summary / Z-report reuses this renderer with no line items) would otherwise print two dividers
+  // back-to-back. The meta divider above still separates the header block from the totals.
+  if (data.lineItems.length > 0) e.line(divider(cols))
 
   // Totals, then the grand total emphasized double-height.
   for (const row of data.totalRows) {

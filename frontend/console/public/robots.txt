@@ -1,0 +1,9 @@
+# Native console — public marketing site is at /. The authenticated app (/pos, /me, /dashboard, …)
+# redirects unauthenticated crawlers back to the landing, and the API/IdP are not content, so they
+# are disallowed to keep the crawl budget on real pages.
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /auth/
+
+Sitemap: https://app.native-app.my.id/sitemap.xml

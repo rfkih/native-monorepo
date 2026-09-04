@@ -4,10 +4,12 @@ import id.co.nativeapp.restaurant.bill.domain.Bill;
 import id.co.nativeapp.restaurant.bill.projection.BillSummaryView;
 import id.co.nativeapp.restaurant.bill.projection.BillView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,6 +21,21 @@ import org.springframework.data.repository.query.Param;
  * automatically (rule 5). Read paths use a native query + projection (never {@code SELECT *}).
  */
 public interface BillRepository extends JpaRepository<Bill, UUID> {
+
+  /**
+   * Loads the bill FOR UPDATE — the serialization point of every bill write path (2026-08-31 audit
+   * C1/H1 fix). {@code Bill.cancel()}'s paid/reserved-line guard is a read of child rows, and a
+   * PARTIAL split-pay / gateway reservation mutates {@code bill_line} via native UPDATEs WITHOUT
+   * dirtying the parent {@code bill} row — so optimistic {@code @Version} alone cannot serialize a
+   * cancel against them (TOCTOU: cancel's line snapshot goes stale, its version check still passes,
+   * and a recorded sale or live PSP reservation is stranded on a CANCELLED bill). Every mutating
+   * path that either changes line paid/reserved state or judges it (cancelBill, payBill,
+   * initiatePendingPayment, BillPaymentCaptureWriter.capture) MUST load the bill through this
+   * finder, making the bill row the common lock; the canonical lock order is bill → bill_line →
+   * payment (see BillPaymentWriter#doAbandon for the payment-side ordering).
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  Optional<Bill> findWithLockById(UUID id);
 
   /**
    * Fetches a single bill's header by id (RLS-scoped). Used for the write path after a {@code

@@ -23,10 +23,12 @@ import { useNavigate } from 'react-router-dom'
 import {
   Banknote,
   BookOpen,
+  CalendarClock,
   ChefHat,
   ClipboardCheck,
   History,
   ClipboardList,
+  FileText,
   Gift,
   KeyRound,
   LogIn,
@@ -40,7 +42,8 @@ import {
   UserRound,
 } from 'lucide-react'
 import { useSession, type CompanySession } from '@/lib/session'
-import { useAuth, hasAnyRole } from '@/lib/authContext'
+import { useAuth, hasAnyRole, effectiveRoles } from '@/lib/authContext'
+import { isNativeShell } from '@/lib/escpos/transport'
 import { accountMenuVisibility } from '@/features/pos-shell/layout/accountMenuGate'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
@@ -91,13 +94,16 @@ import { CategoryCell, CategoryIcon, AllCategoriesIcon } from './components/Cate
 import { MenuTile } from './components/MenuTile'
 import { SummaryBar } from './components/SummaryBar'
 import { WalkInCartSheet } from './components/WalkInCartSheet'
+import { ReturnSaleDialog } from './components/ReturnSaleDialog'
+import { canReturnPayment } from './lib/returnSale'
 import { MenuSkeleton, EmptyMenu, EmptyCategory } from './components/MenuStates'
 import { BillSelectorOverlay } from './components/BillSelectorOverlay'
 import { OpenBillDialog } from './components/OpenBillDialog'
 import { NoCompany } from './components/NoCompany'
 import { RegisterSheet } from './RegisterSheet'
+import { DailySummary } from './DailySummary'
 import { useCurrentRegisterSession } from './registerApi'
-import { noConfirmedOpenSession } from './lib/registerGate'
+import { noConfirmedOpenSession, registerMenuLabelKey } from './lib/registerGate'
 import { useOperatorSession } from '@/features/operator/operatorSessionContext'
 import { operatorSignInRequired } from '@/features/operator/operatorGate'
 import { OperatorPinSheet } from '@/features/operator/OperatorPinSheet'
@@ -107,6 +113,7 @@ import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
 import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
 import { SalesHistorySheet } from './SalesHistorySheet'
+import { ClosingHistorySheet } from './ClosingHistorySheet'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -164,6 +171,17 @@ function PosInner({ session }: { session: CompanySession }) {
   // payment gate below (registerGate.ts) — same query RegisterSheet itself reads, so opening it
   // costs no extra round trip.
   const registerSessionQuery = useCurrentRegisterSession(session)
+  // The till-menu register entry reflects the drawer's ACTUAL state (owner request "kalo sudah
+  // closing harusnya berubah jadi buka kasir") — decision is the pure registerMenuLabelKey core,
+  // mirroring RegisterSheet's own state-aware title. Open → "Closing kasir"; confirmed-closed →
+  // "Buka kasir"; loading/error → the neutral combined label.
+  const registerMenuLabel = t(
+    registerMenuLabelKey({
+      isLoading: registerSessionQuery.isLoading,
+      isError: registerSessionQuery.isError,
+      session: registerSessionQuery.data,
+    }),
+  )
 
   // ADR 0049 P3b — the Business-app device terminal's operator gate. `isDeviceTerminal` is derived
   // from the VERIFIED token claim (auth.actorType, ADR 0049), never a client-side guess; a normal
@@ -203,6 +221,13 @@ function PosInner({ session }: { session: CompanySession }) {
   const [registerGateActive, setRegisterGateActive] = useState(false)
   const [showStocktakeSheet, setShowStocktakeSheet] = useState(false)
   const [showSalesHistory, setShowSalesHistory] = useState(false)
+  // The manager/owner past closed-day history browse (till menu, owner/manager only).
+  const [showClosingHistory, setShowClosingHistory] = useState(false)
+  // The daily transaction summary (Z-report) overlay. An explicit id (set by the close flow's "Cetak
+  // ringkasan") pins the session to summarize; null lets DailySummary resolve the current/last one
+  // (the till-menu "Ringkasan hari ini" entry).
+  const [showSummary, setShowSummary] = useState(false)
+  const [summarySessionId, setSummarySessionId] = useState<string | null>(null)
   // P4: the dock's Send/Pay reach INTO the bill sheet — each ++ asks BillDetail to fire the
   // kitchen ticket / the pay modal as soon as the bill is loaded (no manual sheet detour).
   const [autoKotToken, setAutoKotToken] = useState(0)
@@ -247,9 +272,32 @@ function PosInner({ session }: { session: CompanySession }) {
   // The manual discount is owner/manager-only (ADR 0026 §5; the server 403s anyway — this hides the
   // input for a cashier so it never sees an affordance it cannot use).
   const canManualDiscount = hasAnyRole(auth.roles, 'owner', 'manager')
+  // Returning a sale (full refund, ADR 0061) is owner/manager-only. Merged roles so an ELEVATED
+  // device terminal (ADR 0049 P3b) lights the affordance up; the gateway (SALE_REVERSAL_ROLES) is
+  // the real boundary. The refund posts on the personal/elevated bearer (useRefundPayment) — for a
+  // device terminal that means the elevation token, so this reads owner/manager only from an ACTUAL
+  // elevation (device credentials are cashier-tier by design; a base owner/manager device is not a
+  // provisioned shape). If one ever were, the button would fail CLOSED at the gateway, never widen.
+  const canReturnSale = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
+  // The past closed-day history browse is owner/manager-only. Merged roles for the same elevated
+  // device-terminal reason as the return affordance; the read is POS_ROLES at the gateway (like the
+  // Z-report), so this hides an entry a cashier does not need, not a security boundary.
+  const canViewClosingHistory = hasAnyRole(
+    effectiveRoles(auth.roles, auth.elevatedRoles),
+    'owner',
+    'manager',
+  )
+  // Open-bill lockdown (owner rule): cancelling a bill WITH lines and removing/decrementing lines
+  // are owner/manager-only — once a bill holds items its flow must end in payment. Merged roles so
+  // an elevated device terminal lights the affordances up; the server guard
+  // (BillWriter.requireOwnerOrManager, 403 bill-mutation-forbidden) is the real boundary. An EMPTY
+  // bill stays cancellable by anyone (wrong table opened) — see lib/billPermissions.ts.
+  const canVoidBill = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
 
   // Modal / overlay state
   const [modal, setModal] = useState<'payment' | 'receipt' | 'cart' | null>(null)
+  // The manager-gated "Return sale" confirm/refund dialog over the post-sale receipt (ADR 0061).
+  const [showReturnDialog, setShowReturnDialog] = useState(false)
   const [modifierItem, setModifierItem] = useState<MenuItem | null>(null)
   const [placedOrder, setPlacedOrder] = useState<OrderResponse | null>(null)
   const [placedPayment, setPlacedPayment] = useState<PaymentResponse | null>(null)
@@ -1015,7 +1063,29 @@ function PosInner({ session }: { session: CompanySession }) {
           tableLabel={null}
           appliedPromotions={lastAppliedPromotions}
           provisional={placedProvisional}
+          // Manager-gated Return (ADR 0061). Never on a PROVISIONAL offline receipt — its payment is
+          // a client-side placeholder with no server-side sale to reverse yet.
+          secondaryAction={
+            !placedProvisional && canReturnSale && canReturnPayment(placedPayment)
+              ? { label: t('pos.return.action'), onClick: () => setShowReturnDialog(true) }
+              : undefined
+          }
           onNew={handleNewOrder}
+        />
+      ) : null}
+
+      {modal === 'receipt' && showReturnDialog && placedOrder && placedPayment ? (
+        <ReturnSaleDialog
+          session={session}
+          order={placedOrder}
+          payment={placedPayment}
+          locale={locale}
+          onClose={() => setShowReturnDialog(false)}
+          onReturned={() => {
+            // Sale reversed — close the dialog and the receipt (back to a fresh POS).
+            setShowReturnDialog(false)
+            handleNewOrder()
+          }}
         />
       ) : null}
 
@@ -1026,7 +1096,7 @@ function PosInner({ session }: { session: CompanySession }) {
             {
               key: 'register',
               icon: <Banknote className="size-4" aria-hidden="true" />,
-              label: t('register.title'),
+              label: registerMenuLabel,
               onSelect: () => setShowRegisterSheet(true),
               // ADR 0028: never close a drawer offline or over an unsynced queue — expected cash
               // would understate the replayed sales.
@@ -1064,17 +1134,52 @@ function PosInner({ session }: { session: CompanySession }) {
               disabledTitle: t('pos.history.disabledOffline'),
             },
             {
-              key: 'display',
-              icon: <Monitor className="size-4" aria-hidden="true" />,
-              label: t('pos.customerDisplay.button'),
+              key: 'summary',
+              icon: <FileText className="size-4" aria-hidden="true" />,
+              label: t('register.summaryTillMenuLabel'),
+              // No explicit id → DailySummary resolves the current OPEN (X-report) or last CLOSED
+              // (Z-report) session. Server-truth aggregate — unavailable offline.
               onSelect: () => {
-                displayPublisher.activate()
-                window.open(
-                  `${window.location.origin}/pos/customer-display?outlet=${encodeURIComponent(session.businessId)}`,
-                  'native-pos-display',
-                )
+                setSummarySessionId(null)
+                setShowSummary(true)
               },
+              disabled: offline,
+              disabledTitle: t('register.disabledOffline'),
             },
+            // Owner/manager only: browse PAST closed days' sales (each drills into its Z-report and
+            // that day's transactions). Server-truth read — unavailable offline.
+            ...(canViewClosingHistory
+              ? [
+                  {
+                    key: 'closing-history',
+                    icon: <CalendarClock className="size-4" aria-hidden="true" />,
+                    label: t('pos.closingHistory.tillMenuLabel'),
+                    onSelect: () => setShowClosingHistory(true),
+                    disabled: offline,
+                    disabledTitle: t('pos.closingHistory.disabledOffline'),
+                  },
+                ]
+              : []),
+            // Customer display needs a SECOND window (a browser tab dragged to the customer
+            // monitor). The Android shell is a single WebView — window.open would either navigate
+            // the till itself away mid-shift or spawn a logged-out external tab — so the entry is
+            // browser-only.
+            ...(isNativeShell()
+              ? []
+              : [
+                  {
+                    key: 'display',
+                    icon: <Monitor className="size-4" aria-hidden="true" />,
+                    label: t('pos.customerDisplay.button'),
+                    onSelect: () => {
+                      displayPublisher.activate()
+                      window.open(
+                        `${window.location.origin}/pos/customer-display?outlet=${encodeURIComponent(session.businessId)}`,
+                        'native-pos-display',
+                      )
+                    },
+                  },
+                ]),
             {
               key: 'giftcard',
               icon: <Gift className="size-4" aria-hidden="true" />,
@@ -1189,6 +1294,27 @@ function PosInner({ session }: { session: CompanySession }) {
                   setShowStocktakeSheet(true)
                 }
           }
+          onPrintSummary={
+            // Server-truth aggregate — no offline path, same as the close itself.
+            offline
+              ? undefined
+              : (sessionId) => {
+                  setSummarySessionId(sessionId)
+                  setShowSummary(true)
+                }
+          }
+        />
+      ) : null}
+
+      {showSummary ? (
+        <DailySummary
+          session={session}
+          locale={locale}
+          sessionId={summarySessionId}
+          onClose={() => {
+            setShowSummary(false)
+            setSummarySessionId(null)
+          }}
         />
       ) : null}
 
@@ -1203,6 +1329,18 @@ function PosInner({ session }: { session: CompanySession }) {
 
       {showSalesHistory ? (
         <SalesHistorySheet session={session} locale={locale} onClose={() => setShowSalesHistory(false)} />
+      ) : null}
+      {showClosingHistory ? (
+        <ClosingHistorySheet
+          session={session}
+          locale={locale}
+          onClose={() => setShowClosingHistory(false)}
+          onOpenStocktake={() => {
+            // Stock-count correction hands off to the outlet's opname (self-compensating, ADR 0064).
+            setShowClosingHistory(false)
+            setShowStocktakeSheet(true)
+          }}
+        />
       ) : null}
 
       {showSyncCenter ? <SyncCenter locale={locale} onClose={() => setShowSyncCenter(false)} /> : null}
@@ -1241,6 +1379,7 @@ function PosInner({ session }: { session: CompanySession }) {
           onSheetOpenChange={setBillSheetOpen}
           autoKotToken={autoKotToken}
           autoPayToken={autoPayToken}
+          canVoid={canVoidBill}
           onBack={() => {
             setOpenBillId(null)
             setBillSheetOpen(false)

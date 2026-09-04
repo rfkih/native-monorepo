@@ -6,11 +6,17 @@
 //
 // Usage (PowerShell):
 //   $env:NATIVE_TILL_ORIGIN = "https://<your-origin>"; node scripts/bundle-console.mjs
-// then:  $env:NATIVE_TILL_BUNDLED = "1"; npx cap sync android; (cd android; .\gradlew.bat assembleRelease)
+// then:  $env:NATIVE_TILL_BUNDLED = "1"; $env:NATIVE_TILL_URL = $env:NATIVE_TILL_ORIGIN
+//        npx cap sync android; (cd android; .\gradlew.bat assembleRelease)
 //
 // ORIGIN is the single deployed origin (single-origin UAT layout, docker/uat/edge.conf): the API is
 // at ORIGIN/api and Keycloak at ORIGIN/auth. Defaults to the thin client's current SERVER_URL so a
 // bare run is a working (UAT) bundle.
+//
+// NATIVE_TILL_URL (or NATIVE_TILL_AUTH_ORIGIN) MUST be set to the SAME origin at sync time: a
+// bundled shell boots from https://localhost, so the Keycloak host baked here reaches the WebView
+// only via capacitor.config.ts's allowNavigation (derived from those env vars). Skip it and the
+// interactive login opens the system browser — the exact "app redirects to the web" field bug.
 
 import { execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, rmSync, cpSync } from 'node:fs'

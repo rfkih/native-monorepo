@@ -2,10 +2,13 @@ package id.co.nativeapp.restaurant.register.service;
 
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionAlreadyOpenException;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
+import id.co.nativeapp.restaurant.register.dto.ClosedSessionSummaryResponse;
+import id.co.nativeapp.restaurant.register.dto.CorrectCloseRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
+import id.co.nativeapp.restaurant.register.dto.RegisterSummaryResponse;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.Optional;
@@ -53,6 +56,15 @@ public class RegisterSessionService {
     return writer.close(sessionId, request, idempotencyKey);
   }
 
+  /**
+   * Manager/owner CASH-count correction of an already-CLOSED session (ADR 0064) — finance reverses
+   * the prior variance and posts the corrected one. Correcting to the recorded value is a no-op.
+   */
+  public RegisterSessionResponse correctClose(UUID sessionId, CorrectCloseRequest request) {
+    TenantContext.require();
+    return writer.correctClose(sessionId, request.countedCashMinor(), request.reason());
+  }
+
   public Optional<RegisterSessionResponse> current(UUID businessId) {
     TenantContext.require();
     return writer.findCurrent(businessId);
@@ -64,8 +76,23 @@ public class RegisterSessionService {
     return writer.expectedBreakdown(sessionId);
   }
 
+  /** The POS daily transaction summary (Z-report) for a session — OPEN (X-report) or CLOSED. */
+  public RegisterSummaryResponse summarize(UUID sessionId) {
+    TenantContext.require();
+    return writer.summarize(sessionId);
+  }
+
   public List<RegisterSessionResponse> history(UUID businessId) {
     TenantContext.require();
     return writer.findHistory(businessId);
+  }
+
+  /**
+   * The outlet's CLOSED sessions with each day's net sales + transaction count (newest first) — the
+   * manager/owner past-day history browse. Reporting only; drill-in reuses {@link #summarize}.
+   */
+  public List<ClosedSessionSummaryResponse> closedHistory(UUID businessId) {
+    TenantContext.require();
+    return writer.findClosedHistory(businessId);
   }
 }

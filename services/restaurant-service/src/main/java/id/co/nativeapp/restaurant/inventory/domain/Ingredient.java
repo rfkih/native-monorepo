@@ -45,11 +45,27 @@ public class Ingredient extends Auditable {
   @Column(name = "name", nullable = false, length = 255)
   private String name;
 
-  /** Opaque display text (g / ml / pcs / pack on the console); no server-side unit conversion. */
+  /**
+   * The BASE unit stock is stored and costed in (g / ml / pcs / pack). Opaque to the server — no
+   * server-side unit conversion; {@link #stockQty} and all cost math are in this unit.
+   */
   @Column(name = "unit", nullable = false, length = 16)
   private String unit;
 
-  /** Current stock, ALWAYS tracked — unlike {@code MenuItem.stockQuantity} (ADR 0046). */
+  /**
+   * The unit SHOWN to the user when it differs from the stored base {@link #unit} — {@code kg} over
+   * a base of {@code g}, {@code liter} over {@code ml} (factor 1000). {@code null} when the display
+   * unit IS the base unit (g / ml / pcs / pack). A pure display LABEL: the server never converts —
+   * the console divides/multiplies by the factor so a weight can be entered as 1.5 kg yet stored as
+   * 1500 g, keeping quantities whole integers (ArchUnit HR-8 forbids decimal entity fields).
+   */
+  @Column(name = "display_unit", length = 16)
+  @Nullable private String displayUnit;
+
+  /**
+   * Current stock in the base {@link #unit}, ALWAYS tracked — unlike {@code MenuItem.stockQuantity}
+   * (ADR 0046).
+   */
   @Column(name = "stock_qty", nullable = false)
   private int stockQty;
 
@@ -122,6 +138,17 @@ public class Ingredient extends Auditable {
     return unit;
   }
 
+  @Nullable public String getDisplayUnit() {
+    return displayUnit;
+  }
+
+  /**
+   * Sets the display-unit label (see the field javadoc); {@code null} = display in the base unit.
+   */
+  public void setDisplayUnit(@Nullable String displayUnit) {
+    this.displayUnit = displayUnit;
+  }
+
   public int getStockQty() {
     return stockQty;
   }
@@ -169,6 +196,7 @@ public class Ingredient extends Auditable {
   public void update(
       @Nullable String name,
       @Nullable String unit,
+      @Nullable String displayUnit,
       @Nullable Long unitCostMinor,
       @Nullable String costCurrency) {
     if (name != null) {
@@ -176,6 +204,11 @@ public class Ingredient extends Auditable {
     }
     if (unit != null) {
       this.unit = unit;
+    }
+    if (displayUnit != null) {
+      // A blank string is the caller's explicit "clear the display unit" (back to a base unit);
+      // a null leaves it untouched (partial PATCH), matching the other fields here.
+      this.displayUnit = displayUnit.isBlank() ? null : displayUnit;
     }
     if (unitCostMinor != null) {
       revalue(unitCostMinor, costCurrency);
@@ -238,10 +271,10 @@ public class Ingredient extends Auditable {
 
   /**
    * Receives a purchased quantity at its actual paid price — the moving weighted-average update
-   * (V36). Adds the EXACT {@code amountPaidMinor} to the value bucket and {@code addedQty} to stock;
-   * the derived unit cost ({@link #getUnitCostMinor()}) re-blends. Capturing the TOTAL paid for the
-   * receipt (never a per-unit price) is what keeps the average exact — a Rp 12,75/unit blend is
-   * never rounded away.
+   * (V36). Adds the EXACT {@code amountPaidMinor} to the value bucket and {@code addedQty} to
+   * stock; the derived unit cost ({@link #getUnitCostMinor()}) re-blends. Capturing the TOTAL paid
+   * for the receipt (never a per-unit price) is what keeps the average exact — a Rp 12,75/unit
+   * blend is never rounded away.
    *
    * <p>On a previously UNCOSTED ingredient this establishes the cost currency and values the WHOLE
    * resulting stock at this receipt's unit price (pre-existing units are assumed acquired at the
@@ -333,7 +366,8 @@ public class Ingredient extends Auditable {
     long newValue;
     if (stockQty > 0) {
       // Scale value with qty (preserves the average) — single HALF_EVEN rounding via mulDiv.
-      newValue = Money.ofMinor(stockValueMinor, costCurrency).mulDiv(newQty, stockQty).amountMinor();
+      newValue =
+          Money.ofMinor(stockValueMinor, costCurrency).mulDiv(newQty, stockQty).amountMinor();
     } else {
       // From empty: value the new units at the last-known unit cost (a costed ingredient always
       // retains a non-null unitCostMinor cache — setUnitCost enforces both-or-neither).

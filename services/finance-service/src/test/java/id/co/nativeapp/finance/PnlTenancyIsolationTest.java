@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.finance.expense.messaging.ExpenseRecordedEvent;
 import id.co.nativeapp.finance.expense.service.ExpensePostingService;
-import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.domain.PnlFigures;
 import id.co.nativeapp.finance.pnl.service.PnlReader;
 import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
 import id.co.nativeapp.finance.revenue.service.RevenuePostingService;
@@ -20,13 +20,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 /**
  * Test (e) — CROSS-TENANT ISOLATION of the dimensional ledger + P&L, relying on AUTO-applied RLS.
  *
- * <p>Revenue and an expense posted under tenant A are invisible to tenant B: B's consolidated P&L
- * for the period is empty. The posting binds the event's {@code company_id} as the tenant; the read
- * ({@link PnlReader#pnlForPeriod}) carries NO {@code WHERE company_id} and never calls the
- * synchronizer by hand — only the auto-RLS aspect sets the tenant GUC on each
+ * <p>Revenue and an expense posted under tenant A are invisible to tenant B: B's P&L for the period
+ * is empty. The posting binds the event's {@code company_id} as the tenant; the read ({@link
+ * PnlReader#pnlForPeriod}, GL-derived since ADR 0065) carries NO {@code WHERE company_id} and never
+ * calls the synchronizer by hand — only the auto-RLS aspect sets the tenant GUC on each
  * {@code @Transactional} unit of work, so a query as B sees zero (rule 5). Runs as the unprivileged
- * {@code app_user} role; {@code FORCE ROW LEVEL SECURITY} on both {@code ledger_posting} and {@code
- * consolidated_pnl} binds even that owning role.
+ * {@code app_user} role; {@code FORCE ROW LEVEL SECURITY} on {@code ledger_posting} and the GL
+ * {@code journal_entry}/{@code journal_line} the P&L is now derived from binds even that owning
+ * role.
  */
 @SpringBootTest
 class PnlTenancyIsolationTest extends PostgresRlsTestBase {
@@ -66,15 +67,15 @@ class PnlTenancyIsolationTest extends PostgresRlsTestBase {
                     occurredAt)))
         .isTrue();
 
-    // A sees its full P&L.
-    ConsolidatedPnl aView =
+    // A sees its full P&L (revenue 2,000,000 − expense 500,000 = net 1,500,000).
+    PnlFigures aView =
         TenantContext.callAs(
                 TENANT_A, "viewer-a@example.co.id", () -> pnlReader.pnlForPeriod(period))
             .orElseThrow();
     assertThat(aView.net()).isEqualTo(Money.ofMinor(1_500_000L, "IDR"));
 
-    // As B, the P&L for the period is empty — A's rows are invisible via RLS on the read model...
-    Optional<ConsolidatedPnl> bView =
+    // As B, the P&L for the period is empty — A's GL entries are invisible via RLS...
+    Optional<PnlFigures> bView =
         TenantContext.callAs(TENANT_B, ACTOR_B, () -> pnlReader.pnlForPeriod(period));
     assertThat(bView).isEmpty();
 

@@ -34,8 +34,10 @@ public class CompanyReader {
    *
    * <p>The RLS policy constrains both the {@code company} and the joined {@code org_unit} rows to
    * the bound tenant; no manual {@code WHERE company_id} is needed. The first business is
-   * identified by the same rule the create-company bootstrap uses: the earliest-created root {@code
-   * BUSINESS_UNIT} (with {@code parent_id IS NULL}) for the company.
+   * identified by the same rule the create-company bootstrap uses: the earliest-created {@code
+   * OUTLET} for the company (ADR 0070 — outlets are the only node kind). The join is a LEFT join,
+   * so a company whose outlets have all been deleted still resolves (with a null firstBusinessId)
+   * rather than 404-ing the caller's whole session.
    *
    * @return the company response for the bound tenant
    * @throws NoSuchElementException if no company exists for the bound tenant — mapped to {@code
@@ -56,7 +58,8 @@ public class CompanyReader {
         view.getLegalEmployerId(),
         view.getFirstBusinessId(),
         view.getPlanTier(),
-        view.getCompanyCode());
+        view.getCompanyCode(),
+        view.getVertical());
   }
 
   /**

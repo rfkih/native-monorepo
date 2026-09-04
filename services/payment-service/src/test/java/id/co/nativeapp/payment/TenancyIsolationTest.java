@@ -58,7 +58,8 @@ class TenancyIsolationTest extends PostgresRlsTestBase {
         ACTOR,
         () -> {
           service.upsertCompanyDefault(
-              new UpsertSettingsRequest("GATEWAY", "MIDTRANS", "SANDBOX", "SB-Mid-a-1234", null));
+              new UpsertSettingsRequest(
+                  "GATEWAY", "MIDTRANS", "SANDBOX", "SB-Mid-a-1234", null, null, null));
           service.uploadStaticQr(null, "image/png", PNG);
           return null;
         });
@@ -70,10 +71,10 @@ class TenancyIsolationTest extends PostgresRlsTestBase {
           assertThat(service.list().companyDefault()).isNull();
           assertThat(service.list().outletOverrides()).isEmpty();
           // Effective resolution falls all the way through to the implicit default.
-          assertThat(service.effective(null, null).mode()).isEqualTo("MANUAL");
-          assertThat(service.effective(null, null).staticQrAvailable()).isFalse();
-          assertThat(service.effective(null, null).gateway()).isNull();
-          assertThatThrownBy(() -> service.effectiveImage(null, null))
+          assertThat(service.effective(null).mode()).isEqualTo("MANUAL");
+          assertThat(service.effective(null).staticQrAvailable()).isFalse();
+          assertThat(service.effective(null).gateway()).isNull();
+          assertThatThrownBy(() -> service.effectiveImage(null))
               .isInstanceOf(PaymentSettingsNotFoundException.class);
           return null;
         });
@@ -84,7 +85,7 @@ class TenancyIsolationTest extends PostgresRlsTestBase {
         ACTOR,
         () -> {
           assertThat(service.list().companyDefault()).isNotNull();
-          assertThat(service.effective(null, null).mode()).isEqualTo("GATEWAY");
+          assertThat(service.effective(null).mode()).isEqualTo("GATEWAY");
           return null;
         });
   }

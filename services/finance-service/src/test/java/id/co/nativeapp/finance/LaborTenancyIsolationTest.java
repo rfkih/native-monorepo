@@ -54,13 +54,13 @@ class LaborTenancyIsolationTest extends PostgresRlsTestBase {
     // A sees its labor expense.
     ConsolidatedPnl aView =
         TenantContext.callAs(
-                TENANT_A, "viewer-a@example.co.id", () -> pnlReader.pnlForPeriod(period))
+                TENANT_A, "viewer-a@example.co.id", () -> pnlReader.accumulatedPnlForPeriod(period))
             .orElseThrow();
     assertThat(aView.expense()).isEqualTo(Money.ofMinor(20_000_000L, "IDR"));
 
     // B's P&L for the period is empty — A's rows are invisible via RLS.
     Optional<ConsolidatedPnl> bView =
-        TenantContext.callAs(TENANT_B, ACTOR_B, () -> pnlReader.pnlForPeriod(period));
+        TenantContext.callAs(TENANT_B, ACTOR_B, () -> pnlReader.accumulatedPnlForPeriod(period));
     assertThat(bView).isEmpty();
 
     // The ledger AND the run-control table are RLS-scoped: B sees zero rows over its own

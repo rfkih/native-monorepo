@@ -7,6 +7,7 @@ import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.labor.domain.PayrollRunLedger;
 import id.co.nativeapp.finance.labor.messaging.PayrollLiabilitiesPostedEvent;
@@ -89,6 +90,7 @@ public class PayrollLiabilityWriter {
   private final ProcessedEventStore processedEvents;
   private final RoleAccountResolver roleAccountResolver;
   private final JournalEntryRepository journalEntryRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final JournalLineRepository journalLineRepository;
 
   public PayrollLiabilityWriter(
@@ -96,8 +98,10 @@ public class PayrollLiabilityWriter {
       ProcessedEventStore processedEvents,
       RoleAccountResolver roleAccountResolver,
       JournalEntryRepository journalEntryRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       JournalLineRepository journalLineRepository) {
     this.runLedgerRepository = runLedgerRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.processedEvents = processedEvents;
     this.roleAccountResolver = roleAccountResolver;
     this.journalEntryRepository = journalEntryRepository;
@@ -295,11 +299,7 @@ public class PayrollLiabilityWriter {
   private void persistEntry(JournalEntry entry, String companyId) {
     entry.setCompanyId(companyId);
     // saveAndFlush forces the journal_entry INSERT before the FK'd line INSERTs (same tx).
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   /** Finds this run's control row or opens a fresh one stamped with the event tenant. */

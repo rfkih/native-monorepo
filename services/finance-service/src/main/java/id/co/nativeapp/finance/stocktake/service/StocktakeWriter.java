@@ -5,9 +5,9 @@ import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
+import id.co.nativeapp.finance.inventory.service.PerpetualInventoryReader;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -32,12 +32,22 @@ import org.springframework.transaction.annotation.Transactional;
  * stocktake, not perpetual inventory):
  *
  * <ul>
- *   <li>LOSS ({@code shrinkage_minor > 0}): {@code Dr INVENTORY_SHRINKAGE (5800) / Cr INVENTORY
- *       (1100)}
- *   <li>GAIN ({@code shrinkage_minor < 0}): {@code Dr INVENTORY (1100) / Cr INVENTORY_SHRINKAGE
- *       (5800)}
- *   <li>ZERO: no journal entry — the event is still claimed by {@code processOnce} so redelivery is
- *       a no-op
+ *   <li><strong>NOT perpetual-active</strong> ({@link PerpetualInventoryReader#isActiveFor}, keyed
+ *       on the event's period — ADR 0068 part 1, the DEFAULT for every tenant): a CLAIMED NO-OP.
+ *       The event id is recorded processed; NO {@code journal_entry} and NO {@code ledger_posting}
+ *       is written, regardless of the shrinkage sign/magnitude. This closes the phantom-profit
+ *       class a count typo could otherwise flow straight into the GL — opname stays
+ *       operational-only (restaurant-service still updates {@code stock_qty}; HPP/margin is
+ *       unaffected).
+ *   <li><strong>Perpetual-active</strong> (opt-in, ADR 0067): the true-up below, UNCHANGED —
+ *       <ul>
+ *         <li>LOSS ({@code shrinkage_minor > 0}): {@code Dr INVENTORY_SHRINKAGE (5800) / Cr
+ *             INVENTORY (1100)}
+ *         <li>GAIN ({@code shrinkage_minor < 0}): {@code Dr INVENTORY (1100) / Cr
+ *             INVENTORY_SHRINKAGE (5800)}
+ *         <li>ZERO: no journal entry — the event is still claimed by {@code processOnce} so
+ *             redelivery is a no-op
+ *       </ul>
  * </ul>
  *
  * <p>Shrinkage is a genuine operating expense (account 5800), so — exactly like {@code
@@ -68,9 +78,9 @@ public class StocktakeWriter {
   private static final Logger log = LoggerFactory.getLogger(StocktakeWriter.class);
 
   private final ProcessedEventStore processedEvents;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
+  private final PerpetualInventoryReader perpetualInventoryReader;
   private final LedgerPostingRepository ledgerRepository;
   private final PnlReadModelWriter pnlReadModel;
   private final ErrorInboxWriter errorInbox;
@@ -79,17 +89,17 @@ public class StocktakeWriter {
   @SuppressWarnings("checkstyle:ParameterNumber")
   public StocktakeWriter(
       ProcessedEventStore processedEvents,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
+      PerpetualInventoryReader perpetualInventoryReader,
       LedgerPostingRepository ledgerRepository,
       PnlReadModelWriter pnlReadModel,
       ErrorInboxWriter errorInbox,
       JdbcTemplate jdbcTemplate) {
     this.processedEvents = processedEvents;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.roleAccountResolver = roleAccountResolver;
+    this.perpetualInventoryReader = perpetualInventoryReader;
     this.ledgerRepository = ledgerRepository;
     this.pnlReadModel = pnlReadModel;
     this.errorInbox = errorInbox;
@@ -111,6 +121,22 @@ public class StocktakeWriter {
     String companyId = tenant.companyId();
     String actor = tenant.actor();
     String period = LedgerPosting.periodOf(event.countedAt());
+
+    // ADR 0068 part 1 — the periodic-safe DEFAULT: gate the whole posting on the SAME perpetual
+    // election ADR 0067 introduced. NOT perpetual-active (every tenant by default — no
+    // inventory_method_config row) is a CLAIMED NO-OP: processOnce still records the event id
+    // (idempotency preserved), but no journal_entry / ledger_posting is written — opname stops
+    // moving the GL. Checked BEFORE the sealed-period check so a non-activated tenant's no-op stays
+    // silent (no error-inbox noise) even in a sealed period, mirroring StockReceivedWriter exactly.
+    if (!perpetualInventoryReader.isActiveFor(period)) {
+      log.debug(
+          "StocktakeCompleted {} claimed as a no-op — company {} is not perpetual-active for"
+              + " period {}",
+          event.eventId(),
+          companyId,
+          period);
+      return;
+    }
 
     // Sealed-period quarantine (defense in depth — counted_at is producer-stamped "now", but the
     // guard mirrors the RegisterSessionClosed consumer): post NOTHING, record for the accountant,
@@ -159,12 +185,7 @@ public class StocktakeWriter {
 
     UUID entryId = UUID.randomUUID();
     JournalEntry entry = buildEntry(event, entryId, period);
-    entry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(entry);
-    for (JournalLine line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
 
     // Bring shrinkage onto the two P&L surfaces owners actually read (ADR 0038 W1), in this same
     // transaction — exactly as ExpensePostingWriter does for a genuine expense. The dimensional
@@ -172,10 +193,10 @@ public class StocktakeWriter {
     // consolidated_pnl dashboard. Always keyed to INVENTORY_SHRINKAGE (5800) — the sign lives in
     // the
     // amount, never the account — and the 1100 asset leg stays GL-journal-only. usesIllustrative
-    // mirrors the GL entry (5800/1100 are illustrative, SME-gated per V50), keeping the dashboard's
-    // provisional badge consistent with the books. ledger_posting.source_event_id UNIQUE (the
-    // reused
-    // event id) is the DB idempotency backstop.
+    // mirrors the GL entry (derived from the resolved INVENTORY/INVENTORY_SHRINKAGE mapping
+    // provenance in buildEntry), keeping the dashboard's provisional badge consistent with the
+    // books. ledger_posting.source_event_id UNIQUE (the reused event id) is the DB idempotency
+    // backstop.
     String shrinkageCode = requireMapped(AccountRole.INVENTORY_SHRINKAGE, event.countedAt());
     LedgerPosting posting =
         new LedgerPosting(
@@ -187,7 +208,8 @@ public class StocktakeWriter {
             event.eventId());
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
-    pnlReadModel.addExpense(period, signedExpense, companyId, actor, true);
+    pnlReadModel.addExpense(
+        period, signedExpense, companyId, actor, entry.isUsesIllustrativeRules());
 
     log.info(
         "Posted stocktake shrinkage for stocktake {} (entry {})", event.stocktakeId(), entryId);
@@ -233,8 +255,22 @@ public class StocktakeWriter {
     }
 
     String description = isLoss ? "Inventory stocktake shrinkage" : "Inventory stocktake gain";
+    // Derive the provisional flag from the provenance of the mappings actually resolved (INVENTORY
+    // +
+    // INVENTORY_SHRINKAGE) rather than hardcoding it: once V50's OFFICIAL role_account_map versions
+    // resolve, a new stocktake posting is no longer badged illustrative.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(
+            occurredAt, AccountRole.INVENTORY, AccountRole.INVENTORY_SHRINKAGE);
     return JournalEntry.balanced(
-        entryId, period, occurredAt, description, currencyCode, event.eventId(), true, lines);
+        entryId,
+        period,
+        occurredAt,
+        description,
+        currencyCode,
+        event.eventId(),
+        usesIllustrative,
+        lines);
   }
 
   /** Fail loud on an unmapped role (V50 seeds both, effective 2000-01-01 — internal fault). */

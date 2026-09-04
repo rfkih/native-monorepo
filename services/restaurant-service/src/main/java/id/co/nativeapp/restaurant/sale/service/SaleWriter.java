@@ -6,14 +6,18 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.metric.domain.RestaurantMetricContract;
 import id.co.nativeapp.restaurant.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
+import id.co.nativeapp.restaurant.recipe.messaging.SaleCogsRecordedSchema;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.domain.OperatorMismatchException;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
+import id.co.nativeapp.restaurant.sale.dto.ChannelSalesSummaryResponse;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
 import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema;
+import id.co.nativeapp.restaurant.sale.projection.ChannelSalesSummaryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleHistoryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
@@ -162,6 +166,13 @@ public class SaleWriter {
     // never silently falls back to the device actor.
     String resolvedSellerId = resolveSeller(operator, command);
     stampSeller(sale, resolvedSellerId, operator, companyId, command.businessId());
+    // V39: snapshot the Phase 2 price breakdown onto the sale row (BEFORE the first save — the
+    // columns are updatable=false) so the POS daily summary aggregates exact per-sale figures
+    // instead of re-deriving pricing per order. No-op when the caller carries no breakdown.
+    stampBreakdownIfPresent(sale, command);
+    // ADR 0067 Phase C: snapshot the caller's COGS fold (BEFORE the first save — updatable=false).
+    // No-op when the caller's depletion carried no costed ingredients.
+    sale.stampCogs(command.cogsMinor(), command.cogsCurrency());
     Sale saved = repository.saveAndFlush(sale);
 
     // Build the SaleRecorded GenericRecord from the .avsc and serialize it for the
@@ -195,6 +206,10 @@ public class SaleWriter {
         null,
         UUID.fromString(companyId),
         saved.getOccurredAt());
+
+    // ADR 0067 Phase C: SaleCogsRecorded, same transaction, ONLY when the fold was positive
+    // (sale.cogs_minor stays NULL and nothing is emitted for a sale with no costed depletion).
+    emitSaleCogsRecordedIfPresent(saved, companyId);
 
     // Own-sales commission feed: emit a MetricPublished (sales_amount @ employee) in the SAME
     // transaction, attributed to the resolved seller (operator who rang it, ADR 0049 P2; else the
@@ -253,6 +268,13 @@ public class SaleWriter {
     sale.setCompanyId(companyId);
     String resolvedSellerId = resolveSeller(operator, command);
     stampSeller(sale, resolvedSellerId, operator, companyId, command.businessId());
+    // V39: snapshot the Phase 2 price breakdown onto the sale row (BEFORE the first save — the
+    // columns are updatable=false) so the POS daily summary aggregates exact per-sale figures
+    // instead of re-deriving pricing per order. No-op when the caller carries no breakdown.
+    stampBreakdownIfPresent(sale, command);
+    // ADR 0067 Phase C: snapshot the caller's COGS fold (BEFORE the first save — updatable=false).
+    // No-op when the caller's depletion carried no costed ingredients.
+    sale.stampCogs(command.cogsMinor(), command.cogsCurrency());
     Sale saved = repository.saveAndFlush(sale);
 
     GenericRecord event =
@@ -277,11 +299,43 @@ public class SaleWriter {
         UUID.fromString(companyId),
         saved.getOccurredAt());
 
+    // ADR 0067 Phase C: SaleCogsRecorded, same transaction, ONLY when the fold was positive.
+    emitSaleCogsRecordedIfPresent(saved, companyId);
+
     emitSalesMetric(saved, companyId, resolvedSellerId);
 
     postOutboxHook.afterOutboxWrite(saved);
 
     return new RecordSaleResult(SaleResponse.from(saved), true);
+  }
+
+  /**
+   * ADR 0067 Phase C: writes the {@code SaleCogsRecorded} outbox row in the caller's transaction —
+   * ONLY when {@code saved.getCogsMinor()} is present (a sale with no costed recipe depletion emits
+   * nothing, mirroring {@code sale.cogs_minor} staying NULL). {@code occurredAt} drives the
+   * accounting period, the SAME period as this sale's revenue.
+   */
+  private void emitSaleCogsRecordedIfPresent(Sale saved, String companyId) {
+    Long cogsMinor = saved.getCogsMinor();
+    if (cogsMinor == null) {
+      return;
+    }
+    GenericRecord cogsEvent =
+        SaleCogsRecordedSchema.toRecord(
+            saved.getId(),
+            companyId,
+            saved.getBusinessId(),
+            saved.getOccurredAt(),
+            cogsMinor,
+            saved.getCogsCurrency());
+    outboxWriter.write(
+        SaleCogsRecordedSchema.AGGREGATE_TYPE,
+        saved.getId().toString(),
+        SaleCogsRecordedSchema.EVENT_TYPE,
+        AvroSerde.serialize(cogsEvent),
+        null,
+        UUID.fromString(companyId),
+        saved.getOccurredAt());
   }
 
   /**
@@ -303,6 +357,33 @@ public class SaleWriter {
    */
   private static long giftCardRedeemedOf(RecordSaleCommand command) {
     return command.giftCardRedeemedMinor() != null ? command.giftCardRedeemedMinor() : 0L;
+  }
+
+  /**
+   * Stamps the Phase 2 price-breakdown reporting snapshot onto a freshly-built sale (V39) when the
+   * caller carries one — the SAME figures emitted on the {@code SaleRecorded} event, so the sale
+   * row, the event, and the receipt all agree. {@code discount_minor} is decomposed to PROMO-ONLY
+   * exactly as {@link SaleRecordedSchema#toRecord} does (subtract the loyalty redemption, which is
+   * a separate contra-revenue term). No-op for legacy / carwash callers that pass a {@code null}
+   * breakdown — the columns stay NULL and the daily-summary reader falls back to {@code subtotal ==
+   * amount_minor}. Must run BEFORE the first save (the columns are {@code updatable=false}).
+   */
+  private static void stampBreakdownIfPresent(Sale sale, RecordSaleCommand command) {
+    PriceBreakdown breakdown = command.breakdown();
+    if (breakdown == null) {
+      return;
+    }
+    long loyaltyMinor =
+        command.loyaltyRedeemedMinor() != null ? command.loyaltyRedeemedMinor() : 0L;
+    sale.stampBreakdown(
+        breakdown.subtotal().amountMinor(),
+        // PROMO-ONLY discount: strip the loyalty term (carried separately below), exactly as the
+        // SaleRecorded wire decomposes it.
+        breakdown.discount().amountMinor() - loyaltyMinor,
+        breakdown.serviceCharge().amountMinor(),
+        breakdown.tax().amountMinor(),
+        loyaltyMinor,
+        breakdown.usesIllustrativeRules());
   }
 
   /**
@@ -465,9 +546,16 @@ public class SaleWriter {
    * with {@code occurredAt} in {@code [from, to)}, newest first, hard-capped at 200 rows.
    * RLS-scoped automatically; no manual {@code company_id} predicate. Read path: a native-query
    * projection (only the response columns), never {@code SELECT *} of the entity.
+   *
+   * <p>Outlet-gated (review W1): a cashier may only read the sales of an outlet they are assigned
+   * to — the same {@link OutletAccessGuard} policy the sale-recording writers and the register
+   * reads use (owner/manager bypass, grandfathered tenants allow). Without it a cashier could read
+   * a sibling outlet's transactions cross-outlet (RLS only scopes by company); this also backs the
+   * owner/manager past-day drill-down over a closed session's window.
    */
   @Transactional(readOnly = true)
   public List<SaleHistoryResponse> findHistory(UUID businessId, Instant from, Instant to) {
+    outletAccessGuard.enforce(businessId);
     return repository.findHistory(businessId, from, to).stream()
         .map(SaleWriter::toHistoryResponse)
         .toList();
@@ -484,6 +572,20 @@ public class SaleWriter {
         view.getIdempotencyKey());
   }
 
+  /**
+   * The per-channel ONLINE sales summary for a {@code YYYY-MM} period ({@code GET
+   * /api/v1/sales/channel-summary}) — one row per {@code (channelCode, currency)} bucket.
+   * RLS-scoped automatically; no manual {@code company_id} predicate. Read path: a native-query
+   * projection (only the response columns), never {@code SELECT *} of the entity. Not outlet-gated
+   * — this is a company-wide (all-outlets) report, unlike {@link #findHistory}.
+   */
+  @Transactional(readOnly = true)
+  public List<ChannelSalesSummaryResponse> channelSalesSummary(String period) {
+    return repository.findChannelSummary(period).stream()
+        .map(SaleWriter::toChannelSummaryResponse)
+        .toList();
+  }
+
   /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
   private static SaleHistoryResponse toHistoryResponse(SaleHistoryView view) {
     return new SaleHistoryResponse(
@@ -493,6 +595,18 @@ public class SaleWriter {
         view.getAmountMinor(),
         view.getCurrency().strip(),
         view.getTenderType(),
-        view.getChannelCode());
+        view.getChannelCode(),
+        view.getPaymentStatus(),
+        view.getRefundedMinor());
+  }
+
+  /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
+  private static ChannelSalesSummaryResponse toChannelSummaryResponse(
+      ChannelSalesSummaryView view) {
+    return new ChannelSalesSummaryResponse(
+        view.getChannelCode(),
+        view.getGrossSalesMinor(),
+        view.getTransactionCount(),
+        view.getCurrency().strip());
   }
 }

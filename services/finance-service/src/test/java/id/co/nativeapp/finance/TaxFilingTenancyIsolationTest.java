@@ -73,7 +73,10 @@ class TaxFilingTenancyIsolationTest extends PostgresRlsTestBase {
           VendorResponse vendor = vendorWriter.create("Acme Supplies", null, null);
           UUID bill =
               billWriter.createDraft(
-                  vendor.id(), "IDR", true, List.of(new BillLineInput("Purchase", 1, 4_000_000L)));
+                  vendor.id(),
+                  "IDR",
+                  true,
+                  List.of(new BillLineInput("Purchase", 1, 4_000_000L, false)));
           billWriter.post(bill, 30);
           return null;
         });

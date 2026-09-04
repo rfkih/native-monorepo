@@ -9,8 +9,7 @@ import id.co.nativeapp.finance.ap.repository.BillPaymentRepository;
 import id.co.nativeapp.finance.ap.repository.BillRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -40,8 +39,7 @@ public class BillPaymentWriter {
   private final BillRepository billRepository;
   private final BillPaymentRepository billPaymentRepository;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
 
@@ -50,15 +48,13 @@ public class BillPaymentWriter {
       BillRepository billRepository,
       BillPaymentRepository billPaymentRepository,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.billRepository = billRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.billPaymentRepository = billPaymentRepository;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
     this.jdbcTemplate = jdbcTemplate;
     this.clock = clock;
   }
@@ -122,12 +118,7 @@ public class BillPaymentWriter {
             "AP payment made",
             false,
             amounts);
-    glEntry.setCompanyId(companyId);
-    journalEntryRepository.saveAndFlush(glEntry);
-    for (var line : glEntry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(glEntry, companyId);
 
     BillPayment payment =
         BillPayment.of(billId, amount, now, method, glEntry.getId(), idempotencyKey);

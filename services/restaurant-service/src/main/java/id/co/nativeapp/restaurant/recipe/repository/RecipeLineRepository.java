@@ -4,6 +4,7 @@ import id.co.nativeapp.restaurant.recipe.domain.RecipeLine;
 import id.co.nativeapp.restaurant.recipe.projection.ItemHppView;
 import id.co.nativeapp.restaurant.recipe.projection.RecipeDepletionRow;
 import id.co.nativeapp.restaurant.recipe.projection.RecipeLineView;
+import id.co.nativeapp.restaurant.recipe.projection.UnlinkedMenuItemView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.Collection;
 import java.util.List;
@@ -104,6 +105,31 @@ public interface RecipeLineRepository extends JpaRepository<RecipeLine, UUID> {
       value = "SELECT EXISTS(SELECT 1 FROM recipe_line rl WHERE rl.ingredient_id = :ingredientId)",
       nativeQuery = true)
   boolean existsByIngredientId(@Param("ingredientId") UUID ingredientId);
+
+  /** Auto-link probe ("Lacak stok"): does this menu item already have a recipe? */
+  @Query(
+      value = "SELECT EXISTS(SELECT 1 FROM recipe_line rl WHERE rl.menu_item_id = :menuItemId)",
+      nativeQuery = true)
+  boolean existsByMenuItemId(@Param("menuItemId") UUID menuItemId);
+
+  /**
+   * The auto-link sweep's work list: the outlet's ACTIVE menu items with NO recipe lines — each
+   * gets a same-named 1:1 ingredient so its sales start depleting stock ("Lacak stok semua menu").
+   * Deterministic order so a bulk run processes names stably.
+   */
+  @Query(
+      value =
+          """
+          SELECT m.id   AS id,
+                 m.name AS name
+            FROM menu_item m
+           WHERE m.business_id = :businessId
+             AND m.active = TRUE
+             AND NOT EXISTS (SELECT 1 FROM recipe_line rl WHERE rl.menu_item_id = m.id)
+           ORDER BY m.name, m.id
+          """,
+      nativeQuery = true)
+  List<UnlinkedMenuItemView> findUnlinkedActiveItems(@Param("businessId") UUID businessId);
 
   /** Names of menu items whose recipes reference an ingredient — the 409 guard's error detail. */
   @Query(

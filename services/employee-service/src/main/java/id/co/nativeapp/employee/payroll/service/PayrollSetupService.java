@@ -23,6 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PayrollSetupService {
 
+  /**
+   * The OFFICIAL dataset a fresh tenant activates by default (ADR 0042 go-live). The single source
+   * of truth shared by the console setup-gate ({@code
+   * PayrollSetupController#seedOfficialBootstrap}) and the automatic {@code CompanyCreated}
+   * bootstrap ({@code PayrollBootstrapWriter}).
+   */
+  public static final String DEFAULT_OFFICIAL_DATASET_VERSION = "ID-2026.1";
+
   private final IllustrativeStatutorySeedWriter seedWriter;
   private final OfficialStatutorySeedWriter officialSeedWriter;
   private final StatutoryRuleOverrideWriter overrideWriter;

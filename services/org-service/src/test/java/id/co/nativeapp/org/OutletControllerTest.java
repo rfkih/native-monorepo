@@ -45,8 +45,8 @@ class OutletControllerTest {
     when(orgUnitService.listActiveOutlets())
         .thenReturn(
             List.of(
-                new OutletResponse(OUTLET_A_ID, "Alpha Outlet", "restaurant", DIVISION_A_ID),
-                new OutletResponse(OUTLET_B_ID, "Beta Outlet", "carwash", DIVISION_B_ID)));
+                new OutletResponse(OUTLET_A_ID, "Alpha Outlet"),
+                new OutletResponse(OUTLET_B_ID, "Beta Outlet")));
 
     mockMvc
         .perform(get("/api/v1/outlets"))
@@ -54,12 +54,8 @@ class OutletControllerTest {
         .andExpect(jsonPath("$.length()").value(2))
         .andExpect(jsonPath("$[0].id").value(OUTLET_A_ID.toString()))
         .andExpect(jsonPath("$[0].name").value("Alpha Outlet"))
-        .andExpect(jsonPath("$[0].vertical").value("restaurant"))
-        .andExpect(jsonPath("$[0].divisionId").value(DIVISION_A_ID.toString()))
         .andExpect(jsonPath("$[1].id").value(OUTLET_B_ID.toString()))
-        .andExpect(jsonPath("$[1].name").value("Beta Outlet"))
-        .andExpect(jsonPath("$[1].vertical").value("carwash"))
-        .andExpect(jsonPath("$[1].divisionId").value(DIVISION_B_ID.toString()));
+        .andExpect(jsonPath("$[1].name").value("Beta Outlet"));
   }
 
   @Test
@@ -77,8 +73,7 @@ class OutletControllerTest {
     // The contract is {id, name, vertical, divisionId} — no type, parentId, or active in the
     // response ("parentId" specifically; "divisionId" is a deliberately distinct, additive field).
     when(orgUnitService.listActiveOutlets())
-        .thenReturn(
-            List.of(new OutletResponse(OUTLET_A_ID, "Alpha Outlet", "restaurant", DIVISION_A_ID)));
+        .thenReturn(List.of(new OutletResponse(OUTLET_A_ID, "Alpha Outlet")));
 
     mockMvc
         .perform(get("/api/v1/outlets"))
@@ -89,16 +84,12 @@ class OutletControllerTest {
   }
 
   @Test
-  void listActiveOutletsSerializesNullVerticalAsNull() throws Exception {
+  void listActiveOutletsSerializesTheSlimOutletShape() throws Exception {
     // A pre-V6 anomaly (parent BU without a vertical) must not break the picker — the field
     // serializes as JSON null and the console fails open to restaurant.
     when(orgUnitService.listActiveOutlets())
-        .thenReturn(List.of(new OutletResponse(OUTLET_A_ID, "Alpha Outlet", null, null)));
+        .thenReturn(List.of(new OutletResponse(OUTLET_A_ID, "Alpha Outlet")));
 
-    mockMvc
-        .perform(get("/api/v1/outlets"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$[0].vertical").value((Object) null))
-        .andExpect(jsonPath("$[0].divisionId").value((Object) null));
+    mockMvc.perform(get("/api/v1/outlets")).andExpect(status().isOk());
   }
 }

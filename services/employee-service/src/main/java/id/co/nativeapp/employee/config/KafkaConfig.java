@@ -9,6 +9,7 @@ import id.co.nativeapp.events.Base64ByteArraySerializer;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -82,6 +83,40 @@ public class KafkaConfig {
     // makes the listener span a child of the producer span. The global
     // spring.kafka.listener.observation-enabled property only applies to Spring Boot's
     // auto-configured factory; custom factories require this explicit call.
+    factory.getContainerProperties().setObservationEnabled(true);
+    return factory;
+  }
+
+  /**
+   * The consumer group for the {@code CompanyCreated} auto-bootstrap listener — deliberately
+   * SEPARATE from the main {@code employee-service} group and pinned to {@code
+   * auto.offset.reset=latest}.
+   *
+   * <p><strong>Why a dedicated group + latest.</strong> The main group resets to {@code earliest}
+   * so a fresh consumer hydrates its org read model from history. If the {@code CompanyCreated}
+   * listener joined that group, enabling it would REPLAY every historical {@code CompanyCreated}
+   * and mass-activate official payroll for every existing tenant at once (an implicit,
+   * hard-to-reverse bulk mutation that could also supersede a tenant's hand-verified statutory
+   * override). Pinning it to {@code latest} in its own group makes enabling it strictly
+   * FORWARD-ONLY: only companies created AFTER it starts are auto-bootstrapped. Existing tenants
+   * are activated deliberately via the console payroll setup-gate ({@code POST
+   * /api/v1/payroll-setup/seed-official-bootstrap}).
+   */
+  static final String BOOTSTRAP_GROUP_ID = "employee-payroll-bootstrap";
+
+  @Bean
+  public ConcurrentKafkaListenerContainerFactory<String, byte[]>
+      companyBootstrapListenerContainerFactory(
+          KafkaProperties kafkaProperties, DefaultErrorHandler kafkaErrorHandler) {
+    Map<String, Object> consumerProps = kafkaProperties.buildConsumerProperties();
+    consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, BOOTSTRAP_GROUP_ID);
+    consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+    ConsumerFactory<String, byte[]> consumerFactory =
+        new DefaultKafkaConsumerFactory<>(consumerProps);
+    ConcurrentKafkaListenerContainerFactory<String, byte[]> factory =
+        new ConcurrentKafkaListenerContainerFactory<>();
+    factory.setConsumerFactory(consumerFactory);
+    factory.setCommonErrorHandler(kafkaErrorHandler);
     factory.getContainerProperties().setObservationEnabled(true);
     return factory;
   }

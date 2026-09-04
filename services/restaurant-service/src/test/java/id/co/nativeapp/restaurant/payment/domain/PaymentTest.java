@@ -125,4 +125,19 @@ class PaymentTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("exceeds");
   }
+
+  @Test
+  void refundRejectedOnAlreadyRefundedSaleAsNotReversible() {
+    // The reachable double-return (a second terminal, or a retry racing the async read-model
+    // update): a fully REFUNDED payment refunded again is a domain STATE conflict, not a bad value
+    // —
+    // it must be a PaymentNotReversibleException (→ 409, an honest "already returned"), never a
+    // 500.
+    Payment p =
+        Payment.capturedCash(ORDER, BIZ, idr(50_000), idr(50_000), idr(0), SALE, NOW, "idem-10");
+    p.refund(idr(50_000));
+    assertThat(p.getStatus()).isEqualTo(Payment.Status.REFUNDED);
+    assertThatThrownBy(() -> p.refund(idr(50_000)))
+        .isInstanceOf(PaymentNotReversibleException.class);
+  }
 }

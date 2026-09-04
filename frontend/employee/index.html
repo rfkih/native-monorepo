@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: makes env(safe-area-inset-*) live so the bottom tab bar / FAB clear
+         the gesture pill (they were sitting under it — env() reads 0 without this). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <!-- Set the theme BEFORE first paint to avoid a flash of the wrong colours (FOUC). Reads the
          same storage key as the console's src/lib/theme.ts (shared via the @ alias — see

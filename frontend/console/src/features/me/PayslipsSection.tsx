@@ -24,6 +24,7 @@ import {
   type MyPayslipHeader,
   type MyPayslipsYtdSummary,
 } from './api'
+import { periodLabel } from './periodLabel'
 
 /** A period ("YYYY-MM") is December — the run that may carry the annual Art-17 true-up. */
 function isDecemberPeriod(period: string): boolean {
@@ -163,7 +164,7 @@ function PayslipRow({
         ) : (
           <ChevronRight className="size-4 text-ink-3" aria-hidden="true" />
         )}
-        <span className="text-[15px] font-semibold text-ink">{slip.period}</span>
+        <span className="text-[15px] font-semibold text-ink">{periodLabel(slip.period, locale)}</span>
         {slip.runSeq > 1 ? (
           <span className="text-xs text-ink-3">{t('me.payslips.runSeq', { seq: slip.runSeq })}</span>
         ) : null}

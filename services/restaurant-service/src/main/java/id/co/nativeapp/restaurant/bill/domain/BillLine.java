@@ -76,6 +76,17 @@ public class BillLine extends Auditable {
   @Column(name = "paid_sale_id")
   private UUID paidSaleId;
 
+  /**
+   * The in-flight gateway payment this line is currently RESERVED against (V38), or {@code null}.
+   * Written ONLY via {@code BillLineRepository}'s native {@code @Modifying} reserve/release/mark-
+   * paid queries — never through an entity setter/{@code save()} — but mapped here READ-ONLY
+   * ({@code insertable = false, updatable = false}) so {@link Bill#removeLine} can enforce the "not
+   * reserved" invariant against a freshly-loaded aggregate (hardening — code review: removing a
+   * reserved line out from under an in-flight payment would strand real PSP money at capture time).
+   */
+  @Column(name = "pending_payment_id", insertable = false, updatable = false)
+  private UUID pendingPaymentId;
+
   @OneToMany(
       mappedBy = "billLine",
       cascade = CascadeType.ALL,
@@ -182,5 +193,13 @@ public class BillLine extends Auditable {
 
   public UUID getPaidSaleId() {
     return paidSaleId;
+  }
+
+  /**
+   * {@code null} unless this line is currently RESERVED for an in-flight gateway payment (V38) —
+   * see the field javadoc.
+   */
+  public UUID getPendingPaymentId() {
+    return pendingPaymentId;
   }
 }

@@ -22,6 +22,9 @@ public final class CountryDefaults {
   /** All ISO 3166-1 alpha-2 codes the JDK knows — the single source of country validity. */
   private static final Set<String> ISO_COUNTRIES = Set.of(Locale.getISOCountries());
 
+  /** The platform-supported UI languages (mirror of the {@code SignupRequest} whitelist). */
+  private static final Set<String> SUPPORTED_LANGUAGES = Set.of("en", "id");
+
   private CountryDefaults() {}
 
   /**
@@ -51,5 +54,31 @@ public final class CountryDefaults {
    */
   public static String baseCurrencyFor(String isoCountry) {
     return "ID".equals(isoCountry) ? "IDR" : "USD";
+  }
+
+  /**
+   * Validates a company's default language against the English-first, Indonesian-only-in-Indonesia
+   * policy (ADR 0059) and returns the normalized (trimmed, lower-case) code. English is accepted
+   * for every country; Indonesian ({@code "id"}) ONLY when the country is Indonesia — the language
+   * counterpart of {@link #baseCurrencyFor}. Consumed at the same derive-before-create point as the
+   * currency derivation (so a disallowed language never leaves a compensable Keycloak user behind)
+   * AND by {@link Company}'s constructor (the authoritative check for the in-app create path).
+   *
+   * @param isoCountry a NORMALIZED country code (call {@link #requireValidCountry} first)
+   * @param language the raw default-language code (e.g. {@code "en"}, {@code "ID"})
+   * @return the normalized language code
+   * @throws IllegalArgumentException if the language is unsupported, or Indonesian for a
+   *     non-Indonesian country (mapped to a clean {@code 400} by the shared exception handler)
+   */
+  public static String requireLanguageForCountry(String isoCountry, String language) {
+    Objects.requireNonNull(language, "defaultLanguage");
+    String code = language.strip().toLowerCase(Locale.ROOT);
+    if (!SUPPORTED_LANGUAGES.contains(code)) {
+      throw new IllegalArgumentException("unsupported language: " + code);
+    }
+    if (code.equals("id") && !"ID".equals(isoCountry)) {
+      throw new IllegalArgumentException("Indonesian is only available for companies in Indonesia");
+    }
+    return code;
   }
 }

@@ -199,6 +199,13 @@ export const en = {
         button: 'Change password',
         hint: 'Opens a secure Keycloak page — you’ll return here once it’s done.',
       },
+      privacy: {
+        title: 'Privacy & account deletion',
+        body: 'How we handle your data, and how to have your account erased.',
+        policy: 'Privacy policy',
+        delete: 'Delete your account',
+        hint: 'Deletion is handled by email request and completed within 30 days. Employee accounts are closed by your employer.',
+      },
     },
   },
   landing: {
@@ -206,6 +213,12 @@ export const en = {
     navProduct: 'Product',
     navCompliance: 'Compliance',
     navPricing: 'Pricing',
+    // SEO — the document <title> + meta description (features/landing/Landing.tsx#useLandingSeo).
+    // Keyword-led for the international market; kept ≤60 / ≤160 chars so they display in full in
+    // search results.
+    seoTitle: 'Native — Multi-Entity Accounting, POS & Payroll Software',
+    seoDescription:
+      'Native unifies point of sale, payroll and real-time financial consolidation across every company you run — multi-entity, multi-currency, one set of books.',
     /** ADR 0047 — the landing pricing section, rendered from lib/pricing.ts (never hand-kept). */
     pricing: {
       kicker: 'Pricing',
@@ -227,6 +240,7 @@ export const en = {
     heroPrimary: 'Book a 30-minute demo',
     heroSecondary: 'See the product',
     heroNote: 'No credit card. Your data can be exported at any time.',
+    downloadAndroid: 'Download the Android app',
     // product mockups
     mockPeriod: 'July 2026 · 3 outlets',
     mockLive: 'Live',
@@ -305,7 +319,7 @@ export const en = {
     quoteText:
       'We built Native because closing the books each month should not mean three spreadsheets and an all-nighter.',
     quoteAuthor: 'The Native team',
-    quoteRole: 'PT Native Aplikasi Indonesia · Jakarta',
+    quoteRole: 'Native · Indonesia',
     outcome1Value: '1 source',
     outcome1Label: 'Till, payroll, and journal data are no longer copied between systems',
     outcome2Value: '5 modules',
@@ -320,8 +334,11 @@ export const en = {
     ctaSecondary: 'Try it free',
     demoMailSubject: 'Native demo request',
     // footer
-    footerCompany: 'PT Native Aplikasi Indonesia',
-    footerAddress: 'Jl. Kemang Raya 41, Jakarta Selatan 12730',
+    // Native is operated by an INDIVIDUAL, not a company. This line is published on the public
+    // landing and must match the operator identity in public/privacy.html and the name Google
+    // verifies on the Play developer account — a fabricated PT here is a Play misrepresentation.
+    footerCompany: 'Native',
+    footerAddress: 'Operated by Rifki · Indonesia',
     fProductHeading: 'Product',
     fPos: 'Point of sale',
     fPayroll: 'Payroll',
@@ -336,7 +353,10 @@ export const en = {
     fDocs: 'Documentation',
     fStatus: 'Service status',
     fSales: 'Talk to sales',
-    footerRights: '© {{year}} PT Native Aplikasi Indonesia',
+    fLegalHeading: 'Legal',
+    fPrivacy: 'Privacy policy',
+    fDeleteAccount: 'Delete your account',
+    footerRights: '© {{year}} Native',
     footerPhotoCredit: 'Photos: Unsplash · licenses listed in SOURCES.md',
   },
   common: {
@@ -345,6 +365,7 @@ export const en = {
     copyDetails: 'Copy details',
     traceId: 'Trace ID',
     errorReference: 'Reference',
+    language: 'Language',
     back: 'Back',
     continue: 'Continue',
     cancel: 'Cancel',
@@ -355,6 +376,22 @@ export const en = {
     done: 'Done',
     save: 'Save',
     submit: 'Submit',
+    fileSaved: 'Saved to Downloads: {{filename}}',
+    fileSaveFailed: 'Could not save {{filename}} — check storage space and try again',
+  },
+  appCrash: {
+    title: 'Something went wrong',
+    body: 'The app hit an unexpected error. Reload to continue — your data is safe on the server.',
+    reload: 'Reload',
+  },
+  backGuard: {
+    leaveTitle: 'Leave this page?',
+    leaveBody: 'Going back will leave this page.',
+    leaveConfirm: 'Leave',
+    exitTitle: 'Exit the app?',
+    exitBody: 'The app will be closed to the background.',
+    exitConfirm: 'Exit',
+    exitHint: 'Press back again to exit',
   },
   nav: {
     dashboard: 'Dashboard',
@@ -367,6 +404,7 @@ export const en = {
     printer: 'Printer',
     payments: 'Payments',
     features: 'Features',
+    inventoryMethod: 'Inventory accounting',
     switchCompany: 'Switch company',
     language: 'Language',
     actingAs: 'Acting as',
@@ -379,6 +417,7 @@ export const en = {
     groupAr: 'Receivables',
     groupAp: 'Payables',
     groupCashTax: 'Cash & tax',
+    groupCatalog: 'Menu & stock',
     groupSales: 'Sales',
     groupPlanning: 'Planning',
     groupOrg: 'Organization',
@@ -388,7 +427,8 @@ export const en = {
     employees: 'Employees',
     payroll: 'Payroll',
     attendance: 'Leave & attendance',
-    menu: 'Menu',
+    menu: 'Menu & prices',
+    inventory: 'Inventory',
     kitchen: 'Kitchen',
     expenses: 'Expenses',
     invoices: 'Invoices',
@@ -406,6 +446,7 @@ export const en = {
     deferrals: 'Deferrals',
     channels: 'Sales channels',
     platformSettlements: 'Platform settlements',
+    marketplace: 'Marketplace / Platform Online',
     openingBalances: 'Opening balances',
   },
   a11y: {
@@ -415,7 +456,7 @@ export const en = {
   shell: {
     switchCompany: 'Switch company',
     yourBusinesses: 'Your companies',
-    addBusiness: 'Add company or division',
+    addBusiness: 'Add company',
   },
   dashboardPhone: {
     perOutlet: 'By outlet',
@@ -588,19 +629,6 @@ export const en = {
         usingCompany: 'Using company image',
         overrideSet: 'Outlet image set',
       },
-      divisions: {
-        heading: 'Divisions',
-        hint:
-          'Each division can use its own QRIS mode and image, or follow the company default below. An outlet then follows its division automatically, unless it has its own setting.',
-        empty: 'No divisions yet.',
-      },
-      division: {
-        modeHeading: 'QRIS mode for {{division}}',
-        gatewayHint: "Charges for this division use the company's Midtrans connection:",
-        inheritConfirmMessage:
-          "Revert to the company default? This division's own QRIS image will be removed.",
-        imageOwnSet: 'Division image set',
-      },
       outlets: {
         heading: 'Outlets',
         hint: 'Each outlet can use its own QRIS mode and image, or follow the company default below.',
@@ -609,18 +637,14 @@ export const en = {
       outlet: {
         effectiveOwn: 'Own mode: {{mode}}',
         effectiveInherits: 'Inherits company default ({{mode}})',
-        effectiveInheritsDivision: 'Inherits division default ({{mode}})',
         modeHeading: 'QRIS mode for {{outlet}}',
         inheritOption: 'Inherit company default',
         inheritDesc: 'Follows the company default, currently {{mode}}.',
-        inheritOptionDivision: 'Inherit division default',
-        inheritDescDivision: 'Follows the division default, currently {{mode}}.',
         inheritConfirmMessage:
           "Revert to the company default? This outlet's own QRIS image will be removed.",
         inheritConfirmYes: 'Yes, revert',
         gatewayHint: "Charges for this outlet use the company's Midtrans connection:",
         imageHeading: 'QRIS image',
-        imageInheritsDivision: 'Using division image',
       },
       company: {
         heading: 'Company default',
@@ -628,37 +652,87 @@ export const en = {
       },
       gateway: {
         heading: 'Payment gateway (Midtrans)',
-        environment: 'Environment',
+        activeEnvironment: 'Active environment',
         sandbox: 'Sandbox',
         production: 'Production',
         serverKey: 'Server key',
         serverKeySavedHint: 'Saved — fill in again only to change it.',
         clientKey: 'Client key',
+        testConnection: 'Test connection',
+        verify: {
+          valid: 'Key verified',
+          invalid: 'Key rejected — check the key and environment.',
+          unreachable: 'Could not reach the gateway — try again.',
+        },
+        activateNeedsKey: "Enter this environment's server key before making it active.",
+        productionLiveWarning: 'Production uses real money — customers are charged for real.',
         save: 'Save gateway settings',
         saveError: 'Could not save the gateway settings. Try again.',
         connected: 'Connected',
+        connectedWithLast4: 'Connected · •••• {{last4}}',
         notConnected: 'Not connected',
+      },
+    },
+    inventoryMethod: {
+      /** ADR 0067 §5, Phase D4/D5 — the perpetual-inventory election & activation console.
+       * OWNER-ONLY: activation books a real opening GL entry and is effectively irreversible
+       * (no deactivate/amend flow), so this is never framed as a casual toggle. */
+      title: 'Inventory accounting',
+      subtitle:
+        'Perpetual inventory accounting capitalizes purchases to the Inventory asset and expenses them as Cost of Goods Sold only when sold — instead of expensing every purchase immediately.',
+      loadError: 'Could not load the inventory accounting status. Try again.',
+      status: {
+        activeBadge: 'Perpetual inventory active',
+        cutoverLabel: 'Cutover month',
+        activatedLabel: 'Activated',
+        assetLabel: 'Inventory asset (1100)',
+        negativeWarning: 'Inventory asset is negative',
+        negativeHint:
+          'The inventory asset account has gone negative — check recent stock receipts and cost of goods sold for an unflagged purchase or an oversell.',
+      },
+      inactive: {
+        heading: 'Not yet activated',
+        body: "Today, every purchase is expensed immediately and the inventory asset account isn't tracked. Activating perpetual inventory changes how purchases and sales post to the books going forward: it books a one-time opening entry for what you have on hand today, then capitalizes future inventory purchases and expenses them as Cost of Goods Sold only once they're sold.",
+        bullet1: 'A deliberate, owner-only accounting change — not a casual toggle.',
+        bullet2:
+          'Applies going forward from the cutover month you choose; already-sealed periods keep their existing entries.',
+        bullet3: 'Cannot be turned off once activated.',
+        action: 'Activate perpetual inventory',
+      },
+      activate: {
+        formTitle: 'Activate perpetual inventory',
+        formIntro:
+          "Choose the month this takes effect and the value of inventory you've counted on hand as of that month. Leave the value at 0 if you haven't counted anything yet.",
+        cutoverLabel: 'Cutover month',
+        cutoverHint: 'Perpetual accounting applies from this month onward.',
+        openingValueLabel: 'Counted opening inventory value ({{currency}})',
+        openingValueHint:
+          'The value of ingredients/stock on hand as of the cutover month, from your latest stock count. Books a one-time opening entry to Inventory.',
+        confirmTitle: 'Confirm activation',
+        confirmWarning:
+          'This is permanent. Perpetual inventory accounting cannot be turned off once activated.',
+        confirmCutover: 'Cutover month',
+        confirmOpeningValue: 'Opening inventory value',
+        confirmNote:
+          'Purchases you flag as inventory (or record as a stock receive) will be capitalized to the books from {{period}} onward, and cost of goods sold will post automatically when items are sold.',
+        acknowledge: 'I understand this change is permanent and affects the company books.',
+        confirmAction: 'Activate perpetual inventory',
+      },
+      error: {
+        alreadyActive: 'Perpetual inventory is already active for this company.',
+        sealedPeriod:
+          'That cutover month is already sealed (tax-filed) and can no longer be used — choose a later month.',
+        generic: 'Could not activate perpetual inventory. Try again.',
       },
     },
   },
   onboarding: {
     title: 'Create a company',
     addTitle: 'Add another company',
-    chooser: {
-      title: 'What are you adding?',
-      subtitle:
-        'A company files its own taxes and keeps its own books. A division operates inside an existing company and shares its books and tax filing.',
-      companyOption: 'A separate company',
-      companyOptionHint: 'Its own legal entity (own NPWP) — separate books, taxes, and statements.',
-      divisionOption: 'A division of {{company}}',
-      divisionOptionHint:
-        'Same legal entity — shares the books and tax filing; adds its own outlets and P&L view.',
-    },
     subtitle:
-      'The base currency and language are set now — they are fixed at creation and cannot be changed later.',
+      'The currency, language, and kind of business are set now — all fixed at creation and cannot be changed later.',
     stepCompany: 'Company',
     stepSettings: 'Settings',
-    stepBusiness: 'First division',
     stepReview: 'Review',
     companyName: 'Company name',
     companyNamePlaceholder: 'e.g. Nusantara Holdings',
@@ -670,15 +744,14 @@ export const en = {
       'Your books will be kept in {{currency}} — set by your country and fixed at creation.',
     defaultLanguage: 'Default language',
     defaultLanguageHint: 'The default for new teammates. Each user can override their own.',
-    firstBusinessName: 'Division name',
-    firstBusinessNamePlaceholder: 'e.g. Jakarta Restaurant',
     vertical: 'What kind of business is it?',
     verticalHint: 'Sets which point of sale its outlets use. It cannot be changed later.',
-    reviewHint: 'The company and its first business are created together, in one step.',
+    reviewHint: 'The company and its first outlet are created together, in one step.',
     create: 'Create company',
     creating: 'Creating…',
     createdTitle: 'Company created',
     createdBody: 'Your workspace is ready.',
+    createdOutlet: 'Your first outlet is named after your company — rename it any time from Outlets.',
     goToDashboard: 'Go to dashboard',
     fixedNote: 'Fixed at creation',
     errorTitle: 'Could not create the company',
@@ -699,8 +772,7 @@ export const en = {
   },
   dashboard: {
     title: 'Consolidated position',
-    scopeAllUnits: 'Consolidated position · all divisions of this company',
-    unitContribution: 'Division contribution',
+    scopeAllUnits: 'Consolidated position · all outlets of this company',
     openUnitPnl: 'Open unit P&L',
     period: 'Period',
     prevPeriod: 'Previous period',
@@ -758,7 +830,7 @@ export const en = {
     noCompanyHint: 'Create a company to see its consolidated position.',
   },
   statements: {
-    scopeAllUnits: 'all divisions',
+    scopeAllUnits: 'all outlets',
     incomeTitle: 'Income statement',
     incomeSubtitle: 'Revenue, expense and net for the period.',
     balanceTitle: 'Balance sheet',
@@ -796,6 +868,13 @@ export const en = {
     expenseAccounts: 'Expense accounts',
     lineItems: 'Line items',
     noLines: 'No accounts',
+    /** Summary-card drill-down (Laba Rugi): click a card → per-account breakdown drawer. */
+    viewDetail: 'View breakdown',
+    revenueDetailTitle: 'Revenue breakdown',
+    expenseDetailTitle: 'Expense breakdown',
+    netDetailTitle: 'Profit & loss recap',
+    detailShareNote: 'share of total',
+    netDetailHint: 'Revenue minus expense for the period. Tap Revenue or Expense to see each account.',
     cashFlow: {
       title: 'Cash flow statement',
       subtitle: 'How cash moved this period — the indirect method.',
@@ -918,6 +997,9 @@ export const en = {
         staticHint:
           'Ask the customer to scan this QRIS code, then tap "Mark as paid" once their app shows success.',
         imageError: "The QRIS image couldn't load — you can still confirm payment manually.",
+        gatewayDegradedBadge: 'Gateway unavailable',
+        gatewayDegradedHint:
+          'Can’t reach the QRIS gateway right now — confirm the payment manually. Tap "Mark as paid" once the customer has paid.',
         gatewayInitiateHint:
           'Ask the customer to scan this QR with any QRIS-enabled app. Payment is confirmed automatically — you can still mark it as paid by hand if needed.',
         gatewayWaiting: 'Generating the QR code…',
@@ -945,6 +1027,32 @@ export const en = {
       disabledOffline: 'Sales history needs a connection.',
       capNote: 'Latest 200 shown',
     },
+    closingHistory: {
+      tillMenuLabel: 'Closing history',
+      title: 'Closing history',
+      emptyTitle: 'No closed days yet',
+      emptyHint: 'Closed register sessions appear here, most recent first.',
+      error: 'Could not load closing history.',
+      disabledOffline: 'Closing history needs a connection.',
+      denied: 'Only an owner or manager can view closing history.',
+      txnCount: '{{formatted}} txn',
+      viewTransactions: 'View transactions',
+      txnEmptyHint: 'No transactions recorded for this day.',
+      correctAction: 'Correct',
+    },
+    return: {
+      action: 'Return sale',
+      confirmTitle: 'Return this sale?',
+      confirmBody:
+        'This refunds {{amount}} for sale #{{reference}} to the customer and reverses it in the books. This cannot be undone.',
+      confirmAction: 'Return sale',
+      successTitle: 'Sale returned',
+      successBody: '{{amount}} has been refunded to the customer.',
+      errorForbidden: 'Only an owner or manager can return a sale.',
+      errorRejected:
+        'This sale can’t be returned in full — it may already be returned, or was paid (partly) with a gift card.',
+      errorGeneric: 'Could not return the sale. Please try again.',
+    },
     receipt: {
       title: 'Receipt',
       orderRef: 'Order',
@@ -960,6 +1068,9 @@ export const en = {
       statusVoided: 'Voided',
       statusRefunded: 'Refunded',
       statusPartiallyRefunded: 'Partially refunded',
+      voidedBanner: 'Transaction voided',
+      refundedBanner: 'Sale refunded',
+      partiallyRefundedBanner: 'Partially refunded — {{amount}}',
       pendingNote: 'Payment is pending provider confirmation — revenue will be recognised on capture.',
       newOrder: 'New order',
       print: 'Print',
@@ -1145,6 +1256,32 @@ export const en = {
     selectAddonLabel: 'Add {{name}}',
     addonSelectedLabel: 'Remove {{name}}',
   },
+  closeCorrection: {
+    title: 'Correct closing',
+    loadError: 'Could not load the closing. Try again.',
+    cashTitle: 'Cash',
+    currentCounted: 'Counted now',
+    currentOverShort: 'Over/short now',
+    newCounted: 'Corrected count',
+    newOverShort: 'New over/short',
+    reasonLabel: 'Reason for the correction',
+    reasonPlaceholder: 'e.g. cashier miscounted the drawer',
+    save: 'Save correction',
+    saving: 'Saving…',
+    saveError: 'Could not save the correction. Try again.',
+    invalidAmount: 'Enter a valid amount.',
+    successTitle: 'Correction saved',
+    successNote:
+      'The closing figures are updated. The books update automatically in a moment; if that period was already filed (e.g. the tax return is in), the correction waits with your accountant and is not yet in the books.',
+    errorNotClosed: 'This register session is not closed yet — there is nothing to correct.',
+    errorNotAllowed:
+      "This closing can't be corrected (it may be too old). Ask your accountant for an adjusting entry.",
+    unchangedHint: 'Change the amount to save a correction.',
+    stockTitle: 'Stock opname',
+    stockHint:
+      'Wrong stock counts? Re-count the stock — the system posts the compensating adjustment automatically.',
+    stockAction: 'Correct stock opname',
+  },
   register: {
     /** ADR 0036 — closing kasir (register sessions). `title` labels the till-menu entry and the
      * standalone screen; the sheet's own header is state-aware (open vs close form). */
@@ -1166,6 +1303,14 @@ export const en = {
     countedLabel: 'Counted cash in drawer',
     countedHint: 'Count the WHOLE drawer including the float. The expected amount and the difference are computed by the system.',
     closeAction: 'Close register',
+    /** Owner request — mismatch confirm: when the counted drawer ≠ the system's expected cash, make
+     * the cashier reconfirm the entered amount before the close commits. The server stays the source
+     * of truth; this is only a fat-finger safety net. Reuses `expected`/`counted`/`result*` above. */
+    confirmMismatchTitle: 'Double-check the cash count',
+    confirmMismatchBody:
+      'The counted cash doesn’t match what the system expects in the drawer. Please confirm the amount you entered is correct before closing.',
+    confirmProceed: 'Yes, close register',
+    confirmRecount: 'Check the count again',
     cashSales: 'Cash sales',
     cashRefunds: 'Cash refunds',
     expected: 'Expected in drawer',
@@ -1185,12 +1330,36 @@ export const en = {
     tenderCard: 'Card',
     tenderQris: 'QRIS',
     tenderOnline: 'Online',
+    /** 5th settlement type on the daily summary (gift-card redemption). */
+    tenderGiftCard: 'Gift card',
     errorDayClosed:
       'This outlet is already closed for today. The daily close happens once a day — make a correction entry if something needs fixing.',
     errorAlreadyOpen: 'A register session is already open at this outlet. Refresh to see it.',
     errorNotOpen: 'This register session is no longer open. Refresh to see the current state.',
     errorKeyConflict:
       'That close was already recorded with a different amount. Refresh to see the current state.',
+    /** POS daily transaction summary (Z-report) — printed at close and from the till menu. */
+    summaryTillMenuLabel: 'Today’s summary',
+    summaryTitle: 'Daily summary',
+    summaryPrint: 'Print summary',
+    summaryInterim: 'Interim — drawer still open',
+    summaryClosedAt: 'Closed',
+    summaryAsOf: 'As of',
+    summaryTransactions: 'Transactions',
+    summaryGross: 'Gross sales',
+    summaryDiscount: 'Discount',
+    summaryLoyalty: 'Loyalty redeemed',
+    summaryService: 'Service charge',
+    summaryTax: 'Tax (PB1)',
+    summaryEstimated: 'estimated',
+    summaryTaxEstimatedNote: 'Tax rate is an illustrative estimate — not yet verified for reporting.',
+    summaryRefunds: 'Refunds',
+    summaryNet: 'Net sales',
+    summaryCashSection: 'Cash drawer',
+    summarySelisih: 'Difference',
+    summaryFooter: 'Internal management summary — not a tax invoice.',
+    summaryEmpty: 'Open the register to see today’s summary.',
+    summaryError: 'Could not load the summary. Please try again.',
   },
   stocktake: {
     /** ADR 0038 phase 3 + ADR 0046 — the stock opname now counts INGREDIENTS (bahan), not
@@ -1199,7 +1368,16 @@ export const en = {
     tillMenuLabel: 'Stock count',
     entryHint:
       'Counts start pre-filled with the system quantity — only change what differs from your physical count. For a menu covered by a recipe, a costed ingredient’s difference reads as waste/loss; for the rest, it still includes normal usage, not just loss.',
+    soldTodayTitle: 'Items sold today',
+    soldTodayEmpty: 'No sales yet today.',
     systemQty: 'System: {{qty}} {{unit}}',
+    usedToday: 'Used today: {{qty}} {{unit}}',
+    usedThatDay: 'Used that day: {{qty}} {{unit}}',
+    historyTitle: 'Opname history',
+    historyAction: 'Opname history',
+    historyError: 'Could not load the opname history.',
+    historyEmpty: 'No stock opnames recorded yet.',
+    historyVariedCount: '{{formatted}} items with variance',
     countedForItem: 'Counted quantity for {{name}}',
     notCounted: 'Not counted',
     submitAction: 'Submit stock count',
@@ -1217,6 +1395,14 @@ export const en = {
     done: 'Done',
     varianceLinesTitle: 'Items with a variance',
     lineCounts: 'System {{system}} → counted {{counted}}',
+    /** ADR 0068 part 3 — the pre-submit variance-confirmation guard (stocktakeVarianceGuard.ts):
+     * one or more counted quantities look implausible (a ×1000 g/kg slip, an extra zero…). A
+     * fat-finger safety net, not a hard block — the operator can always "Save anyway". */
+    varianceGuardTitle: 'Double-check this count',
+    varianceGuardBody:
+      'One or more counts look far outside the expected range — a common cause is a kg/g mix-up or an extra zero. Check the amounts below before saving:',
+    varianceGuardRecount: 'Check again',
+    varianceGuardProceed: 'Save anyway',
   },
   inventory: {
     /** ADR 0046 phase 1 — the per-outlet stock-item catalog behind the stock opname. Owner
@@ -1249,14 +1435,25 @@ export const en = {
       'Used to value the stock-count difference in the books. Leave empty to count without posting anything.',
     costPlaceholder: 'Optional',
     initialQtyLabel: 'Starting quantity',
+    // How to enter cost when adding an item: the vendor TOTAL (per-unit derived from the quantity)
+    // or the per-unit cost directly.
+    costModeLabel: 'How to enter cost',
+    costModeTotal: 'Total price',
+    costModeUnit: 'Per unit',
+    qtyBoughtLabel: 'Quantity bought ({{unit}})',
+    totalCostLabel: 'Total purchase price ({{currency}}, optional)',
+    totalCostHint: 'The total you paid the supplier — the per-unit cost is worked out from the quantity.',
+    totalNeedsQty: 'Enter the quantity bought above to work out the per-unit cost.',
     removeAction: 'Remove item',
     removeConfirm: 'Tap again to remove — it disappears from lists and future counts.',
     receiveTitle: 'Receive — {{name}}',
     receiveHint: 'Current stock: {{qty}} {{unit}}. Enter what you received (or a negative correction).',
     receiveAmountLabel: 'Amount ({{unit}})',
-    receivePriceLabel: 'Total paid ({{currency}}, optional)',
-    receivePriceHint: 'The total price for this purchase — used to compute the moving-average cost. Leave empty if there was no price.',
     receiveUnitPriceHint: '≈ {{price}} / {{unit}}',
+    // ADR 0072 §5 — points a priced purchase at the company-expense form instead (the Terima
+    // dialog's price inputs are gone; only the costless quantity adjust remains here).
+    receivePricedHint: 'Bought this with a payment to record?',
+    receivePricedHintLink: 'Record it as an expense',
     receiveSubmit: 'Add to stock',
     setTitle: 'Set quantity — {{name}}',
     setHint: 'Current stock: {{qty}} {{unit}}. Enter the new absolute quantity.',
@@ -1264,6 +1461,22 @@ export const en = {
     setSubmit: 'Set quantity',
     errorGeneric: 'Could not save. Please try again.',
     nameTaken: 'An item with this name already exists at this outlet.',
+  },
+  /**
+   * Owner request — the "+ Tambah bahan baru" inline ingredient picker/create mini-form shared by
+   * NewCompanyExpense.tsx's Belanja bahan line rows and NewBill.tsx's Persediaan linkage. Reuses
+   * `inventory.*`'s name/unit field copy (same fields as IngredientManagement's create dialog);
+   * this namespace only holds the picker-specific bits (the trigger, the create dialog's own
+   * title/hint/submit/error, and the 409 "select existing instead" recovery).
+   */
+  inventoryPicker: {
+    addNew: '+ Add new ingredient',
+    createTitle: 'New ingredient',
+    createHint: 'Stock and cost for a brand-new ingredient are set by this purchase — nothing to fill in here.',
+    createSubmit: 'Create and use',
+    createError: 'Could not create this ingredient. Please try again.',
+    matchesExisting: 'An ingredient named "{{name}}" already exists.',
+    selectInstead: 'Use it instead',
   },
   posShell: {
     /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */
@@ -1408,7 +1621,7 @@ export const en = {
       employees: 'Employees',
       people: 'App access',
       net: 'Net this period',
-      parentUnit: 'Division',
+      parentUnit: 'Company',
     },
     overview: {
       revenue: 'Revenue',
@@ -1425,7 +1638,7 @@ export const en = {
     outletsTab: {
       add: 'Add outlet',
       empty: 'No outlets yet',
-      emptyHint: 'Add the first outlet to start selling under this division.',
+      emptyHint: 'Add the first outlet to start selling.',
     },
     people: {
       empty: 'No one is assigned under this unit yet',
@@ -1465,9 +1678,9 @@ export const en = {
     },
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to see its people.',
-    noBusinessUnit: {
-      title: 'No business set up yet',
-      hint: 'Create a business unit from Organization to start adding employees.',
+    noOutlet: {
+      title: 'No outlet set up yet',
+      hint: 'Add an outlet from Outlets to start adding employees.',
     },
     error: 'Could not load the businesses for this company.',
   },
@@ -1562,8 +1775,12 @@ export const en = {
     hub: {
       subtitle: 'Review claims, settle approved ones, and manage the expense catalog.',
       manageCategories: 'Manage categories',
+      // ADR 0072 P3 — the "Catat pengeluaran" entry point + its own tab, both FINANCE-gated
+      // (owner/accountant), separate from the HR-gated claim tabs below.
+      recordExpense: 'Record expense',
       tabInbox: 'Inbox',
       tabAll: 'All claims',
+      tabCompany: 'Company',
       tabsLabel: 'Expense views',
     },
     inbox: {
@@ -1684,6 +1901,99 @@ export const en = {
         confirm: 'Void claim',
       },
     },
+    // ADR 0072 P3 — "Catat pengeluaran": the one-submit company-expense input (GENERAL category
+    // expense, or an INVENTORY ingredient purchase that also adds stock). `/expenses/record`.
+    record: {
+      noCompany: 'Could not load your company',
+      noCompanyHint: 'Try refreshing the page.',
+      title: 'Record expense',
+      subtitle: 'Record a company expense — a category expense, or an ingredient purchase that also updates stock.',
+      modeLabel: 'Expense type',
+      modeGeneral: 'Category',
+      modeInventory: 'Ingredient purchase',
+      outletLabel: 'Outlet',
+      outletPlaceholder: 'Choose an outlet',
+      noOutlets: 'No outlets yet — add one from Org structure first.',
+      dateLabel: 'Date (optional)',
+      descriptionLabel: 'Description',
+      descriptionPlaceholder: 'What was this for?',
+      errorGeneric: 'Could not record this expense. Check the fields and try again.',
+      submit: 'Record expense',
+      general: {
+        categoryLabel: 'Category',
+        categoryPlaceholder: 'Choose a category',
+        categoriesEmpty: 'No categories yet — seed or create one from Manage categories.',
+        amountLabel: 'Amount ({{currency}})',
+      },
+      inventory: {
+        descriptionPlaceholder: 'e.g. Weekly ingredient shopping',
+        lines: 'Ingredients',
+        pickOutletFirst: 'Choose an outlet above to pick its ingredients.',
+        ingredientsError: 'Could not load this outlet’s ingredients.',
+        noIngredients: 'This outlet has no ingredients yet.',
+        addIngredientLink: 'Add one from Inventory',
+        ingredientLabel: 'Ingredient',
+        ingredientPlaceholder: 'Choose an ingredient',
+        qtyLabel: 'Quantity ({{unit}})',
+        totalLabel: 'Total paid ({{currency}})',
+        lineValue: 'Line total',
+        removeLine: 'Remove line {{n}}',
+        addLine: 'Add ingredient',
+        total: 'Total',
+        totalNote: 'The server sums the lines as the recorded amount — this total is a preview only.',
+      },
+      success: {
+        title: 'Expense recorded',
+        body: 'Expense {{id}} was recorded and posted to the books.',
+        stockNote: 'Stock updates automatically within seconds.',
+        backToList: 'Back to Expenses',
+        recordAnother: 'Record another',
+      },
+    },
+    // ADR 0072 P3 — the "Perusahaan" tab: recent company expenses (both GENERAL and INVENTORY),
+    // with a void action. FINANCE-gated (owner/accountant).
+    company: {
+      title: 'Company expenses',
+      subtitle: 'Category expenses and ingredient purchases recorded via "Record expense".',
+      noCompany: 'Could not load your company',
+      noCompanyHint: 'Try refreshing the page.',
+      error: 'Could not load the company expenses.',
+      empty: 'No company expenses yet',
+      emptyHint: 'Expenses recorded via "Record expense" appear here.',
+      colNo: 'No.',
+      colDate: 'Date',
+      colKind: 'Type',
+      colOutlet: 'Outlet',
+      colDescription: 'Description',
+      colStatus: 'Status',
+      colAmount: 'Amount',
+      kind: {
+        GENERAL: 'Category',
+        INVENTORY: 'Ingredient purchase',
+      },
+      status: {
+        POSTED: 'Posted',
+        VOID: 'Voided',
+      },
+      void: 'Void',
+      detail: {
+        title: 'Expense detail',
+        expenseNo: 'Expense no.',
+        date: 'Date',
+        glHint: 'Category',
+        lineQty: 'Qty (base unit)',
+      },
+      voidDialog: {
+        title: 'Void this expense?',
+        body: 'Posts the exact contra of the original posting — use this to correct a mistaken entry.',
+        confirm: 'Void expense',
+        doneTitle: 'Expense voided',
+        doneBody: 'The money-side entry has been reversed.',
+        stockGuidance:
+          'Stock was NOT reverted — this was a money-only correction. Adjust the quantity via "Set quantity" or a stock opname if needed.',
+        stockGuidanceLink: 'Go to Inventory',
+      },
+    },
   },
   hr: {
     list: {
@@ -1712,7 +2022,7 @@ export const en = {
     },
     createLogin: {
       title: 'Create login — {{name}}',
-      username: 'Username',
+      username: 'Login ID',
       usernameHint:
         'The employee signs in with this and a one-time password. Letters, numbers and dots — no spaces.',
       email: 'Email address (optional)',
@@ -1788,7 +2098,7 @@ export const en = {
       // ADR 0052 — an hr-alone login (`!canManageLogins`) sees this instead: creating a login is an
       // owner/manager-only action (org-service).
       noLoginReadOnly: 'No login yet. Ask an owner or manager to create one.',
-      username: 'Username',
+      username: 'Login ID',
       tempPassword: 'One-time password',
       tempPasswordHint:
         'Visible until the employee first signs in and sets their own — share it with them now.',
@@ -1884,10 +2194,10 @@ export const en = {
     },
     assignExisting: {
       title: 'Assign to {{unit}}',
-      subtitle: 'Pick an existing employee of this company. New employees are added at the division.',
+      subtitle: 'Pick an existing employee of this company.',
       employee: 'Employee',
       pick: 'Select an employee…',
-      empty: 'No employees available to assign. Add them at the division first.',
+      empty: 'No employees available to assign. Add an employee first.',
       submit: 'Assign',
     },
     endAssignment: {
@@ -2182,7 +2492,7 @@ export const en = {
   posVertical: {
     badge: 'Coming soon',
     title: 'The {{vertical}} point of sale is coming soon',
-    body: 'This outlet belongs to a {{vertical}} division. Sales, menus, and kitchen tickets currently support restaurant, car wash, and barbershop outlets only.',
+    body: 'This company is a {{vertical}} business. Sales, menus, and kitchen tickets currently support restaurant, car wash, and barbershop outlets only.',
     switchHint: 'Ring on another outlet',
   },
   outletGate: {
@@ -2194,15 +2504,14 @@ export const en = {
     retry: 'Retry',
   },
   org: {
-    title: 'Org tree',
-    subtitle: 'The organisational hierarchy for this company.',
+    title: 'Outlets',
+    subtitle: 'The selling locations this company operates.',
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to manage its org tree.',
     empty: 'No org units yet',
-    emptyHint: 'Add a top-level division to get started.',
+    emptyHint: 'Add your first outlet to get started.',
     error: 'Could not load the org tree.',
     addUnit: 'Add unit',
-    addChild: 'Add child',
     expand: 'Expand',
     collapse: 'Collapse',
     rename: 'Rename',
@@ -2213,19 +2522,12 @@ export const en = {
     inactive: 'Inactive',
     active: 'Active',
     type: {
-      BUSINESS_UNIT: 'Division',
       OUTLET: 'Outlet',
-      TEAM: 'Team',
     },
     addDialog: {
       title: 'Add org unit',
       nameLabel: 'Name',
       namePlaceholder: 'e.g. Jakarta Outlet',
-      verticalLabel: 'Business vertical',
-      typeLabel: 'Type',
-      parentLabel: 'Parent',
-      noParent: 'None (top-level)',
-      noChildAllowed: 'A team is the leaf level — nothing can be created under it.',
       submit: 'Create',
       submitting: 'Creating…',
       errorTitle: 'Could not create unit',
@@ -2256,7 +2558,6 @@ export const en = {
       checking: 'Checking whether this unit is empty…',
       verifyError: 'Couldn’t check whether this unit is empty, so it can’t be deleted right now. Close this and try again.',
       body: 'Permanently delete "{{name}}"? This removes it for good and cannot be undone. Only use this to remove a unit created by mistake.',
-      bodyBu: 'Permanently delete "{{name}}" and its empty outlets? This removes them for good and cannot be undone. Only use this to remove a unit created by mistake.',
       blockedIntro: '"{{name}}" still has data, so it can only be deactivated (which keeps its history):',
       blockedLogins: 'Assigned logins: {{count}}',
       blockedEmployees: 'Assigned employees: {{count}}',
@@ -2402,6 +2703,8 @@ export const en = {
       'Your books will be kept in {{currency}} — set by your country and fixed at creation.',
     defaultLanguage: 'Default language',
     defaultLanguageHint: 'The default for new teammates. Each user can override their own.',
+    languageEnglishOnlyNote:
+      'Your workspace language is English. Indonesian is available for businesses based in Indonesia.',
     permanentNote:
       'The country, its derived base currency, and the default language are fixed at creation and cannot be changed later.',
     firstBusinessName: 'Business name',
@@ -2622,10 +2925,30 @@ export const en = {
       previewAlt: 'Preview of {{name}}',
       placeholderAlt: 'No photo',
     },
+    autoLink: {
+      action: 'Track stock for all items',
+      actionShort: 'Track stock',
+      title: 'Track stock for all items',
+      explain:
+        'Every menu item without a recipe gets auto-linked to a same-named ingredient (unit pcs, stock 0) with a 1-per-portion recipe — so each sale immediately reduces stock and the stock-opname figures fill in automatically.',
+      skipNote:
+        "Items that already have a recipe are never touched. The 1:1 recipe is a starting point — refine it into a real ingredient recipe any time.",
+      confirm: 'Link now',
+      running: 'Linking…',
+      result: '{{linked}} items linked, {{skipped}} skipped (already have a recipe).',
+      blocked:
+        '{{blocked}} items couldn’t be linked — their name matches an ingredient in another unit (e.g. grams). Rename them or build a recipe.',
+      afterHint:
+        'Seed each ingredient’s starting stock via the Inventory page or the first stock opname. After that, the opname is just verification.',
+      error: 'Could not link. Try again.',
+    },
     createItem: {
       title: 'Add menu item',
       nameLabel: 'Item name',
       namePlaceholder: 'e.g. Nasi Goreng',
+      autoTrackLabel: 'Track stock for this item',
+      autoTrackHint:
+        'Automatically creates a same-named ingredient (1 per portion) so every sale reduces stock.',
       categoryLabel: 'Category',
       categoryPlaceholder: 'Select a category…',
       priceLabel: 'Price ({{currency}})',
@@ -2780,6 +3103,11 @@ export const en = {
     baseSection: 'Base ingredients',
     baseSectionHint: 'Every portion of this item uses these ingredients, in this quantity.',
     baseEmpty: 'No base ingredients yet — add the first one below.',
+    autoLinkAction: 'Auto-track 1:1 stock',
+    autoLinkRunning: 'Linking…',
+    autoLinkError: 'Could not link. Try again.',
+    autoLinkBlocked:
+      'This item’s name matches an ingredient in another unit — rename it or build a recipe.',
     addLine: 'Add ingredient',
     /** Quantities are always whole numbers — nudges the operator to pick a unit that survives that. */
     roundingHint:
@@ -2841,6 +3169,10 @@ export const en = {
     noLines: 'No items yet — tap the menu to add items to this bill.',
     pay: 'Pay',
     cancelBill: 'Cancel bill',
+    cancelNeedsManager: 'A bill with items can only be cancelled by an owner or manager',
+    errNeedsManager: 'This action needs an owner or manager',
+    errHasPaidLines: 'Some items are already paid — settle the remainder or reverse the paid checks first',
+    errLinePaid: 'That item is already paid and cannot be removed',
     cancelBillTitle: 'Cancel bill',
     cancelBillBody: 'Cancel the bill for "{{label}}"? No sale will be recorded.',
     cancelBillConfirm: 'Cancel bill',
@@ -2855,6 +3187,14 @@ export const en = {
     viewBill: 'View bill',
     /** Split-by-item (Increment 3) */
     split: 'Split',
+    attach: {
+      title: 'Attachments',
+      action: 'Attach',
+      remove: 'Remove attachment',
+      tooLarge: 'The file is too large (max 5 MB).',
+      imageError: 'Could not process the image. Try another photo.',
+      uploadError: 'Could not upload the attachment. Please try again.',
+    },
     splitToggle: 'Toggle split-by-item mode',
     splitHint: 'Check the items to pay in this round, then tap "Pay selected".',
     splitSelected: '{{n}} item(s) selected',
@@ -3174,6 +3514,28 @@ export const en = {
       quantityLabel: 'Qty',
       unitPriceLabel: 'Unit price',
       lineTotal: 'Line total',
+      /** ADR 0067 Phase B, §3 — flags this line as a capitalizable inventory purchase. Only takes
+       * effect once the company has activated perpetual inventory accounting; shown always so the
+       * form is ready ahead of activation. */
+      inventoryLabel: 'Inventory',
+      inventoryHint:
+        'Capitalized to the inventory asset instead of expensed immediately — only applies once perpetual inventory accounting is active.',
+      // ADR 0072 P4 — the ingredient linkage on an inventory-flagged line. Reworked 2026-09-04
+      // (owner UX correction): the description field IS the ingredient combobox now, so a ticked
+      // line is either fully linked or incomplete — never "flagged but unlinked" in the UI.
+      ingredientOutletLabel: 'Outlet (for the ingredient picker)',
+      ingredientOutletHint: 'Filters which ingredients show below — not sent with the bill; a bill has no outlet of its own.',
+      ingredientOutletPlaceholder: 'Choose an outlet…',
+      ingredientLinkNote: 'Optionally link an ingredient — stock is added automatically once this bill is posted.',
+      ingredientLinkPickOutlet: 'Choose an outlet above to pick its ingredients.',
+      ingredientLinkError: 'Could not load this outlet’s ingredients.',
+      ingredientLineIncomplete: 'Pick (or add) an ingredient and enter its quantity and total price to complete this line.',
+      ingredientLabel: 'Ingredient',
+      ingredientComboboxPlaceholder: 'Type to search ingredients…',
+      ingredientComboboxEmpty: 'This outlet has no ingredients yet — start typing to add one.',
+      ingredientCreateHint: 'No match — add "{{name}}" as a new ingredient',
+      ingredientQtyLabel: 'Quantity ({{unit}})',
+      ingredientTotalLabel: 'Total price',
       preview: 'Preview',
       subtotal: 'Subtotal',
       tax: 'Tax (11%)',
@@ -3203,6 +3565,12 @@ export const en = {
       colQuantity: 'Qty',
       colUnitPrice: 'Unit price',
       colLineTotal: 'Line total',
+      // ADR 0072 P4 — the ingredient-linkage display on inventory-flagged lines.
+      inventoryBadge: 'Inventory',
+      resolveOutletLabel: 'Show quantities for outlet',
+      resolveOutletHint: 'Optional — resolves a linked ingredient’s quantity into its usual unit (e.g. kg). A bill has no outlet of its own, so this is a display choice only.',
+      resolveOutletPlaceholder: 'Base-unit quantity',
+      ingredientQtyBaseUnit: '{{qty}} (base unit)',
       payments: 'Payments',
       noPayments: 'No payments recorded yet.',
       colPaymentDate: 'Date',
@@ -3238,6 +3606,15 @@ export const en = {
         body: 'Void bill {{number}}? This cannot be undone.',
         confirm: 'Void bill',
         submitting: 'Voiding…',
+        // Code-review W3 (ADR 0072 P4) — shown when the bill has any ingredient-linked line
+        // (mirrors expenses.company.voidDialog's stock-guidance copy).
+        stockGuidanceNote:
+          'This bill has ingredient-linked lines that already received stock — voiding only reverses the money. Stock will not be reverted.',
+        doneTitle: 'Bill voided',
+        doneBody: 'The money-side entry has been reversed.',
+        stockGuidance:
+          'Stock was NOT reverted — this was a money-only correction. Adjust the quantity via "Set quantity" or a stock opname if needed.',
+        stockGuidanceLink: 'Go to Inventory',
       },
       errors: {
         invalidState:
@@ -3375,6 +3752,11 @@ export const en = {
     deactivate: 'Deactivate',
     deactivateConfirm:
       'Deactivate {{name}}? It will no longer be offered as an ONLINE payment channel at checkout.',
+    suggestions: {
+      title: 'Add a popular platform',
+      hint: 'One tap adds it to your channel list — you can rename, deactivate, or ignore it anytime.',
+      addAria: 'Add {{name}} as a sales channel',
+    },
     dialog: {
       createTitle: 'New sales channel',
       editTitle: 'Edit sales channel',
@@ -3440,6 +3822,25 @@ export const en = {
       colNet: 'Net',
       colFee: 'Fee',
     },
+  },
+  marketplace: {
+    title: 'Marketplace / Platform Online',
+    subtitle:
+      'Per-platform summary for the period: gross online sales, platform fee, net received, and what is still outstanding.',
+    noCompany: 'No company selected',
+    noCompanyHint: 'Create a company to see the marketplace report.',
+    error: 'Could not load the marketplace report.',
+    empty: 'No marketplace activity yet',
+    emptyHint:
+      'This report fills in once an ONLINE sale is rung through a channel or a settlement is recorded.',
+    prevPeriod: 'Previous period',
+    nextPeriod: 'Next period',
+    colPlatform: 'Platform',
+    colGross: 'Gross sales',
+    colFee: 'Commission / fee',
+    colNet: 'Net received',
+    colOutstanding: 'Outstanding',
+    totalsLabel: 'Total',
   },
   tax: {
     report: {
@@ -3816,6 +4217,7 @@ export const en = {
       rateSummary: '{{pct}} of every sale back in points',
       minSaleLabel: 'Minimum sale to earn',
       effectiveRange: 'Effective {{from}} – {{to}}',
+      effectiveOpenEnded: 'Effective {{from}} – no end date',
       fields: {
         rate: 'Points rate',
         rateHint: 'The percentage of each sale returned as points, e.g. 1 for 1%. 1 point = 1 minor currency unit.',
@@ -3845,6 +4247,10 @@ export const en = {
       title: 'Gift card lookup',
       subtitle: 'Look up a gift card by its code.',
     },
+  },
+  appUpdate: {
+    available: 'A new version is available.',
+    action: 'Update',
   },
   offline: {
     banner: {
@@ -3942,11 +4348,11 @@ export const en = {
       none: 'No terminal login has been created yet.',
       create: 'Create terminal login',
       creating: 'Creating…',
-      username: 'Username',
+      username: 'Login ID',
       password: 'Password',
       showPassword: 'Show password',
       hidePassword: 'Hide password',
-      copyUsername: 'Copy username',
+      copyUsername: 'Copy Login ID',
       copyPassword: 'Copy password',
       resetPassword: 'Reset password',
       resetting: 'Resetting…',

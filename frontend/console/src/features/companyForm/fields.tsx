@@ -22,26 +22,20 @@ import {
   type ReviewRow,
 } from './companyForm'
 
-/** Company step — company name, first business name, and the vertical. */
+/** Company step — the company name and its vertical (ADR 0070: one name, not two). */
 export function CompanyFields({
   companyName,
-  firstBusinessName,
   vertical,
   onCompanyName,
-  onFirstBusinessName,
   onVertical,
   companyNameError,
-  firstBusinessNameError,
   autoFocus = true,
 }: {
   companyName: string
-  firstBusinessName: string
   vertical: string
   onCompanyName: (value: string) => void
-  onFirstBusinessName: (value: string) => void
   onVertical: (value: string) => void
   companyNameError?: string
-  firstBusinessNameError?: string
   autoFocus?: boolean
 }) {
   const { t } = useTranslation()
@@ -60,18 +54,6 @@ export function CompanyFields({
           value={companyName}
           onChange={(e) => onCompanyName(e.target.value)}
           placeholder={t('signup.companyNamePlaceholder')}
-        />
-      </Field>
-      <Field
-        label={t('signup.firstBusinessName')}
-        htmlFor="bizName"
-        error={firstBusinessNameError}
-      >
-        <TextInput
-          id="bizName"
-          value={firstBusinessName}
-          onChange={(e) => onFirstBusinessName(e.target.value)}
-          placeholder={t('signup.firstBusinessNamePlaceholder')}
         />
       </Field>
       <Field label={t('signup.vertical')} hint={t('signup.verticalHint')}>
@@ -131,18 +113,28 @@ export function RegionFields({
           })}
         </p>
       </div>
-      <Field label={t('signup.defaultLanguage')} hint={t('signup.defaultLanguageHint')}>
-        <ChoiceCards
-          name="lang"
-          value={defaultLanguage}
-          onChange={onDefaultLanguage}
-          options={LANGS.map((l) => ({
-            value: l,
-            title: t(`lang.${l}`),
-            subtitle: l.toUpperCase(),
-          }))}
-        />
-      </Field>
+      {/* Language is English-first and gated to Indonesia (ADR 0059): the chooser only appears when
+          the selected country is Indonesia; every other country keeps its interface in English —
+          shown as a locked note, mirroring the derived-currency treatment above. */}
+      {country === 'ID' ? (
+        <Field label={t('signup.defaultLanguage')} hint={t('signup.defaultLanguageHint')}>
+          <ChoiceCards
+            name="lang"
+            value={defaultLanguage}
+            onChange={onDefaultLanguage}
+            options={LANGS.map((l) => ({
+              value: l,
+              title: t(`lang.${l}`),
+              subtitle: l.toUpperCase(),
+            }))}
+          />
+        </Field>
+      ) : (
+        <div className="flex items-start gap-2.5 rounded-xl border border-line bg-paper px-3.5 py-3">
+          <Lock className="mt-0.5 size-3.5 shrink-0 text-ink-3" aria-hidden />
+          <p className="text-xs leading-relaxed text-ink-2">{t('signup.languageEnglishOnlyNote')}</p>
+        </div>
+      )}
       {/* Permanent-settings notice */}
       <p className="rounded-xl border border-amber/30 bg-amber-tint px-3.5 py-2.5 text-xs leading-relaxed text-amber">
         {t('signup.permanentNote')}
@@ -222,11 +214,13 @@ export function CompanyReview({
   const baseCurrency = derivedCurrency(basics.country)
   const rows: ReviewRow[] = [
     { label: t('signup.companyName'), value: basics.companyName, step: COMPANY_STEP },
-    { label: t('signup.firstBusinessName'), value: basics.firstBusinessName, step: COMPANY_STEP },
     {
+      // Immutable since ADR 0070 moved the vertical onto the COMPANY (it decides which POS the
+      // company's outlets get) — flagged `fixed` for the same reason country/currency are.
       label: t('signup.vertical'),
       value: t(`vertical.${basics.vertical}` as Parameters<typeof t>[0]),
       step: COMPANY_STEP,
+      fixed: true,
     },
     {
       // The country is immutable (ADR 0025); its edit pencil jumps to Region.

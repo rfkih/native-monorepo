@@ -68,7 +68,7 @@ export function MyExpenses() {
   const page0 = claims.data
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-[100dvh] bg-paper">
       {/* Phone chrome (Native Console Android): back to /me + a compact new-claim action. */}
       <ScreenHeader
         className="sm:hidden"

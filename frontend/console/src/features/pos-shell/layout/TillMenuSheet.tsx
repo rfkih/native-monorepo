@@ -4,11 +4,14 @@
  * crowd the header as 10 always-visible icons. Anchored top-right under the band.
  *
  * Focus contract (the SheetOverlay rules): initial focus on the panel, Escape closes, backdrop
- * click closes. pos-shell rule: stateless — items and their handlers come from the caller.
+ * click closes, phone/browser Back closes (useBackDismiss). pos-shell rule: stateless — items and
+ * their handlers come from the caller.
  */
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { cn } from '@/lib/cn'
 
 export interface TillMenuItem {
@@ -31,6 +34,8 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
   const { t } = useTranslation()
   const panelRef = useRef<HTMLDivElement>(null)
 
+  useBackDismiss(onClose)
+  useScrollLock()
   useEffect(() => {
     panelRef.current?.focus()
     function onKey(e: KeyboardEvent) {
@@ -42,11 +47,22 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
 
   const itemClass = (it: TillMenuItem) =>
     cn(
-      'flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-medium transition-colors',
+      'flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left text-[14px] font-medium transition-colors',
       'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald',
       it.danger ? 'text-loss hover:bg-tint-loss' : 'text-ink hover:bg-hover',
       it.disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
     )
+
+  // Touch devices never surface title= tooltips, so a disabled row must EXPLAIN itself in-line —
+  // otherwise the Android till shows a greyed button with no visible reason (e.g. while offline).
+  const itemText = (it: TillMenuItem) => (
+    <span className="min-w-0 flex-1">
+      <span className="block truncate">{it.label}</span>
+      {it.disabled && it.disabledTitle ? (
+        <span className="block truncate text-[11px] font-normal text-ink-3">{it.disabledTitle}</span>
+      ) : null}
+    </span>
+  )
 
   return (
     <div className="fixed inset-0 z-50" role="presentation">
@@ -63,7 +79,7 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
           it.to && !it.disabled ? (
             <Link key={it.key} to={it.to} role="menuitem" className={itemClass(it)} onClick={onClose}>
               <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">{it.icon}</span>
-              {it.label}
+              {itemText(it)}
             </Link>
           ) : (
             <button
@@ -87,7 +103,7 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
               >
                 {it.icon}
               </span>
-              {it.label}
+              {itemText(it)}
             </button>
           ),
         )}

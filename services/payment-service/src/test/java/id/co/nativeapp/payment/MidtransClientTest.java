@@ -8,6 +8,7 @@ import id.co.nativeapp.payment.charge.service.MidtransClient;
 import id.co.nativeapp.payment.charge.service.QrisGatewayPort;
 import id.co.nativeapp.payment.charge.service.QrisGatewayPort.CancelOutcome;
 import id.co.nativeapp.payment.charge.service.QrisGatewayPort.GatewayCredentials;
+import id.co.nativeapp.payment.charge.service.QrisGatewayPort.GatewayVerification;
 import id.co.nativeapp.payment.charge.service.QrisGatewayPort.RemoteStatus;
 import id.co.nativeapp.payment.config.PaymentProperties;
 import id.co.nativeapp.payment.settings.domain.ProviderEnvironment;
@@ -19,6 +20,7 @@ import java.util.UUID;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
+import okhttp3.mockwebserver.SocketPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -165,6 +167,42 @@ class MidtransClientTest {
 
     midtrans.enqueue(new MockResponse().setResponseCode(404).setBody("{}"));
     assertThat(client.cancel(credentials, ORDER_ID)).isEqualTo(CancelOutcome.NOT_FOUND);
+  }
+
+  @Test
+  void verifyProbesStatusWithoutChargingAndMapsAuthOutcomes() throws Exception {
+    // 404 (order unknown) → the key authenticated.
+    midtrans.enqueue(new MockResponse().setResponseCode(404).setBody("{}"));
+    assertThat(client.verify(credentials)).isEqualTo(GatewayVerification.VALID);
+    RecordedRequest probe = midtrans.takeRequest();
+    // Side-effect-free: a status GET of a throwaway order id — NEVER /v2/charge.
+    assertThat(probe.getMethod()).isEqualTo("GET");
+    assertThat(probe.getPath()).startsWith("/v2/native-verify-");
+    assertThat(probe.getPath()).endsWith("/status");
+
+    // 401 → the key is rejected (wrong key, or a key for the OTHER environment).
+    midtrans.enqueue(new MockResponse().setResponseCode(401).setBody("{}"));
+    assertThat(client.verify(credentials)).isEqualTo(GatewayVerification.INVALID);
+
+    // Some deployments answer HTTP 200 with a body-level 401.
+    midtrans.enqueue(json("{\"status_code\":\"401\",\"status_message\":\"unauthorized\"}"));
+    assertThat(client.verify(credentials)).isEqualTo(GatewayVerification.INVALID);
+
+    // HTTP 200 with a normal (non-401) status body → authenticated.
+    midtrans.enqueue(json("{\"status_code\":\"404\",\"status_message\":\"not found\"}"));
+    assertThat(client.verify(credentials)).isEqualTo(GatewayVerification.VALID);
+
+    // Provider/transport error → inconclusive, never a false verdict.
+    midtrans.enqueue(new MockResponse().setResponseCode(500));
+    assertThat(client.verify(credentials)).isEqualTo(GatewayVerification.UNREACHABLE);
+
+    // 403 is an auth rejection too.
+    midtrans.enqueue(new MockResponse().setResponseCode(403).setBody("{}"));
+    assertThat(client.verify(credentials)).isEqualTo(GatewayVerification.INVALID);
+
+    // A dropped connection (ResourceAccessException) is inconclusive, never INVALID/VALID.
+    midtrans.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START));
+    assertThat(client.verify(credentials)).isEqualTo(GatewayVerification.UNREACHABLE);
   }
 
   private static MockResponse json(String body) {

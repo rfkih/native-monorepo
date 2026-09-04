@@ -12,8 +12,10 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '@/lib/api'
-import type { CompanySession } from '@/lib/session'
+import { useSession, type CompanySession } from '@/lib/session'
+import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
 import { lastClosedSession } from './lib/registerFloat'
+import { registerMenuLabelKey, type RegisterMenuLabelKey } from './lib/registerGate'
 
 export interface RegisterSessionResponse {
   id: string
@@ -46,11 +48,74 @@ export interface RegisterExpectedResponse {
   tenders: TenderExpected[]
 }
 
+/**
+ * One settlement line's GROSS sales (before refunds) on the daily summary — mirror of
+ * restaurant-service TenderSalesLine. `GIFT_CARD` is the 5th settlement type (gift-card redemption),
+ * present only when gift cards were redeemed. Σ `salesMinor` == `totalMinor`.
+ */
+export interface TenderSalesLine {
+  tenderType: 'CASH' | 'CARD' | 'QRIS' | 'ONLINE' | 'GIFT_CARD'
+  salesMinor: number
+}
+
+/**
+ * The POS daily transaction summary (Z-report) for a register session — mirror of restaurant-service
+ * RegisterSummaryResponse. Works for an OPEN session (a live X-report over `[openedAt, now)`) and a
+ * CLOSED one (the final Z-report over `[openedAt, closedAt)`). Reporting only: the tax line is PB1
+ * ("Pajak Restoran", not PPN) and MUST be badged "estimasi" when `usesIllustrativeRules` is true.
+ * Revenue breakdown reconciles: `grossSalesMinor − discountMinor − loyaltyRedeemedMinor +
+ * serviceChargeMinor + taxMinor == totalMinor`; `netSalesMinor == totalMinor − refundsMinor`.
+ */
+export interface RegisterSummaryResponse {
+  sessionId: string
+  businessId: string
+  status: 'OPEN' | 'CLOSED'
+  businessDate: string
+  currency: string
+  openedAt: string
+  asOf: string
+  transactionCount: number
+  grossSalesMinor: number
+  discountMinor: number
+  loyaltyRedeemedMinor: number
+  serviceChargeMinor: number
+  taxMinor: number
+  totalMinor: number
+  refundsMinor: number
+  netSalesMinor: number
+  usesIllustrativeRules: boolean
+  tenders: TenderSalesLine[]
+  openingFloatMinor: number
+  expectedCashMinor: number | null
+  countedCashMinor: number | null
+  overShortMinor: number | null
+}
+
+/**
+ * One row of the manager/owner past closed-day history browse — mirror of restaurant-service
+ * ClosedSessionSummaryResponse. `netSalesMinor` equals that session's Z-report net (total − refunds)
+ * over its `[openedAt, closedAt)` window; money is minor units in `currency` (rule 8).
+ */
+export interface ClosedSessionSummary {
+  sessionId: string
+  businessDate: string
+  openedAt: string
+  closedAt: string | null
+  currency: string
+  netSalesMinor: number
+  transactionCount: number
+}
+
 function tenantOf(session: CompanySession) {
   return { companyId: session.companyId, actor: session.actor }
 }
 
 const currentKey = (s: CompanySession) => ['register-session', s.companyId, s.businessId]
+const closedHistoryKey = (s: CompanySession) => [
+  'register-closed-history',
+  s.companyId,
+  s.businessId,
+]
 
 /** The outlet's OPEN session (null when the drawer is closed — the endpoint returns 204). */
 export function useCurrentRegisterSession(session: CompanySession) {
@@ -85,6 +150,28 @@ export function useRegisterExpected(
 }
 
 /**
+ * The POS daily transaction summary (Z-report) for a session — the day's sales aggregates
+ * (transaction count, gross/discount/service/tax breakdown, per-tender net) + the cash
+ * reconciliation, over `[openedAt, closedAt ?? now)`. Works for an OPEN session (live X-report) and
+ * a CLOSED one (final Z-report), so the till-menu "today's summary" reads it for the current open OR
+ * last-closed session, and the close verdict reads it for the just-closed session.
+ */
+export function useRegisterSummary(
+  session: CompanySession,
+  sessionId: string | null | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['register-summary', session.companyId, sessionId],
+    enabled: enabled && !!sessionId,
+    queryFn: () =>
+      apiFetch<RegisterSummaryResponse>(`/api/v1/register-sessions/${sessionId}/summary`, {
+        tenant: tenantOf(session),
+      }),
+  })
+}
+
+/**
  * The outlet's most recent CLOSED session with a recorded count — the open form's float default
  * ("cash stays in the drawer overnight": yesterday's counted cash is today's likely float).
  * Served from the history endpoint (newest-first); enabled only while the open form is showing.
@@ -99,6 +186,93 @@ export function useLastClosedSession(session: CompanySession, enabled: boolean) 
         query: { businessId: session.businessId },
       })
       return lastClosedSession(rows)
+    },
+  })
+}
+
+/**
+ * The register entry's label key for a surface with NO POS `session` in scope — the manager
+ * "Lainnya" (More) sheet tile. It resolves the CURRENT effective outlet (the same hook OutletGate
+ * uses) then reads that outlet's open session, SHARING the POS/RegisterSheet cache via the identical
+ * query key (`currentKey`), so it costs no extra round trip when the till already loaded it. Returns
+ * the neutral combined label until the outlet AND the session read have BOTH settled — the tile
+ * never flashes the wrong action. Pass `active=false` (tile hidden) to skip the session read.
+ */
+export function useCurrentOutletRegisterLabelKey(active: boolean): RegisterMenuLabelKey {
+  const { company } = useSession()
+  const { effectiveOutletId, status } = useResolvedOutlets()
+  const enabled = active && !!company && !!effectiveOutletId
+  const query = useQuery({
+    enabled,
+    queryKey: ['register-session', company?.companyId, effectiveOutletId],
+    queryFn: () =>
+      apiFetch<RegisterSessionResponse | null>('/api/v1/register-sessions/current', {
+        tenant: { companyId: company!.companyId, actor: company!.actor },
+        query: { businessId: effectiveOutletId! },
+      }),
+  })
+  // Only trust an open/closed verdict once the outlet is 'ready' AND the session read has settled;
+  // any other state (loading/error/empty outlet, or an in-flight session read) → neutral label.
+  return registerMenuLabelKey({
+    isLoading: status !== 'ready' || query.isLoading,
+    isError: query.isError,
+    session: query.data,
+  })
+}
+
+/**
+ * The outlet's recent CLOSED sessions with each closed day's net sales + transaction count (newest
+ * first) — the manager/owner "past closed-day sales history" browse. Server truth; a tap-through
+ * opens the full Z-report via {@link useRegisterSummary}. Only fetched while the history sheet is
+ * open (`enabled`). Past days are immutable, so no polling.
+ */
+export function useClosedSessions(session: CompanySession, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: closedHistoryKey(session),
+    staleTime: 60_000,
+    queryFn: () =>
+      apiFetch<ClosedSessionSummary[]>('/api/v1/register-sessions/closed', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      }),
+  })
+}
+
+/**
+ * Manager/owner CASH-count CORRECTION of a CLOSED session (ADR 0064) — the fix for a cashier who
+ * closed with the wrong counted cash. Rides the PERSONAL/elevated bearer (`auth: 'personal'`): the
+ * endpoint is owner/manager-only at the gateway, exactly like a refund. The server re-derives
+ * over/short and reverses + re-posts the finance variance; correcting to the recorded value is a
+ * no-op. Invalidates the session's Z-report, the closed-day list, and the current-session cache.
+ */
+export function useCorrectClose(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      sessionId,
+      countedCashMinor,
+      reason,
+    }: {
+      sessionId: string
+      countedCashMinor: number
+      reason: string
+    }) =>
+      apiFetch<RegisterSessionResponse>(
+        `/api/v1/register-sessions/${sessionId}/correct-close`,
+        {
+          method: 'POST',
+          tenant: tenantOf(session),
+          auth: 'personal',
+          body: { countedCashMinor, reason },
+        },
+      ),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({
+        queryKey: ['register-summary', session.companyId, vars.sessionId],
+      })
+      void qc.invalidateQueries({ queryKey: closedHistoryKey(session) })
+      void qc.invalidateQueries({ queryKey: currentKey(session) })
     },
   })
 }
@@ -141,7 +315,11 @@ export function useCloseRegisterSession(session: CompanySession) {
         headers: { 'Idempotency-Key': `close:${sessionId}` },
         body: { countedCashMinor, tenderCounts },
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: currentKey(session) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: currentKey(session) })
+      // The just-closed session becomes a new row in the past-day history browse.
+      void qc.invalidateQueries({ queryKey: closedHistoryKey(session) })
+    },
     onError: (err) => {
       // Already closed (double-close race or a changed recount after a lost response): the
       // server state is the truth — refetch so the sheet flips out of the close form.

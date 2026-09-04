@@ -12,7 +12,6 @@ import id.co.nativeapp.org.devicecredential.domain.DeviceCredential;
 import id.co.nativeapp.org.devicecredential.service.DeviceCredentialAlreadyExistsException;
 import id.co.nativeapp.org.devicecredential.service.DeviceCredentialNotFoundException;
 import id.co.nativeapp.org.devicecredential.service.DeviceCredentialReader;
-import id.co.nativeapp.org.devicecredential.service.DeviceCredentialTargetNotOutletException;
 import id.co.nativeapp.org.devicecredential.service.DeviceCredentialWriter;
 import id.co.nativeapp.org.user.service.OrgUnitNotFoundException;
 import id.co.nativeapp.tenant.TenantContext;
@@ -49,7 +48,7 @@ class DeviceCredentialPersistenceTest extends PostgresRlsTestBase {
   private TenantSetup bootstrap(String name) {
     var r =
         companyService.createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "restaurant", ACTOR));
+            new CreateCompanyCommand(name, "IDR", "id", "restaurant", ACTOR));
     return new TenantSetup(r.company().getId(), r.firstBusiness().getId());
   }
 
@@ -59,7 +58,7 @@ class DeviceCredentialPersistenceTest extends PostgresRlsTestBase {
         ACTOR,
         () -> {
           OrgUnit outlet =
-              orgUnitService.create(new CreateOrgUnitCommand(outletName, "outlet", t.rootId()));
+              orgUnitService.create(new CreateOrgUnitCommand(outletName, "outlet", null));
           return outlet.getId();
         });
   }
@@ -174,18 +173,6 @@ class DeviceCredentialPersistenceTest extends PostgresRlsTestBase {
   // -------------------------------------------------------------------------
   // requireOutlet validation
   // -------------------------------------------------------------------------
-
-  @Test
-  void requireOutletRejectsABusinessUnitTarget() throws Exception {
-    TenantSetup t = bootstrap("AcmeDeviceNonOutlet");
-
-    assertThatThrownBy(
-            () ->
-                TenantContext.callAs(
-                    t.companyId().toString(), ACTOR, () -> reader.requireOutlet(t.rootId())))
-        .isInstanceOf(DeviceCredentialTargetNotOutletException.class)
-        .hasMessageContaining("BUSINESS_UNIT");
-  }
 
   @Test
   void requireOutletRejectsAnUnknownId() throws Exception {

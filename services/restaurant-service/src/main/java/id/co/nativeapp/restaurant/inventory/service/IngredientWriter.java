@@ -1,15 +1,18 @@
 package id.co.nativeapp.restaurant.inventory.service;
 
+import id.co.nativeapp.restaurant.inventory.domain.GoodsReceiptIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
+import id.co.nativeapp.restaurant.inventory.repository.GoodsReceiptRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
@@ -26,19 +29,47 @@ import org.springframework.transaction.annotation.Transactional;
  * pattern). {@link OutletAccessGuard#enforce} must run inside that same transaction (its repository
  * reads rely on the GUC already being set), so it is called here — after loading the aggregate for
  * update/deactivate/stock paths, since {@code businessId} is not known until then.
+ *
+ * <p><strong>ADR 0067 Phase B.</strong> A PRICED {@link #addStock} call (the {@code
+ * Ingredient#receive} branch) additionally writes a {@code GoodsReceipt} row and the {@code
+ * StockReceived} outbox event, in the SAME {@code REQUIRES_NEW} transaction as the moving-average
+ * receive (rule 3) — restaurant emits the fact UNCONDITIONALLY; finance decides the accounting
+ * treatment. A costless {@code addStock}/{@code setStock} call emits nothing (no landed value to
+ * report).
+ *
+ * <p><strong>ADR 0067 Phase D, D1 — receive idempotency.</strong> A PRICED {@link #addStock} call
+ * may carry a caller-supplied {@code Idempotency-Key} (the {@code RegisterSessionController} idiom,
+ * threaded from {@code IngredientController} through {@code IngredientService}). A key already
+ * recorded on a {@code GoodsReceipt} row (the {@code (company_id, idempotency_key)} partial-unique
+ * index, V43) short-circuits: the SAME payload replays with NO second value-add and NO second
+ * {@code StockReceived} event (closes ADR 0056 accepted-limitation #1); a DIFFERENT payload under
+ * the same key is a client bug surfaced as {@link GoodsReceiptIdempotencyKeyConflictException}
+ * (409), never a silent double-add. Two concurrent first-seen calls with the same key both pass
+ * this in-transaction probe and race the INSERT; the partial-unique index backstops the race and
+ * the LOSER's {@code DataIntegrityViolationException} is recovered by {@code
+ * IngredientService#addStock} via {@link #findByGoodsReceiptKey} in a FRESH transaction (the {@code
+ * IngredientStocktakeService}/{@code RegisterSessionService} pattern) — never re-queried inside the
+ * poisoned transaction. A call with NO key (or a costless call) is unchanged — still susceptible to
+ * a double-write until a caller supplies one.
  */
 @Component
 public class IngredientWriter {
 
   private final IngredientRepository repository;
+  private final GoodsReceiptRepository goodsReceiptRepository;
+  private final PricedReceiveWriter pricedReceiveWriter;
   private final OutletAccessGuard outletAccessGuard;
   private final List<IngredientDeactivationGuard> deactivationGuards;
 
   public IngredientWriter(
       IngredientRepository repository,
+      GoodsReceiptRepository goodsReceiptRepository,
+      PricedReceiveWriter pricedReceiveWriter,
       OutletAccessGuard outletAccessGuard,
       List<IngredientDeactivationGuard> deactivationGuards) {
     this.repository = repository;
+    this.goodsReceiptRepository = goodsReceiptRepository;
+    this.pricedReceiveWriter = pricedReceiveWriter;
     this.outletAccessGuard = outletAccessGuard;
     this.deactivationGuards = deactivationGuards;
   }
@@ -61,6 +92,7 @@ public class IngredientWriter {
             request.unit(),
             request.unitCostMinor(),
             request.costCurrency());
+    ingredient.setDisplayUnit(request.displayUnit());
     if (request.initialStockQty() != null && request.initialStockQty() > 0) {
       ingredient.setStock(request.initialStockQty());
     }
@@ -82,7 +114,11 @@ public class IngredientWriter {
     Ingredient ingredient = load(id);
     outletAccessGuard.enforce(ingredient.getBusinessId());
     ingredient.update(
-        request.name(), request.unit(), request.unitCostMinor(), request.costCurrency());
+        request.name(),
+        request.unit(),
+        request.displayUnit(),
+        request.unitCostMinor(),
+        request.costCurrency());
     Ingredient saved = repository.saveAndFlush(ingredient);
     return IngredientResponse.from(saved);
   }
@@ -129,18 +165,31 @@ public class IngredientWriter {
   /**
    * Adds a signed delta to an ingredient's stock, flooring at 0. When a price ({@code
    * amountPaidMinor} + {@code costCurrency}) is supplied it is a PRICED positive receive that
-   * updates the moving weighted-average cost (V36); otherwise it is a costless adjustment that
-   * preserves the unit cost. Price fields are both-or-neither (400 otherwise), mirroring how the
-   * aggregate validates the cost pair; the positive-amount rule is enforced by {@link
-   * Ingredient#receive}.
+   * updates the moving weighted-average cost (V36) AND records the {@code goods_receipt} fact +
+   * {@code StockReceived} outbox event (ADR 0067 Phase B) in this SAME transaction; otherwise it is
+   * a costless adjustment that preserves the unit cost and emits nothing. Price fields are
+   * both-or-neither (400 otherwise), mirroring how the aggregate validates the cost pair; the
+   * positive-amount rule is enforced by {@link Ingredient#receive}.
+   *
+   * <p>{@code idempotencyKey} (ADR 0067 Phase D, D1) is honoured ONLY on the priced branch: a key
+   * already recorded on a {@code GoodsReceipt} row replays — same payload returns the CURRENT
+   * ingredient state with no second value-add/event; a different payload is a 409 (see the class
+   * doc). A blank/{@code null} key (or a costless call) skips the dedup check entirely — unchanged
+   * pre-D1 behaviour.
    *
    * @throws IngredientNotFoundException if not found or not visible to the current tenant
    * @throws IllegalArgumentException if exactly one price field is present (→ 400)
+   * @throws GoodsReceiptIdempotencyKeyConflictException if {@code idempotencyKey} was already used
+   *     for a receive with a DIFFERENT ingredient/quantity/value/currency (→ 409)
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public IngredientResponse addStock(
-      UUID id, int amount, @Nullable Long amountPaidMinor, @Nullable String costCurrency) {
-    TenantContext.require();
+      UUID id,
+      int amount,
+      @Nullable Long amountPaidMinor,
+      @Nullable String costCurrency,
+      @Nullable String idempotencyKey) {
+    String companyId = TenantContext.require().companyId();
     Ingredient ingredient = load(id);
     outletAccessGuard.enforce(ingredient.getBusinessId());
     if (amountPaidMinor != null || costCurrency != null) {
@@ -148,12 +197,51 @@ public class IngredientWriter {
         throw new IllegalArgumentException(
             "amountPaidMinor and costCurrency must both be present or both absent");
       }
-      ingredient.receive(amount, amountPaidMinor, costCurrency);
+      String key = normalize(idempotencyKey);
+      // The probe + receive + goods_receipt + StockReceived core is shared with the ADR 0072
+      // InventoryPurchaseRecorded consumer — one implementation, two entry points (this one keeps
+      // the OutletAccessGuard + REQUIRES_NEW semantics; the consumer authorizes at the finance
+      // input instead). Behaviour here is byte-identical to the pre-extraction inline code.
+      if (pricedReceiveWriter.checkReplay(key, id, amount, amountPaidMinor, costCurrency)
+          == PricedReceiveWriter.ReplayOutcome.REPLAY) {
+        // Idempotent replay: the FIRST-SEEN call already added the value and emitted the event —
+        // return the ingredient's CURRENT state, add nothing again, emit nothing again.
+        return IngredientResponse.from(ingredient);
+      }
+      Ingredient saved =
+          pricedReceiveWriter.apply(
+              ingredient,
+              amount,
+              amountPaidMinor,
+              costCurrency,
+              key,
+              companyId,
+              java.time.Instant.now());
+      return IngredientResponse.from(saved);
     } else {
       ingredient.addStock(amount);
+      Ingredient saved = repository.saveAndFlush(ingredient);
+      return IngredientResponse.from(saved);
     }
-    Ingredient saved = repository.saveAndFlush(ingredient);
-    return IngredientResponse.from(saved);
+  }
+
+  /**
+   * Idempotent-replay re-read used by {@code IngredientService#addStock}'s concurrent same-key race
+   * recovery (ADR 0067 Phase D, D1) — a FRESH transaction, since the loser's aborted INSERT
+   * transaction is poisoned (the {@code IngredientStocktakeWriter#findExistingByKey}/{@code
+   * RegisterSessionWriter#findByOpenKey} pattern). {@code Optional.empty()} when the key does not
+   * (yet) resolve to a row — the caller then rethrows the original conflict.
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+  public Optional<IngredientResponse> findByGoodsReceiptKey(String idempotencyKey) {
+    return goodsReceiptRepository
+        .findReplayByIdempotencyKey(idempotencyKey)
+        .map(receipt -> IngredientResponse.from(load(receipt.getIngredientId())));
+  }
+
+  /** Normalizes a blank/{@code null} Idempotency-Key to {@code null} (treated as "no key"). */
+  @Nullable private static String normalize(@Nullable String idempotencyKey) {
+    return idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey;
   }
 
   private Ingredient load(UUID id) {

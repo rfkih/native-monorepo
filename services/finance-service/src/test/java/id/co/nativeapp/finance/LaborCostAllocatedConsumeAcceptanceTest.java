@@ -103,7 +103,8 @@ class LaborCostAllocatedConsumeAcceptanceTest extends KafkaPostgresTestBase {
 
     // The P&L expense leg reflects the labor cost.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(amount, "IDR"));
   }
 

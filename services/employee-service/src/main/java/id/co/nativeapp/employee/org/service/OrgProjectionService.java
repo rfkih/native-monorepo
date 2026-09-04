@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee.org.service;
 
 import id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent;
+import id.co.nativeapp.employee.org.dto.OrgUnitRemovedEvent;
 import id.co.nativeapp.tenant.TenantContext;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +42,26 @@ public class OrgProjectionService {
     } catch (Exception e) {
       // callAs declares checked Exception; writer.apply throws only unchecked.
       throw new IllegalStateException("Failed to apply org event", e);
+    }
+  }
+
+  /**
+   * Purges one deleted org unit from the projection, idempotently, in the event's tenant scope (ADR
+   * 0070). Same tenant-binding contract as {@link #apply}: the scope comes from the event's {@code
+   * company_id}, never a request, so RLS scopes the delete (rule 5).
+   *
+   * @return {@code true} if this delivery applied (first delivery), {@code false} if it was a
+   *     re-delivery skipped by the idempotent consumer.
+   */
+  public boolean remove(OrgUnitRemovedEvent removal) {
+    try {
+      return TenantContext.callAs(
+          removal.companyId(), CONSUMER_ACTOR, () -> writer.remove(removal));
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      // callAs declares checked Exception; writer.remove throws only unchecked.
+      throw new IllegalStateException("Failed to purge org projection", e);
     }
   }
 }

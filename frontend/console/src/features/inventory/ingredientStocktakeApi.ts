@@ -14,7 +14,7 @@
  * Money rule (rule 8): integer minor units everywhere; renders via formatMoney.
  */
 import { useRef } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 import { INGREDIENTS_KEY } from './ingredientApi'
@@ -55,6 +55,23 @@ function tenantOf(session: CompanySession) {
   return { companyId: session.companyId, actor: session.actor }
 }
 
+/**
+ * GET /api/v1/ingredient-stocktakes?businessId — the outlet's opname history, newest first (server
+ * cap 50), each with its full lines. Only fetched while the riwayat sheet is open.
+ */
+export function useStocktakeHistory(session: CompanySession, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['ingredient-stocktakes', session.companyId, session.businessId],
+    staleTime: 30_000,
+    queryFn: () =>
+      apiFetch<IngredientStocktakeResponse[]>('/api/v1/ingredient-stocktakes', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      }),
+  })
+}
+
 export function useSubmitIngredientStocktake(session: CompanySession) {
   const qc = useQueryClient()
   // Stable across retries of one count (replay-safe); reset only after a successful submit.
@@ -71,6 +88,10 @@ export function useSubmitIngredientStocktake(session: CompanySession) {
     onSuccess: () => {
       // Quantities were adjusted to the physical count server-side — refresh the catalog.
       void qc.invalidateQueries({ queryKey: INGREDIENTS_KEY(session) })
+      // The fresh count becomes the newest riwayat row.
+      void qc.invalidateQueries({
+        queryKey: ['ingredient-stocktakes', session.companyId, session.businessId],
+      })
       // The next distinct count is a new submission — mint a fresh key.
       keyRef.current = crypto.randomUUID()
     },

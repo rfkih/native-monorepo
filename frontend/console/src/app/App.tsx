@@ -10,6 +10,9 @@ import { Spinner } from '@/components/ui/Spinner'
 import { AppSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
+import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
+import { BackGuard } from '@/components/mobile/BackGuard'
+import { FileSaveToast } from '@/components/FileSaveToast'
 import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { isNativeShell } from '@/lib/escpos/transport'
 import { usePageAccess } from '@/lib/pageAccess'
@@ -113,6 +116,7 @@ function PrefetchRouteChunks({
         void import('@/features/bank/BankAccounts')
         void import('@/features/tax/TaxReport')
         void import('@/features/assets/FixedAssets')
+        void import('@/features/expenses/NewCompanyExpense')
       }
     }
     const w = window as Window & {
@@ -212,6 +216,11 @@ const FeaturesSettings = lazy(() =>
 const PaymentSettings = lazy(() =>
   import('@/features/payments/PaymentSettings').then((m) => ({ default: m.PaymentSettings })),
 )
+const InventoryMethodSettings = lazy(() =>
+  import('@/features/inventory/InventoryMethodSettings').then((m) => ({
+    default: m.InventoryMethodSettings,
+  })),
+)
 const MyExpenses = lazy(() =>
   import('@/features/expenses/MyExpenses').then((m) => ({ default: m.MyExpenses })),
 )
@@ -229,6 +238,11 @@ const ExpensesHub = lazy(() =>
 )
 const CategoriesAdmin = lazy(() =>
   import('@/features/expenses/CategoriesAdmin').then((m) => ({ default: m.CategoriesAdmin })),
+)
+// ADR 0072 P3 — the company-expense input ("Catat pengeluaran"); FINANCE-gated (see
+// `financeAllowed` below), unlike the HR-gated ExpensesHub/CategoriesAdmin above.
+const NewCompanyExpense = lazy(() =>
+  import('@/features/expenses/NewCompanyExpense').then((m) => ({ default: m.NewCompanyExpense })),
 )
 const Customers = lazy(() =>
   import('@/features/ar/Customers').then((m) => ({ default: m.Customers })),
@@ -282,6 +296,9 @@ const PlatformSettlements = lazy(() =>
   import('@/features/platform/PlatformSettlements').then((m) => ({
     default: m.PlatformSettlements,
   })),
+)
+const Marketplace = lazy(() =>
+  import('@/features/marketplace/Marketplace').then((m) => ({ default: m.Marketplace })),
 )
 const CustomerDisplay = lazy(() =>
   import('@/features/pos/display/CustomerDisplay').then((m) => ({ default: m.CustomerDisplay })),
@@ -561,10 +578,19 @@ export function App() {
 
   return (
     <>
-      {/* App-global, mounted once here (not inside Shell) so it is visible on every authenticated
-          screen INCLUDING the full-screen POS surfaces, which render outside the dashboard shell
-          (Phase 5 offline mode, ADR 0028). Renders nothing when there is nothing to say. */}
-      <OfflineBanner />
+      {/* App-global top banner RAIL, mounted once here (not inside Shell) so it is visible on
+          every authenticated screen INCLUDING the full-screen POS surfaces, which render outside
+          the dashboard shell (Phase 5 offline mode, ADR 0028). One fixed column so simultaneous
+          banners (offline + update available) stack instead of covering each other; each child
+          renders nothing when there is nothing to say. */}
+      <div className="fixed inset-x-0 top-0 z-[70] flex flex-col print:hidden">
+        <OfflineBanner />
+        <AppUpdatePrompt />
+      </div>
+      {/* Hardware-Back confirm guard (Android shells only — self-disables in browsers). */}
+      <BackGuard homePath={home} />
+      {/* Confirms NativeShell file saves (exports land in Downloads with no chrome of their own). */}
+      <FileSaveToast />
       {posAllowed && <PrefetchPosChunk />}
       <PrefetchRouteChunks
         canOps={opsOk}
@@ -625,6 +651,13 @@ export function App() {
               Owner-only (a payments-integrity decision, not a plan-tier feature): mirrors
               /settings/features' registration exactly, one level below it. */}
           {isOwner && <Route path="/settings/payments" element={<PaymentSettings />} />}
+
+          {/* Perpetual-inventory election & activation (ADR 0067 §5, Phase D4/D5) — owner-only:
+              activation books a real opening GL entry and is effectively irreversible, the same
+              sensitivity as QRIS payment-settings administration above. */}
+          {isOwner && (
+            <Route path="/settings/inventory" element={<InventoryMethodSettings />} />
+          )}
 
           {/* Onboarding picks its chrome ONCE, on entry (see OnboardingRoute): first company →
               full-page standalone wizard (no shell to wander off into); adding another company →
@@ -713,6 +746,12 @@ export function App() {
             )}
             {financeAllowed && (
               <Route
+                path="/marketplace"
+                element={company ? <Marketplace /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {financeAllowed && (
+              <Route
                 path="/opening-balances"
                 element={company ? <OpeningBalances /> : <Navigate to="/onboarding" replace />}
               />
@@ -727,6 +766,15 @@ export function App() {
               <Route
                 path="/expenses/categories"
                 element={company ? <CategoriesAdmin /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {/* ADR 0072 P3 — "Catat pengeluaran". FINANCE-gated (owner/accountant), not
+                `expensesAllowed` (hr-reachable) — mirrors `/api/v1/company-expenses/**`'s
+                FINANCE_ROLES gate at the gateway. */}
+            {financeAllowed && (
+              <Route
+                path="/expenses/record"
+                element={company ? <NewCompanyExpense /> : <Navigate to="/onboarding" replace />}
               />
             )}
             {financeAllowed && (

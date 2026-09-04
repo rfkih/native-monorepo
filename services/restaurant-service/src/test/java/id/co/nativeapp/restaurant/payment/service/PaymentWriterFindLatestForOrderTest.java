@@ -67,6 +67,7 @@ class PaymentWriterFindLatestForOrderTest {
     when(view.getChangeMinor()).thenReturn(10_000L);
     when(view.isProviderPending()).thenReturn(false);
     when(view.getSaleId()).thenReturn(saleId);
+    when(view.getRefundedMinor()).thenReturn(0L);
     when(repository.findLatestReceiptViewByOrderId(orderId)).thenReturn(Optional.of(view));
 
     Optional<PaymentResponse> result = asTenant(() -> writer.findLatestForOrder(orderId));
@@ -83,6 +84,7 @@ class PaymentWriterFindLatestForOrderTest {
     assertThat(response.changeMinor()).isEqualTo(10_000L);
     assertThat(response.providerPending()).isFalse();
     assertThat(response.saleId()).isEqualTo(saleId);
+    assertThat(response.refundedMinor()).isZero();
     verify(repository).findLatestReceiptViewByOrderId(orderId);
   }
 

@@ -14,9 +14,10 @@
  */
 import { useTranslation } from 'react-i18next'
 import { formatMoney } from '@/lib/money'
+import { printCurrentPage } from '@/lib/nativeShell'
 import type { AppliedPromotionResponse, OrderResponse, PaymentResponse } from './api'
 import { ThermalReceipt } from './ThermalReceipt'
-import type { ThermalRow, ThermalLineItem } from './ThermalReceipt'
+import type { ThermalRow, ThermalLineItem, ThermalSecondaryAction } from './ThermalReceipt'
 
 interface Props {
   order: OrderResponse
@@ -49,6 +50,12 @@ interface Props {
   occurredAt?: string
   /** Overrides the bottom action label (default: "new order"). */
   actionLabelText?: string
+  /**
+   * Optional destructive action below the Print/primary row — the manager-gated "Return sale"
+   * refund (ADR 0061). The caller owns eligibility (owner/manager ∧ CAPTURED ∧ not provisional) and
+   * the confirm/refund flow; ReceiptView only forwards it to the receipt's button area.
+   */
+  secondaryAction?: ThermalSecondaryAction
   onNew: () => void
 }
 
@@ -67,6 +74,31 @@ function statusKey(status: string): string {
       return 'pos.receipt.statusPartiallyRefunded'
     default:
       return 'pos.receipt.statusPending'
+  }
+}
+
+/**
+ * The reversed-sale banner text (ThermalReceipt's `reversedNote`, on screen AND on the printed
+ * thermal paper) for a VOIDED/REFUNDED/PARTIALLY_REFUNDED payment — null for any other status, so
+ * a normal paid receipt never grows one. The partial variant names the refunded amount so the
+ * banner is actionable, not just a status word.
+ */
+function reversedBannerNote(
+  t: (key: string, opts?: Record<string, unknown>) => string,
+  payment: PaymentResponse,
+  locale: string,
+): string | null {
+  switch (payment.status) {
+    case 'VOIDED':
+      return t('pos.receipt.voidedBanner')
+    case 'REFUNDED':
+      return t('pos.receipt.refundedBanner')
+    case 'PARTIALLY_REFUNDED':
+      return t('pos.receipt.partiallyRefundedBanner', {
+        amount: formatMoney(payment.refundedMinor ?? 0, payment.currency, locale),
+      })
+    default:
+      return null
   }
 }
 
@@ -108,12 +140,14 @@ export function ReceiptView({
   reprint,
   occurredAt,
   actionLabelText,
+  secondaryAction,
   onNew,
 }: Props) {
   const { t } = useTranslation()
   const isPending = payment.status === 'PENDING'
   const isCash = payment.tenderType === 'CASH'
   const currency = payment.currency
+  const reversedNote = reversedBannerNote(t, payment, locale)
   const breakdown = order.breakdown
   const orderTypeKey = orderTypeI18nKey(order.orderType ?? null)
 
@@ -244,13 +278,16 @@ export function ReceiptView({
       grandTotalLabel={grandTotalLabel}
       paymentRows={paymentRows}
       footerNote={t('pos.receipt.thankYou')}
-      onPrint={() => window.print()}
+      onPrint={() => printCurrentPage('receipt')}
       onAction={onNew}
       actionLabel={actionLabelText ?? t('pos.receipt.newOrder')}
+      secondaryAction={secondaryAction}
       isPending={isPending}
       pendingNote={isPending ? t('pos.receipt.pendingNote') : undefined}
       isProvisional={provisional}
       provisionalNote={provisional ? t('offline.provisional.receiptNote') : undefined}
+      isReversed={reversedNote != null}
+      reversedNote={reversedNote ?? undefined}
     />
   )
 }

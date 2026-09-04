@@ -19,6 +19,11 @@ dependencies {
     // the client type appears in service-visible signatures.
     api(libs.awssdk.s3)
 
+    // The SDK's sync HTTP client, made EXPLICIT so S3MediaStorage can configure OWNED
+    // connect/socket timeouts on it (§4 Resilience; flaw-audit C1) — as a transitive
+    // runtime dep its builder class would not be compilable here.
+    implementation(libs.awssdk.apache5.client)
+
     // Auto-configuration machinery (the libs/tenant idiom): MediaStorageAutoConfiguration
     // is registered in META-INF/spring/...AutoConfiguration.imports so a service gets a
     // ready MediaStorage bean just by depending on this module and setting native.media.*.

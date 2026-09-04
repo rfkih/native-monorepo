@@ -3,82 +3,85 @@ package id.co.nativeapp.org.company.domain;
 import java.util.Set;
 
 /**
- * The kind of an {@link OrgUnit} in the company's self-referencing org tree, and the source of
- * truth for the <strong>allowed parent → child hierarchy</strong>.
+ * The kind of an {@link OrgUnit}. Since ADR 0070 a company's org "tree" is a flat list of physical
+ * selling locations hanging directly off the company ({@code company > outlet}), so {@link #OUTLET}
+ * is the only kind anything may be CREATED as.
  *
- * <p>The tree nests {@code business_unit > outlet > team} (ADR 0012 — the tree is flat: an outlet
- * IS the physical selling location; there is no intermediate branch level):
+ * <p><strong>Why the retired constants are still here.</strong> {@link #BUSINESS_UNIT} (the
+ * console's old "Division") and {@link #TEAM} are gone from the product, but they are NOT gone from
+ * the database: a tenant written by a pre-ADR-0070 image still has such rows until the {@code
+ * OrgTreeFlatteningReconciler} retires them. {@code OrgUnit.type} is mapped {@code
+ * EnumType.STRING}, so Hibernate resolves the column through {@code Enum.valueOf} — deleting these
+ * constants makes a legacy row IMPOSSIBLE TO LOAD, which means the reconciler's own {@code findAll}
+ * throws and the migration silently never runs on exactly the tenants that need it. They stay until
+ * the contract migration that deletes the last such row.
  *
- * <ul>
- *   <li>{@link #BUSINESS_UNIT} — a top-level node; its parent MUST be {@code null}.
- *   <li>{@link #OUTLET} — hangs under a {@code BUSINESS_UNIT}.
- *   <li>{@link #TEAM} — hangs under an {@code OUTLET} (the leaf level).
- * </ul>
+ * <p><strong>They are unreachable from every write path.</strong> {@link #from(String)} — the only
+ * way a request string becomes a type — rejects them, so no new row can ever be created with one;
+ * {@link #isRetired()} names the distinction for anything else that needs it. The enum is
+ * deliberately NOT reduced to a single constant: that reduction is what caused the bug above.
  *
- * <p>So a {@code TEAM} directly under a {@code BUSINESS_UNIT} is rejected — a team belongs to a
- * physical outlet. Persisted as its {@code name()} via {@code EnumType.STRING}, so the {@code
- * org_unit.type} column is human-readable and stable against reordering.
+ * <p>What DID go away is the hierarchy: there are no parent→child rules, because an outlet's parent
+ * is always {@code null} (enforced in the {@link OrgUnit} aggregate). Grouping outlets for
+ * reporting is served by multi-company ownership (ADR 0021) plus group consolidation, not by a tree
+ * level.
  */
 public enum OrgUnitType {
-  BUSINESS_UNIT,
+
+  /** A physical selling location, hanging directly off the company. The only creatable kind. */
   OUTLET,
+
+  /**
+   * RETIRED (ADR 0070) — the old "Division". Persists only until the reconciler deletes the row.
+   */
+  BUSINESS_UNIT,
+
+  /**
+   * RETIRED (ADR 0070) — a group inside an outlet. Persists only until the reconciler deletes it.
+   */
   TEAM;
 
-  /**
-   * The legal parent types for this kind — empty for a root type ({@link #BUSINESS_UNIT}), which
-   * has no parent. This is the one place the nesting is encoded.
-   */
-  public Set<OrgUnitType> allowedParentTypes() {
-    return switch (this) {
-      case BUSINESS_UNIT -> Set.of();
-      case OUTLET -> Set.of(BUSINESS_UNIT);
-      case TEAM -> Set.of(OUTLET);
-    };
-  }
-
-  /** {@code true} if this is a top-level (root) type — i.e. it must have a {@code null} parent. */
-  public boolean isRoot() {
-    return allowedParentTypes().isEmpty();
-  }
+  /** The kinds ADR 0070 removed: loadable from a legacy row, never creatable. */
+  private static final Set<OrgUnitType> RETIRED = Set.of(BUSINESS_UNIT, TEAM);
 
   /**
-   * Whether a node of this type may legally sit directly under a parent of {@code parentType} (or,
-   * when {@code parentType} is {@code null}, at the top level). Encapsulates the full parent→child
-   * rule so callers never re-derive it.
-   *
-   * @param parentType the prospective parent's type, or {@code null} for a top-level placement
+   * Whether this kind was retired by ADR 0070 and exists only so a pre-flattening row can still be
+   * read (and then deleted). Never {@code true} for anything the current API can create.
    */
-  public boolean canBeChildOf(OrgUnitType parentType) {
-    if (parentType == null) {
-      return isRoot();
-    }
-    return allowedParentTypes().contains(parentType);
-  }
-
-  /**
-   * A human-readable list of this type's legal parents (e.g. {@code "BUSINESS_UNIT"}) for error
-   * messages; callers must not invoke it on a root type.
-   */
-  public String describeAllowedParents() {
-    return String.join(" or ", allowedParentTypes().stream().map(Enum::name).sorted().toList());
+  public boolean isRetired() {
+    return RETIRED.contains(this);
   }
 
   /**
    * Parses an {@code OrgUnitType} from a request string, accepting any case and trimming
    * whitespace.
    *
-   * @param raw the wire value (e.g. {@code "business_unit"} / {@code "OUTLET"})
-   * @throws IllegalArgumentException if {@code raw} is null/blank or not a known type (mapped to a
-   *     {@code 400} by {@link id.co.nativeapp.security.ApiExceptionHandler})
+   * <p>Since ADR 0070 the only accepted value is {@code outlet}. A request naming a RETIRED level
+   * ({@code business_unit} / {@code team}) is rejected here with a {@code 400} — the constants
+   * exist for reading legacy rows, not for creating new ones — so an old client gets a clear error
+   * rather than silently creating a node the flat model cannot represent.
+   *
+   * @param raw the wire value (e.g. {@code "outlet"} / {@code "OUTLET"})
+   * @throws IllegalArgumentException if {@code raw} is null/blank, unknown, or a retired kind
+   *     (mapped to a {@code 400} by {@link id.co.nativeapp.security.ApiExceptionHandler})
    */
   public static OrgUnitType from(String raw) {
     if (raw == null || raw.isBlank()) {
       throw new IllegalArgumentException("org unit type must not be blank");
     }
+    OrgUnitType parsed;
     try {
-      return OrgUnitType.valueOf(raw.strip().toUpperCase(java.util.Locale.ROOT));
+      parsed = OrgUnitType.valueOf(raw.strip().toUpperCase(java.util.Locale.ROOT));
     } catch (IllegalArgumentException e) {
-      throw new IllegalArgumentException("Unknown org unit type: " + raw);
+      throw new IllegalArgumentException(
+          "Unknown org unit type: " + raw + " (the only type is 'outlet' — ADR 0070)");
     }
+    if (parsed.isRetired()) {
+      throw new IllegalArgumentException(
+          "Org unit type "
+              + raw
+              + " was removed by ADR 0070 — the org tree is flat (company > outlet)");
+    }
+    return parsed;
   }
 }

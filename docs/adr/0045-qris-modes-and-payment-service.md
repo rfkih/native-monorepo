@@ -107,6 +107,64 @@ RLS, and the money path's protections (consumer-side amount verification, signat
 settlement) are untouched by it. The console resolves outlet→division parentage from the
 POS-visible `/api/v1/outlets` (which gains an additive `divisionId`).
 
+## Amendment (2026-08-13) — per-environment credentials, verify, honest degrade
+
+First real go-live surfaced a silent human-error trap. Credentials were a SINGLE slot
+(`provider_environment` + `server_key_encrypted` + `client_key_encrypted` + `server_key_last4`)
+and the key is write-only (blank on save keeps the stored value). Flipping the environment without
+re-entering the key left the OTHER environment's key in place (e.g. `environment=SANDBOX` still
+bound to a PRODUCTION key) → Midtrans rejected auth at the till, surfaced only as the confusing
+"Demo · pending provider" MANUAL fallback. This EXTENDS the credential model rather than reversing
+it, so it is recorded here.
+
+- **Two credential slots.** The merchant's SANDBOX and PRODUCTION keys live in independent columns
+  (`sandbox_*` / `production_*`, migration **V6** — nullable ADD + an RLS-wrapped backfill from the
+  legacy slot into the slot matching each row's current `provider_environment`; the legacy columns
+  are kept dead for forward-only/rollback safety and dropped in a later contract migration).
+  `provider_environment` becomes purely the **active** selector.
+- **Structural guard.** `PaymentSettings.activateEnvironment(env)` refuses (→ 422) to activate an
+  environment whose slot has no key, so an environment can never be activated against another
+  environment's (or no) key. Switching the active environment needs no key re-entry. The domain's
+  `getServerKey()/hasServerKey()/getServerKeyLast4()` resolve the ACTIVE slot, so the charge and
+  webhook paths are unchanged (the webhook signature verifies against the active env's key, which is
+  exactly the env charges are created with).
+- **Verify ("Test connection").** `POST /api/v1/payment-settings/gateway/verify` (owner-only) runs a
+  side-effect-free status probe of a throwaway order id: 404 → VALID (key authenticates), 401/403 →
+  INVALID (also catches a key pointed at the wrong environment), else UNREACHABLE. No charge is
+  created. This catches a bad/mis-environment key at the settings page instead of at the till.
+- **Honest till degrade.** When the CONFIGURED mode is GATEWAY but the till resolves to MANUAL
+  (effective read erroring/offline/disconnected/non-IDR), the panel now shows a "gateway
+  unavailable — confirm manually" badge instead of the demo "pending provider" copy. Fail-open to
+  MANUAL is unchanged; only the wording stops misleading.
+
+## Amendment (2026-08-14) — dynamic QRIS gateway for BILLS/tabs (closes the ADR 0036 residual)
+
+The original decision + the DIVISION amendment shipped gateway QRIS for the ORDER surface only;
+bills/tabs fell back to manual "Demo" because a bill records its `Sale` **directly, one-step**
+(`BillWriter.payBill`) with **no `Payment` row** for a charge to attach to (the ADR 0036 residual).
+This EXTENDS the gateway flow to bills without changing payment-service at all — a bill's gateway
+payment is a restaurant `Payment` row keyed by `paymentId`, so the charge / `PaymentChargeSucceeded`
+/ consumer plumbing is reused verbatim (vertical stays `restaurant`). Scope: **full-bill**; split
+checks are a follow-up (the reservation model already supports them).
+
+- **Two-step on bills.** `POST /bills/{id}/pay-pending` reserves the bill's unpaid lines
+  (`bill_line.pending_payment_id`) and mints a **PENDING bill-aware `Payment`** (`payment.order_id`
+  nullable + `bill_id`/`discount_minor`/`check_idempotency_key`, migration V38, `CHECK` exactly one
+  of order_id/bill_id). On settlement, `BillPaymentCaptureWriter.capture(paymentId)` records the
+  check's `Sale` + `SaleRecorded`, marks the lines paid, closes the bill (PAID), and flips the
+  payment CAPTURED — reusing the sale-recording core extracted from `payBill` (`recordCheck`), so
+  the cash/manual path is byte-for-byte unchanged.
+- **Line reservation = correctness.** A concurrent cash `payBill` now excludes reserved lines, so a
+  line can never be double-settled. A second `pay-pending` self-heals a stale reservation
+  (abandon + re-reserve); `POST /payments/{id}/abandon` releases it on a clean cancel/close.
+- **Capture recompute-and-assert.** A bill is a mutable tab, so capture recomputes the breakdown
+  from the reserved lines **at the mint instant** (`Payment.occurredAt`, immune to an effective-dated
+  tax-rule change) and parks (never captures) on any drift from the authorized amount. Idempotent by
+  the already-CAPTURED short-circuit + the sale `(company_id, idempotency_key)` unique backstop.
+- **Console.** `BillPaymentModal` grows a gateway branch mirroring the order `RestaurantDigitalAttempt`
+  (initiate → `GatewayQrisPendingView` → poll → capture closes the bill); non-gateway tenders
+  unchanged.
+
 ## Consequences
 
 - Going live with digital tenders is now real: STATIC ships value with no PSP dependency at all,

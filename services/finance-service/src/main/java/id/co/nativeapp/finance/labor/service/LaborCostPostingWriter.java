@@ -3,8 +3,7 @@ package id.co.nativeapp.finance.labor.service;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.labor.domain.PayrollRunLedger;
 import id.co.nativeapp.finance.labor.domain.PayrollRunState;
@@ -72,8 +71,7 @@ public class LaborCostPostingWriter {
   private final PnlReadModelWriter pnlReadModel;
   private final ConsolidatedPnlRepository pnlRepository;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public LaborCostPostingWriter(
@@ -84,17 +82,15 @@ public class LaborCostPostingWriter {
       PnlReadModelWriter pnlReadModel,
       ConsolidatedPnlRepository pnlRepository,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository) {
+      GeneralLedgerWriter generalLedgerWriter) {
     this.ledgerRepository = ledgerRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.runLedgerRepository = runLedgerRepository;
     this.processedEvents = processedEvents;
     this.glAccountResolver = glAccountResolver;
     this.pnlReadModel = pnlReadModel;
     this.pnlRepository = pnlRepository;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
   }
 
   /**
@@ -250,14 +246,7 @@ public class LaborCostPostingWriter {
     glEntry.setCompanyId(companyId);
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
-    journalEntryRepository.saveAndFlush(glEntry);
-    glEntry
-        .getLines()
-        .forEach(
-            line -> {
-              line.setCompanyId(companyId);
-              journalLineRepository.save(line);
-            });
+    generalLedgerWriter.post(glEntry, companyId);
 
     // 5) Move the P&L expense leg up, carrying the illustrative flag (sticky-OR on the read model).
     pnlReadModel.addExpense(

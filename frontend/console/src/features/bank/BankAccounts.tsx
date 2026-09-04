@@ -61,43 +61,45 @@ export function BankAccounts() {
         <EmptyState title={t('bank.accounts.empty')} hint={t('bank.accounts.emptyHint')} />
       ) : (
         <Card className="overflow-hidden rounded-[20px]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
-                <th className="px-4 py-3">{t('bank.accounts.colName')}</th>
-                <th className="px-4 py-3">{t('bank.accounts.colBank')}</th>
-                <th className="px-4 py-3">{t('bank.accounts.colAccountNumber')}</th>
-                <th className="px-4 py-3">{t('bank.accounts.colCurrency')}</th>
-                <th className="px-4 py-3">{t('bank.accounts.colStatus')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((a) => (
-                <tr key={a.id} className="border-b border-ink-50 last:border-0 hover:bg-hover">
-                  <td className="px-4 py-3">
-                    <Link
-                      to={`/bank/${a.id}`}
-                      className="font-semibold text-ink hover:text-brand-700 hover:underline"
-                    >
-                      {a.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-ink-2">
-                    {a.bankName ?? t('bank.accounts.noValue')}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-ink-2">
-                    {a.accountNumber ?? t('bank.accounts.noValue')}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-ink-2">{a.currency}</td>
-                  <td className="px-4 py-3">
-                    <Badge tone={a.active ? 'profit' : 'neutral'}>
-                      {a.active ? t('bank.accounts.statusActive') : t('bank.accounts.statusInactive')}
-                    </Badge>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                  <th className="px-4 py-3">{t('bank.accounts.colName')}</th>
+                  <th className="px-4 py-3">{t('bank.accounts.colBank')}</th>
+                  <th className="px-4 py-3">{t('bank.accounts.colAccountNumber')}</th>
+                  <th className="px-4 py-3">{t('bank.accounts.colCurrency')}</th>
+                  <th className="px-4 py-3">{t('bank.accounts.colStatus')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {accounts.map((a) => (
+                  <tr key={a.id} className="border-b border-ink-50 last:border-0 hover:bg-hover">
+                    <td className="px-4 py-3">
+                      <Link
+                        to={`/bank/${a.id}`}
+                        className="font-semibold text-ink hover:text-brand-700 hover:underline"
+                      >
+                        {a.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-ink-2">
+                      {a.bankName ?? t('bank.accounts.noValue')}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-ink-2">
+                      {a.accountNumber ?? t('bank.accounts.noValue')}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-ink-2">{a.currency}</td>
+                    <td className="px-4 py-3">
+                      <Badge tone={a.active ? 'profit' : 'neutral'}>
+                        {a.active ? t('bank.accounts.statusActive') : t('bank.accounts.statusInactive')}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 

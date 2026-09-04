@@ -31,8 +31,10 @@ import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
 import { canFinance, canHr, canOps, canPos } from '@/lib/rolePreset'
+import { useCurrentOutletRegisterLabelKey } from '@/features/pos/registerApi'
 import { AUTH_MODE } from '@/lib/config'
 import { useSession } from '@/lib/session'
+import { useOfferedLangs } from '@/lib/geo'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
 import { useNavGroups, type Icon } from './navGroups'
@@ -78,8 +80,14 @@ export function MoreSheet({
   const pageAccess = usePageAccess()
   const tierAccess = useTierAccess()
   const { groups } = useNavGroups()
+  // The 'catalog' group (menu + inventory) exists for the DESKTOP sidebar; on a phone those pages are
+  // the quick-access tiles below, so drop it from the "all pages" list here to avoid listing twice.
+  const pageGroups = groups.filter((g) => g.key !== 'catalog')
   const { company, companies, setActiveCompany } = useSession()
   const { theme, toggle } = useTheme()
+  // Outside Indonesia there is a single UI language, so the switcher renders nothing (ADR 0059) —
+  // drop this labeled row entirely rather than leave a "Language" label with no control beside it.
+  const hasLanguageChoice = useOfferedLangs().length >= 2
   const navigate = useNavigate()
 
   // ADR 0049 P3b — mirrors MobileTabBarGate's per-capability booleans (merged/elevated roles), so
@@ -93,6 +101,9 @@ export function MoreSheet({
   const financeOk = canFinance(roles)
   const hrOk = canHr(roles)
   const posOk = canPos(auth.roles)
+  // The register tile toggles Buka/Closing kasir like the POS till menu (owner request) — resolved
+  // for the current outlet only when the tile actually renders (onOpenRegister provided).
+  const registerLabelKey = useCurrentOutletRegisterLabelKey(onOpenRegister != null)
 
   const tiles = [
     financeOk && pageAccess.isAllowed('close') && tierAccess.allows('orgStructure')
@@ -130,7 +141,7 @@ export function MoreSheet({
                 className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-[12px] font-semibold text-ink-2 transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
               >
                 <Banknote className="size-[22px] text-emerald-2" strokeWidth={1.8} aria-hidden />
-                {t('mobile.more.registerClose')}
+                {t(registerLabelKey)}
               </button>
             ) : null}
             {tiles.map((tile) => (
@@ -149,8 +160,8 @@ export function MoreSheet({
           </div>
         ) : null}
 
-        {groups.length > 0 ? <MicroHeading>{t('mobile.more.allPages')}</MicroHeading> : null}
-        {groups.map((group) => (
+        {pageGroups.length > 0 ? <MicroHeading>{t('mobile.more.allPages')}</MicroHeading> : null}
+        {pageGroups.map((group) => (
           <div key={group.key}>
             <MicroHeading>{group.heading}</MicroHeading>
             {group.items.map((item) => {
@@ -204,15 +215,17 @@ export function MoreSheet({
 
         <div className="my-2 h-px bg-line" />
         {/* Preferences — language + theme moved off the phone top bar (they crowded a 360px header). */}
-        <div className={cn(ROW_CLASS, 'justify-between hover:bg-transparent')}>
-          <span className="flex items-center gap-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
-              <Languages className="size-[17px]" aria-hidden />
+        {hasLanguageChoice && (
+          <div className={cn(ROW_CLASS, 'justify-between hover:bg-transparent')}>
+            <span className="flex items-center gap-3">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
+                <Languages className="size-[17px]" aria-hidden />
+              </span>
+              {t('nav.language')}
             </span>
-            {t('nav.language')}
-          </span>
-          <LanguageSwitcher />
-        </div>
+            <LanguageSwitcher />
+          </div>
+        )}
         <button type="button" onClick={toggle} className={ROW_CLASS}>
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
             {theme === 'dark' ? <Sun className="size-[17px]" aria-hidden /> : <Moon className="size-[17px]" aria-hidden />}

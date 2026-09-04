@@ -11,6 +11,8 @@
 import { useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, Clock, RotateCw, TriangleAlert, X, XCircle } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -26,6 +28,8 @@ interface Props {
 
 export function SyncCenter({ locale, onClose }: Props) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
+  useScrollLock()
   const rows = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const [retrying, setRetrying] = useState(false)
 

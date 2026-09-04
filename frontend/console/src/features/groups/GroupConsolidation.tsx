@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, Play, Plus, TriangleAlert } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, PeriodNav } from '@/features/_shared/financeUi'
+import { formatDate } from '@/features/expenses/format'
 import { useSession } from '@/lib/session'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { canFinance } from '@/lib/rolePreset'
@@ -70,6 +73,8 @@ function DefineGroupDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const [currency, setCurrency] = useState('IDR')
@@ -138,6 +143,8 @@ function AddMemberDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const [memberId, setMemberId] = useState('')
   const mutation = useAddGroupMember({ companyId, actor, groupId })
@@ -198,6 +205,8 @@ function RemoveMemberDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const mutation = useRemoveGroupMember({ companyId, actor, groupId })
 
@@ -253,6 +262,8 @@ function RunCloseDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
   const mutation = useRunGroupClose({ companyId, actor, groupId })
@@ -458,7 +469,7 @@ function GroupDetail({
                         {m.memberCompanyId}
                       </p>
                       <p className="text-xs text-ink-3">
-                        {currency} · {t('groups.effectiveFrom')} {m.effectiveFrom}
+                        {currency} · {t('groups.effectiveFrom')} {formatDate(m.effectiveFrom, locale)}
                       </p>
                     </div>
                   </div>

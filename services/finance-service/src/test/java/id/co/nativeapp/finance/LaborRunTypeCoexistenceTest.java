@@ -57,7 +57,8 @@ class LaborRunTypeCoexistenceTest extends PostgresRlsTestBase {
                     UUID.randomUUID(), regularRun, 1, "REGULAR", "5100-SALARY", regularAmount)))
         .isTrue();
     ConsolidatedPnl afterRegular =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(PERIOD)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(PERIOD))
+            .orElseThrow();
     assertThat(afterRegular.expense()).isEqualTo(Money.ofMinor(regularAmount, "IDR"));
 
     // THR run_seq=1 (its OWN independent series) lands for the SAME period — must NOT reverse the
@@ -67,7 +68,8 @@ class LaborRunTypeCoexistenceTest extends PostgresRlsTestBase {
                 laborEvent(UUID.randomUUID(), thrRun, 1, "THR", "5150-THR", thrAmount)))
         .isTrue();
     ConsolidatedPnl afterThr =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(PERIOD)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(PERIOD))
+            .orElseThrow();
     assertThat(afterThr.expense()).isEqualTo(Money.ofMinor(regularAmount + thrAmount, "IDR"));
 
     // Neither run was ever reversed — a SUPERSEDED run's presence would mean one of the two was

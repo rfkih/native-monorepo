@@ -16,6 +16,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { formatMoney } from '@/lib/money'
+import { printCurrentPage } from '@/lib/nativeShell'
 import type { BillLineResponse, BillResponse } from './billsApi'
 import { ThermalReceipt } from './ThermalReceipt'
 import type { ThermalRow, ThermalLineItem } from './ThermalReceipt'
@@ -149,7 +150,7 @@ export function BillReceiptView({
       grandTotalLabel={grandTotalLabel}
       paymentRows={paymentRows}
       footerNote={t('pos.receipt.thankYou')}
-      onPrint={() => window.print()}
+      onPrint={() => printCurrentPage('receipt')}
       onAction={onClose}
       actionLabel={t('common.close')}
     />

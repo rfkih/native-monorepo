@@ -14,6 +14,7 @@ interface RuntimeConfig {
   apiBaseUrl?: string
   keycloakUrl?: string
   keycloakRealm?: string
+  legalBaseUrl?: string
 }
 
 declare global {
@@ -41,6 +42,25 @@ export const KEYCLOAK_URL: string =
 
 export const KEYCLOAK_REALM: string =
   rt.keycloakRealm ?? import.meta.env.VITE_KEYCLOAK_REALM ?? 'native'
+
+/**
+ * Origin serving the static legal pages. ABSOLUTE on purpose, and pinned to the BUSINESS origin:
+ * `privacy.html` / `delete-account.html` live in this project's `public/`, which only the console
+ * image ships. The Employee app is a separate build served from `emp.native-app.my.id`, where
+ * `/privacy.html` falls through to that SPA's shell — a relative link would show a reviewer the app
+ * instead of the policy. Google Play requires the account-deletion page to be reachable from INSIDE
+ * an app that lets users create an account, so the link must not depend on which shell is running.
+ * `app.native-app.my.id` is already in the Employee shell's Capacitor `allowNavigation` (it is the
+ * Keycloak host), so these open in the WebView instead of bouncing out to Chrome.
+ */
+export const LEGAL_BASE_URL: string =
+  rt.legalBaseUrl ?? import.meta.env.VITE_LEGAL_BASE_URL ?? 'https://app.native-app.my.id'
+
+/** Public privacy policy — the URL declared in Play Console → App content → Privacy policy. */
+export const PRIVACY_URL = `${LEGAL_BASE_URL}/privacy.html`
+
+/** Public account-deletion page — the URL declared in Play Console → Data safety → Data deletion. */
+export const DELETE_ACCOUNT_URL = `${LEGAL_BASE_URL}/delete-account.html`
 
 /** The public SPA client id registered in the Keycloak realm (authorization-code + PKCE, no secret). */
 export const KEYCLOAK_CLIENT_ID = 'native-console'

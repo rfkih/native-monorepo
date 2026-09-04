@@ -53,11 +53,22 @@ class SaleHistoryControllerTest {
     UUID saleId = UUID.fromString("33333333-3333-3333-3333-333333333333");
     UUID orderId = UUID.fromString("44444444-4444-4444-4444-444444444444");
     Instant occurredAt = Instant.parse("2026-08-08T02:00:00Z");
+    UUID unbackedSaleId = UUID.fromString("55555555-5555-5555-5555-555555555555");
     when(saleService.findHistory(any(), any(), any()))
         .thenReturn(
             List.of(
                 new SaleHistoryResponse(
-                    saleId, orderId, occurredAt, 150_000L, "IDR", "CASH", null)));
+                    saleId,
+                    orderId,
+                    occurredAt,
+                    150_000L,
+                    "IDR",
+                    "CASH",
+                    null,
+                    "PARTIALLY_REFUNDED",
+                    40_000L),
+                new SaleHistoryResponse(
+                    unbackedSaleId, null, occurredAt, 50_000L, "IDR", "CASH", null, null, 0L)));
 
     mockMvc
         .perform(
@@ -71,7 +82,12 @@ class SaleHistoryControllerTest {
         .andExpect(jsonPath("$[0].amountMinor").value(150_000))
         .andExpect(jsonPath("$[0].currency").value("IDR"))
         .andExpect(jsonPath("$[0].tenderType").value("CASH"))
-        .andExpect(jsonPath("$[0].channelCode").doesNotExist());
+        .andExpect(jsonPath("$[0].channelCode").doesNotExist())
+        .andExpect(jsonPath("$[0].paymentStatus").value("PARTIALLY_REFUNDED"))
+        .andExpect(jsonPath("$[0].refundedMinor").value(40_000))
+        .andExpect(jsonPath("$[1].saleId").value(unbackedSaleId.toString()))
+        .andExpect(jsonPath("$[1].paymentStatus").doesNotExist())
+        .andExpect(jsonPath("$[1].refundedMinor").value(0));
   }
 
   @Test

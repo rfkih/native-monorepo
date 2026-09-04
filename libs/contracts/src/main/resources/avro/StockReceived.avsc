@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "StockReceived",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a PRICED goods receipt is recorded (a moving-average receive, ADR 0056). Consumed by finance-service to capitalize the landed value to Inventory under the GRNI clearing idiom (Dr 1100 / Cr 2050) WHEN the company is perpetual-active for received_at's period; otherwise a claimed no-op. Money is integer minor units + an ISO-4217 code, never a float (rule 8). ALL fields required (a brand-new contract); future additive fields append LAST with a default (rule 7).",
+  "fields": [
+    {"name": "receipt_id", "type": "string", "doc": "The goods_receipt aggregate id (UUID as string); partition key AND finance idempotency key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating outlet (UUID as string)."},
+    {"name": "ingredient_id", "type": "string", "doc": "The received ingredient (UUID as string) — traceability only; finance posts one aggregate Dr 1100 / Cr 2050 pair and does not dimension the GL on it."},
+    {"name": "qty", "type": "long", "doc": "Units received, in the ingredient's own base unit (integer; ADR 0046 decimal ban)."},
+    {"name": "value_minor", "type": "long", "doc": "The EXACT total paid for this receipt, in the currency's minor units — the value added to the moving-average bucket. Never a float (rule 8)."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code (e.g. IDR, USD)."},
+    {"name": "received_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the goods were received, epoch millis UTC — drives the accounting period."}
+  ]
+}

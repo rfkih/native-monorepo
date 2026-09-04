@@ -3,14 +3,17 @@ package id.co.nativeapp.finance.platform.controller;
 import id.co.nativeapp.finance.platform.dto.PlatformOutstandingResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResult;
+import id.co.nativeapp.finance.platform.dto.PlatformSettlementSummaryResponse;
 import id.co.nativeapp.finance.platform.dto.SettlePlatformRequest;
 import id.co.nativeapp.finance.platform.service.PlatformSettlementWriter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import java.net.URI;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Platform settlements", description = "Online-platform payout settlements (ADR 0036)")
 @RestController
 @RequestMapping("/api/v1/platform-settlements")
+@Validated
 public class PlatformSettlementController {
 
   private final PlatformSettlementWriter writer;
@@ -79,5 +83,26 @@ public class PlatformSettlementController {
   public List<PlatformSettlementResponse> history(
       @RequestParam(value = "channelCode", required = false) String channelCode) {
     return writer.history(channelCode);
+  }
+
+  /**
+   * The per-channel settlement summary for a {@code YYYY-MM} period — one row per {@code
+   * (channelCode, currency)} bucket: settled gross/fee/net totals and settlement count. READ-ONLY,
+   * tenant-scoped via RLS (rule 5). Empty list when the period has no settlements.
+   */
+  @Operation(
+      summary = "Per-channel platform-settlement summary for a period",
+      description =
+          "Returns the per-channel settlement summary for the given YYYY-MM period: settled"
+              + " gross/fee/net totals and settlement count per (channelCode, currency) bucket."
+              + " Empty list when the period has no settlements.")
+  @GetMapping("/summary")
+  public List<PlatformSettlementSummaryResponse> summary(
+      @RequestParam
+          @Pattern(
+              regexp = "\\d{4}-(0[1-9]|1[0-2])",
+              message = "period must be a valid YYYY-MM month")
+          String period) {
+    return writer.summary(period);
   }
 }

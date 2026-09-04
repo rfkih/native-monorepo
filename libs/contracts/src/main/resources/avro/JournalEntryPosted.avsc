@@ -1,0 +1,34 @@
+{
+  "type": "record",
+  "name": "JournalEntryPosted",
+  "namespace": "id.co.nativeapp.events.finance",
+  "doc": "finance-service's per-entry GL contract (ADR 0071 P1). Emitted exactly once for EVERY balanced journal entry the GL persists, from the single GeneralLedgerWriter.post choke point (the ArchUnit rule onlyTheGeneralLedgerWriterPersistsJournals makes a posting path that skips the emit unrepresentable) — atomic with the entry via the transactional outbox (rule 3). Consumed by analytics-service to build fact_gl_day; idempotency there keys on journal_entry_id (a CLAIM table), NOT the outbox event id, because a replayed/synthesized event carries a new outbox id. period is the entry's authoritative accounting period carried verbatim (it is NOT always derivable from occurred_at — payroll runs). REVERSAL entries (ADR 0064 supersession contra) arrive as their own events with posting_role=REVERSAL and must be modelled as contra rows, never deletes. Money is integer minor units + ISO-4217 currency, never a float (rule 8); no PII (rule 6). Partition key = company_id (per-tenant ordering).",
+  "fields": [
+    {"name": "journal_entry_id", "type": "string", "doc": "The journal_entry primary key (UUID as string) — the consumer-side idempotency/claim key (survives replay with a fresh outbox event id)."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string); the Kafka partition key and the RLS dimension."},
+    {"name": "business_id", "type": ["null", "string"], "default": null, "doc": "The outlet (org unit) this entry is attributable to (UUID as string), or null for a company-level entry (depreciation, bank fees, AR/AP, payroll, tax — ~16 posting kinds carry no outlet by domain design). Null until ADR 0071 P5 threads it through the choke point; consumers must render null as 'unallocated', never spread or hide it."},
+    {"name": "period", "type": "string", "doc": "The entry's accounting period (YYYY-MM), carried VERBATIM from the entry — the caller's authoritative value, not derived from occurred_at."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "The entry's book timestamp, epoch millis (UTC). The outlet-local book date is derived by the consumer in the company's zone."},
+    {"name": "currency", "type": "string", "doc": "The entry's ISO-4217 transaction currency (e.g. IDR, USD); every line is in this currency."},
+    {"name": "posting_role", "type": "string", "doc": "PRIMARY for a first posting; REVERSAL for a contra entry (ADR 0064 close-correction supersession). A REVERSAL is an additive contra row downstream, never a delete."},
+    {"name": "source_event_id", "type": "string", "doc": "The consumed event that produced this entry (UUID as string) — provenance; joins ledger_posting.source_event_id (the P5 business_id backfill key)."},
+    {
+      "name": "lines",
+      "doc": "The entry's balanced double-entry lines (>= 2, sum of debits == sum of credits, all in the entry's currency).",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "JournalEntryLine",
+          "fields": [
+            {"name": "line_no", "type": "int", "doc": "The line's 1-based position within the entry."},
+            {"name": "account_code", "type": "string", "doc": "The chart_of_account account code (the GL dimension)."},
+            {"name": "debit_minor", "type": "long", "doc": "Debit amount in the entry currency's minor units (integer; never a float). Exactly one of debit_minor/credit_minor is zero; the other is strictly positive."},
+            {"name": "credit_minor", "type": "long", "doc": "Credit amount in the entry currency's minor units (integer; never a float). Exactly one of debit_minor/credit_minor is zero; the other is strictly positive."},
+            {"name": "currency", "type": "string", "doc": "The line's ISO-4217 currency code; always equals the entry's currency."}
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -12,8 +12,7 @@ import id.co.nativeapp.finance.ar.repository.InvoiceLineRepository;
 import id.co.nativeapp.finance.ar.repository.InvoiceRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
-import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
-import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -69,8 +68,7 @@ public class InvoiceWriter {
   private final InvoiceLineRepository invoiceLineRepository;
   private final CustomerRepository customerRepository;
   private final JournalPostingService journalPostingService;
-  private final JournalEntryRepository journalEntryRepository;
-  private final JournalLineRepository journalLineRepository;
+  private final GeneralLedgerWriter generalLedgerWriter;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
 
@@ -80,16 +78,14 @@ public class InvoiceWriter {
       InvoiceLineRepository invoiceLineRepository,
       CustomerRepository customerRepository,
       JournalPostingService journalPostingService,
-      JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository,
+      GeneralLedgerWriter generalLedgerWriter,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.invoiceRepository = invoiceRepository;
+    this.generalLedgerWriter = generalLedgerWriter;
     this.invoiceLineRepository = invoiceLineRepository;
     this.customerRepository = customerRepository;
     this.journalPostingService = journalPostingService;
-    this.journalEntryRepository = journalEntryRepository;
-    this.journalLineRepository = journalLineRepository;
     this.jdbcTemplate = jdbcTemplate;
     this.clock = clock;
   }
@@ -244,11 +240,7 @@ public class InvoiceWriter {
   private void persistEntry(JournalEntry entry, String companyId) {
     entry.setCompanyId(companyId);
     // saveAndFlush forces the journal_entry INSERT before the FK'd line INSERTs (same tx).
-    journalEntryRepository.saveAndFlush(entry);
-    for (var line : entry.getLines()) {
-      line.setCompanyId(companyId);
-      journalLineRepository.save(line);
-    }
+    generalLedgerWriter.post(entry, companyId);
   }
 
   private Invoice requireInvoice(UUID invoiceId) {

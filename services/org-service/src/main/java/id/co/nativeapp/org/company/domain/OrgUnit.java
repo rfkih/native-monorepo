@@ -2,7 +2,6 @@ package id.co.nativeapp.org.company.domain;
 
 import id.co.nativeapp.tenant.Auditable;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -13,20 +12,22 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * An {@code org_unit} — a node in a company's self-referencing org tree ({@code business_unit >
- * outlet > team}; ADR 0012 — the tree is flat, an outlet IS the physical selling location). The
- * first node created with a company (the "business") is a {@link OrgUnitType#BUSINESS_UNIT} with a
- * {@code null} parent; outlets and teams hang below it, each under a type from its legal parent set
- * ({@link OrgUnitType}).
+ * An {@code org_unit} — a physical selling location (an {@link OrgUnitType#OUTLET}) hanging
+ * directly off the company. Since ADR 0070 the org "tree" is FLAT ({@code company > outlet}): the
+ * division (business-unit) and team levels are gone, so there is no nesting, no parent to choose,
+ * and nothing to move a node under. The company bootstrap seeds one outlet named after the company;
+ * the owner adds and renames the rest on the Outlets page.
  *
- * <p><strong>The aggregate owns the hierarchy invariant.</strong> Construction validates that the
- * node's {@code type} may legally sit under the supplied parent type ({@link
- * OrgUnitType#canBeChildOf}); a root type ({@code business_unit}) demands a {@code null} parent,
- * and every other type demands a parent from its legal parent set. The same rule is re-checked on a
- * {@link #moveTo move}. The two things the aggregate cannot see in isolation — that the parent is
- * in the SAME company, and that a move would create a CYCLE — are enforced one layer out, in the
- * writer (the company constraint is also enforced a second time by RLS); the aggregate guards a
- * direct self-parent.
+ * <p><strong>The aggregate owns the flatness invariant.</strong> Construction always sets a {@code
+ * null} parent — there is no legal parent for an outlet. The {@code parent_id} column and the
+ * {@code parent_id} event field survive (always {@code null}) purely so ADR 0070 needed no schema
+ * change and no consumer migration; see {@link OrgUnitType} for the same reasoning about {@code
+ * type}.
+ *
+ * <p><strong>The vertical moved to the company (ADR 0070).</strong> It used to live on the
+ * business-unit node and be inherited by outlets through a parent self-join; with that node gone it
+ * is a company-level immutable ({@link Company#getVertical()}). An outlet carries no vertical of
+ * its own, so the POS reads it once from the company rather than joining per outlet.
  *
  * <p><strong>Effective-dated.</strong> Each node carries {@code effective_from}/{@code
  * effective_to}; an open-ended row uses the far-future sentinel {@link #OPEN_ENDED} ({@code
@@ -54,18 +55,12 @@ public class OrgUnit extends Auditable {
   @Column(name = "type", nullable = false, updatable = false, length = 32)
   private OrgUnitType type;
 
+  /**
+   * Always {@code null} since ADR 0070 (the tree is flat). The column is KEPT rather than dropped
+   * so the event contract and the downstream read models needed no migration; nothing can set it.
+   */
   @Column(name = "parent_id")
   private UUID parentId;
-
-  /**
-   * The business vertical — REQUIRED for a {@link OrgUnitType#BUSINESS_UNIT}, {@code null} for
-   * outlet/team nodes (they inherit via their parent). IMMUTABLE after creation (like the company
-   * base currency). Persisted LOWERCASE via {@link VerticalConverter} — see {@link Vertical} for
-   * the casing decision.
-   */
-  @Convert(converter = VerticalConverter.class)
-  @Column(name = "vertical", length = 32, updatable = false)
-  private Vertical vertical;
 
   /** The legal employer this node belongs to (in the bootstrap, the company's single one). */
   @Column(name = "legal_employer_id", nullable = false, updatable = false)
@@ -85,32 +80,19 @@ public class OrgUnit extends Auditable {
   }
 
   /**
-   * Creates an org unit with a freshly generated id, validating the hierarchy against the parent's
-   * type.
+   * Creates an org unit with a freshly generated id. Since ADR 0070 every org unit is a top-level
+   * {@link OrgUnitType#OUTLET}, so there is no hierarchy to validate — the parent is
+   * unconditionally {@code null}.
    *
    * <p>The node is created active and open-ended (its {@code effective_to} is the {@link
    * #OPEN_ENDED} sentinel), effective from {@code effectiveFrom}.
    *
    * @param name the org-unit name; must be non-blank
-   * @param type the org-unit kind; must be non-null
-   * @param vertical the business vertical — required for a {@code BUSINESS_UNIT}, must be {@code
-   *     null} for outlet/team nodes (they inherit via their parent)
-   * @param parentId the parent org unit, or {@code null} for a top-level node
-   * @param parentType the parent's type, or {@code null} when {@code parentId} is {@code null};
-   *     used to validate the {@code business_unit > outlet > team} nesting
+   * @param type the org-unit kind; must be non-null (the only kind is {@link OrgUnitType#OUTLET})
    * @param legalEmployerId the legal employer this node belongs to; must be non-null
    * @param effectiveFrom the date the node becomes effective; must be non-null
-   * @throws IllegalArgumentException if the type may not sit under the parent type, or the vertical
-   *     does not match the type rule (both mapped to 400)
    */
-  public OrgUnit(
-      String name,
-      OrgUnitType type,
-      Vertical vertical,
-      UUID parentId,
-      OrgUnitType parentType,
-      UUID legalEmployerId,
-      LocalDate effectiveFrom) {
+  public OrgUnit(String name, OrgUnitType type, UUID legalEmployerId, LocalDate effectiveFrom) {
     this.id = UUID.randomUUID();
     this.name = requireNonBlank(name, "name");
     this.type = Objects.requireNonNull(type, "type");
@@ -118,57 +100,7 @@ public class OrgUnit extends Auditable {
     this.effectiveFrom = Objects.requireNonNull(effectiveFrom, "effectiveFrom");
     this.effectiveTo = OPEN_ENDED;
     this.active = true;
-    requireLegalPlacement(type, parentId, parentType);
-    requireVerticalMatchesType(type, vertical);
-    this.parentId = parentId;
-    this.vertical = vertical;
-  }
-
-  /**
-   * A {@code BUSINESS_UNIT} must carry a vertical (what kind of business it runs); every other node
-   * type must NOT (outlets/teams inherit via their parent). Throws {@link IllegalArgumentException}
-   * (→ 400) otherwise.
-   */
-  private static void requireVerticalMatchesType(OrgUnitType type, Vertical vertical) {
-    if (type == OrgUnitType.BUSINESS_UNIT && vertical == null) {
-      throw new IllegalArgumentException(
-          "A BUSINESS_UNIT requires a vertical (restaurant | carwash | barbershop)");
-    }
-    if (type != OrgUnitType.BUSINESS_UNIT && vertical != null) {
-      throw new IllegalArgumentException(
-          "A " + type + " cannot carry a vertical — it inherits its business unit's");
-    }
-  }
-
-  /**
-   * Validates that a node of {@code type} may sit under {@code parentId} (whose type is {@code
-   * parentType}). A root type demands a {@code null} parent; every other type demands a parent
-   * whose type is in its legal parent set (e.g. an outlet accepts a business unit parent). Throws
-   * {@link IllegalArgumentException} (→ 400) otherwise.
-   */
-  private static void requireLegalPlacement(
-      OrgUnitType type, UUID parentId, OrgUnitType parentType) {
-    if (parentId == null) {
-      if (!type.isRoot()) {
-        throw new IllegalArgumentException(
-            "A " + type + " must have a parent of type " + type.describeAllowedParents());
-      }
-      return;
-    }
-    if (type.isRoot()) {
-      throw new IllegalArgumentException(
-          "A " + type + " is a top-level node and cannot have a parent");
-    }
-    Objects.requireNonNull(parentType, "parentType");
-    if (!type.canBeChildOf(parentType)) {
-      throw new IllegalArgumentException(
-          "A "
-              + type
-              + " cannot be a child of a "
-              + parentType
-              + "; it must be a child of a "
-              + type.describeAllowedParents());
-    }
+    this.parentId = null;
   }
 
   /**
@@ -187,25 +119,24 @@ public class OrgUnit extends Auditable {
   }
 
   /**
-   * Moves this org unit under a new parent, re-validating the hierarchy. The node's own {@code
-   * type} never changes; only its parent does, so the new parent must be of this type's single
-   * legal parent type (or {@code null} for a root type). The aggregate guards a direct self-parent;
-   * the writer guards a deeper cycle and the same-company constraint.
+   * Detaches this node from its parent, restoring the ADR 0070 flatness invariant on a row that
+   * predates it. Sets {@code parent_id} to {@code null}; a no-op on a node that is already
+   * top-level.
    *
-   * @param newParentId the new parent, or {@code null} to move to the top level (root types only)
-   * @param newParentType the new parent's type, or {@code null} when {@code newParentId} is null
-   * @return {@code true} if the parent actually changed
-   * @throws IllegalArgumentException if the placement is illegal, or the node is moved under itself
+   * <p><strong>The one-shot migration path only.</strong> This exists for {@code
+   * OrgTreeFlatteningReconciler}, which lifts a company's outlets out from under their retired
+   * business unit. Nothing in the normal request path calls it — a newly created outlet is already
+   * parentless, and there is no "move" operation any more. It lives on the aggregate rather than as
+   * a raw {@code UPDATE} so the invariant stays owned here, and so the caller can emit {@code
+   * OrgUnitChanged}/{@code MOVED} from the node's real post-change state.
+   *
+   * @return {@code true} if the node actually had a parent and is now top-level
    */
-  public boolean moveTo(UUID newParentId, OrgUnitType newParentType) {
-    if (this.id.equals(newParentId)) {
-      throw new IllegalArgumentException("An org unit cannot be its own parent");
-    }
-    requireLegalPlacement(this.type, newParentId, newParentType);
-    if (Objects.equals(newParentId, this.parentId)) {
+  public boolean detachFromParent() {
+    if (this.parentId == null) {
       return false;
     }
-    this.parentId = newParentId;
+    this.parentId = null;
     return true;
   }
 
@@ -233,10 +164,9 @@ public class OrgUnit extends Auditable {
    * true} and restores {@code effective_to} to the {@link #OPEN_ENDED} sentinel — the exact inverse
    * of {@link #deactivate}. A no-op if already active.
    *
-   * <p>The aggregate cannot see the parent's state, so the tree invariant <em>no active node may
-   * have an inactive ancestor</em> is enforced one layer out, in the writer: it rejects
-   * reactivating a node whose parent is inactive (reactivate the parent first). Reactivation does
-   * NOT cascade to descendants — each node is reactivated explicitly, top-down.
+   * <p>Since ADR 0070 the tree is flat, so there are no ancestors or descendants: reactivation
+   * concerns exactly this node and can never leave an active node under an inactive parent (the
+   * invariant the old nested tree needed a writer-side guard for).
    *
    * @return {@code true} if the node was inactive and is now reactivated, {@code false} if it was
    *     already active
@@ -271,13 +201,9 @@ public class OrgUnit extends Auditable {
     return type;
   }
 
+  /** Always {@code null} since ADR 0070 — kept for the event/read-model shape only. */
   public UUID getParentId() {
     return parentId;
-  }
-
-  /** The business vertical ({@code null} for outlet/team nodes — they inherit via the parent). */
-  public Vertical getVertical() {
-    return vertical;
   }
 
   public UUID getLegalEmployerId() {

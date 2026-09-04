@@ -70,15 +70,22 @@ public final class MediaKeys {
         + extensionFor(canonicalContentType);
   }
 
-  /** Maps a canonical image content type to its key extension. */
+  /**
+   * Maps a canonical media content type to its key extension. Images (JPEG/PNG/WEBP) are the
+   * original set; {@code application/pdf} is added for document attachments (ADR 0063) — a bill can
+   * carry a scanned/PDF receipt, and the key needs a stable {@code .pdf} extension. Callers that
+   * accept only images (menu, QR) never pass {@code application/pdf}, so their behaviour is
+   * unchanged.
+   */
   public static String extensionFor(String canonicalContentType) {
     return switch (canonicalContentType) {
       case ImageContentTypeValidator.CONTENT_TYPE_JPEG -> "jpg";
       case ImageContentTypeValidator.CONTENT_TYPE_PNG -> "png";
       case ImageContentTypeValidator.CONTENT_TYPE_WEBP -> "webp";
+      case "application/pdf" -> "pdf";
       default ->
           throw new IllegalArgumentException(
-              "not a canonical image content type: " + canonicalContentType);
+              "not a canonical media content type: " + canonicalContentType);
     };
   }
 

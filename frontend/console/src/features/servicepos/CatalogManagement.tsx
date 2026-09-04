@@ -19,6 +19,8 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Pencil, Plus, Wrench } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -65,7 +67,7 @@ export function CatalogManagement({ config }: { config: VerticalPosConfig }) {
 function NoCompany() {
   const { t } = useTranslation()
   return (
-    <div className="grid min-h-screen place-items-center bg-paper px-5">
+    <div className="grid min-h-[100dvh] place-items-center bg-paper px-5">
       <Card className="w-full max-w-md p-10 text-center">
         <h2 className="font-display text-xl font-semibold text-ink">{t('dashboard.noCompany')}</h2>
         <p className="mt-2 text-sm text-ink-3">{t('serviceCatalog.noCompanyHint')}</p>
@@ -109,7 +111,7 @@ function CatalogManagementInner({
   const staffNoun = t(config.staffTitleKey).toLowerCase()
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-[100dvh] bg-paper">
       {/* Phone: the header wraps (auto height) and the picker takes its own full-width row —
           inline at a fixed h-16 it crushed the title (the header-crush class). Desktop keeps
           the original single h-16 row. */}
@@ -387,6 +389,8 @@ function CreateCatalogItemDialog({
   titleKey: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const createPackage = useCreatePackage(config, session)
   const createAddon = useCreateAddon(config, session)
@@ -501,6 +505,8 @@ function EditCatalogItemDialog({
   titleKey: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const updatePackage = useUpdatePackage(config, session)
   const updateAddon = useUpdateAddon(config, session)
@@ -731,6 +737,8 @@ function WasherDialog({
   canDashboard: boolean
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const createMutation = useCreateStaffProfile(config, session)
   const updateMutation = useUpdateStaffProfile(config, session)

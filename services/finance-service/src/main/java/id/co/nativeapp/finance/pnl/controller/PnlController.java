@@ -2,7 +2,7 @@ package id.co.nativeapp.finance.pnl.controller;
 
 import id.co.nativeapp.finance.fx.dto.PnlPresentation;
 import id.co.nativeapp.finance.fx.service.PresentationConverter;
-import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.domain.PnlFigures;
 import id.co.nativeapp.finance.pnl.dto.PnlResponse;
 import id.co.nativeapp.finance.pnl.service.PnlReader;
 import id.co.nativeapp.money.Money;
@@ -85,12 +85,12 @@ public class PnlController {
       @RequestParam(required = false) String currency,
       @RequestParam(required = false) String presentation) {
 
-    Optional<ConsolidatedPnl> pnl = pnlReader.pnlForPeriod(period);
+    Optional<PnlFigures> pnl = pnlReader.pnlForPeriod(period);
     if (pnl.isPresent()) {
-      ConsolidatedPnl row = pnl.get();
+      PnlFigures row = pnl.get();
       if (presentation != null && !presentation.isBlank()) {
-        // VIEW-ONLY: convert each leg on the way out; the stored read model is never touched. The
-        // converter reads the row's legs (entity access stays out of the controller). An unknown
+        // VIEW-ONLY: convert each leg on the way out; no stored figure is ever touched. The
+        // converter reads the figures' legs (Money access stays out of the controller). An unknown
         // ISO-4217 code -> 400 via Currency.getInstance/the shared advice; no rate -> 422.
         Currency target = Currency.getInstance(presentation.strip());
         PnlPresentation view = presentationConverter.convertPnl(row, period, target);

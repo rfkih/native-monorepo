@@ -7,11 +7,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.tax.domain.NetDirection;
 import id.co.nativeapp.finance.tax.domain.NoVatActivityException;
@@ -63,16 +65,22 @@ class TaxFilingPostingTest {
             mock(VatReturnReader.class),
             roleResolver,
             mock(TaxFilingRepository.class),
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             mock(JdbcTemplate.class),
             clock);
     settlementWriter =
         new TaxSettlementWriter(
             mock(TaxFilingRepository.class),
             roleResolver,
-            mock(JournalEntryRepository.class),
-            mock(JournalLineRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
             mock(JdbcTemplate.class),
             clock);
   }
@@ -94,6 +102,38 @@ class TaxFilingPostingTest {
     assertThat(lineFor(lines, "2200").getDebitMinor()).isEqualTo(1_100_000L); // Dr VAT_OUTPUT
     assertThat(lineFor(lines, "1300").getCreditMinor()).isEqualTo(440_000L); // Cr VAT_INPUT
     assertThat(lineFor(lines, "2300").getCreditMinor()).isEqualTo(660_000L); // Cr VAT_PAYABLE (net)
+    // Provenance-derived (was hardcoded true): every resolved role above is OFFICIAL, so the entry
+    // is not badged provisional.
+    assertThat(entry.isUsesIllustrativeRules()).isFalse();
+  }
+
+  @Test
+  void anIllustrativeMappingBadgesTheFilingEntryProvisional() {
+    RoleAccountResolver illustrativeResolver = mock(RoleAccountResolver.class);
+    when(illustrativeResolver.resolve(eq(AccountRole.VAT_OUTPUT), any())).thenReturn("2200");
+    when(illustrativeResolver.resolve(eq(AccountRole.VAT_INPUT), any())).thenReturn("1300");
+    when(illustrativeResolver.resolve(eq(AccountRole.VAT_PAYABLE), any())).thenReturn("2300");
+    when(illustrativeResolver.anyIllustrative(any(), any(), any(), any())).thenReturn(true);
+    TaxFilingWriter illustrativeWriter =
+        new TaxFilingWriter(
+            mock(VatReturnReader.class),
+            illustrativeResolver,
+            mock(TaxFilingRepository.class),
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
+            mock(JdbcTemplate.class),
+            Clock.fixed(NOW, ZoneOffset.UTC));
+
+    JournalEntry entry =
+        illustrativeWriter.buildFilingEntry(
+            PERIOD, NOW, UUID.randomUUID(), UUID.randomUUID(), IDR, 1_100_000L, 440_000L);
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative mapping among the roles posted flags the entry provisional")
+        .isTrue();
   }
 
   @Test
@@ -117,6 +157,8 @@ class TaxFilingPostingTest {
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(300_000L);
     assertThat(lineFor(lines, "2200").getDebitMinor()).isEqualTo(300_000L);
     assertThat(lineFor(lines, "1300").getCreditMinor()).isEqualTo(300_000L);
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
   }
 
   @Test
@@ -163,6 +205,35 @@ class TaxFilingPostingTest {
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(660_000L);
     assertThat(lineFor(lines, "2300").getDebitMinor()).isEqualTo(660_000L); // Dr VAT_PAYABLE
     assertThat(lineFor(lines, "1900").getCreditMinor()).isEqualTo(660_000L); // Cr CASH_CLEARING
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
+  }
+
+  @Test
+  void anIllustrativeMappingBadgesTheSettlementEntryProvisional() {
+    RoleAccountResolver illustrativeResolver = mock(RoleAccountResolver.class);
+    when(illustrativeResolver.resolve(eq(AccountRole.VAT_PAYABLE), any())).thenReturn("2300");
+    when(illustrativeResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
+    when(illustrativeResolver.anyIllustrative(any(), any(), any())).thenReturn(true);
+    TaxSettlementWriter illustrativeWriter =
+        new TaxSettlementWriter(
+            mock(TaxFilingRepository.class),
+            illustrativeResolver,
+            new GeneralLedgerWriter(
+                mock(JournalEntryRepository.class),
+                mock(JournalLineRepository.class),
+                mock(OutboxWriter.class),
+                Clock.systemUTC()),
+            mock(JdbcTemplate.class),
+            Clock.fixed(NOW, ZoneOffset.UTC));
+    TaxFiling payable = payableFiling(660_000L);
+
+    JournalEntry entry =
+        illustrativeWriter.buildSettlementEntry(payable, PERIOD, NOW, UUID.randomUUID());
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative VAT_PAYABLE/CASH_CLEARING mapping flags the entry provisional")
+        .isTrue();
   }
 
   // ----- TaxFiling state machine ----------------------------------------------------------------

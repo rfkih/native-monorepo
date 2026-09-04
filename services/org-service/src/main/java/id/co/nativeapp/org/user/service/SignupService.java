@@ -70,6 +70,11 @@ public class SignupService {
     // a user was created (which would spend a compensation on a validation error).
     String country = CountryDefaults.requireValidCountry(request.country());
     String baseCurrency = CountryDefaults.baseCurrencyFor(country);
+    // The default language is country-gated (ADR 0059): English everywhere, Indonesian only for an
+    // Indonesian company. Validated HERE, at the same derive-before-create point, so a disallowed
+    // language 400s while nothing exists yet — never after a Keycloak user was created.
+    String defaultLanguage =
+        CountryDefaults.requireLanguageForCountry(country, request.defaultLanguage());
 
     // Step 1: pre-check the email in Keycloak so the common duplicate case is rejected cleanly.
     // A race that slips past this is still caught: createUser maps Keycloak's 409 to
@@ -97,7 +102,8 @@ public class SignupService {
     try {
       keycloak.assignRealmRole(keycloakUserId, "owner");
 
-      // Step 4: create the company + first business (new tenant) under the pre-generated id. This
+      // Step 4: create the company + its seeded outlet (new tenant) under the pre-generated id.
+      // This
       // calls into CompanyService, which opens a TenantContext scope over that id and delegates to
       // a @Transactional CompanyWriter, exactly as the tenant bootstrap always does. The base
       // currency is the DERIVED one — never anything the client sent.
@@ -105,12 +111,11 @@ public class SignupService {
           new CreateCompanyCommand(
               request.companyName(),
               baseCurrency,
-              request.defaultLanguage(),
+              defaultLanguage,
               country,
               blankToNull(request.phone()),
               request.companySize(),
               request.primaryInterest(),
-              request.firstBusinessName(),
               request.vertical(),
               request.ownerEmail() // actor = the signing-up owner's email
               ),

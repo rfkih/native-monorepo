@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee.org.messaging;
 
 import id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent;
+import id.co.nativeapp.employee.org.dto.OrgUnitRemovedEvent;
 import id.co.nativeapp.employee.org.service.OrgProjectionService;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -13,10 +14,10 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Consumes {@code OrgUnitCreated} / {@code OrgUnitChanged} off Kafka and applies them to the local
- * org read model ({@link OrgUnitProjection}) — the projection the same-legal-employer assignment
- * invariant is checked against (ARCHITECTURE.md §2; rule 2 — a cached read model, never a sync
- * call).
+ * Consumes {@code OrgUnitCreated} / {@code OrgUnitChanged} / {@code OrgUnitDeleted} off Kafka and
+ * applies them to the local org read model ({@link OrgUnitProjection}) — the projection the
+ * same-legal-employer assignment invariant is checked against (ARCHITECTURE.md §2; rule 2 — a
+ * cached read model, never a sync call).
  *
  * <p><strong>Raw Avro bytes.</strong> The message value is the org-service outbox payload — raw
  * Avro bytes shipped by Debezium — so the container delivers a {@code byte[]} value; this listener
@@ -71,6 +72,41 @@ public class OrgUnitEventListener {
       containerFactory = "kafkaListenerContainerFactory")
   public void onOrgUnitChanged(ConsumerRecord<String, byte[]> record) {
     handle(record, OrgUnitEventSchemas::decodeChanged);
+  }
+
+  /**
+   * Handles one {@code OrgUnitDeleted} (ADR 0070): PURGES the projection row. Terminal for the
+   * aggregate — nothing follows it — so the purge cannot be undone by a later upsert. A delete for
+   * a unit employee-service never projected is a clean no-op.
+   */
+  @KafkaListener(
+      topics = OrgUnitEventSchemas.DELETED_TOPIC,
+      containerFactory = "kafkaListenerContainerFactory")
+  public void onOrgUnitDeleted(ConsumerRecord<String, byte[]> record) {
+    UUID eventId = eventIdOf(record);
+    OrgUnitRemovedEvent removal;
+    try {
+      removal = OrgUnitEventSchemas.decodeDeleted(eventId, record.value());
+    } catch (RuntimeException decodeFailure) {
+      throw new OrgUnitDecodeException(
+          "Failed to decode OrgUnitDeleted payload at "
+              + record.topic()
+              + "-"
+              + record.partition()
+              + "@"
+              + record.offset()
+              + " (eventId="
+              + eventId
+              + "); routing to DLT",
+          decodeFailure);
+    }
+    boolean applied = projectionService.remove(removal);
+    if (!applied) {
+      log.debug(
+          "Skipped re-delivered OrgUnitDeleted eventId={} orgUnitId={} (already processed)",
+          eventId,
+          removal.orgUnitId());
+    }
   }
 
   private void handle(

@@ -1,10 +1,13 @@
 package id.co.nativeapp.restaurant.register.controller;
 
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
+import id.co.nativeapp.restaurant.register.dto.ClosedSessionSummaryResponse;
+import id.co.nativeapp.restaurant.register.dto.CorrectCloseRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
+import id.co.nativeapp.restaurant.register.dto.RegisterSummaryResponse;
 import id.co.nativeapp.restaurant.register.service.RegisterSessionService;
 import io.swagger.v3.oas.annotations.Operation;
 import java.net.URI;
@@ -78,6 +81,26 @@ public class RegisterSessionController {
     return ResponseEntity.ok(service.close(id, request, idempotencyKey));
   }
 
+  /**
+   * Manager/owner CASH-count CORRECTION of an already-CLOSED session (ADR 0064) — the fix for a
+   * cashier who closed with the wrong counted cash. Finance reverses the prior cash-variance
+   * journal and posts the corrected one (append-only). Gateway-gated to owner/manager. 200 with the
+   * amended session; 409 if the session is not CLOSED; 422 if it is too old / predates the feature.
+   */
+  @Operation(
+      summary = "Correct a closed register session's cash count",
+      description =
+          "Manager/owner-only. Re-derives the over/short from the corrected counted cash and reverses"
+              + " + re-posts the finance variance (books stay balanced). Recent, unsealed closes"
+              + " only; correcting to the recorded value is a no-op. A required reason is recorded"
+              + " for audit.")
+  @PostMapping("/{id}/correct-close")
+  public ResponseEntity<RegisterSessionResponse> correctClose(
+      @PathVariable("id") UUID id,
+      @jakarta.validation.Valid @RequestBody CorrectCloseRequest request) {
+    return ResponseEntity.ok(service.correctClose(id, request));
+  }
+
   /** The outlet's current OPEN session — 200 with the session, or 204 when none is open. */
   @Operation(
       summary = "Current register session",
@@ -105,11 +128,49 @@ public class RegisterSessionController {
     return ResponseEntity.ok(service.expectedBreakdown(id));
   }
 
+  /**
+   * The POS daily transaction summary (Z-report) for a session — the day's sales aggregates
+   * (transaction count, gross/discount/service/tax breakdown, per-tender net) plus the cash
+   * reconciliation, printed at close or any time during the day. Works for an OPEN session (a live
+   * X-report over {@code [openedAt, now)}) and a CLOSED one (the final Z-report over {@code
+   * [openedAt, closedAt)}). 404 for an unknown session. Reporting only — the tax line is
+   * illustrative unless an SME has replaced the seeded rate.
+   */
+  @Operation(
+      summary = "Register session daily summary (Z-report)",
+      description =
+          "The day's sales aggregates for the session (transaction count, gross/discount/service/tax"
+              + " breakdown, per-tender net sales, refunds) plus the cash reconciliation. Works for"
+              + " an OPEN session (live X-report) and a CLOSED one (final Z-report). Reporting only;"
+              + " the tax line is illustrative unless the seeded rate has been replaced by an SME.")
+  @GetMapping("/{id}/summary")
+  public ResponseEntity<RegisterSummaryResponse> summary(@PathVariable("id") UUID id) {
+    return ResponseEntity.ok(service.summarize(id));
+  }
+
   /** The outlet's session history, most recent first (capped at 50). */
   @Operation(summary = "Register session history", description = "Most recent 50 sessions.")
   @GetMapping
   public ResponseEntity<List<RegisterSessionResponse>> history(@RequestParam UUID businessId) {
     return ResponseEntity.ok(service.history(businessId));
+  }
+
+  /**
+   * The outlet's CLOSED sessions (newest first, capped) with each closed day's net sales and
+   * transaction count — the manager/owner "past closed-day sales history" browse. Each row's net
+   * equals that session's Z-report net; tap-through opens {@code /{id}/summary}. POS_ROLES at the
+   * gateway (same as the summary); the owner/manager restriction is a client affordance. Reporting
+   * only.
+   */
+  @Operation(
+      summary = "Closed register session history (with sales)",
+      description =
+          "Recent CLOSED sessions for the outlet, newest first, each with its net sales and"
+              + " transaction count — the manager/owner past-day history browse. Reporting only.")
+  @GetMapping("/closed")
+  public ResponseEntity<List<ClosedSessionSummaryResponse>> closedHistory(
+      @RequestParam UUID businessId) {
+    return ResponseEntity.ok(service.closedHistory(businessId));
   }
 
   private static void requireKey(String idempotencyKey) {

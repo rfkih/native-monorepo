@@ -48,10 +48,22 @@ Copy-Item dist\native-employee-app-prod-v<N>.apk "..\..\docker\prod\downloads\na
 ```
 
 Then bump the `native-app-latest.apk` / `native-employee-app-latest.apk` redirect targets in
-`docker/prod/edge.conf` to the new `native-*-prod-v<N>.apk` filenames and reload the edge
-(`docker exec native-prod-edge nginx -s reload`, zero-downtime — edge.conf is a read-only mount).
-No container restart needed — nginx reads the mount per-request. Delete superseded
-`native-*-prod-v<old>.apk` once no link points at them.
+`docker/prod/edge.conf` to the new `native-*-prod-v<N>.apk` filenames.
+
+⚠️ edge.conf is a SINGLE-FILE bind mount: `sed -i` and most editors replace the file's inode, and
+the container keeps the OLD inode — `nginx -s reload` then reloads the stale config and the 302
+silently keeps serving the previous version (bit the v9 release). Two working recipes:
+
+- Zero-downtime: rewrite the file IN PLACE (same inode), then reload —
+  `sed 's|v8\.apk|v9.apk|' edge.conf > /tmp/e && cat /tmp/e > edge.conf && rm /tmp/e`
+  then `docker exec native-prod-edge nginx -s reload`.
+- After an inode-replacing edit (`sed -i`, vim): `docker restart native-prod-edge` (~2s blip) —
+  the restart re-resolves the mount by path.
+
+Either way, VERIFY from inside the container before trusting the public URL:
+`docker exec native-prod-edge grep native-app-latest /etc/nginx/conf.d/default.conf`.
+
+Delete superseded `native-*-prod-v<old>.apk` once no link points at them (keep one for rollback).
 
 Signing keys (unchanged from UAT — the app's permanent identity, back them up):
 `C:\Users\rifki\native-till-signing\` (Till) and the Employee app's own keystore.

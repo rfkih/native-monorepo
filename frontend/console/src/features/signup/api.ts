@@ -6,7 +6,6 @@ export interface SignupRequest {
   /** ISO 3166-1 alpha-2 — the server DERIVES the base currency from it (ADR 0025). */
   country: string
   defaultLanguage: string
-  firstBusinessName: string
   /** Lowercase business vertical (restaurant | carwash | barbershop). */
   vertical: string
   ownerFirstName: string

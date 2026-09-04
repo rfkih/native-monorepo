@@ -20,4 +20,4 @@ import java.util.UUID;
  * @param divisionId the outlet's parent org-unit id (its business unit); null only for an anomalous
  *     parentless outlet — clients fail open
  */
-public record OutletResponse(UUID id, String name, String vertical, UUID divisionId) {}
+public record OutletResponse(UUID id, String name) {}

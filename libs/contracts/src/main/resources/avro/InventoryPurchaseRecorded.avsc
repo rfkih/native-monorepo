@@ -1,0 +1,30 @@
+{
+  "type": "record",
+  "name": "InventoryPurchaseRecorded",
+  "namespace": "id.co.nativeapp.events.finance",
+  "doc": "Emitted by finance-service when a company purchase whose money is posted to the GL carries ingredient lines (a company-expense INVENTORY submit, or a posted AP bill with ingredient-linked inventory lines) — ADR 0072. Consumed by restaurant-service to apply each line as a PRICED goods receipt (moving-average cost, ADR 0056) through the existing goods_receipt idempotency anchor (idempotency_key = line_id), which in turn emits StockReceived — so money and stock stay synchronized while finance decides the accounting treatment locally (periodic Dr 5100 at input; perpetual Dr 2050 GRNI at input, cleared by StockReceived's Dr 1100 / Cr 2050). Money is integer minor units + an ISO-4217 code, never a float (rule 8); no PII (rule 6). ALL fields required (a brand-new contract); future additive fields append LAST with a default (rule 7).",
+  "fields": [
+    {"name": "purchase_id", "type": "string", "doc": "The source aggregate id (company_expense id or bill id, UUID as string); the Kafka partition key."},
+    {"name": "source", "type": "string", "doc": "EXPENSE (company-expense form) or BILL (posted AP bill). Consumers MUST tolerate unknown future values by skip-and-log, never by failing the event."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string); the RLS dimension the consumer binds."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 code of every line's value_minor. A mismatch with the ingredient's cost currency parks in the consumer's error inbox."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the purchase was recorded (the money-posting instant), epoch millis (UTC)."},
+    {
+      "name": "lines",
+      "doc": "One entry per ingredient line; the consumer applies each independently and idempotently — a bad line parks, the rest still apply.",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "InventoryPurchaseLine",
+          "fields": [
+            {"name": "line_id", "type": "string", "doc": "The purchase line id (UUID as string) — used as the goods_receipt idempotency_key, so a redelivered or duplicated line can never double-add stock."},
+            {"name": "ingredient_id", "type": "string", "doc": "The restaurant ingredient to receive into (UUID as string). Unknown to the consumer -> parked in the error inbox, never dropped silently."},
+            {"name": "qty_base", "type": "long", "doc": "Quantity received in the ingredient's own BASE unit (integer; the ADR 0046 no-decimals rule). Display-unit conversion happens in the console before submit."},
+            {"name": "value_minor", "type": "long", "doc": "The exact amount paid for THIS line (net of recoverable VAT), in the purchase currency's minor units — the value added to the moving-average bucket (integer; never a float)."}
+          ]
+        }
+      }
+    }
+  ]
+}

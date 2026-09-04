@@ -22,8 +22,14 @@ android {
         // Fresh lineage (ADR 0049 P5) — a brand-new app, NOT a continuation of the Till app's
         // versionCode/versionName. Bumps ONLY on native shell changes; web features ship via the
         // normal console deploy with no app release.
-        versionCode 1
-        versionName "1.0"
+        // 2 = NativeShell plugin v2 (minimize for the back-guard exit + saveFile Downloads +
+        //     printPage — "Cetak slip" needs it) + first SIGNED release (own keystore minted);
+        // 3 = own launcher identity — a PERSON glyph instead of the shared trend mark, so this app
+        //     and the Business app are tellable apart on a phone that has both and in the two Play
+        //     listings; plus brand raster mipmaps, which were still Capacitor's stock logo on the
+        //     API 24-25 fallback path. Regenerate with scripts/render-launcher-icons.mjs.
+        versionCode 3
+        versionName "1.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

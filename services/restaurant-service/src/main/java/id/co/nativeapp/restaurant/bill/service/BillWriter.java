@@ -4,6 +4,8 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.bill.domain.Bill;
 import id.co.nativeapp.restaurant.bill.domain.BillLine;
 import id.co.nativeapp.restaurant.bill.domain.BillLineModifier;
+import id.co.nativeapp.restaurant.bill.domain.BillLineReservationConflictException;
+import id.co.nativeapp.restaurant.bill.domain.BillMutationForbiddenException;
 import id.co.nativeapp.restaurant.bill.domain.BillNotFoundException;
 import id.co.nativeapp.restaurant.bill.domain.BillNotOpenException;
 import id.co.nativeapp.restaurant.bill.dto.AppendLinesRequest;
@@ -18,6 +20,7 @@ import id.co.nativeapp.restaurant.bill.repository.BillLineModifierRepository;
 import id.co.nativeapp.restaurant.bill.repository.BillLineRepository;
 import id.co.nativeapp.restaurant.bill.repository.BillRepository;
 import id.co.nativeapp.restaurant.channel.repository.SalesChannelRepository;
+import id.co.nativeapp.restaurant.config.ActorRolesProvider;
 import id.co.nativeapp.restaurant.menu.domain.InsufficientStockException;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
 import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
@@ -30,6 +33,9 @@ import id.co.nativeapp.restaurant.order.service.ModifierValidationReader;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.payment.dto.PaymentRequest;
+import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
+import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
+import id.co.nativeapp.restaurant.payment.service.PaymentWriter;
 import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
 import id.co.nativeapp.restaurant.promotion.domain.AppliedPromotion;
@@ -51,6 +57,7 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Currency;
@@ -64,6 +71,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,12 +96,27 @@ import org.springframework.transaction.annotation.Transactional;
  * exactly, sharing the same {@link ModifierValidationReader} and {@link TaxChargeService} beans so
  * the two paths cannot silently diverge.
  *
- * <p><strong>CashWindowLock (verified HIGH race fix).</strong> {@link #payBill} acquires the
- * per-business {@link CashWindowLock} SHARED ({@link CashWindowLock#acquireForCommit}) as the FIRST
- * lock-acquiring statement — strictly BEFORE the {@code Instant now} that becomes the check's sale
- * {@code occurred_at} is captured — mirroring {@code OrderWriter.checkout}/{@code payParked}.
- * SHARED holders never block each other, only a concurrent register close's EXCLUSIVE mode. See
- * {@code RegisterSessionWriter} class javadoc for the full contract.
+ * <p><strong>CashWindowLock (verified HIGH race fix).</strong> {@link #payBill} and {@code
+ * BillPaymentCaptureWriter#capture} each acquire the per-business {@link CashWindowLock} SHARED
+ * ({@link CashWindowLock#acquireForCommit}) as the FIRST lock-acquiring statement in THEIR OWN
+ * transaction — strictly BEFORE the {@code Instant now} that becomes the check's sale {@code
+ * occurred_at} is captured — mirroring {@code OrderWriter.checkout}/{@code payParked}. SHARED
+ * holders never block each other, only a concurrent register close's EXCLUSIVE mode. See {@code
+ * RegisterSessionWriter} class javadoc for the full contract. {@link #recordCheck} — the shared
+ * sale-recording core both callers delegate to — does NOT re-acquire the lock itself: it mirrors
+ * {@code SaleWriter#recordInCurrentTx}'s documented contract that a {@code MANDATORY}-joining
+ * helper trusts its caller to already hold it (a PostgreSQL advisory xact lock is re-entrant within
+ * one transaction, but re-acquiring inside the helper would defeat the "before {@code now}"
+ * ordering for whichever caller captures {@code now} first).
+ *
+ * <p><strong>V38 — dynamic QRIS/CARD gateway (full-bill only).</strong> {@link
+ * #initiatePendingPayment} mirrors {@code OrderWriter.checkout}'s digital-tender two-step: it mints
+ * a PENDING {@code payment} row (via {@link PaymentWriter#recordPendingBillDigital}) for the
+ * check's grand total, RESERVES every unpaid line ({@code bill_line.pending_payment_id}) against
+ * it, and records NO sale. Revenue is recognised only when {@code BillPaymentCaptureWriter#capture}
+ * runs (via the SAME {@code PaymentChargeSucceeded} consumer plumbing the order path already uses —
+ * payment-service needs zero changes). {@link #recordCheck} is the sale-recording core shared by
+ * {@link #payBill} (cash/manual/static, unchanged behaviour) and the gateway capture path.
  */
 @Component
 public class BillWriter {
@@ -112,8 +135,16 @@ public class BillWriter {
   private final PromotionEngineService promotionEngine;
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
+  private final ActorRolesProvider actorRoles;
+
+  /** Audit #3: age after which a PENDING gateway reservation is considered leaked (self-healed). */
+  private final Duration pendingReservationTtl;
+
   private final SalesChannelRepository salesChannelRepository;
   private final CashWindowLock cashWindowLock;
+  private final PaymentWriter paymentWriter;
+  private final BillPaymentWriter billPaymentWriter;
+  private final PaymentRepository paymentRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public BillWriter(
@@ -132,7 +163,12 @@ public class BillWriter {
       AppliedPromotionRepository appliedPromotionRepository,
       ManualDiscountGuard manualDiscountGuard,
       SalesChannelRepository salesChannelRepository,
-      CashWindowLock cashWindowLock) {
+      CashWindowLock cashWindowLock,
+      PaymentWriter paymentWriter,
+      BillPaymentWriter billPaymentWriter,
+      PaymentRepository paymentRepository,
+      ActorRolesProvider actorRoles,
+      @Value("${native.bill.pending-reservation-ttl:PT30M}") Duration pendingReservationTtl) {
     this.billRepository = billRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -149,6 +185,31 @@ public class BillWriter {
     this.manualDiscountGuard = manualDiscountGuard;
     this.salesChannelRepository = salesChannelRepository;
     this.cashWindowLock = cashWindowLock;
+    this.paymentWriter = paymentWriter;
+    this.billPaymentWriter = billPaymentWriter;
+    this.paymentRepository = paymentRepository;
+    this.actorRoles = actorRoles;
+    // Fail fast on a NEGATIVE TTL (a config typo would otherwise be an always-true age check).
+    // ZERO is deliberately allowed — it means "every reservation is immediately expired", which
+    // the TTL tests pin (PT0S); production keeps the PT30M default.
+    if (pendingReservationTtl.isNegative()) {
+      throw new IllegalStateException(
+          "native.bill.pending-reservation-ttl must be >= 0, got " + pendingReservationTtl);
+    }
+    this.pendingReservationTtl = pendingReservationTtl;
+  }
+
+  /**
+   * Open-bill lockdown (owner rule): destructive open-bill mutations require {@code owner}/{@code
+   * manager}. Empty-roles-pass semantics shared with {@link
+   * id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard} — a headerless caller
+   * (gateway-less dev recipe / direct service-layer test) is trusted; a real cashier token is
+   * denied.
+   */
+  private void requireOwnerOrManager(String action, UUID billId) {
+    if (!actorRoles.currentRoles().isEmpty() && !actorRoles.isOwnerOrManager()) {
+      throw new BillMutationForbiddenException(billId, action);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -264,10 +325,15 @@ public class BillWriter {
 
   /**
    * Removes a single line from an OPEN bill. Stock is not adjusted at remove time — deduction
-   * happens only at pay time.
+   * happens only at pay time. Open-bill lockdown (owner rule): removing lines requires {@code
+   * owner}/{@code manager} — a cashier cannot trim a bill after items were served. The domain
+   * additionally refuses removing a PAID or payment-reserved line (see {@link
+   * Bill#removeLine(BillLine)}).
    *
    * @throws BillNotFoundException if the bill is not found
    * @throws BillNotOpenException if the bill is not OPEN
+   * @throws BillMutationForbiddenException if the actor is not owner/manager
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillLinePaidException if the line is paid
    * @throws IllegalArgumentException if the line does not belong to this bill
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -278,6 +344,8 @@ public class BillWriter {
     if (!"OPEN".equals(bill.getStatus())) {
       throw new BillNotOpenException(billId, bill.getStatus());
     }
+
+    requireOwnerOrManager("removeLine", billId);
 
     BillLine lineToRemove =
         bill.getLines().stream()
@@ -327,12 +395,22 @@ public class BillWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public BillResponse payBill(UUID billId, PayBillRequest request) {
     String actor = TenantContext.require().actor();
+    // FOR UPDATE (audit C1/H1): the bill row is the serialization point of every bill write path —
+    // see BillRepository#findWithLockById.
     Bill bill =
-        billRepository.findById(billId).orElseThrow(() -> new BillNotFoundException(billId));
+        billRepository
+            .findWithLockById(billId)
+            .orElseThrow(() -> new BillNotFoundException(billId));
 
     // Phase 5 enforcement at the money moment: even if the bill was opened by someone else (or the
     // cashier's assignment was revoked mid-shift), paying it requires outlet access.
     outletAccessGuard.enforce(bill.getBusinessId());
+
+    // Audit #3 (expiry): a gateway reservation whose PENDING payment is older than the TTL is a
+    // leak (customer walked away, shell crashed before Abandon) — self-heal it here so the cashier
+    // can take cash instead of being locked out forever. Joins THIS transaction, under the bill
+    // row lock above. A FRESH reservation is deliberately untouched (customer may be mid-scan).
+    releaseExpiredPendingReservation(billId);
 
     // Idempotent: already PAID — return current state without side effects.
     if ("PAID".equals(bill.getStatus())) {
@@ -386,15 +464,21 @@ public class BillWriter {
     Map<UUID, BillLineView> lineViewById =
         allLineViews.stream().collect(Collectors.toMap(BillLineView::getId, Function.identity()));
 
-    // Separate unpaid from paid line views.
-    List<BillLineView> unpaidLineViews = allLineViews.stream().filter(v -> !v.isPaid()).toList();
+    // Separate unpaid+unreserved ("payable") from paid/reserved line views. V38: a line currently
+    // RESERVED for an in-flight gateway payment (pending_payment_id IS NOT NULL) is excluded here
+    // even though it is not yet `paid` — the reservation holds until that gateway payment is either
+    // captured or abandoned, so a concurrent cash check can never claim the SAME line (no
+    // double-revenue race between a gateway capture and a cash payBill).
+    List<BillLineView> unpaidLineViews =
+        allLineViews.stream().filter(v -> !v.isPaid() && v.getPendingPaymentId() == null).toList();
 
     Set<UUID> unpaidIds =
         unpaidLineViews.stream().map(BillLineView::getId).collect(Collectors.toSet());
 
     List<BillLineView> targetLineViews;
     if (requestedLineIds != null) {
-      // Validate: every requested id must belong to this bill and must be unpaid.
+      // Validate: every requested id must belong to this bill and must be payable (unpaid AND not
+      // reserved by an in-flight gateway payment).
       for (UUID lineId : requestedLineIds) {
         if (!lineViewById.containsKey(lineId)) {
           throw new IllegalArgumentException(
@@ -402,7 +486,10 @@ public class BillWriter {
         }
         if (!unpaidIds.contains(lineId)) {
           throw new IllegalArgumentException(
-              "Line " + lineId + " is already paid on bill " + billId);
+              "Line "
+                  + lineId
+                  + " is already paid, or reserved by an in-flight gateway payment, on bill "
+                  + billId);
         }
       }
       Set<UUID> requestedSet = Set.copyOf(requestedLineIds);
@@ -463,93 +550,35 @@ public class BillWriter {
     // CashWindowLock (verified HIGH race fix) — SHARED, FIRST lock-acquiring statement in this
     // transaction, BEFORE the now capture below (same contract as OrderWriter.checkout/
     // payParked; see RegisterSessionWriter class javadoc). Everything above this point is a plain
-    // read or an idempotent-replay short-circuit — no DB lock taken yet.
+    // read or an idempotent-replay short-circuit — no DB lock taken yet. recordCheck (below) does
+    // NOT re-acquire this lock itself — see this class's javadoc.
     // -----------------------------------------------------------------------
     cashWindowLock.acquireForCommit(bill.getBusinessId());
-
-    // -----------------------------------------------------------------------
-    // Evaluate the promotions engine for THIS check's subtotal (ADR 0026 — automatics + the manual
-    // discount only; coupons are NOT supported on bills this phase — follow-up). The collapsed
-    // discount feeds TaxChargeService as the fixed discount, replacing the raw request discount.
-    // -----------------------------------------------------------------------
     Instant now = Instant.now();
-    Money subtotal = sumLineTotals(targetLineViews, currency);
-    List<EvalLine> evalLines = toEvalLines(targetLineViews, currency);
-    long manualDiscountMinor = (request.discountMinor() != null) ? request.discountMinor() : 0L;
-    EvalInput evalInput =
-        new EvalInput(evalLines, currency, subtotal, now, null, manualDiscountMinor);
-    EvalResult evalResult = promotionEngine.evaluate(evalInput);
 
-    PriceBreakdown breakdown =
-        taxChargeService.resolve(subtotal, 0L, evalResult.totalDiscount(), now);
-    Money grandTotal = breakdown.grandTotal();
-
-    if (!grandTotal.isPositive()) {
-      throw new IllegalArgumentException(
-          "Check grand total must be positive after discount/tax/service-charge; got "
-              + grandTotal.amountMinor()
-              + " "
-              + currency);
-    }
-
-    // -----------------------------------------------------------------------
-    // Deduct stock for tracked lines in this check — same tx, rolls back on
-    // shortfall. Lines already paid in previous checks are unaffected.
-    // -----------------------------------------------------------------------
-    deductStock(targetLineViews, currency);
-
-    // ADR 0050: recipe-driven ingredient depletion for THIS check's lines only — per-check by
-    // design (same tx + idempotency short-circuit as the check's sale, so a replay can never
-    // double-deplete). Floors at 0, never blocks the payment.
-    ingredientDepletionWriter.depleteForLines(toDepletionLines(targetLineViews));
-
-    // -----------------------------------------------------------------------
-    // Record ONE sale for this check — one SaleRecorded outbox event.
-    // -----------------------------------------------------------------------
     String tenderTypeName =
         (request.payment() != null) ? request.payment().tenderType().name() : null;
-    RecordSaleCommand saleCommand =
-        new RecordSaleCommand(
-            bill.getBusinessId(),
-            grandTotal.amountMinor(),
-            currency,
-            now,
+    // ADR 0036 Phase B2: the channel rides the sale ONLY for an ONLINE tender (validated above);
+    // null for every other tender.
+    String onlineChannelForSale = isOnline(tenderTypeName) ? onlineChannel : null;
+
+    UUID checkSaleId =
+        recordCheck(
+            bill,
+            targetLineViews,
+            request.discountMinor(),
             saleIdempotencyKey,
             tenderTypeName,
-            breakdown,
-            // ADR 0036 Phase B2: the channel rides the sale ONLY for an ONLINE tender (validated
-            // above); null for every other tender.
-            isOnline(tenderTypeName) ? onlineChannel : null);
-    RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
-    UUID checkSaleId = saleResult.sale().id();
+            onlineChannelForSale,
+            now,
+            now,
+            null, // capturingPaymentId — cash/manual/static/online path (C1 fix): mark-paid is
+            // guarded "AND paid = false AND pending_payment_id IS NULL" instead
+            null); // precomputedPricing — not yet computed for this (cash) path; recordCheck
+    // resolves it itself
 
-    // Same tx as the sale — the applied_promotion audit rows for THIS check (empty when only the
-    // manual layer discounted, since the manual discount carries no ruleId). The "order_id" column
-    // holds this BILL's id — see AppliedPromotion's class javadoc for the per-vertical column
-    // reuse.
-    persistAppliedPromotions(
-        bill.getId(), checkSaleId, evalResult, TenantContext.require().companyId());
-
-    // -----------------------------------------------------------------------
-    // Mark the target lines as paid (bulk UPDATE via repository).
-    // -----------------------------------------------------------------------
-    List<UUID> targetIds = targetLineViews.stream().map(BillLineView::getId).toList();
-    // Chunk in case there are many lines (unlikely for a bill, but follow the house rule <=1000).
-    for (int i = 0; i < targetIds.size(); i += 1000) {
-      List<UUID> chunk = targetIds.subList(i, Math.min(i + 1000, targetIds.size()));
-      lineRepository.markLinesPaid(chunk, checkSaleId, actor);
-    }
-
-    // -----------------------------------------------------------------------
-    // If ALL lines are now paid, transition the bill to PAID.
-    // -----------------------------------------------------------------------
-    boolean allPaid = (unpaidIds.size() == targetLineViews.size());
-    if (allPaid) {
-      bill.markPaid(checkSaleId);
-      billRepository.saveAndFlush(bill);
-    }
-
-    // Re-load all line views after the bulk UPDATE so the response shows current paid flags.
+    // Re-load all line views after recordCheck's bulk UPDATE so the response shows current paid
+    // flags.
     List<BillLineView> updatedLineViews = lineRepository.findViewsByBillId(bill.getId());
     List<BillLineResponse> lineResponses = buildLineResponses(updatedLineViews);
     PriceBreakdown fullBreakdown =
@@ -558,26 +587,224 @@ public class BillWriter {
   }
 
   // -------------------------------------------------------------------------
-  // Cancel a bill
+  // V38 — dynamic QRIS/CARD gateway (full-bill only): initiate a PENDING payment
   // -------------------------------------------------------------------------
 
   /**
-   * Cancels an OPEN bill (no sale, no stock change).
+   * Mints a PENDING gateway (QRIS/CARD) {@code payment} for the FULL bill — every currently unpaid
+   * line — and RESERVES those lines against it. Records NO sale; revenue is recognised only when
+   * {@code BillPaymentCaptureWriter#capture} runs (mirrors {@code OrderWriter.checkout}'s
+   * digital-tender two-step — see this class's javadoc).
    *
+   * <p><strong>Self-heal.</strong> If the bill already carries a live PENDING gateway payment (a
+   * refreshed QR, an abandoned app, a retried request), it is abandoned — and its reservation
+   * released — FIRST, in the SAME transaction as the fresh mint (via {@link
+   * BillPaymentWriter#abandonInCurrentTx}), so a stale attempt never leaves two live reservations
+   * in flight for one bill.
+   *
+   * @param billId the bill to initiate a gateway payment against
+   * @param request carries the digital {@code payment.tenderType} (QRIS/CARD) and the optional
+   *     manual {@code discountMinor} for this check; {@code lineIds}/{@code channelCode} are
+   *     ignored (full-bill only this phase; split checks are a follow-up)
+   * @return the PENDING payment (status = PENDING, amount = this check's grand total)
    * @throws BillNotFoundException if the bill is not found
    * @throws BillNotOpenException if the bill is not OPEN
+   * @throws IllegalArgumentException if the bill has no items / no unpaid lines, {@code
+   *     request.payment()} is missing or not a digital (QRIS/CARD) tender, or the computed grand
+   *     total is not positive
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillLineReservationConflictException if a
+   *     concurrent payment claims one or more of the bill's unpaid lines between this method's read
+   *     and its reservation UPDATE (409; the whole transaction — including the freshly-minted
+   *     payment — rolls back; safe to retry)
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void cancelBill(UUID billId) {
+  public PaymentResponse initiatePendingPayment(UUID billId, PayBillRequest request) {
+    String actor = TenantContext.require().actor();
+
+    // FOR UPDATE (audit C1/H1): reserving lines judges + mutates bill_line state, so it must
+    // serialize on the bill row like every other bill write path — see findWithLockById.
     Bill bill =
-        billRepository.findById(billId).orElseThrow(() -> new BillNotFoundException(billId));
+        billRepository
+            .findWithLockById(billId)
+            .orElseThrow(() -> new BillNotFoundException(billId));
+
+    // Phase 5 enforcement — same guard as payBill.
+    outletAccessGuard.enforce(bill.getBusinessId());
 
     if (!"OPEN".equals(bill.getStatus())) {
       throw new BillNotOpenException(billId, bill.getStatus());
     }
 
+    String currency = bill.getCurrency().strip();
+    if ("XXX".equals(currency)) {
+      throw new IllegalArgumentException(
+          "Bill " + billId + " has no items yet; cannot pay an empty bill");
+    }
+
+    TenderType tenderType = (request.payment() != null) ? request.payment().tenderType() : null;
+    if (tenderType == null || !tenderType.isDigital()) {
+      throw new IllegalArgumentException(
+          "initiatePendingPayment requires a digital (QRIS/CARD) payment.tenderType; got "
+              + tenderType);
+    }
+
+    // Phase 3 (ADR 0026): a positive manual discount requires owner/manager — same guard payBill
+    // enforces, checked before any state-mutating step below.
+    manualDiscountGuard.enforce(request.discountMinor());
+
+    // Self-heal: a stale live PENDING gateway payment for this bill is abandoned (and its
+    // reservation released) BEFORE minting a new one, in THIS SAME transaction — either both the
+    // abandon and the fresh mint commit together, or neither does.
+    //
+    // W2 fix (code review): the payment found "live PENDING" a moment ago may have been CAPTURED
+    // (or already abandoned by a concurrent racer) by the time this abandon actually runs — a
+    // benign, harmless race, NOT a failure: the fresh mint below simply proceeds against whatever
+    // bill_line state exists now (if that prior payment just captured, its lines are already paid
+    // and this method correctly rejects below with "no unpaid lines" instead of a 500).
+    paymentRepository
+        .findLivePendingBillPaymentId(billId)
+        .ifPresent(
+            stalePaymentId -> {
+              try {
+                billPaymentWriter.abandonInCurrentTx(stalePaymentId);
+              } catch (IllegalStateException alreadySettled) {
+                // Payment#abandon's PENDING guard fired — it settled (captured/abandoned) between
+                // our read and this call. Nothing to self-heal; not an error for THIS request.
+              }
+            });
+
+    List<BillLineView> allLineViews = lineRepository.findViewsByBillId(bill.getId());
+    List<BillLineView> unpaidLineViews = allLineViews.stream().filter(v -> !v.isPaid()).toList();
+    if (unpaidLineViews.isEmpty()) {
+      throw new IllegalArgumentException(
+          "Cannot pay a bill with no unpaid lines (bill id: " + billId + ")");
+    }
+
+    // Compute the check breakdown EXACTLY as payBill does (promotions + tax/service + discount) —
+    // reuse the same computation (priceCheck), pricing AT this mint instant.
+    Instant now = Instant.now();
+    CheckPricing pricing = priceCheck(unpaidLineViews, currency, request.discountMinor(), now);
+    Money grandTotal = pricing.breakdown().grandTotal();
+    if (!grandTotal.isPositive()) {
+      throw new IllegalArgumentException(
+          "Check grand total must be positive after discount/tax/service-charge; got "
+              + grandTotal.amountMinor()
+              + " "
+              + currency);
+    }
+
+    // This PENDING payment's OWN idempotency key — distinct per mint attempt (a self-healed retry
+    // must never collide with the just-ABANDONED row under uq_payment_company_idempotency). Kept
+    // SHORT (a bare UUID, not billId-prefixed): DigitalProvider#authorize builds provider_ref as
+    // "PENDING-<this key>-<uuid>" and provider_ref is VARCHAR(128) — a long key here would overflow
+    // it (the order path's client-supplied keys are always short; this one is server-generated, so
+    // it must stay short by construction instead).
+    //
+    // HIGH fix (code review): this is NOT the eventual check's sale idempotency key — there is no
+    // longer a shared "<bill_id>:bill-sale"-style key minted here at all. BillPaymentCaptureWriter
+    // derives the sale key on-the-fly from the payment's OWN id at capture time (mirroring the
+    // order path exactly), so it is unique per payment and can never collide with the cash path's
+    // (or an earlier gateway check's) sale on the same bill.
+    String paymentIdempotencyKey = "bill-pay-" + UUID.randomUUID();
+
+    // S2 (code review): request.idempotencyKey() is intentionally NOT consulted here — pay-pending
+    // is not itself idempotent (retries self-heal by abandoning the prior attempt, see above); the
+    // field is inert on this endpoint. The frontend may still send it harmlessly.
+    PaymentResponse paymentResponse =
+        paymentWriter.recordPendingBillDigital(
+            billId,
+            bill.getBusinessId(),
+            tenderType,
+            grandTotal,
+            request.discountMinor(),
+            now,
+            paymentIdempotencyKey);
+
+    // RESERVE every unpaid line against the freshly-minted PENDING payment. A concurrent cash
+    // payBill against the SAME lines is blocked from here on (its own unpaid-line read excludes
+    // any row this UPDATE just claimed).
+    int reserved = lineRepository.reserveUnpaidLines(billId, paymentResponse.paymentId(), actor);
+    if (reserved != unpaidLineViews.size()) {
+      throw new BillLineReservationConflictException(billId, unpaidLineViews.size(), reserved);
+    }
+
+    return paymentResponse;
+  }
+
+  // -------------------------------------------------------------------------
+  // Cancel a bill
+  // -------------------------------------------------------------------------
+
+  /**
+   * Cancels an OPEN bill (no sale, no stock change). Open-bill lockdown (owner rule): a bill that
+   * holds lines must end in payment unless an {@code owner}/{@code manager} intervenes — only an
+   * EMPTY bill (wrong table opened) may be cancelled by anyone. The domain additionally refuses a
+   * cancel while any line is PAID or reserved by an in-flight payment (see {@link Bill#cancel()}).
+   *
+   * @throws BillNotFoundException if the bill is not found
+   * @throws BillNotOpenException if the bill is not OPEN
+   * @throws BillMutationForbiddenException if the bill has lines and the actor is not owner/manager
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillHasPaidLinesException if any line is paid
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillLineReservedException if any line is
+   *     reserved
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void cancelBill(UUID billId) {
+    // FOR UPDATE (audit C1/H1): Bill.cancel()'s paid/reserved guard is a read of child rows that a
+    // partial split-pay / reservation mutates WITHOUT bumping bill.version — the row lock makes
+    // this cancel serialize against those writers (they all load via findWithLockById too), so the
+    // line state read below is the committed truth for the duration of this transaction.
+    Bill bill =
+        billRepository
+            .findWithLockById(billId)
+            .orElseThrow(() -> new BillNotFoundException(billId));
+
+    if (!"OPEN".equals(bill.getStatus())) {
+      throw new BillNotOpenException(billId, bill.getStatus());
+    }
+
+    // Audit #3 (expiry): an EXPIRED gateway reservation must not lock the bill uncancellable
+    // forever — self-heal it (fresh reservations still block via Bill.cancel()'s guard).
+    releaseExpiredPendingReservation(billId);
+
+    if (!bill.getLines().isEmpty()) {
+      requireOwnerOrManager("cancel", billId);
+    }
+
     bill.cancel();
     billRepository.saveAndFlush(bill);
+  }
+
+  /**
+   * Audit #3 fix: abandons this bill's live PENDING gateway payment — releasing its bill_line
+   * reservation — IF it is older than {@code pendingReservationTtl}. Without any server-side
+   * expiry, a customer who walks away from a QRIS (or a shell that crashes before Abandon) leaves
+   * the bill's lines reserved forever: unpayable by cash and uncancellable. Joins the caller's
+   * transaction (both callers hold the bill row lock). A fresh PENDING payment is left alone — the
+   * customer may be mid-scan; {@code initiatePendingPayment}'s own self-heal (deliberate retry)
+   * remains unconditional.
+   */
+  private void releaseExpiredPendingReservation(UUID billId) {
+    paymentRepository
+        .findLivePendingBillPaymentId(billId)
+        .ifPresent(
+            pendingId ->
+                paymentRepository
+                    .findById(pendingId)
+                    .filter(
+                        p ->
+                            p.getCreatedAt() != null
+                                && p.getCreatedAt()
+                                    .isBefore(Instant.now().minus(pendingReservationTtl)))
+                    .ifPresent(
+                        expired -> {
+                          try {
+                            billPaymentWriter.abandonInCurrentTx(expired.getId());
+                          } catch (IllegalStateException alreadySettled) {
+                            // Settled (captured/abandoned) between our read and the abandon —
+                            // benign race, nothing to heal.
+                          }
+                        }));
   }
 
   // -------------------------------------------------------------------------
@@ -629,6 +856,211 @@ public class BillWriter {
             : computeBreakdown(currentLineViews, currency, bill.getDiscountMinor());
     return toBillResponse(bill, lineResponses, breakdown, currency);
   }
+
+  /**
+   * The sale-recording core shared by {@link #payBill} (cash/manual/static/online, unchanged
+   * behaviour) and {@code BillPaymentCaptureWriter#capture} (the V38 gateway path): computes the
+   * check's price breakdown ({@link #priceCheck}, unless {@code precomputedPricing} is supplied),
+   * deducts stock + depletes ingredients, records ONE sale ({@code SaleRecorded}), persists the
+   * {@code applied_promotion} audit rows, marks {@code lines} paid, and transitions {@code bill} to
+   * PAID once every line on the WHOLE bill is paid.
+   *
+   * <p><strong>C1 fix (code review — CRITICAL concurrency double-settle).</strong> The mark-paid
+   * UPDATE is guarded and its affected-row count is VERIFIED against {@code lines.size()}:
+   *
+   * <ul>
+   *   <li>{@code capturingPaymentId == null} (the cash/manual/static/online {@link #payBill} path)
+   *       — {@link BillLineRepository#markLinesPaidForCash} guards {@code AND paid = false AND
+   *       pending_payment_id IS NULL}, RE-VALIDATING at write time that no gateway payment reserved
+   *       these lines in the window between {@code payBill}'s initial unpaid-line read and this
+   *       write. Without this, a concurrent {@link #initiatePendingPayment} reservation committing
+   *       inside that window would be silently clobbered — the line ends up {@code paid = true} AND
+   *       the customer double-charged (cash here, the still-live QRIS/CARD payment later captures
+   *       too).
+   *   <li>{@code capturingPaymentId != null} (the gateway {@code BillPaymentCaptureWriter#capture}
+   *       path) — {@link BillLineRepository#markLinesPaidForCapture} guards {@code AND
+   *       pending_payment_id = :paymentId}, so the UPDATE only ever touches lines THIS SPECIFIC
+   *       payment still holds — a stale/duplicate capture, or one racing a concurrent {@code
+   *       abandon}, can never blindly re-mark a line some OTHER payment or a cash check has since
+   *       claimed.
+   * </ul>
+   *
+   * <p>A shortfall on EITHER guard throws {@link BillLineReservationConflictException} (409, or —
+   * being an {@link IllegalStateException} — auto-parked by {@code PaymentChargeSucceededWriter} on
+   * the capture path), rolling back the WHOLE transaction: the sale and outbox row already written
+   * in THIS SAME transaction roll back too, so a loser never leaves a phantom {@code SaleRecorded}.
+   *
+   * <p><strong>Does NOT acquire {@link CashWindowLock} itself</strong> — see this class's javadoc
+   * (mirrors {@code SaleWriter#recordInCurrentTx}'s documented contract). The caller MUST already
+   * hold it and have captured {@code now}/{@code pricingInstant} strictly after doing so, in the
+   * SAME transaction, before calling this method.
+   *
+   * @param bill the bill being paid
+   * @param lines the lines THIS check settles — already resolved unpaid (and, on the gateway path,
+   *     reserved against the capturing payment)
+   * @param discountMinor the RAW manual discount requested for this check, minor units, or {@code
+   *     null} — fed into the SAME promotions-engine computation every caller uses (only when {@code
+   *     precomputedPricing} is {@code null})
+   * @param checkIdempotencyKey the deterministic sale idempotency key this check records under —
+   *     for the gateway path this MUST be derived from the payment's OWN id (HIGH fix — see {@code
+   *     BillPaymentCaptureWriter}), never a value shared across a bill's multiple checks
+   * @param tenderTypeName the wire tender-type name ({@code CASH}/{@code QRIS}/{@code CARD}/{@code
+   *     ONLINE}), or {@code null}
+   * @param onlineChannel the sales-channel code, ONLY when {@code tenderTypeName} is {@code
+   *     "ONLINE"} (validated by the caller); {@code null} otherwise
+   * @param pricingInstant the instant effective-dated tax/service-charge rules resolve against —
+   *     for {@link #payBill} this IS {@code now} (mint and settle are the same moment); for a
+   *     gateway capture this is the ORIGINAL pay-pending mint instant ({@code
+   *     payment.getOccurredAt()}), so a later capture reproduces the SAME breakdown even if a newer
+   *     rule version has since become effective (mirrors {@code
+   *     PaymentCaptureWriter#reconstructBreakdown}'s rationale for the order path)
+   * @param now the instant recorded as the sale's {@code occurred_at} — for a gateway capture this
+   *     is the CAPTURE instant (when revenue is actually recognised), which may be later than
+   *     {@code pricingInstant}
+   * @param capturingPaymentId {@code null} for the cash/manual/static/online {@link #payBill} path;
+   *     the gateway payment's id for the {@code BillPaymentCaptureWriter#capture} path — selects
+   *     which guarded mark-paid UPDATE runs (see above)
+   * @param precomputedPricing when non-{@code null}, REUSES this already-computed {@link
+   *     CheckPricing} instead of calling {@link #priceCheck} again (S3, code review — {@code
+   *     BillPaymentCaptureWriter} already computed it for its recompute-and-assert guard; avoids a
+   *     redundant second promotions-engine evaluation for the SAME check)
+   * @return the recorded sale id
+   * @throws IllegalArgumentException if the computed grand total is not positive
+   * @throws InsufficientStockException on a tracked-item stock shortfall (rolls back this check)
+   * @throws BillLineReservationConflictException if the guarded mark-paid UPDATE affects fewer rows
+   *     than {@code lines.size()} — a concurrent racer claimed one or more of them first
+   */
+  // Package-private (not private): BillPaymentCaptureWriter (same bill.service package) calls this
+  // as a plain method on the injected BillWriter bean from within its OWN already-open
+  // REQUIRES_NEW transaction — mirrors OrderWriter calling PaymentWriter#
+  // recordPendingDigitalInCurrentTx, a normal cross-bean call, not a self-invocation.
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  UUID recordCheck(
+      Bill bill,
+      List<BillLineView> lines,
+      Long discountMinor,
+      String checkIdempotencyKey,
+      String tenderTypeName,
+      String onlineChannel,
+      Instant pricingInstant,
+      Instant now,
+      UUID capturingPaymentId,
+      CheckPricing precomputedPricing) {
+    String currency = bill.getCurrency().strip();
+    String companyId = TenantContext.require().companyId();
+    String actor = TenantContext.require().actor();
+
+    CheckPricing pricing =
+        (precomputedPricing != null)
+            ? precomputedPricing
+            : priceCheck(lines, currency, discountMinor, pricingInstant);
+    PriceBreakdown breakdown = pricing.breakdown();
+    Money grandTotal = breakdown.grandTotal();
+    if (!grandTotal.isPositive()) {
+      throw new IllegalArgumentException(
+          "Check grand total must be positive after discount/tax/service-charge; got "
+              + grandTotal.amountMinor()
+              + " "
+              + currency);
+    }
+
+    // Deduct stock for tracked lines in this check — rolls back on shortfall. Lines already paid
+    // in a previous check are unaffected.
+    deductStock(lines, currency);
+
+    // ADR 0050: recipe-driven ingredient depletion for THIS check's lines only — per-check by
+    // design (same tx + idempotency short-circuit as the check's sale, so a replay can never
+    // double-deplete). Floors at 0, never blocks the payment. ADR 0067 Phase C: the SAME call folds
+    // COGS (null when nothing costed) — threaded into the sale command below.
+    IngredientDepletionWriter.CogsResult cogs =
+        ingredientDepletionWriter.depleteForLines(toDepletionLines(lines));
+
+    // Record ONE sale for this check — one SaleRecorded outbox event.
+    RecordSaleCommand saleCommand =
+        new RecordSaleCommand(
+            bill.getBusinessId(),
+            grandTotal.amountMinor(),
+            currency,
+            now,
+            checkIdempotencyKey,
+            tenderTypeName,
+            breakdown,
+            onlineChannel,
+            cogs != null ? cogs.cogsMinor() : null,
+            cogs != null ? cogs.currency() : null);
+    RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
+    UUID checkSaleId = saleResult.sale().id();
+
+    // Same tx as the sale — the applied_promotion audit rows for THIS check (empty when only the
+    // manual layer discounted, since the manual discount carries no ruleId). The "order_id" column
+    // holds this BILL's id — see AppliedPromotion's class javadoc for the per-vertical column
+    // reuse.
+    persistAppliedPromotions(bill.getId(), checkSaleId, pricing.evalResult(), companyId);
+
+    // C1 fix (code review): mark the target lines as paid via the GUARDED UPDATE matching this
+    // check's origin, and verify the affected-row count — see this method's javadoc.
+    List<UUID> targetIds = lines.stream().map(BillLineView::getId).toList();
+    int totalUpdated = 0;
+    // Chunk in case there are many lines (unlikely for a bill, but follow the house rule <=1000).
+    for (int i = 0; i < targetIds.size(); i += 1000) {
+      List<UUID> chunk = targetIds.subList(i, Math.min(i + 1000, targetIds.size()));
+      totalUpdated +=
+          (capturingPaymentId == null)
+              ? lineRepository.markLinesPaidForCash(chunk, checkSaleId, actor)
+              : lineRepository.markLinesPaidForCapture(
+                  chunk, capturingPaymentId, checkSaleId, actor);
+    }
+    if (totalUpdated != targetIds.size()) {
+      throw new BillLineReservationConflictException(bill.getId(), targetIds.size(), totalUpdated);
+    }
+
+    // If EVERY line on the WHOLE bill is now paid, transition it to PAID. Re-queries DB truth
+    // (rather than comparing against a stale pre-fetch count) so this is correct even when a NEW
+    // round was appended to the bill after `lines` was resolved/reserved (e.g. while a gateway
+    // payment was in flight) — that new, still-unpaid line correctly keeps the bill OPEN.
+    List<BillLineView> refreshedAll = lineRepository.findViewsByBillId(bill.getId());
+    boolean allPaid =
+        !refreshedAll.isEmpty() && refreshedAll.stream().allMatch(BillLineView::isPaid);
+    if (allPaid) {
+      bill.markPaid(checkSaleId);
+      billRepository.saveAndFlush(bill);
+    }
+
+    return checkSaleId;
+  }
+
+  /**
+   * Computes ONE check's price breakdown — the promotions-engine + tax computation {@link #payBill}
+   * always used (ADR 0026 — automatics + the manual discount only; coupons are NOT supported on
+   * bills this phase), now shared with the V38 gateway mint ({@link #initiatePendingPayment}) and
+   * {@code BillPaymentCaptureWriter#capture}'s recompute-and-assert guard.
+   *
+   * @param lineViews the check's lines (subtotal = Σ line totals)
+   * @param currency the bill's ISO-4217 currency
+   * @param discountMinor the RAW manual discount, minor units, or {@code null}
+   * @param pricingInstant the instant promotions/tax rules resolve against
+   */
+  // Package-private — see recordCheck's comment; BillPaymentCaptureWriter also calls this directly
+  // for its capture-time recompute-and-assert guard.
+  CheckPricing priceCheck(
+      List<BillLineView> lineViews, String currency, Long discountMinor, Instant pricingInstant) {
+    Money subtotal = sumLineTotals(lineViews, currency);
+    List<EvalLine> evalLines = toEvalLines(lineViews, currency);
+    long manualDiscountMinor = (discountMinor != null) ? discountMinor : 0L;
+    EvalInput evalInput =
+        new EvalInput(evalLines, currency, subtotal, pricingInstant, null, manualDiscountMinor);
+    EvalResult evalResult = promotionEngine.evaluate(evalInput);
+    PriceBreakdown breakdown =
+        taxChargeService.resolve(subtotal, 0L, evalResult.totalDiscount(), pricingInstant);
+    return new CheckPricing(breakdown, evalResult);
+  }
+
+  /**
+   * One check's promotions+tax pricing outcome — {@code breakdown} for the recorded sale, {@code
+   * evalResult} for the {@code applied_promotion} audit rows. Package-private: read by {@code
+   * BillPaymentCaptureWriter}'s capture-time guard.
+   */
+  record CheckPricing(PriceBreakdown breakdown, EvalResult evalResult) {}
 
   /**
    * Validates that a tableId exists and belongs to the given business. RLS enforces tenant scope.

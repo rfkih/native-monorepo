@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index,follow" />
+    <title>Kebijakan Privasi — Native</title>
+    <!--
+      Standalone bilingual (ID/EN) privacy policy for the Native apps (Business + Karyawan).
+      Served as a STATIC file (public/ → dist root) so its URL stays stable and reachable even when
+      the SPA is not — Google Play requires a publicly reachable privacy-policy URL for a login-gated
+      app that handles personal + financial data. Language is chosen by ?lng=id|en (default: browser).
+
+      OPERATOR IDENTITY — Native is operated by an INDIVIDUAL (perorangan), not a company. The
+      operator name below MUST match, character for character, the legal name Google verifies and
+      publishes on the Play developer account: a mismatch between the listing's developer name and
+      this policy is a Play "Misrepresentation" rejection. It appears in exactly two places, both
+      tagged <!--OPERATOR--> (the ID intro and the EN intro) plus the two Contact blocks. The
+      contact email (rfkih23@gmail.com) must stay a mailbox that is actually read — Google writes
+      to it and users send deletion requests there.
+
+      Account deletion lives in its own page, delete-account.html, and is linked from §7 of both
+      languages. That URL is what goes in Play Console → Data safety → "Data deletion" — Play
+      requires it for any app that lets users create an account (Native does: /signup is public).
+
+      This is a starting point, not legal advice — have it reviewed against Indonesia's PDP Law
+      (UU 27/2022) and Google Play policies.
+    -->
+    <style>
+      :root {
+        --paper: #f6f9fa;
+        --ink: #0f1b1f;
+        --ink-2: #3b4a4f;
+        --ink-3: #64757b;
+        --brand: #0e7490;
+        --line: #dde6e9;
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink-2);
+        font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px 96px; }
+      header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+      .brand { font-weight: 800; letter-spacing: -0.02em; color: var(--ink); font-size: 20px; }
+      .brand span { color: var(--brand); }
+      .lang { font-size: 14px; }
+      .lang a { color: var(--ink-3); text-decoration: none; padding: 4px 8px; border-radius: 8px; }
+      .lang a.active { color: var(--brand); background: #e6f3f6; font-weight: 700; }
+      h1 { color: var(--ink); font-size: 28px; line-height: 1.25; letter-spacing: -0.02em; margin: 20px 0 6px; }
+      h2 { color: var(--ink); font-size: 18px; margin: 34px 0 8px; letter-spacing: -0.01em; }
+      p, li { color: var(--ink-2); }
+      a { color: var(--brand); }
+      .meta { color: var(--ink-3); font-size: 14px; margin: 0 0 8px; }
+      ul { padding-left: 20px; }
+      li { margin: 4px 0; }
+      hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
+      .note { background: #eef5f7; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font-size: 14px; color: var(--ink-3); }
+      footer { margin-top: 40px; color: var(--ink-3); font-size: 13px; }
+      [data-lng] { display: none; }
+      html[lang="id"] [data-lng="id"], html[lang="en"] [data-lng="en"] { display: block; }
+      html[lang="id"] li[data-lng="id"], html[lang="en"] li[data-lng="en"] { display: list-item; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">Native<span>.</span></div>
+        <nav class="lang">
+          <a href="?lng=id" id="lng-id">ID</a>
+          <a href="?lng=en" id="lng-en">EN</a>
+        </nav>
+      </header>
+
+      <!-- ============================ BAHASA INDONESIA ============================ -->
+      <div data-lng="id">
+        <h1>Kebijakan Privasi</h1>
+        <p class="meta">Berlaku efektif: 16 Agustus 2026 · Terakhir diperbarui: 1 September 2026</p>
+        <p>
+          Kebijakan ini menjelaskan bagaimana <strong><!--OPERATOR-->Rifki</strong> ("Native", "kami")
+          mengumpulkan, menggunakan, dan melindungi data pada aplikasi <strong>Native</strong> dan
+          <strong>Native Karyawan</strong> (bersama-sama, "Aplikasi") serta layanan terkait di
+          app.native-app.my.id. Native adalah perangkat lunak Point of Sale (POS), akuntansi, dan HR
+          untuk pelaku usaha.
+        </p>
+        <p>
+          <strong>Peran kami.</strong> Untuk data akun pengguna Aplikasi, kami bertindak sebagai
+          Pengendali Data. Untuk data yang dimasukkan oleh usaha pelanggan tentang karyawan dan
+          pelanggannya (mis. gaji, NIK, transaksi), usaha tersebut adalah Pengendali Data dan Native
+          bertindak sebagai Prosesor Data yang memproses atas nama mereka.
+        </p>
+
+        <h2>1. Data yang kami kumpulkan</h2>
+        <ul>
+          <li data-lng="id"><strong>Identitas &amp; akun:</strong> nama, email, nomor telepon, nama perusahaan, peran, nama pengguna, dan kata sandi (dikelola melalui penyedia identitas Keycloak).</li>
+          <li data-lng="id"><strong>Data operasional usaha:</strong> transaksi penjualan/POS, menu &amp; stok, catatan keuangan dan akuntansi.</li>
+          <li data-lng="id"><strong>Data karyawan &amp; penggajian</strong> yang dimasukkan oleh usaha: nama, NIK, gaji, dan rekening bank. Data sensitif ini dienkripsi pada tingkat kolom dan tidak pernah dicatat di log.</li>
+          <li data-lng="id"><strong>Konten unggahan:</strong> foto/PDF struk atau bukti transaksi yang Anda lampirkan.</li>
+          <li data-lng="id"><strong>Data teknis:</strong> alamat IP, jenis perangkat, versi aplikasi, dan log diagnostik untuk keamanan dan pemecahan masalah.</li>
+        </ul>
+        <p>Kami <strong>tidak</strong> menampilkan iklan dan <strong>tidak</strong> menjual data Anda.</p>
+
+        <h2>2. Cara kami menggunakan data</h2>
+        <ul>
+          <li data-lng="id">Menyediakan fitur POS, akuntansi, dan HR.</li>
+          <li data-lng="id">Autentikasi, keamanan akun, dan pencegahan penyalahgunaan.</li>
+          <li data-lng="id">Dukungan pelanggan dan pemberitahuan layanan.</li>
+          <li data-lng="id">Memenuhi kewajiban hukum, pajak, dan akuntansi.</li>
+        </ul>
+
+        <h2>3. Izin perangkat</h2>
+        <ul>
+          <li data-lng="id"><strong>Internet:</strong> menghubungkan aplikasi ke layanan Native.</li>
+          <li data-lng="id"><strong>Bluetooth:</strong> mencetak struk ke printer termal yang sudah dipasangkan. Kami tidak memindai lokasi Anda.</li>
+          <li data-lng="id"><strong>Kamera/Penyimpanan/Foto:</strong> hanya saat Anda memilih melampirkan foto/PDF bukti transaksi.</li>
+        </ul>
+        <p>Aplikasi tidak mengakses lokasi, kontak, maupun mikrofon Anda.</p>
+
+        <h2>4. Berbagi data</h2>
+        <p>
+          Kami tidak menjual data pribadi. Kami hanya membagikannya kepada: (a) penyedia infrastruktur
+          dan sub-prosesor yang menjalankan layanan (hosting, penyimpanan); (b) penyedia pembayaran
+          berlisensi (mis. gerbang pembayaran QRIS/Midtrans) untuk memproses pembayaran; dan (c) pihak
+          berwenang apabila diwajibkan oleh hukum.
+        </p>
+
+        <h2>5. Keamanan</h2>
+        <p>
+          Data dienkripsi saat transit (HTTPS). Data pribadi yang sensitif (mis. gaji, NIK, rekening
+          bank) dienkripsi pada tingkat kolom. Data setiap perusahaan diisolasi secara tenant dengan
+          kontrol akses berbasis peran.
+        </p>
+
+        <h2>6. Penyimpanan data</h2>
+        <p>
+          Kami menyimpan data selama akun aktif dan selama diperlukan untuk memenuhi kewajiban hukum,
+          pajak, dan akuntansi. Setelah itu, data dihapus atau dianonimkan.
+        </p>
+
+        <h2>7. Hak Anda</h2>
+        <p>
+          Sesuai UU Pelindungan Data Pribadi (UU No. 27 Tahun 2022), Anda berhak mengakses,
+          memperbaiki, dan menghapus data pribadi Anda. Untuk data karyawan, permintaan biasanya
+          disampaikan melalui pemberi kerja (Pengendali Data). Hubungi kami di
+          <a href="mailto:rfkih23@gmail.com">rfkih23@gmail.com</a>.
+        </p>
+        <p>
+          <strong>Penghapusan akun.</strong> Anda dapat meminta penghapusan akun Native beserta data
+          terkait kapan saja — lihat
+          <a href="delete-account.html?lng=id">Penghapusan Akun &amp; Data</a> untuk langkah, cakupan
+          data yang dihapus, dan data yang wajib kami simpan karena kewajiban pajak.
+        </p>
+
+        <h2>8. Anak-anak</h2>
+        <p>Aplikasi ditujukan untuk penggunaan bisnis dan tidak ditujukan bagi anak di bawah 18 tahun.</p>
+
+        <h2>9. Transfer internasional</h2>
+        <p>Data dapat diproses di server di luar wilayah Anda dengan perlindungan yang wajar sesuai hukum yang berlaku.</p>
+
+        <h2>10. Perubahan kebijakan</h2>
+        <p>Kami dapat memperbarui kebijakan ini. Perubahan penting akan diberitahukan melalui Aplikasi atau email.</p>
+
+        <h2>11. Kontak</h2>
+        <p>
+          <strong><!--OPERATOR-->Rifki</strong><br />
+          Email: <a href="mailto:rfkih23@gmail.com">rfkih23@gmail.com</a>
+        </p>
+      </div>
+
+      <!-- ================================ ENGLISH ================================ -->
+      <div data-lng="en">
+        <h1>Privacy Policy</h1>
+        <p class="meta">Effective: 16 August 2026 · Last updated: 1 September 2026</p>
+        <p>
+          This policy explains how <strong><!--OPERATOR-->Rifki</strong> ("Native", "we") collects, uses, and
+          protects data in the <strong>Native</strong> and <strong>Native Karyawan</strong> apps
+          (together, the "Apps") and related services at app.native-app.my.id. Native is Point of Sale
+          (POS), accounting, and HR software for businesses.
+        </p>
+        <p>
+          <strong>Our role.</strong> For App user account data we act as the Data Controller. For data
+          a business customer enters about its own employees and customers (e.g. salary, national ID,
+          transactions), that business is the Data Controller and Native acts as a Data Processor on
+          their behalf.
+        </p>
+
+        <h2>1. Data we collect</h2>
+        <ul>
+          <li data-lng="en"><strong>Identity &amp; account:</strong> name, email, phone number, company name, role, username, and password (managed via the Keycloak identity provider).</li>
+          <li data-lng="en"><strong>Business operational data:</strong> sales/POS transactions, menu &amp; stock, financial and accounting records.</li>
+          <li data-lng="en"><strong>Employee &amp; payroll data</strong> entered by the business: name, national ID (NIK), salary, and bank account. This sensitive data is column-level encrypted and never written to logs.</li>
+          <li data-lng="en"><strong>Uploaded content:</strong> receipt/proof photos or PDFs you choose to attach.</li>
+          <li data-lng="en"><strong>Technical data:</strong> IP address, device type, app version, and diagnostic logs for security and troubleshooting.</li>
+        </ul>
+        <p>We do <strong>not</strong> serve ads and do <strong>not</strong> sell your data.</p>
+
+        <h2>2. How we use data</h2>
+        <ul>
+          <li data-lng="en">To provide POS, accounting, and HR features.</li>
+          <li data-lng="en">Authentication, account security, and abuse prevention.</li>
+          <li data-lng="en">Customer support and service notices.</li>
+          <li data-lng="en">To meet legal, tax, and accounting obligations.</li>
+        </ul>
+
+        <h2>3. Device permissions</h2>
+        <ul>
+          <li data-lng="en"><strong>Internet:</strong> to connect the app to Native's services.</li>
+          <li data-lng="en"><strong>Bluetooth:</strong> to print receipts to a paired thermal printer. We do not scan for your location.</li>
+          <li data-lng="en"><strong>Camera/Storage/Photos:</strong> only when you choose to attach a photo/PDF proof of a transaction.</li>
+        </ul>
+        <p>The app does not access your location, contacts, or microphone.</p>
+
+        <h2>4. Data sharing</h2>
+        <p>
+          We do not sell personal data. We share it only with: (a) infrastructure providers and
+          sub-processors that run the service (hosting, storage); (b) licensed payment providers
+          (e.g. the QRIS/Midtrans payment gateway) to process payments; and (c) authorities where
+          required by law.
+        </p>
+
+        <h2>5. Security</h2>
+        <p>
+          Data is encrypted in transit (HTTPS). Sensitive personal data (e.g. salary, national ID,
+          bank account) is column-level encrypted. Each company's data is tenant-isolated with
+          role-based access controls.
+        </p>
+
+        <h2>6. Data retention</h2>
+        <p>
+          We retain data while an account is active and as needed to meet legal, tax, and accounting
+          obligations, after which it is deleted or anonymized.
+        </p>
+
+        <h2>7. Your rights</h2>
+        <p>
+          Under Indonesia's Personal Data Protection Law (Law No. 27 of 2022) you may access, correct,
+          and delete your personal data. For employee data, requests are usually made through the
+          employer (Data Controller). Contact us at <a href="mailto:rfkih23@gmail.com">rfkih23@gmail.com</a>.
+        </p>
+        <p>
+          <strong>Account deletion.</strong> You can ask us to delete your Native account and its
+          associated data at any time — see
+          <a href="delete-account.html?lng=en">Account &amp; Data Deletion</a> for the steps, exactly
+          what is erased, and what we must retain to meet tax obligations.
+        </p>
+
+        <h2>8. Children</h2>
+        <p>The Apps are intended for business use and are not directed to children under 18.</p>
+
+        <h2>9. International transfers</h2>
+        <p>Data may be processed on servers outside your region with appropriate safeguards under applicable law.</p>
+
+        <h2>10. Changes to this policy</h2>
+        <p>We may update this policy. Material changes will be announced in the Apps or by email.</p>
+
+        <h2>11. Contact</h2>
+        <p>
+          <strong><!--OPERATOR-->Rifki</strong><br />
+          Email: <a href="mailto:rfkih23@gmail.com">rfkih23@gmail.com</a>
+        </p>
+      </div>
+
+      <hr />
+      <footer>© 2026 Native · app.native-app.my.id</footer>
+    </div>
+
+    <script>
+      // Language: ?lng=id|en wins; otherwise the browser preference; default Indonesian.
+      (function () {
+        var q = new URLSearchParams(location.search).get('lng')
+        var lng = q === 'en' || q === 'id' ? q : (navigator.language || 'id').slice(0, 2) === 'en' ? 'en' : 'id'
+        document.documentElement.lang = lng
+        var active = document.getElementById('lng-' + lng)
+        if (active) active.classList.add('active')
+        document.title = lng === 'en' ? 'Privacy Policy — Native' : 'Kebijakan Privasi — Native'
+      })()
+    </script>
+  </body>
+</html>

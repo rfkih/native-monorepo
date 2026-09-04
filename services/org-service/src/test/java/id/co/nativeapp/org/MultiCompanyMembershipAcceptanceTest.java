@@ -64,7 +64,14 @@ class MultiCompanyMembershipAcceptanceTest {
 
   @SuppressWarnings("resource")
   protected static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+          // withCommand REPLACES the constructor's command (it does not append), so fsync=off —
+          // Testcontainers' own default and a large test-time speedup — must be restated here.
+          // max_connections is raised from Postgres's default 100 because cached @SpringBootTest
+          // contexts each pin a Hikari pool against this one container; restaurant-service died
+          // mid-run at ~90 sharing classes with "FATAL: remaining connection slots are reserved
+          // for roles with the SUPERUSER attribute" (48ac4add). The cap below is the other half.
+          .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=500");
 
   private static final OkHttpClient HTTP = new OkHttpClient();
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -111,6 +118,11 @@ class MultiCompanyMembershipAcceptanceTest {
     registry.add("native.keycloak-admin.realm", () -> REALM);
     registry.add("native.keycloak-admin.client-id", () -> "native-admin");
     registry.add("native.keycloak-admin.client-secret", () -> "native-admin-secret");
+    // Hikari defaults to minimumIdle == maximumPoolSize == 10, so every CACHED test context
+    // pins 10 idle connections for the rest of the run. Cap the pool and let idle connections
+    // drain so cached contexts stay well under the container's max_connections (see above).
+    registry.add("spring.datasource.hikari.maximum-pool-size", () -> "8");
+    registry.add("spring.datasource.hikari.minimum-idle", () -> "2");
   }
 
   @Test

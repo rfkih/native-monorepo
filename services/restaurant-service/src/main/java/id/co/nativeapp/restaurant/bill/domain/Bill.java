@@ -118,12 +118,24 @@ public class Bill extends Auditable {
   }
 
   /**
-   * Removes a line from this bill. The bill must be OPEN.
+   * Removes a line from this bill. The bill must be OPEN, and the line must NOT be currently
+   * RESERVED for an in-flight gateway payment (V38 hardening fix — code review): removing a
+   * reserved line would strand real PSP money at capture time (see {@link
+   * BillLineReservedException} javadoc).
    *
    * @throws IllegalStateException if the bill is not OPEN
+   * @throws BillLineReservedException if {@code line} is currently reserved
    */
   public void removeLine(BillLine line) {
     requireOpen("removeLine");
+    // Open-bill lockdown hardening: a PAID line's sale is recorded — removing it would silently
+    // detach money from the bill. The frontend never offers this; the server refuses regardless.
+    if (line.isPaid()) {
+      throw new BillLinePaidException(id, line.getId());
+    }
+    if (line.getPendingPaymentId() != null) {
+      throw new BillLineReservedException(id, line.getId(), line.getPendingPaymentId());
+    }
     lines.remove(line);
   }
 
@@ -143,19 +155,34 @@ public class Bill extends Auditable {
   }
 
   /**
-   * Cancels this bill (no sale, no stock change).
+   * Cancels this bill (no sale, no stock change). Open-bill lockdown hardening: refused while any
+   * line is already PAID (the recorded split-check sales would be stranded — settle the remainder
+   * or reverse the paid checks first) or RESERVED for an in-flight gateway payment (cancelling
+   * under a pending capture would strand real PSP money).
    *
    * @throws IllegalStateException if the bill is not OPEN
+   * @throws BillHasPaidLinesException if any line is already paid
+   * @throws BillLineReservedException if any line is reserved by an in-flight payment
    */
   public void cancel() {
     requireOpen("cancel");
+    int paidCount = (int) lines.stream().filter(BillLine::isPaid).count();
+    if (paidCount > 0) {
+      throw new BillHasPaidLinesException(id, paidCount);
+    }
+    for (BillLine line : lines) {
+      if (line.getPendingPaymentId() != null) {
+        throw new BillLineReservedException(id, line.getId(), line.getPendingPaymentId());
+      }
+    }
     this.status = "CANCELLED";
   }
 
-  /** Sets the order-level fixed discount in minor units (null = no discount). */
-  public void setDiscountMinor(Long discountMinor) {
-    this.discountMinor = discountMinor;
-  }
+  // NOTE (2026-08-31 audit L1): there is deliberately NO setter for discountMinor — the column is
+  // a legacy always-null artifact (discounts are applied PER CHECK at pay time via
+  // PayBillRequest.discountMinor, never bill-wide), so the live breakdown responses that read
+  // getDiscountMinor() always see null. A setter would silently diverge the display breakdown
+  // from what pay actually charges.
 
   /**
    * Sets the currency on first item append. Only valid when the current currency is "XXX" (the

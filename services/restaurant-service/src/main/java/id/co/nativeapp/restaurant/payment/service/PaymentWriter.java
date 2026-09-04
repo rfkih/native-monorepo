@@ -181,6 +181,83 @@ public class PaymentWriter {
   }
 
   /**
+   * Records a PENDING digital tender (QRIS/CARD) against a BILL (V38) by joining the caller's
+   * transaction (propagation {@code MANDATORY}) — {@code BillWriter.initiatePendingPayment}'s own
+   * unit of work. No sale is recorded here; revenue is deferred to {@code
+   * BillPaymentCaptureWriter#capture} (ADR 0006's revenue-at-capture invariant, extended to bills).
+   *
+   * <p>Mirrors {@link #recordPendingDigitalInCurrentTx} closely, including the ADR 0049 P4
+   * device-operator guard (a device actor with no verified operator session is rejected outright
+   * before the PENDING payment is ever minted) — this IS the second PENDING-digital-mint choke
+   * point the guard's javadoc anticipates. The one structural difference: there is no {@code
+   * orderId} to authorize against, so the {@link PaymentInstruction} built here carries {@code
+   * orderId = null} — safe because neither {@link PaymentProviderRegistry#providerFor} nor {@link
+   * DigitalProvider#authorize} ever reads it (only {@code tenderType}/{@code idempotencyKey}).
+   *
+   * @param billId the bill this payment settles
+   * @param amount the check's grand total (the caller — {@code BillWriter} — has already run the
+   *     SAME promotions + tax computation {@code payBill} uses)
+   * @param discountMinor the manual discount requested, minor units, or {@code null} — stamped onto
+   *     the PENDING payment so capture can reproduce this same grand total deterministically
+   * @param occurredAt the mint instant (stamped on the payment; also the pricing instant a capture
+   *     re-resolves effective-dated tax rules against, so a later capture reproduces this same
+   *     breakdown even if a newer rule version has since become effective)
+   * @param paymentIdempotencyKey this PENDING payment's OWN idempotency key — the caller mints a
+   *     fresh one per attempt, since a self-healed retry must not collide with an already-ABANDONED
+   *     row under the {@code uq_payment_company_idempotency} constraint. NOTE (HIGH fix): this is
+   *     NOT the eventual check's sale idempotency key — {@code BillPaymentCaptureWriter#capture}
+   *     derives that separately, on-the-fly, from the persisted payment's OWN id at capture time
+   *     (mirroring the order path), so it can never collide across a bill's multiple checks
+   * @return the PENDING payment response (status = PENDING, providerPending = true, saleId = null)
+   * @throws IllegalArgumentException if {@code tenderType} is not digital
+   * @throws id.co.nativeapp.restaurant.sale.domain.OperatorRequiredException if the current request
+   *     is a device (outlet-terminal) actor with no verified operator session bound
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  @Transactional(propagation = Propagation.MANDATORY)
+  public PaymentResponse recordPendingBillDigital(
+      UUID billId,
+      UUID businessId,
+      TenderType tenderType,
+      Money amount,
+      Long discountMinor,
+      Instant occurredAt,
+      String paymentIdempotencyKey) {
+    if (tenderType == null || !tenderType.isDigital()) {
+      throw new IllegalArgumentException(
+          "recordPendingBillDigital requires a digital tender; got " + tenderType);
+    }
+    String companyId = TenantContext.require().companyId();
+
+    Optional<OperatorPrincipal> operator = operatorContextProvider.current();
+    operatorRequiredGuard.enforce(businessId, operator);
+
+    PaymentInstruction instruction =
+        new PaymentInstruction(null, businessId, tenderType, amount, null, paymentIdempotencyKey);
+    TenderAuthorization auth = providers.providerFor(tenderType).authorize(instruction);
+
+    Payment payment =
+        Payment.pendingDigitalForBill(
+            billId,
+            businessId,
+            tenderType,
+            amount,
+            discountMinor,
+            auth.providerRef(),
+            occurredAt,
+            paymentIdempotencyKey);
+    // Same tenant/outlet assertion as recordPendingDigitalInCurrentTx — see its comment.
+    operator.ifPresent(
+        principal -> {
+          OperatorMismatchException.requireMatch(
+              principal.companyId(), principal.businessId(), companyId, businessId);
+          payment.stampSeller(principal.operatorUserId());
+        });
+    payment.setCompanyId(companyId);
+    return PaymentResponse.from(repository.saveAndFlush(payment));
+  }
+
+  /**
    * Records a synchronously-captured ONLINE (platform-collected) tender against a just-recorded
    * sale, joining the caller's transaction (ADR 0036 Phase B2). Mirrors {@link
    * #captureCashInCurrentTx} but with NO tendered requirement: the platform already remitted the
@@ -259,11 +336,16 @@ public class PaymentWriter {
     return repository.findLatestReceiptViewByOrderId(orderId).map(PaymentWriter::toResponse);
   }
 
-  /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
+  /**
+   * Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it).
+   * {@code billId} is always {@code null} here — {@link PaymentReceiptView} backs ONLY the order
+   * read path's receipt-rebuild need ({@link #findLatestForOrder}), which is always order-scoped.
+   */
   private static PaymentResponse toResponse(PaymentReceiptView view) {
     return new PaymentResponse(
         view.getId(),
         view.getOrderId(),
+        null,
         view.getTenderType(),
         view.getStatus(),
         view.getAmountMinor(),
@@ -271,6 +353,7 @@ public class PaymentWriter {
         view.getTenderedMinor(),
         view.getChangeMinor(),
         view.isProviderPending(),
-        view.getSaleId());
+        view.getSaleId(),
+        view.getRefundedMinor());
   }
 }
