@@ -296,7 +296,7 @@ Public edge = two Cloudflare **quick tunnels** (EPHEMERAL URLs; current values i
 
 | Task | How |
 |---|---|
-| **Release to prod** | Merge to master (green `gate`+`ai-gate`) → `git tag -a vX.Y.Z && git push origin vX.Y.Z` → approve the `deploy-prod` run (production environment). Health-gated, auto-rolls back to `LAST_GOOD` on failure. |
+| **Release to prod** | **`master` is the ONLY release line — tags are cut from `master`, never from a long-lived branch** (ADR 0053 §3; the `feat/business-employee-apps` line that drifted out of this rule was retired 2026-09-04). Merge to master (green `gate`) → `git tag -a vX.Y.Z && git push origin vX.Y.Z` → approve the `deploy-prod` run (production environment). `verify-ci` refuses the deploy unless a **green `ci` run exists for that exact commit**, so the tagged commit must have landed on master first. Health-gated, auto-rolls back to `LAST_GOOD` on failure. |
 | **Roll back** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-rollback.sh'` (LAST_GOOD) or `... prod-rollback.sh vX.Y.Z` for any retained release. |
 | **Tunnels died / new URLs** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-bootstrap.sh $(cat LAST_GOOD)'` — re-discovers URLs, rewrites prod.env, re-patches Keycloak. |
 | **Backups** | Nightly cron 02:10 WIB → `backups/nightly/*.enc` (AES-256; 11 DBs + MinIO + prod.env; keep 14). Offsite: Windows task `NativeProdBackupPull` pulls to `%USERPROFILE%\native-prod-backups` daily 04:00 (keep 30). Passphrase: `BACKUP_PASSPHRASE` in prod.env + `%USERPROFILE%\.native-prod-backup-passphrase.txt` — ALSO keep it in a password manager. |
