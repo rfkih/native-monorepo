@@ -3520,18 +3520,22 @@ export const en = {
       inventoryLabel: 'Inventory',
       inventoryHint:
         'Capitalized to the inventory asset instead of expensed immediately — only applies once perpetual inventory accounting is active.',
-      // ADR 0072 P4 — the optional ingredient linkage on an inventory-flagged line.
+      // ADR 0072 P4 — the ingredient linkage on an inventory-flagged line. Reworked 2026-09-04
+      // (owner UX correction): the description field IS the ingredient combobox now, so a ticked
+      // line is either fully linked or incomplete — never "flagged but unlinked" in the UI.
       ingredientOutletLabel: 'Outlet (for the ingredient picker)',
       ingredientOutletHint: 'Filters which ingredients show below — not sent with the bill; a bill has no outlet of its own.',
       ingredientOutletPlaceholder: 'Choose an outlet…',
       ingredientLinkNote: 'Optionally link an ingredient — stock is added automatically once this bill is posted.',
       ingredientLinkPickOutlet: 'Choose an outlet above to pick its ingredients.',
       ingredientLinkError: 'Could not load this outlet’s ingredients.',
-      ingredientLinkNone: 'This outlet has no ingredients yet.',
-      ingredientLinkInvalid: 'Pick an ingredient and enter its quantity, or leave both blank.',
-      ingredientLabel: 'Ingredient (optional)',
-      ingredientNone: 'No linked ingredient',
+      ingredientLineIncomplete: 'Pick (or add) an ingredient and enter its quantity and total price to complete this line.',
+      ingredientLabel: 'Ingredient',
+      ingredientComboboxPlaceholder: 'Type to search ingredients…',
+      ingredientComboboxEmpty: 'This outlet has no ingredients yet — start typing to add one.',
+      ingredientCreateHint: 'No match — add "{{name}}" as a new ingredient',
       ingredientQtyLabel: 'Quantity ({{unit}})',
+      ingredientTotalLabel: 'Total price',
       preview: 'Preview',
       subtotal: 'Subtotal',
       tax: 'Tax (11%)',

@@ -41,6 +41,7 @@ function isNameConflict(err: unknown): boolean {
 export function CreateIngredientInline({
   session,
   existingIngredients,
+  initialName,
   onClose,
   onCreated,
   onSelectExisting,
@@ -52,6 +53,10 @@ export function CreateIngredientInline({
   /** The outlet's currently loaded catalog — used only for the live/409 "select existing instead"
    *  match; never sent anywhere. */
   existingIngredients: readonly Ingredient[]
+  /** Prefills the name field — e.g. NewBill.tsx's ingredient combobox opens this with whatever the
+   *  operator already typed that matched nothing, so they don't retype it. Optional; defaults to
+   *  blank (IngredientManagement's own create-flow entry point). */
+  initialName?: string
   onClose: () => void
   /** Called with the newly created ingredient — the caller both auto-selects it on its line AND
    *  refetches its own outlet-scoped ingredient list query. */
@@ -60,7 +65,7 @@ export function CreateIngredientInline({
 }) {
   const { t } = useTranslation()
   const create = useCreateIngredient(session)
-  const [name, setName] = useState('')
+  const [name, setName] = useState(initialName ?? '')
   const [unitChoice, setUnitChoice] = useState('pcs')
   const [nameError, setNameError] = useState<string | null>(null)
 

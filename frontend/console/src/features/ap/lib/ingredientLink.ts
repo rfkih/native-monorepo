@@ -1,66 +1,65 @@
 /**
- * ingredientLink.ts — pure parse/validate logic for an AP bill line's OPTIONAL ingredient linkage
- * (ADR 0072 P4), extracted so it is unit-testable without rendering (mirrors
- * `features/expenses/lib/companyExpenseForm.ts`'s `parseInventoryLine` — same shape, this is its
- * AP-bill counterpart: no `valueMinor` here, since the line's own `unitPriceMinor × quantity`
- * already carries the money; the linkage is quantity-only).
+ * ingredientLink.ts — pure parse/validate logic for a Persediaan-ticked AP bill line (ADR 0072 P4;
+ * reworked 2026-09-04 per owner UX correction: the DESCRIPTION FIELD ITSELF is now the ingredient
+ * combobox — a ticked line is either fully linked or not submittable, there is no more
+ * "inventory-flagged but unlinked" shape in the UI). Extracted so it is unit-testable without
+ * rendering (mirrors `features/expenses/lib/companyExpenseForm.ts`'s `parseInventoryLine` — the
+ * two purchase forms now share the same bahan + jumlah + total-dibayar shape).
  *
- * The linkage is optional even on an inventory-flagged line (a bare `inventory: true` with no
- * linkage stays fully supported — it only changes GL routing, ADR 0067). Quantity parsing reuses
- * `features/inventory/lib/units.ts`'s display-unit→base-unit conversion — entered in the
- * ingredient's DISPLAY unit (kg/liter), converted to the BASE integer the server stores.
+ * Quantity parsing reuses `features/inventory/lib/units.ts`'s display-unit→base-unit conversion
+ * (entered in the ingredient's DISPLAY unit, e.g. "2.5 kg"); money parsing reuses
+ * `features/pos/lib/discountInput.ts`'s major-input→minor-units convention. The backend's
+ * `quantity` is an INTEGER and cannot carry a fractional real quantity, so the wire line always
+ * sends `quantity: 1` with the entered TOTAL as `unitPriceMinor` (1 × total reproduces the total
+ * exactly) — the REAL quantity rides `ingredientQtyBase` instead.
  */
 import { parseShownQtyInput, type UnitBearing } from '@/features/inventory/lib/units'
+import { parseDiscountInput } from '@/features/pos/lib/discountInput'
 
-export interface IngredientLinkDraft {
+export interface InventoryLineDraft {
   ingredientId: string
   ingredientName: string
   /** Quantity typed in the ingredient's DISPLAY unit (kg/liter accept decimals). */
   qtyInput: string
+  /** TOTAL price for the WHOLE line, MAJOR units (not per-unit). */
+  totalInput: string
 }
 
-export interface ParsedIngredientLink {
+export interface ParsedInventoryLine {
+  /** Sent as the line's `description` — the ingredient's own name (the combobox IS the
+   *  description field once linked, so there is nothing else to send). */
+  description: string
+  /** Always 1 — see this module's doc for why. */
+  quantity: 1
+  /** = the entered TOTAL in minor units (quantity(1) × unitPriceMinor reproduces it exactly). */
+  unitPriceMinor: number
   ingredientId: string
   ingredientName: string
   ingredientQtyBase: number
 }
 
-export interface IngredientLinkResult {
-  /** The parsed trio, or `null` when nothing was entered OR the entry doesn't (yet) resolve. */
-  link: ParsedIngredientLink | null
-  /**
-   * `false` only for a PARTIALLY entered draft (e.g. an ingredient picked with no quantity, or a
-   * quantity that fails to convert to a positive BASE integer) — the caller should block the whole
-   * line's submit rather than silently drop the half-entered linkage. `true` for both "nothing
-   * entered" (`link: null`) and "a complete, valid trio" (`link` set).
-   */
-  valid: boolean
-}
-
-const EMPTY_LINK: IngredientLinkResult = { link: null, valid: true }
-
 /**
- * Parses an OPTIONAL ingredient linkage. Mirrors the server's V59 CHECK constraints exactly:
- * `ingredientId` and a resolvable positive `ingredientQtyBase` go together (both or neither).
+ * Parses a Persediaan-ticked line, or `null` when not (yet) submittable: an ingredient MUST be
+ * resolved (picked from the combobox or freshly created — never a bare free-text description), the
+ * quantity must convert to a strictly positive BASE integer via the ingredient's own display-unit
+ * factor, and the total must be strictly positive.
  */
-export function parseIngredientLink(
-  draft: IngredientLinkDraft,
+export function parseInventoryLine(
+  draft: InventoryLineDraft,
   ingredient: UnitBearing | null,
-): IngredientLinkResult {
-  const hasIngredient = draft.ingredientId !== ''
-  const hasQty = draft.qtyInput.trim() !== ''
-  if (!hasIngredient && !hasQty) return EMPTY_LINK
-  if (!hasIngredient || !ingredient) return { link: null, valid: false }
-
+  currency: string,
+): ParsedInventoryLine | null {
+  if (!draft.ingredientId || !ingredient) return null
   const qtyBase = parseShownQtyInput(draft.qtyInput, ingredient)
-  if (qtyBase == null || qtyBase <= 0) return { link: null, valid: false }
-
+  if (qtyBase == null || qtyBase <= 0) return null
+  const totalMinor = parseDiscountInput(draft.totalInput, currency)
+  if (totalMinor <= 0) return null
   return {
-    link: {
-      ingredientId: draft.ingredientId,
-      ingredientName: draft.ingredientName,
-      ingredientQtyBase: qtyBase,
-    },
-    valid: true,
+    description: draft.ingredientName,
+    quantity: 1,
+    unitPriceMinor: totalMinor,
+    ingredientId: draft.ingredientId,
+    ingredientName: draft.ingredientName,
+    ingredientQtyBase: qtyBase,
   }
 }

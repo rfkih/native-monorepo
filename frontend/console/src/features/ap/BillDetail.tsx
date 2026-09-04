@@ -303,9 +303,16 @@ export function BillDetail() {
                         </div>
                       ) : null}
                     </td>
-                    <td className="tnum py-2.5 text-right font-mono text-ink-2">{line.quantity}</td>
+                    {/* ADR 0072 P4 UX rework — a LINKED line always carries quantity 1 and
+                        unitPriceMinor == the line total (the bahan qty rides ingredientQtyBase,
+                        shown in the description's subtext via `linkLabel` instead); rendering
+                        "1" and the total again here would misleadingly read as a real per-unit
+                        breakdown ("1 × total"), so both columns dash out for a linked line. */}
                     <td className="tnum py-2.5 text-right font-mono text-ink-2">
-                      {formatMoney(line.unitPriceMinor, bill.currency, locale)}
+                      {line.ingredientId ? '—' : line.quantity}
+                    </td>
+                    <td className="tnum py-2.5 text-right font-mono text-ink-2">
+                      {line.ingredientId ? '—' : formatMoney(line.unitPriceMinor, bill.currency, locale)}
                     </td>
                     <td className="tnum py-2.5 text-right font-mono text-ink">
                       {formatMoney(line.lineTotalMinor, bill.currency, locale)}
