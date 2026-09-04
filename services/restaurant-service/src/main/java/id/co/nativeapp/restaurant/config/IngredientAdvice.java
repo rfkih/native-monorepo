@@ -4,6 +4,7 @@ import id.co.nativeapp.restaurant.inventory.domain.GoodsReceiptIdempotencyKeyCon
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNameConflictException;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientStocktakeNotFoundException;
+import id.co.nativeapp.restaurant.inventory.domain.IngredientUnitChangeException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import org.slf4j.MDC;
@@ -72,6 +73,20 @@ public class IngredientAdvice {
     ProblemDetail problem =
         problem(HttpStatus.CONFLICT, "goods-receipt-idempotency-key-conflict", request);
     problem.setTitle("Idempotency-Key conflict");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * Changing an ingredient's BASE unit while it still holds stock (ADR 0072 follow-up) -- refused
+   * as a 409 rather than silently reinterpreting the on-hand quantity. The detail names the units
+   * and the quantity so the console can tell the owner exactly what to zero first.
+   */
+  @ExceptionHandler(IngredientUnitChangeException.class)
+  public ProblemDetail handleIngredientUnitChange(
+      IngredientUnitChangeException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "ingredient-unit-change-blocked", request);
+    problem.setTitle("Unit cannot be changed while stock remains");
     problem.setDetail(ex.getMessage());
     return problem;
   }

@@ -33,4 +33,7 @@ public interface IngredientView {
   long getStockValueMinor();
 
   boolean isActive();
+
+  /** Default pack contents in base units, or {@code null} when the item has no usual pack. */
+  @Nullable Integer getPackSize();
 }

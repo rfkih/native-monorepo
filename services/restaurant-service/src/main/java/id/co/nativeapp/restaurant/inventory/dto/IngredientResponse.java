@@ -23,7 +23,35 @@ public record IngredientResponse(
     @Nullable Long unitCostMinor,
     @Nullable String costCurrency,
     long stockValueMinor,
-    boolean active) {
+    boolean active,
+    @Nullable Integer packSize) {
+
+  /** Pre-pack-size shape — every existing caller and test keeps compiling unchanged. */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public IngredientResponse(
+      UUID id,
+      UUID businessId,
+      String name,
+      String unit,
+      @Nullable String displayUnit,
+      int stockQty,
+      @Nullable Long unitCostMinor,
+      @Nullable String costCurrency,
+      long stockValueMinor,
+      boolean active) {
+    this(
+        id,
+        businessId,
+        name,
+        unit,
+        displayUnit,
+        stockQty,
+        unitCostMinor,
+        costCurrency,
+        stockValueMinor,
+        active,
+        null);
+  }
 
   /** Maps the write-path aggregate to the response shape. */
   public static IngredientResponse from(Ingredient ingredient) {
@@ -37,6 +65,7 @@ public record IngredientResponse(
         ingredient.getUnitCostMinor(),
         ingredient.getCostCurrency(),
         ingredient.getStockValueMinor(),
-        ingredient.isActive());
+        ingredient.isActive(),
+        ingredient.getPackSize());
   }
 }

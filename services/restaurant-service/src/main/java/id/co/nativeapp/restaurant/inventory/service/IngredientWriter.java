@@ -93,6 +93,7 @@ public class IngredientWriter {
             request.unitCostMinor(),
             request.costCurrency());
     ingredient.setDisplayUnit(request.displayUnit());
+    ingredient.setPackSize(request.packSize());
     if (request.initialStockQty() != null && request.initialStockQty() > 0) {
       ingredient.setStock(request.initialStockQty());
     }
@@ -118,7 +119,9 @@ public class IngredientWriter {
         request.unit(),
         request.displayUnit(),
         request.unitCostMinor(),
-        request.costCurrency());
+        request.costCurrency(),
+        request.packSize(),
+        Boolean.TRUE.equals(request.clearPackSize()));
     Ingredient saved = repository.saveAndFlush(ingredient);
     return IngredientResponse.from(saved);
   }

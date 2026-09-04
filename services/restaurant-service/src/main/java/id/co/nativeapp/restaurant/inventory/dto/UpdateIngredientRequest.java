@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant.inventory.dto;
 
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import org.springframework.lang.Nullable;
@@ -19,4 +20,20 @@ public record UpdateIngredientRequest(
     @Nullable @Size(max = 16) String unit,
     @Nullable @Size(max = 16) String displayUnit,
     @Nullable @PositiveOrZero Long unitCostMinor,
-    @Nullable @Size(min = 3, max = 3) String costCurrency) {}
+    @Nullable @Size(min = 3, max = 3) String costCurrency,
+    @Nullable @Positive Integer packSize,
+    // BOXED, not primitive: Jackson's record deserializer treats a MISSING primitive creator
+    // property as an error, so a PATCH body that omits this would 400 (the CreateBillRequest
+    // note). Null means "the field was not sent" = leave the pack size alone.
+    @Nullable Boolean clearPackSize) {
+
+  /** Pre-pack-size callers (and every existing test) keep compiling unchanged. */
+  public UpdateIngredientRequest(
+      @Nullable String name,
+      @Nullable String unit,
+      @Nullable String displayUnit,
+      @Nullable Long unitCostMinor,
+      @Nullable String costCurrency) {
+    this(name, unit, displayUnit, unitCostMinor, costCurrency, null, null);
+  }
+}

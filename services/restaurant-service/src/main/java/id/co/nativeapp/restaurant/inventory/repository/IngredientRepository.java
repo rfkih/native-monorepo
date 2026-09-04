@@ -33,7 +33,8 @@ public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
              i.unit_cost_minor   AS unit_cost_minor,
              i.cost_currency     AS cost_currency,
              i.stock_value_minor AS stock_value_minor,
-             i.active            AS active
+             i.active            AS active,
+             i.pack_size         AS pack_size
         FROM ingredient i
       """;
 
