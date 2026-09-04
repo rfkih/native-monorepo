@@ -69,14 +69,89 @@ export interface InventoryLineDraft {
   qtyInput: string
   /** Total paid for THIS line, MAJOR units of the company base currency. */
   totalInput: string
+  /**
+   * "Nama di nota berbeda" (V60, additive; mirrors `features/ap/lib/ingredientLink.ts`'s AP-bill
+   * toggle exactly — the same UX, same on/off semantics, same prefill-on-enable behaviour, so the
+   * two purchase forms feel identical). OFF (default): the line is named after the inventory item
+   * (`description` omitted on the wire). ON: `receiptDescriptionInput` is a free-text receipt
+   * wording independent of `ingredientName`; required non-blank once ticked.
+   */
+  receiptNameDiffers: boolean
+  /** Free-text receipt wording; only read when `receiptNameDiffers` is true. */
+  receiptDescriptionInput: string
+  /**
+   * Owner request — a vendor sells by the PACK while inventory counts CONTENTS (e.g. a receipt
+   * says "TORTILLA 1 PCS" for a pack of 20 individual tortillas). Optional; BLANK (default) is
+   * today's behaviour unchanged — `qtyInput` is a plain display-unit quantity. NON-BLANK means
+   * `qtyInput` now counts PACKS, and this is how many of the ingredient's DISPLAY unit are in ONE
+   * pack — both must be positive WHOLE numbers (no fractional pack counts/sizes). Deliberately
+   * separate from `features/inventory/lib/units.ts`'s `shownFactor`/`DISPLAY_OVER_BASE` (a fixed
+   * 1000× kg/g, liter/ml family) — a pack size is an arbitrary per-product number; see
+   * `parsePackedQtyBase`.
+   */
+  packSizeInput: string
+}
+
+/**
+ * The "Nama di nota berbeda" omit rule (mirrors the backend's own V60 normalisation): blank, or
+ * equal to the ingredient's name, means "not different" — sent as nothing (never the ingredient
+ * name echoed back as its own description).
+ */
+function receiptDescriptionOrNull(
+  draft: Pick<InventoryLineDraft, 'receiptNameDiffers' | 'receiptDescriptionInput' | 'ingredientName'>,
+): string | null {
+  if (!draft.receiptNameDiffers) return null
+  const trimmed = draft.receiptDescriptionInput.trim()
+  if (!trimmed || trimmed === draft.ingredientName.trim()) return null
+  return trimmed
+}
+
+/** The resolved BASE quantity, plus the pack count when pack mode was used (for the UI's "packs ×
+ *  size = result" readback — the typo safety net). `packs: null` = pack mode wasn't used at all. */
+export interface PackedQty {
+  packs: number | null
+  qtyBase: number
+}
+
+/**
+ * Resolves `qtyInput` (+ optional `packSizeInput`) to the BASE integer quantity — see
+ * `InventoryLineDraft.packSizeInput`'s doc for the pack semantics. `null` when either input fails
+ * to resolve to a positive whole number: an under/mistyped pack size or count BLOCKS the line
+ * rather than silently falling back to "no pack" or a wrong count (an inflated pack size silently
+ * inflates stock, and only a stock opname would catch it later — this must fail loudly instead).
+ */
+export function parsePackedQtyBase(
+  qtyInput: string,
+  packSizeInput: string,
+  ingredient: UnitBearing,
+): PackedQty | null {
+  const packSizeTrimmed = packSizeInput.trim()
+  if (packSizeTrimmed === '') {
+    const qtyBase = parseShownQtyInput(qtyInput, ingredient)
+    if (qtyBase == null || qtyBase <= 0) return null
+    return { packs: null, qtyBase }
+  }
+  const packSize = Number(packSizeTrimmed)
+  if (!Number.isInteger(packSize) || packSize <= 0) return null
+  const packs = Number(qtyInput.trim())
+  if (!Number.isInteger(packs) || packs <= 0) return null
+  // The per-pack content, in the ingredient's DISPLAY unit, converted to base via the SAME
+  // shownFactor machinery a plain quantity would use (packSize is always a whole number, so this
+  // never trips the base-unit fraction rejection either way).
+  const perPackBase = parseShownQtyInput(packSizeTrimmed, ingredient)
+  if (perPackBase == null || perPackBase <= 0) return null
+  const qtyBase = packs * perPackBase
+  if (!Number.isInteger(qtyBase) || qtyBase <= 0) return null
+  return { packs, qtyBase }
 }
 
 /**
  * Parses one INVENTORY line into the wire shape, or `null` when incomplete/invalid: an ingredient
  * must be chosen (and resolvable — `ingredient` is `null` when the id no longer matches the
- * outlet's catalog), the quantity must convert to a strictly positive BASE integer via the
- * ingredient's own display-unit factor (fractional input on a base-unit ingredient is rejected,
- * exactly like the Terima dialog), and the amount paid must be strictly positive.
+ * outlet's catalog), the quantity (optionally pack-scaled — see `parsePackedQtyBase`) must convert
+ * to a strictly positive BASE integer, the amount paid must be strictly positive, and — once "Nama
+ * di nota berbeda" is ticked — the receipt wording must be non-blank (a ticked-but-empty toggle is
+ * an incomplete line, not a silent no-op).
  */
 export function parseInventoryLine(
   draft: InventoryLineDraft,
@@ -84,15 +159,18 @@ export function parseInventoryLine(
   currency: string,
 ): CompanyExpenseLineInput | null {
   if (!draft.ingredientId || !ingredient) return null
-  const qtyBase = parseShownQtyInput(draft.qtyInput, ingredient)
-  if (qtyBase == null || qtyBase <= 0) return null
+  const packed = parsePackedQtyBase(draft.qtyInput, draft.packSizeInput, ingredient)
+  if (!packed) return null
   const valueMinor = parseDiscountInput(draft.totalInput, currency)
   if (valueMinor <= 0) return null
+  if (draft.receiptNameDiffers && draft.receiptDescriptionInput.trim() === '') return null
+  const description = receiptDescriptionOrNull(draft)
   return {
     ingredientId: draft.ingredientId,
     ingredientName: draft.ingredientName,
-    qtyBase,
+    qtyBase: packed.qtyBase,
     valueMinor,
+    ...(description ? { description } : {}),
   }
 }
 

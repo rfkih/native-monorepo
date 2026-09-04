@@ -29,22 +29,33 @@ interface TenantParams {
 export type CompanyExpenseKind = 'GENERAL' | 'INVENTORY'
 export type CompanyExpenseStatus = 'POSTED' | 'VOID'
 
-/** One ingredient line of an INVENTORY expense — the REQUEST shape (mirrors finance-service's
- *  `RecordCompanyExpenseRequest.LineRequest`). `qtyBase` is the ingredient's BASE unit — convert a
- *  display-unit input (kg/liter) via `features/inventory/lib/units.ts` before sending, mirroring
- *  the Terima ("receive") dialog's own conversion. `valueMinor` is the amount paid for THIS line,
- *  minor units of the company base currency. Finance stores `ingredientId`/`ingredientName` as
- *  opaque snapshots (ADR 0072 — it cannot validate them against restaurant-service, rule 1); the
- *  console picker is what keeps garbage out. */
+/**
+ * One ingredient line of an INVENTORY expense — the REQUEST shape (mirrors finance-service's
+ * `RecordCompanyExpenseRequest.LineRequest`, V60). `qtyBase` is the ingredient's BASE unit —
+ * convert a display-unit input (kg/liter) via `features/inventory/lib/units.ts` before sending,
+ * mirroring the Terima ("receive") dialog's own conversion. `valueMinor` is the amount paid for
+ * THIS line, minor units of the company base currency. Finance stores `ingredientId`/
+ * `ingredientName` as opaque snapshots (ADR 0072 — it cannot validate them against
+ * restaurant-service, rule 1); the console picker is what keeps garbage out.
+ *
+ * `description` (V60, additive) — "Nama di nota berbeda" (mirrors `features/ap`'s AP-bill toggle,
+ * `ingredientLink.ts`'s doc): what the RECEIPT calls this line, sent ONLY when it differs from
+ * `ingredientName`. The server normalises a blank value OR one equal to `ingredientName` to `null`
+ * — so the console omits it entirely rather than ever sending the ingredient name as the
+ * description (see `NewCompanyExpense.tsx`'s line-parsing for the omit rule).
+ */
 export interface CompanyExpenseLineInput {
   ingredientId: string
   ingredientName: string
   qtyBase: number
   valueMinor: number
+  description?: string
 }
 
 /** One ingredient line as returned by a detail read (mirrors `CompanyExpenseResponse.LineResponse`
- *  — `id` is the LINE's own id, `lineNo` its 1-based position). Empty on the list read. */
+ *  — `id` is the LINE's own id, `lineNo` its 1-based position). Empty on the list read.
+ *  `description` (V60) is `null` when the line is named after the inventory item (the common
+ *  case); a non-null value is the "Nama di nota berbeda" receipt wording. */
 export interface CompanyExpenseLine {
   id: string
   lineNo: number
@@ -52,6 +63,7 @@ export interface CompanyExpenseLine {
   ingredientName: string
   qtyBase: number
   valueMinor: number
+  description: string | null
 }
 
 /** A recorded company expense (mirrors `CompanyExpenseResponse`) — `lines` is always `[]` on the

@@ -278,7 +278,23 @@ function CompanyExpenseDetailSheet({
                       <tbody>
                         {expense.lines.map((line) => (
                           <tr key={line.id} className="border-b border-ink-50 last:border-0">
-                            <td className="px-3 py-2 text-ink-2">{line.ingredientName}</td>
+                            <td className="px-3 py-2 text-ink-2">
+                              {/* "Nama di nota berbeda" (V60) — a non-null line description is the
+                                  RECEIPT wording, shown as the primary text with the linked
+                                  inventory item as subtext; a plain line (description null, the
+                                  common case) renders exactly as before. */}
+                              {line.description ? (
+                                <>
+                                  <div>{line.description}</div>
+                                  <div className="text-xs text-ink-3">
+                                    → {line.ingredientName} ·{' '}
+                                    {new Intl.NumberFormat(locale).format(line.qtyBase)}
+                                  </div>
+                                </>
+                              ) : (
+                                line.ingredientName
+                              )}
+                            </td>
                             <td className="tnum px-3 py-2 text-right font-mono text-ink-2">
                               {new Intl.NumberFormat(locale).format(line.qtyBase)}
                             </td>

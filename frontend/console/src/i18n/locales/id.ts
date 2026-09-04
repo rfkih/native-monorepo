@@ -411,7 +411,7 @@ export const id = {
     payroll: 'Penggajian',
     attendance: 'Cuti & absensi',
     menu: 'Menu & harga',
-    inventory: 'Inventaris',
+    inventory: 'Persediaan',
     kitchen: 'Dapur',
     expenses: 'Pengeluaran',
     invoices: 'Faktur',
@@ -470,7 +470,7 @@ export const id = {
       stocktake: 'Opname stok',
       registerClose: 'Closing kasir',
       menuPrices: 'Menu & harga',
-      ingredients: 'Inventaris',
+      ingredients: 'Persediaan',
       kitchenDisplay: 'Layar dapur',
       openPos: 'POS',
       allPages: 'Semua halaman',
@@ -1367,10 +1367,10 @@ export const id = {
     notCounted: 'Belum dihitung',
     submitAction: 'Kirim stock opname',
     errorGeneric: 'Tidak dapat mengirim stock opname. Silakan coba lagi.',
-    loadError: 'Tidak dapat memuat daftar inventaris.',
+    loadError: 'Tidak dapat memuat daftar persediaan.',
     emptyHint:
       'Belum ada barang di gerai ini — tambahkan yang Anda beli dan hitung (roti, saus, gelas, sedotan…) untuk mulai stock opname.',
-    emptyCta: 'Buka inventaris',
+    emptyCta: 'Buka persediaan',
     /** Muncul di ringkasan saat tidak ada baris berbiaya — tidak ada yang dibukukan. */
     noValuedLines: 'Terhitung — tidak ada barang berbiaya, jadi tidak ada yang dibukukan.',
     countedAt: 'Dihitung',
@@ -1391,14 +1391,16 @@ export const id = {
     varianceGuardProceed: 'Simpan saja',
   },
   inventory: {
-    /** ADR 0046 fase 1 — katalog barang stok per gerai di balik stock opname. Penamaan owner:
-     * "Inventaris", isinya "barang" — bukan hanya bahan makanan tapi juga perlengkapan
-     * (gelas, piring kertas, sedotan). API/domain internal tetap "ingredient". */
-    title: 'Inventaris',
-    tillMenuLabel: 'Inventaris',
+    /** ADR 0046 fase 1 — katalog barang stok per gerai di balik stock opname. Penamaan owner
+     * (diperbarui): "Persediaan" — istilah akuntansi yang benar dan sudah dipakai di checkbox
+     * baris tagihan (ADR 0072 P4), jadi aplikasi konsisten dengan dirinya sendiri. Isinya
+     * "barang" — bukan hanya bahan makanan tapi juga perlengkapan (gelas, piring kertas,
+     * sedotan). API/domain internal tetap "ingredient". */
+    title: 'Persediaan',
+    tillMenuLabel: 'Persediaan',
     backToPos: 'Kembali ke POS',
     addAction: 'Tambah barang',
-    loadError: 'Tidak dapat memuat daftar inventaris.',
+    loadError: 'Tidak dapat memuat daftar persediaan.',
     emptyTitle: 'Belum ada barang',
     emptyHint:
       'Tambahkan yang dibeli dan dihitung gerai ini — bahan (roti, patty, saus) maupun perlengkapan (gelas, piring kertas, sedotan). Stock opname menghitung barang-barang ini, bukan item menu.',
@@ -1454,6 +1456,16 @@ export const id = {
     createError: 'Gagal membuat bahan ini. Silakan coba lagi.',
     matchesExisting: 'Bahan bernama "{{name}}" sudah ada.',
     selectInstead: 'Gunakan yang sudah ada',
+    receiptNameDiffersLabel: 'Nama di nota berbeda',
+    receiptNameDiffersHint: 'Nota menyebutnya dengan nama lain — tetap kaitkan bahannya, tapi catat apa yang sebenarnya tertulis.',
+    receiptDescriptionLabel: 'Nama di nota',
+    receiptDescriptionHint: 'Apa yang sebenarnya tertulis di nota pemasok — dikirim sebagai deskripsi baris ini.',
+    packSizeLabel: 'Isi per kemasan',
+    packSizeHint: 'Opsional — isi hanya jika nota menghitung KEMASAN, tapi stok harus menghitung isinya.',
+    packSizePlaceholder: 'Opsional',
+    qtyPacksLabel: 'Jumlah (kemasan)',
+    packResultLine: '{{packs}} kemasan × {{packSize}} = {{result}} {{unit}} masuk Persediaan',
+    packInvalid: 'Isi per kemasan dan jumlah kemasan harus bilangan bulat positif.',
   },
   posShell: {
     /** Redesign P4 — kerangka POS bersama (bilah status, menu kasir, dok tiket). */
@@ -2902,7 +2914,7 @@ export const id = {
       blocked:
         '{{blocked}} menu tidak bisa ditautkan — namanya sama dengan bahan bersatuan lain (mis. gram). Beri nama berbeda atau buat resep manual.',
       afterHint:
-        'Isi stok awal tiap bahan lewat halaman Inventaris atau stock opname pertama. Setelah itu, opname tinggal verifikasi.',
+        'Isi stok awal tiap bahan lewat halaman Persediaan atau stock opname pertama. Setelah itu, opname tinggal verifikasi.',
       error: 'Gagal menautkan. Coba lagi.',
     },
     createItem: {
@@ -3487,6 +3499,7 @@ export const id = {
       ingredientCreateHint: 'Tidak cocok — tambahkan "{{name}}" sebagai bahan baru',
       ingredientQtyLabel: 'Jumlah ({{unit}})',
       ingredientTotalLabel: 'Total harga',
+      linkedIngredientLabel: 'Bahan terkait',
       preview: 'Pratinjau',
       subtotal: 'Subtotal',
       tax: 'Pajak (11%)',

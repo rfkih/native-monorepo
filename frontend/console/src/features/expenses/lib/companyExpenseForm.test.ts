@@ -5,6 +5,7 @@ import {
   parseGeneralExpense,
   parseInventoryExpense,
   parseInventoryLine,
+  parsePackedQtyBase,
   type GeneralExpenseDraft,
   type InventoryLineDraft,
 } from './companyExpenseForm'
@@ -33,6 +34,9 @@ function lineDraft(overrides: Partial<InventoryLineDraft> = {}): InventoryLineDr
     ingredientName: 'Tepung terigu',
     qtyInput: '1.5',
     totalInput: '20000',
+    receiptNameDiffers: false,
+    receiptDescriptionInput: '',
+    packSizeInput: '',
     ...overrides,
   }
 }
@@ -118,6 +122,158 @@ describe('parseInventoryLine', () => {
     expect(parseInventoryLine(lineDraft({ totalInput: '' }), kg, IDR)).toBeNull()
     expect(parseInventoryLine(lineDraft({ totalInput: '0' }), kg, IDR)).toBeNull()
     expect(parseInventoryLine(lineDraft({ totalInput: '-1' }), kg, IDR)).toBeNull()
+  })
+
+  describe('"Nama di nota berbeda" (receiptNameDiffers)', () => {
+    it('omits description when the toggle is off, regardless of receiptDescriptionInput', () => {
+      const parsed = parseInventoryLine(
+        lineDraft({ receiptNameDiffers: false, receiptDescriptionInput: 'AYAM BROILER 1KG' }),
+        kg,
+        IDR,
+      )
+      expect(parsed).toEqual({
+        ingredientId: 'ing-1',
+        ingredientName: 'Tepung terigu',
+        qtyBase: 1500,
+        valueMinor: 20_000,
+      })
+      expect(parsed).not.toHaveProperty('description')
+    })
+
+    it('sends description when the toggle is on and the text differs from the ingredient name', () => {
+      const parsed = parseInventoryLine(
+        lineDraft({ receiptNameDiffers: true, receiptDescriptionInput: 'AYAM BROILER 1KG' }),
+        kg,
+        IDR,
+      )
+      expect(parsed).toEqual({
+        ingredientId: 'ing-1',
+        ingredientName: 'Tepung terigu',
+        qtyBase: 1500,
+        valueMinor: 20_000,
+        description: 'AYAM BROILER 1KG',
+      })
+    })
+
+    it('trims the receipt description', () => {
+      const parsed = parseInventoryLine(
+        lineDraft({ receiptNameDiffers: true, receiptDescriptionInput: '  Ayam fillet segar  ' }),
+        kg,
+        IDR,
+      )
+      expect(parsed?.description).toBe('Ayam fillet segar')
+    })
+
+    it('omits description when the toggle is on but the text EQUALS the ingredient name', () => {
+      const parsed = parseInventoryLine(
+        lineDraft({ receiptNameDiffers: true, receiptDescriptionInput: 'Tepung terigu' }),
+        kg,
+        IDR,
+      )
+      expect(parsed).not.toHaveProperty('description')
+    })
+
+    it('omits description when the toggle is on but the text only differs by whitespace/casing-neutral trim', () => {
+      const parsed = parseInventoryLine(
+        lineDraft({ receiptNameDiffers: true, receiptDescriptionInput: '  Tepung terigu  ' }),
+        kg,
+        IDR,
+      )
+      expect(parsed).not.toHaveProperty('description')
+    })
+
+    it('rejects the whole line when the toggle is on but the receipt text is blank', () => {
+      expect(
+        parseInventoryLine(lineDraft({ receiptNameDiffers: true, receiptDescriptionInput: '' }), kg, IDR),
+      ).toBeNull()
+      expect(
+        parseInventoryLine(
+          lineDraft({ receiptNameDiffers: true, receiptDescriptionInput: '   ' }),
+          kg,
+          IDR,
+        ),
+      ).toBeNull()
+    })
+  })
+
+  describe('pack size ("Isi per kemasan")', () => {
+    it('is unchanged when no pack size is entered', () => {
+      expect(parseInventoryLine(lineDraft({ packSizeInput: '' }), kg, IDR)?.qtyBase).toBe(1500)
+    })
+
+    it('multiplies packs × per-pack qty for a base-unit ingredient (the tortilla case)', () => {
+      // Receipt says "TORTILLA 1 PCS" for a pack of 20 individual tortillas.
+      const parsed = parseInventoryLine(
+        lineDraft({ qtyInput: '1', packSizeInput: '20' }),
+        pcs,
+        IDR,
+      )
+      expect(parsed?.qtyBase).toBe(20)
+    })
+
+    it('multiplies packs × per-pack qty for a kg-display ingredient (packs × N × 1000)', () => {
+      // 2 sacks, each holding 5 kg.
+      const parsed = parseInventoryLine(
+        lineDraft({ qtyInput: '2', packSizeInput: '5' }),
+        kg,
+        IDR,
+      )
+      expect(parsed?.qtyBase).toBe(2 * 5 * 1000)
+    })
+
+    it('computes exactly what a typo would produce (the scale-error safety net)', () => {
+      // A "200" typo instead of "20" inflates stock 10x — the math itself must be predictable so
+      // the UI's inline readback can catch it before submit.
+      const parsed = parseInventoryLine(lineDraft({ qtyInput: '1', packSizeInput: '200' }), pcs, IDR)
+      expect(parsed?.qtyBase).toBe(200)
+    })
+
+    it('rejects a fractional pack size', () => {
+      expect(parseInventoryLine(lineDraft({ qtyInput: '1', packSizeInput: '2.5' }), pcs, IDR)).toBeNull()
+    })
+
+    it('rejects a zero or negative pack size', () => {
+      expect(parseInventoryLine(lineDraft({ qtyInput: '1', packSizeInput: '0' }), pcs, IDR)).toBeNull()
+      expect(parseInventoryLine(lineDraft({ qtyInput: '1', packSizeInput: '-5' }), pcs, IDR)).toBeNull()
+    })
+
+    it('rejects a fractional, zero, or negative pack COUNT (qtyInput) once pack size is set', () => {
+      expect(parseInventoryLine(lineDraft({ qtyInput: '1.5', packSizeInput: '20' }), pcs, IDR)).toBeNull()
+      expect(parseInventoryLine(lineDraft({ qtyInput: '0', packSizeInput: '20' }), pcs, IDR)).toBeNull()
+      expect(parseInventoryLine(lineDraft({ qtyInput: '-1', packSizeInput: '20' }), pcs, IDR)).toBeNull()
+    })
+  })
+})
+
+describe('parsePackedQtyBase', () => {
+  it('falls through to the plain display-unit conversion when packSizeInput is blank', () => {
+    expect(parsePackedQtyBase('1.5', '', kg)).toEqual({ packs: null, qtyBase: 1500 })
+  })
+
+  it('returns null (not a fallback) for an invalid plain quantity with no pack size', () => {
+    expect(parsePackedQtyBase('', '', kg)).toBeNull()
+    expect(parsePackedQtyBase('0', '', kg)).toBeNull()
+  })
+
+  it('multiplies packs × per-pack base qty', () => {
+    expect(parsePackedQtyBase('1', '20', pcs)).toEqual({ packs: 1, qtyBase: 20 })
+    expect(parsePackedQtyBase('3', '20', pcs)).toEqual({ packs: 3, qtyBase: 60 })
+  })
+
+  it('applies shownFactor on top of the pack size for a display-unit ingredient', () => {
+    expect(parsePackedQtyBase('2', '5', kg)).toEqual({ packs: 2, qtyBase: 10_000 })
+  })
+
+  it('rejects a non-integer, zero, or negative pack size', () => {
+    expect(parsePackedQtyBase('1', '1.5', kg)).toBeNull()
+    expect(parsePackedQtyBase('1', '0', kg)).toBeNull()
+    expect(parsePackedQtyBase('1', '-2', kg)).toBeNull()
+  })
+
+  it('rejects a non-integer, zero, or negative pack count', () => {
+    expect(parsePackedQtyBase('1.5', '20', pcs)).toBeNull()
+    expect(parsePackedQtyBase('0', '20', pcs)).toBeNull()
+    expect(parsePackedQtyBase('-1', '20', pcs)).toBeNull()
   })
 })
 

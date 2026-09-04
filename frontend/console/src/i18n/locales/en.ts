@@ -1477,6 +1477,23 @@ export const en = {
     createError: 'Could not create this ingredient. Please try again.',
     matchesExisting: 'An ingredient named "{{name}}" already exists.',
     selectInstead: 'Use it instead',
+    // Owner request (same-day follow-up) — "Nama di nota berbeda": a supplier's invoice often
+    // writes its own product name, which rarely matches the inventory item name. Shared verbatim
+    // by NewBill.tsx (AP bill Persediaan lines) and NewCompanyExpense.tsx (INVENTORY lines) so the
+    // two purchase forms feel identical.
+    receiptNameDiffersLabel: 'Receipt name differs',
+    receiptNameDiffersHint: 'The invoice calls this something else — keep the ingredient link, but record what it actually says.',
+    receiptDescriptionLabel: 'Receipt name',
+    receiptDescriptionHint: 'What the supplier’s invoice actually says — sent as this line’s description.',
+    // Owner request (same-day follow-up) — "Isi per kemasan": a vendor sells by the PACK while
+    // inventory counts CONTENTS (e.g. a receipt says "TORTILLA 1 PCS" for a pack of 20 individual
+    // tortillas). Shared verbatim by both purchase forms.
+    packSizeLabel: 'Units per pack',
+    packSizeHint: 'Optional — fill in only when the receipt counts PACKS but stock should count what’s inside each one.',
+    packSizePlaceholder: 'Optional',
+    qtyPacksLabel: 'Quantity (packs)',
+    packResultLine: '{{packs}} pack(s) × {{packSize}} = {{result}} {{unit}} into stock',
+    packInvalid: 'Units per pack and the pack count must both be whole numbers greater than zero.',
   },
   posShell: {
     /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */
@@ -3536,6 +3553,9 @@ export const en = {
       ingredientCreateHint: 'No match — add "{{name}}" as a new ingredient',
       ingredientQtyLabel: 'Quantity ({{unit}})',
       ingredientTotalLabel: 'Total price',
+      // "Nama di nota berbeda" / "Isi per kemasan" copy lives under the shared `inventoryPicker.*`
+      // namespace (reused verbatim by the company-expense form's INVENTORY line rows).
+      linkedIngredientLabel: 'Linked ingredient',
       preview: 'Preview',
       subtotal: 'Subtotal',
       tax: 'Tax (11%)',
