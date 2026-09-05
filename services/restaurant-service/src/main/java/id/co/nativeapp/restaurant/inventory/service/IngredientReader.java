@@ -110,9 +110,8 @@ public class IngredientReader {
       UUID ingredientId, LocalDate from, LocalDate to) {
     UUID businessId =
         repository
-            .findById(ingredientId)
-            .orElseThrow(() -> new IngredientNotFoundException(ingredientId))
-            .getBusinessId();
+            .findBusinessIdById(ingredientId)
+            .orElseThrow(() -> new IngredientNotFoundException(ingredientId));
     outletAccessGuard.enforce(businessId);
     return stockDayRepository.findDailyLedger(ingredientId, from, to).stream()
         .map(

@@ -119,7 +119,7 @@ function SalesIntegrityInner({ session }: { session: CompanySession }) {
             currency={currency}
             locale={locale}
           />
-          <CoverageCard report={report} />
+          <CoverageCard report={report} locale={locale} />
           {signals.length === 0 ? (
             <EmptyState title={t('salesIntegrity.empty')} hint={t('salesIntegrity.emptyHint')} />
           ) : (
@@ -196,11 +196,7 @@ function HeadlineCard({
 }
 
 /** What the report could not see — placed above the findings, on purpose. */
-function CoverageCard({
-  report,
-}: {
-  report: { coverage: LeakCoverage }
-}) {
+function CoverageCard({ report, locale }: { report: { coverage: LeakCoverage }; locale: string }) {
   const { t } = useTranslation()
   const { coverage } = report
   const pct =
@@ -234,7 +230,7 @@ function CoverageCard({
         </li>
         <li>
           {t('salesIntegrity.coverage.manualCorrections', {
-            count: coverage.manualStockCorrections,
+            n: new Intl.NumberFormat(locale).format(coverage.manualStockCorrections),
           })}
         </li>
       </ul>
@@ -278,7 +274,13 @@ function SignalCard({
             </span>
           </div>
           <p className="mt-1 text-sm text-ink-3">
-            {t(`salesIntegrity.signal.${signal.type}.body`, { count: signal.occurrences })}
+            {t(`salesIntegrity.signal.${signal.type}.body`, {
+              // `n`, never i18next's reserved `count`: passing `count` triggers plural
+              // resolution, and without _one/_other forms English renders "1 bills were
+              // cancelled". The copy is worded count-last so it is grammatical at any number,
+              // and the number itself is grouped by Intl like every other figure on the page.
+              n: new Intl.NumberFormat(locale).format(signal.occurrences),
+            })}
           </p>
         </div>
         {signal.estimatedValueMinor !== null && (

@@ -1,5 +1,57 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-06 — the leak report was reporting the future (code-review fixes, ADR 0074)
+
+`/code-review` came back with fifteen findings on the detection work, and four of them were the same
+mistake wearing different clothes. Every detector here reasons about something NOT happening, and I
+had measured all of them against the window the caller asked for. The console's default period is the
+CURRENT month, so that window ends in the future — and the unelapsed remainder of the month is, to a
+detector looking for absence, indistinguishable from evidence. Tonight's dinner service came back as
+a dark hour. Today came back as a day that never closed. A session opened this morning came back as
+abandoned. A stock count taken yesterday was reported as three weeks old, in the very block whose job
+is to tell the owner how much to trust the number.
+
+The fix is two upper bounds instead of one. The requested `to` still bounds every query, so nothing
+outside the asked-for period is included; a derived `observedTo = min(to, now)` bounds every
+CONCLUSION about absence. The unclosed-day check is capped tighter still, at the last complete
+outlet-local day: a day in progress has not failed to close, it has not finished. Worth writing down
+because the bug was invisible in tests — every integration test used a window ending in the past.
+
+A fifth finding was the same species one level down: the dark-hour BASELINE took its median only over
+days that actually sold at that hour, because a day with no sales leaves no row to average. An outlet
+selling at 21:00 on three Mondays in eight got a baseline of "about five", and the five silent Mondays
+were each reported as a hole — the exact false positive the minimum-expected floor existed to
+prevent. The baseline now builds the full day x hour grid and left-joins the counts, so a quiet hour
+contributes a real zero.
+
+The rest, briefly. Per-person rates were being computed over ALL payments including PENDING,
+ABANDONED and FAILED, so a cashier generating abandoned QRIS attempts had their void rate diluted
+below the bar while a cash-only till was flagged for ordinary behaviour. The refund baseline was
+built only from operators who had refunded, quietly dropping every clean operator out of the
+comparison and inflating both refunders' rates against each other. The discount check's floor was a
+money floor, so one rupiah of discount at an outlet where nobody else discounted was enough to put a
+name in front of an owner — a minimum has to be counted in times-it-happened when the numerator is
+currency. And the manual-correction count took the calendar date of an EXCLUSIVE instant and compared
+it inclusively, folding an extra day into every period.
+
+Two smaller ones worth the change: the recipe-consumer query had the sold-quantity roll-up embedded
+inside it, so a chunked `IN` clause re-scanned every order and bill line of the period per chunk, on
+top of the identical roll-up the coverage figure already computes — the sales mix is now fetched once
+and joined in memory. And the leak report had borrowed `StockLedgerDay.ZONE`, a constant whose own
+javadoc scopes it to ingredient-ledger bucketing; it is now `OutletZone`, named for what three
+separate features actually mean by it, so the coupling is visible rather than accidental.
+
+Finally, the English copy was interpolating `{{count}}` — i18next's RESERVED plural key — with no
+`_one`/`_other` forms, so a single finding rendered as "1 bills were cancelled after items had been
+added." Rather than add fifteen pairs of plural forms, the bodies are worded count-last and
+interpolate a non-reserved `{{n}}`, which is grammatical at any number in both languages and
+sidesteps plural resolution entirely. A test now fails if `{{count}}` ever reappears.
+
+One finding I checked and did not treat as live: a CLOSED session with a null variance being counted
+as an exact-zero close is unreachable, because V21's `ck_crs_closed_shape` requires the column to be
+present on any CLOSED row. Hardened anyway — treating "never compared" as "agreed exactly" is the
+wrong default to leave lying around, and it cost one branch.
+
 ## 2026-09-06 — finding the sales that were never rung (ADR 0074)
 
 Every report Native has is derived from what was recorded, so none of them can see the fraud that

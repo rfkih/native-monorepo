@@ -34,8 +34,20 @@ public final class OperatorOutliers {
    * @param numerator what they did (voids, refunds, cash sales) or the discount they gave
    * @param denominator the opportunity they had (payments taken, gross rung)
    * @param valueMinor the money behind the numerator, carried through for display only
+   * @param eventCount how many TIMES they did it — the figure the minimum-count guard is measured
+   *     in, which is not always the numerator. For a money-valued measure like discounting, the
+   *     numerator is an amount, and a minimum expressed in minor units would be no minimum at all
+   *     (one rupiah clears it); the guard has to count discounts, not currency
    */
-  public record OperatorRate(String actor, long numerator, long denominator, long valueMinor) {}
+  public record OperatorRate(
+      String actor, long numerator, long denominator, long valueMinor, long eventCount) {
+
+    /** For a measure whose numerator IS the event count (voids, refunds, cash sales). */
+    public static OperatorRate counting(
+        String actor, long numerator, long denominator, long valueMinor) {
+      return new OperatorRate(actor, numerator, denominator, valueMinor, numerator);
+    }
+  }
 
   /**
    * The operators whose rate is at least {@code factor} times the rate of everyone else at the
@@ -46,6 +58,8 @@ public final class OperatorOutliers {
    * <ul>
    *   <li><strong>A minimum count.</strong> Two voids out of three sales is a 67% rate and means
    *       nothing. Without a floor, the quietest operator tops every list by arithmetic alone.
+   *       Measured on {@code eventCount}, never on the numerator, so a money-valued measure is
+   *       gated on how many times it happened rather than on how many minor units it came to.
    *   <li><strong>Somebody to compare against.</strong> With one operator there is no
    *       rest-of-outlet, and a lone cashier is not an outlier — they are the entire baseline.
    *       Returns nothing.
@@ -54,7 +68,8 @@ public final class OperatorOutliers {
    *
    * @param rates every operator's figures for one measure
    * @param factor how many times the others' rate counts as standing out
-   * @param minCount the fewest events an operator must have before their rate means anything
+   * @param minCount the fewest events ({@link OperatorRate#eventCount()}) an operator must have
+   *     before their rate means anything
    */
   public static List<OperatorRate> outliers(List<OperatorRate> rates, long factor, long minCount) {
     long totalNumerator = 0L;
@@ -66,7 +81,7 @@ public final class OperatorOutliers {
 
     List<OperatorRate> flagged = new ArrayList<>();
     for (OperatorRate rate : rates) {
-      if (rate.numerator() < minCount || rate.denominator() <= 0) {
+      if (rate.eventCount() < minCount || rate.denominator() <= 0) {
         continue;
       }
       long othersNumerator = totalNumerator - rate.numerator();

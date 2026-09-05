@@ -201,8 +201,17 @@ class SalesIntegrityReportTest extends PostgresRlsTestBase {
     // cash in the drawer, tax and service charge included, not the revenue line under it.
     assertThat(signal.estimatedValueMinor()).isEqualTo(27_720L);
 
-    // A day that traded and never closed is the same evidence seen from the other end.
-    assertThat(signalOf(report, LeakSignalType.TRADING_DAY_WITHOUT_CLOSE)).isPresent();
+    // But TODAY is NOT reported as a day that never closed, even though it has taken money and has
+    // no Z-report. A day in progress has not failed to close — it has not finished. The console
+    // asks for the whole current month, so its window end is in the FUTURE, and without capping the
+    // day set at the last COMPLETE outlet-local day every outlet would be told every single day
+    // that today went unreconciled.
+    assertThat(signalOf(report, LeakSignalType.TRADING_DAY_WITHOUT_CLOSE)).isEmpty();
+
+    // Same reasoning, same root cause: tonight has not happened, so it cannot be a dark hour, and
+    // a session opened minutes ago has not been abandoned.
+    assertThat(signalOf(report, LeakSignalType.DARK_HOUR)).isEmpty();
+    assertThat(signalOf(report, LeakSignalType.SESSION_LEFT_OPEN)).isEmpty();
 
     // Neither is counted into the leak range: they describe money that went UNRECONCILED, not money
     // that is missing. Folding them in would double-count the honest takings of a sloppy shift.

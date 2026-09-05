@@ -98,6 +98,18 @@ public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
    * caller can decide reuse-vs-block by unit (a same-named non-{@code pcs} raw material must NOT be
    * depleted 1-per-portion — review W2).
    */
+  /**
+   * An ingredient's outlet, as a scalar.
+   *
+   * <p>A read path must not hydrate the whole {@code @Entity} to reach one column (CLAUDE.md,
+   * Conventions): the stock-history drill-down needs only the outlet id to run its access check,
+   * and loading name, unit, stock, cost, pack size and six audit columns to get it would be the
+   * write path's shape on a report request. Empty when the id is unknown OR belongs to another
+   * tenant — RLS makes those indistinguishable, which is what lets the caller 404 both alike.
+   */
+  @Query(value = "SELECT i.business_id FROM ingredient i WHERE i.id = :id", nativeQuery = true)
+  Optional<UUID> findBusinessIdById(@Param("id") UUID id);
+
   Optional<Ingredient> findFirstByBusinessIdAndNameIgnoreCaseAndActiveTrue(
       UUID businessId, String name);
 }

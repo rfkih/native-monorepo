@@ -7,9 +7,10 @@ import id.co.nativeapp.restaurant.integrity.projection.MissingTrackedItemView;
 import id.co.nativeapp.restaurant.integrity.projection.OperatorActivityView;
 import id.co.nativeapp.restaurant.integrity.projection.OperatorRefundView;
 import id.co.nativeapp.restaurant.integrity.projection.OutsideSessionSalesView;
-import id.co.nativeapp.restaurant.integrity.projection.RecipeConsumerView;
+import id.co.nativeapp.restaurant.integrity.projection.RecipeEdgeView;
 import id.co.nativeapp.restaurant.integrity.projection.RegisterSessionHygieneView;
 import id.co.nativeapp.restaurant.integrity.projection.SoldItemCoverageView;
+import id.co.nativeapp.restaurant.integrity.projection.SoldQuantityView;
 import id.co.nativeapp.restaurant.integrity.projection.UnclosedTradingDayView;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
@@ -111,21 +112,19 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
       @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
 
   /**
-   * Every menu item whose BASE recipe consumes one of {@code ingredientIds}, with the quantity of
-   * that item actually sold in {@code [from, to)}.
+   * Every menu item whose BASE recipe consumes one of {@code ingredientIds}, and how much of that
+   * ingredient one portion takes.
    *
-   * <p>Sold quantity is the union of the two paths a menu item can sell through, which never
-   * overlap: an order-then-checkout writes {@code order_line} rows under a {@code restaurant_order}
-   * carrying the sale, while a bill/tab check writes {@code bill_line} rows stamped with {@code
-   * paid_sale_id}. Counting only one would systematically under-weight whichever way the outlet
-   * actually trades and skew every allocation built on it. Both are joined THROUGH {@code sale} so
-   * the window is the sale's own {@code occurred_at}, the same clock every other figure in this
-   * report uses.
+   * <p>Recipe structure ONLY — the sold quantities that weight the allocation come from {@link
+   * #findSoldQuantities}, fetched once per report. Embedding that aggregate here would re-scan and
+   * re-group every {@code order_line} and {@code bill_line} of the period for each 1000-id chunk
+   * and then discard all but the chunk's items, on top of the identical roll-up {@link
+   * #findSoldItemCoverage} already performs in the same request.
    *
-   * <p>{@code LEFT JOIN} on the sold aggregate: an item with a recipe that sold nothing in the
-   * window still comes back, at {@code sold_qty = 0}, so the caller can see that an ingredient's
-   * only consumers were dormant — which is itself the case where a proportional allocation has
-   * nothing to go on.
+   * <p>Only BASE recipe lines ({@code modifier_option_id IS NULL}) participate. Per-option deltas
+   * are deliberately excluded: they are signed adjustments to a specific order's portion, and
+   * attributing a shortfall through them would require knowing which options were chosen on the
+   * sales that were never recorded — which is precisely what is unknown.
    *
    * <p>Callers must chunk {@code ingredientIds} to ≤ 1000 per call (the {@code IN}-clause
    * convention).
@@ -133,45 +132,58 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
   @Query(
       value =
           """
-          SELECT rl.ingredient_id     AS ingredient_id,
-                 rl.menu_item_id      AS menu_item_id,
-                 m.name               AS name,
-                 m.price_minor        AS unit_price_minor,
-                 m.currency           AS currency,
-                 rl.qty_per_portion   AS qty_per_portion,
-                 COALESCE(sold.qty, 0) AS sold_qty
+          SELECT rl.ingredient_id   AS ingredient_id,
+                 rl.menu_item_id    AS menu_item_id,
+                 m.name             AS name,
+                 m.price_minor      AS unit_price_minor,
+                 m.currency         AS currency,
+                 rl.qty_per_portion AS qty_per_portion
             FROM recipe_line rl
             JOIN menu_item m ON m.id = rl.menu_item_id
-            LEFT JOIN (
-                 SELECT u.menu_item_id AS menu_item_id, SUM(u.qty) AS qty
-                   FROM (
-                        SELECT ol.menu_item_id AS menu_item_id, ol.qty AS qty
-                          FROM order_line ol
-                          JOIN restaurant_order o ON o.id = ol.order_id
-                          JOIN sale s            ON s.id = o.sale_id
-                         WHERE s.business_id = :businessId
-                           AND s.occurred_at >= :from
-                           AND s.occurred_at <  :to
-                        UNION ALL
-                        SELECT bl.menu_item_id AS menu_item_id, bl.qty AS qty
-                          FROM bill_line bl
-                          JOIN sale s ON s.id = bl.paid_sale_id
-                         WHERE s.business_id = :businessId
-                           AND s.occurred_at >= :from
-                           AND s.occurred_at <  :to
-                   ) u
-                  GROUP BY u.menu_item_id
-            ) sold ON sold.menu_item_id = rl.menu_item_id
            WHERE rl.business_id = :businessId
              AND rl.modifier_option_id IS NULL
              AND rl.ingredient_id IN (:ingredientIds)
           """,
       nativeQuery = true)
-  List<RecipeConsumerView> findRecipeConsumers(
-      @Param("businessId") UUID businessId,
-      @Param("ingredientIds") Collection<UUID> ingredientIds,
-      @Param("from") Instant from,
-      @Param("to") Instant to);
+  List<RecipeEdgeView> findRecipeEdges(
+      @Param("businessId") UUID businessId, @Param("ingredientIds") Collection<UUID> ingredientIds);
+
+  /**
+   * Units sold per menu item in {@code [from, to)} — the sales mix every allocation is weighted by.
+   *
+   * <p>The union of the two paths a menu item can sell through, which never overlap: an
+   * order-then-checkout writes {@code order_line} rows under a {@code restaurant_order} carrying
+   * the sale, while a bill/tab check writes {@code bill_line} rows stamped with {@code
+   * paid_sale_id}. Counting only one would systematically under-weight whichever way the outlet
+   * actually trades and skew every allocation built on it. Both are joined THROUGH {@code sale} so
+   * the window is the sale's own {@code occurred_at}, the same clock every other figure in this
+   * report uses.
+   */
+  @Query(
+      value =
+          """
+          SELECT u.menu_item_id AS menu_item_id, SUM(u.qty) AS sold_qty
+            FROM (
+                 SELECT ol.menu_item_id AS menu_item_id, ol.qty AS qty
+                   FROM order_line ol
+                   JOIN restaurant_order o ON o.id = ol.order_id
+                   JOIN sale s            ON s.id = o.sale_id
+                  WHERE s.business_id = :businessId
+                    AND s.occurred_at >= :from
+                    AND s.occurred_at <  :to
+                 UNION ALL
+                 SELECT bl.menu_item_id AS menu_item_id, bl.qty AS qty
+                   FROM bill_line bl
+                   JOIN sale s ON s.id = bl.paid_sale_id
+                  WHERE s.business_id = :businessId
+                    AND s.occurred_at >= :from
+                    AND s.occurred_at <  :to
+            ) u
+           GROUP BY u.menu_item_id
+          """,
+      nativeQuery = true)
+  List<SoldQuantityView> findSoldQuantities(
+      @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
 
   /**
    * The sales rung while no register session was open. A till trading outside a session has a
@@ -255,6 +267,22 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
    * threshold cannot work here: a quiet Tuesday 15:00 and a packed Saturday 19:00 are not
    * comparable, and any single number would either flag the first or miss the second.
    *
+   * <p><strong>The baseline counts the quiet days too.</strong> {@code hourly} only has a row where
+   * a sale happened, so taking the median straight from it would average over the days the outlet
+   * DID sell at that hour and silently discard every day it sold nothing — an outlet that sells at
+   * 21:00 on three Mondays in eight would get a baseline of "about five sales", and the five silent
+   * Mondays would each be reported as a hole. The baseline therefore builds the full (baseline day
+   * x hour) grid and LEFT JOINs the counts, so an hour that saw nothing contributes a genuine zero.
+   * That is what makes {@code minExpected} mean "normally busy" rather than "busy whenever it was
+   * busy at all".
+   *
+   * <p><strong>Only elapsed hours can be judged.</strong> The window's {@code to} is whatever the
+   * caller asked for and is routinely in the FUTURE (the console's default period is the current
+   * month, so {@code to} is month-end). Without the {@code observedTo} bound, every remaining hour
+   * of today — and of every day left in the month — has no rows, satisfies {@code NOT EXISTS}, and
+   * is reported as a dark hour. An hour is eligible only once it has completely passed: an hour
+   * still in progress has not had its chance to record anything.
+   *
    * <p>{@code percentile_disc} (not {@code percentile_cont}) is deliberate: it returns an ACTUAL
    * observed value of the same type as its input, so the median stays an integer count. {@code
    * percentile_cont} interpolates and returns {@code double precision}, dragging a float into a
@@ -275,16 +303,26 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
                 FROM sale s
                WHERE s.business_id = :businessId
                  AND s.occurred_at >= :baselineFrom
-                 AND s.occurred_at <  :to
+                 AND s.occurred_at <  :observedTo
                GROUP BY 1, 2, 3
           ),
-          baseline AS (
-              SELECT h.dow AS dow,
-                     h.hr  AS hr,
-                     percentile_disc(0.5) WITHIN GROUP (ORDER BY h.sale_count) AS median_count
+          baseline_days AS (
+              SELECT DISTINCT h.biz_date AS biz_date, h.dow AS dow
                 FROM hourly h
                WHERE h.biz_date < :windowStart
-               GROUP BY h.dow, h.hr
+          ),
+          hours AS (
+              SELECT generate_series(0, 23) AS hr
+          ),
+          baseline AS (
+              SELECT d.dow AS dow,
+                     x.hr  AS hr,
+                     percentile_disc(0.5) WITHIN GROUP (ORDER BY COALESCE(h.sale_count, 0))
+                                          AS median_count
+                FROM baseline_days d
+                CROSS JOIN hours x
+                LEFT JOIN hourly h ON h.biz_date = d.biz_date AND h.hr = x.hr
+               GROUP BY d.dow, x.hr
           ),
           traded_days AS (
               SELECT DISTINCT h.biz_date AS biz_date, h.dow AS dow
@@ -297,6 +335,8 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
             FROM traded_days t
             JOIN baseline b ON b.dow = t.dow
            WHERE b.median_count >= :minExpected
+             AND (t.biz_date + make_interval(hours => b.hr + 1))
+                   AT TIME ZONE 'Asia/Jakarta' <= :observedTo
              AND NOT EXISTS (
                    SELECT 1
                      FROM hourly h
@@ -309,7 +349,7 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
       @Param("businessId") UUID businessId,
       @Param("baselineFrom") Instant baselineFrom,
       @Param("windowStart") LocalDate windowStart,
-      @Param("to") Instant to,
+      @Param("observedTo") Instant observedTo,
       @Param("minExpected") long minExpected);
 
   /**
@@ -399,14 +439,14 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
           SELECT COALESCE(SUM(d.adjustment_count), 0)
             FROM ingredient_stock_day d
            WHERE d.business_id = :businessId
-             AND d.stock_date >= :from
-             AND d.stock_date <= :to
+             AND d.stock_date >= :fromDate
+             AND d.stock_date <  :toDateExclusive
           """,
       nativeQuery = true)
   long countManualStockCorrections(
       @Param("businessId") UUID businessId,
-      @Param("from") LocalDate from,
-      @Param("to") LocalDate to);
+      @Param("fromDate") LocalDate fromDate,
+      @Param("toDateExclusive") LocalDate toDateExclusive);
 
   /**
    * When this outlet last counted its ingredients, across all time — not just the reported window.
@@ -450,6 +490,13 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
    * there is no operator session and {@code created_by} IS the person. Neither column alone is the
    * answer, which is why this is a fallback rather than a choice.
    *
+   * <p><strong>Only revenue-bearing payments count.</strong> {@code ck_payment_status} also allows
+   * PENDING, ABANDONED and FAILED — tenders where no money ever moved. They belong in no rate on
+   * either side of the fraction: counting them inflates the denominator of an operator who
+   * generates many abandoned QRIS attempts (diluting a genuine void rate below the bar) while
+   * leaving a cash-only till's denominator small (making ordinary behaviour look like an outlier),
+   * and they add money to {@code gross_minor} that was never taken.
+   *
    * <p>Returns COUNTS, never rates. Every rate is derived in the service against the rest of the
    * outlet, which the SQL cannot express per-row without recomputing the whole aggregate for each
    * actor.
@@ -463,6 +510,7 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
                  COALESCE(SUM(p.amount_minor) FILTER (WHERE p.status = 'VOIDED'), 0)
                                                                                   AS void_minor,
                  COALESCE(SUM(p.discount_minor), 0)                               AS discount_minor,
+                 COUNT(*) FILTER (WHERE COALESCE(p.discount_minor, 0) > 0)        AS discount_count,
                  COALESCE(SUM(p.amount_minor), 0)                                 AS gross_minor,
                  COUNT(*) FILTER (WHERE p.tender_type = 'CASH')                   AS cash_count,
                  MAX(p.currency)                                                  AS currency
@@ -470,6 +518,7 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
            WHERE p.business_id = :businessId
              AND p.occurred_at >= :from
              AND p.occurred_at <  :to
+             AND p.status IN ('CAPTURED', 'VOIDED', 'REFUNDED', 'PARTIALLY_REFUNDED')
            GROUP BY COALESCE(p.sold_by_user_id, p.created_by)
            ORDER BY COALESCE(p.sold_by_user_id, p.created_by)
           """,

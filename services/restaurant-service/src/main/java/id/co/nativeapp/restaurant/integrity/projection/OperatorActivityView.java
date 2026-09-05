@@ -32,6 +32,13 @@ public interface OperatorActivityView {
   /** Σ order-level discount they applied, in minor units. */
   long getDiscountMinor();
 
+  /**
+   * How many payments they discounted AT ALL — the event count the discount check's minimum is
+   * measured in. {@link #getDiscountMinor()} is money, and a floor expressed in minor units is no
+   * floor at all: one rupiah would clear it.
+   */
+  long getDiscountCount();
+
   /** Σ payment amount they took, the denominator the discount rate is measured against. */
   long getGrossMinor();
 

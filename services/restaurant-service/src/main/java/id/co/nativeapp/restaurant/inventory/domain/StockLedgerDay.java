@@ -1,7 +1,7 @@
 package id.co.nativeapp.restaurant.inventory.domain;
 
+import id.co.nativeapp.restaurant.config.OutletZone;
 import java.time.LocalDate;
-import java.time.ZoneId;
 
 /**
  * The calendar-day attribution for the per-day ingredient stock ledger ({@link IngredientStockDay},
@@ -22,15 +22,12 @@ import java.time.ZoneId;
  */
 public final class StockLedgerDay {
 
-  /** The v1 zone every ledger row is bucketed by. */
-  public static final ZoneId ZONE = ZoneId.of("Asia/Jakarta");
-
   private StockLedgerDay() {
     // constants holder
   }
 
   /** The ledger day a movement happening right now belongs to. */
   public static LocalDate today() {
-    return LocalDate.now(ZONE);
+    return OutletZone.today();
   }
 }

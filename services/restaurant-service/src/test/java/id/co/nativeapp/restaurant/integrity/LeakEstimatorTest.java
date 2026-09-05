@@ -4,10 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.restaurant.integrity.domain.MixedCurrencyLeakReportException;
-import id.co.nativeapp.restaurant.integrity.projection.RecipeConsumerView;
 import id.co.nativeapp.restaurant.integrity.service.LeakEstimator;
+import id.co.nativeapp.restaurant.integrity.service.LeakEstimator.ConsumerEdge;
 import java.util.List;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -21,12 +20,10 @@ import org.junit.jupiter.api.Test;
  */
 class LeakEstimatorTest {
 
-  private static final UUID INGREDIENT = UUID.fromString("11111111-0000-0000-0000-000000000001");
-
   @Test
   void aSingleConsumerConvertsTheWholeShortfallAtItsOwnRecipeRate() {
     // 600 g of rice missing; one dish uses 200 g per portion and sells for 25k.
-    List<RecipeConsumerView> consumers = List.of(consumer("Nasi Goreng", 25_000L, 200, 40));
+    List<ConsumerEdge> consumers = List.of(consumer("Nasi Goreng", 25_000L, 200, 40));
 
     LeakEstimator.ShortfallEstimate estimate =
         LeakEstimator.estimateShortfallRevenue(600, consumers, "IDR");
@@ -41,7 +38,7 @@ class LeakEstimatorTest {
     // Both dishes sold 10 units, but the second uses four times as much of the ingredient, so it
     // absorbs four times as much of the shortfall — and converts its share back into portions at
     // its own heavier rate, which is the half a sales-only weighting would get wrong.
-    List<RecipeConsumerView> consumers =
+    List<ConsumerEdge> consumers =
         List.of(
             consumer("Ayam Kecil", 20_000L, 100, 10), // 10 x 100 = 1000
             consumer("Ayam Besar", 50_000L, 400, 10)); // 10 x 400 = 4000, denominator 5000
@@ -59,7 +56,7 @@ class LeakEstimatorTest {
   @Test
   void aDormantConsumerContributesNothingButStillAnchorsTheDenominator() {
     // One dish sold, one did not. All of the shortfall lands on the one that actually sold.
-    List<RecipeConsumerView> consumers =
+    List<ConsumerEdge> consumers =
         List.of(
             consumer("Terjual", 30_000L, 150, 20), //
             consumer("Tidak terjual", 90_000L, 150, 0));
@@ -74,7 +71,7 @@ class LeakEstimatorTest {
 
   @Test
   void whenNothingSoldASingleConsumerStillGivesAnUnambiguousAnswer() {
-    List<RecipeConsumerView> consumers = List.of(consumer("Soto", 18_000L, 250, 0));
+    List<ConsumerEdge> consumers = List.of(consumer("Soto", 18_000L, 250, 0));
 
     LeakEstimator.ShortfallEstimate estimate =
         LeakEstimator.estimateShortfallRevenue(1_000, consumers, "IDR");
@@ -86,7 +83,7 @@ class LeakEstimatorTest {
 
   @Test
   void whenNothingSoldSeveralConsumersSplitTheQuantityEvenly() {
-    List<RecipeConsumerView> consumers =
+    List<ConsumerEdge> consumers =
         List.of(consumer("A", 10_000L, 100, 0), consumer("B", 40_000L, 200, 0));
 
     LeakEstimator.ShortfallEstimate estimate =
@@ -109,7 +106,7 @@ class LeakEstimatorTest {
 
   @Test
   void aNonPositiveShortfallEstimatesNothing() {
-    List<RecipeConsumerView> consumers = List.of(consumer("Apa saja", 10_000L, 100, 10));
+    List<ConsumerEdge> consumers = List.of(consumer("Apa saja", 10_000L, 100, 10));
 
     assertThat(LeakEstimator.estimateShortfallRevenue(0, consumers, "IDR").estimatedRevenueMinor())
         .isZero();
@@ -120,7 +117,7 @@ class LeakEstimatorTest {
   @Test
   void theResultRoundsOnceAtTheEndRatherThanCompoundingPerStep() {
     // denominator = 10 * 30 = 300; 100 * 10 * 9_999 / 300 = 9_999_000 / 300 = 33_330 exactly.
-    List<RecipeConsumerView> consumers = List.of(consumer("Pecahan", 9_999L, 30, 10));
+    List<ConsumerEdge> consumers = List.of(consumer("Pecahan", 9_999L, 30, 10));
 
     LeakEstimator.ShortfallEstimate estimate =
         LeakEstimator.estimateShortfallRevenue(100, consumers, "IDR");
@@ -132,10 +129,25 @@ class LeakEstimatorTest {
 
   @Test
   void aConsumerPricedInAnotherCurrencyFailsClosedRatherThanBeingSummed() {
-    List<RecipeConsumerView> consumers =
+    List<ConsumerEdge> consumers =
         List.of(consumer("Rupiah", 10_000L, 100, 5), consumerIn("Dolar", 10_000L, 100, 5, "USD"));
 
     assertThatThrownBy(() -> LeakEstimator.estimateShortfallRevenue(500, consumers, "IDR"))
+        .isInstanceOf(MixedCurrencyLeakReportException.class)
+        .hasMessageContaining("IDR")
+        .hasMessageContaining("USD");
+  }
+
+  @Test
+  void consumersAreReconciledAgainstEachOtherEvenWhenNoCurrencyIsEstablishedYet() {
+    // The dangerous path: an UNCOSTED ingredient's stocktake carries no currency, and if no earlier
+    // signal fired there is nothing established either — so the expected currency is null. Checking
+    // each consumer only against that null would wave both through and sum 50000 IDR and 5 USD into
+    // one meaningless number, presented to the owner as money lost.
+    List<ConsumerEdge> consumers =
+        List.of(consumer("Rupiah", 50_000L, 100, 5), consumerIn("Dolar", 500L, 100, 5, "USD"));
+
+    assertThatThrownBy(() -> LeakEstimator.estimateShortfallRevenue(500, consumers, null))
         .isInstanceOf(MixedCurrencyLeakReportException.class)
         .hasMessageContaining("IDR")
         .hasMessageContaining("USD");
@@ -161,73 +173,13 @@ class LeakEstimatorTest {
         .isInstanceOf(MixedCurrencyLeakReportException.class);
   }
 
-  @Test
-  void groupingKeepsEveryEdgeUnderItsOwnIngredient() {
-    UUID other = UUID.fromString("11111111-0000-0000-0000-000000000002");
-    RecipeConsumerView a = consumer("A", 1_000L, 10, 1);
-    RecipeConsumerView b = consumer("B", 2_000L, 20, 2);
-    RecipeConsumerView c = consumerOf(other, "C", 3_000L, 30, 3, "IDR");
-
-    var grouped = LeakEstimator.groupByIngredient(List.of(a, b, c));
-
-    assertThat(grouped).hasSize(2);
-    assertThat(grouped.get(INGREDIENT)).containsExactly(a, b);
-    assertThat(grouped.get(other)).containsExactly(c);
-  }
-
-  private static RecipeConsumerView consumer(
+  private static ConsumerEdge consumer(
       String name, long priceMinor, long qtyPerPortion, long soldQty) {
-    return consumerOf(INGREDIENT, name, priceMinor, qtyPerPortion, soldQty, "IDR");
+    return new ConsumerEdge(name, priceMinor, "IDR", qtyPerPortion, soldQty);
   }
 
-  private static RecipeConsumerView consumerIn(
+  private static ConsumerEdge consumerIn(
       String name, long priceMinor, long qtyPerPortion, long soldQty, String currency) {
-    return consumerOf(INGREDIENT, name, priceMinor, qtyPerPortion, soldQty, currency);
-  }
-
-  /** A hand-rolled projection stub — the interface has eight accessors and no behaviour to mock. */
-  private static RecipeConsumerView consumerOf(
-      UUID ingredientId,
-      String name,
-      long priceMinor,
-      long qtyPerPortion,
-      long soldQty,
-      String currency) {
-    return new RecipeConsumerView() {
-      @Override
-      public UUID getIngredientId() {
-        return ingredientId;
-      }
-
-      @Override
-      public UUID getMenuItemId() {
-        return UUID.nameUUIDFromBytes(name.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-      }
-
-      @Override
-      public String getName() {
-        return name;
-      }
-
-      @Override
-      public long getUnitPriceMinor() {
-        return priceMinor;
-      }
-
-      @Override
-      public String getCurrency() {
-        return currency;
-      }
-
-      @Override
-      public long getQtyPerPortion() {
-        return qtyPerPortion;
-      }
-
-      @Override
-      public long getSoldQty() {
-        return soldQty;
-      }
-    };
+    return new ConsumerEdge(name, priceMinor, currency, qtyPerPortion, soldQty);
   }
 }

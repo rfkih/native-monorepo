@@ -1,13 +1,9 @@
 package id.co.nativeapp.restaurant.integrity.service;
 
 import id.co.nativeapp.restaurant.integrity.domain.MixedCurrencyLeakReportException;
-import id.co.nativeapp.restaurant.integrity.projection.RecipeConsumerView;
 import jakarta.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * The money arithmetic behind the sales-leak estimate — pure, static, dependency-free, and
@@ -24,6 +20,18 @@ public final class LeakEstimator {
   private LeakEstimator() {
     // pure functions
   }
+
+  /**
+   * One menu item that consumes the ingredient: what a portion takes, what it sells for, and how
+   * much of it actually sold in the window.
+   *
+   * <p>A plain record rather than the repository projection, because the sales mix now arrives from
+   * a separate, once-per-report query and is joined onto the recipe edges in the service — so there
+   * is no single row for a projection to describe, and a record keeps this arithmetic testable
+   * without hand-rolling an eight-accessor stub.
+   */
+  public record ConsumerEdge(
+      String name, long unitPriceMinor, String currency, long qtyPerPortion, long soldQty) {}
 
   /**
    * One ingredient's shortfall turned into estimated lost revenue.
@@ -73,44 +81,49 @@ public final class LeakEstimator {
    * @param expectedCurrency the currency every figure in this report must share, or {@code null} to
    *     adopt the first one seen
    * @return the estimate, never {@code null}
-   * @throws MixedCurrencyLeakReportException if a consumer prices in a different currency
+   * @throws MixedCurrencyLeakReportException if the consumers disagree on currency, with each other
+   *     or with {@code expectedCurrency}
    */
   public static ShortfallEstimate estimateShortfallRevenue(
-      long missingQty, List<RecipeConsumerView> consumers, @Nullable String expectedCurrency) {
+      long missingQty, List<ConsumerEdge> consumers, @Nullable String expectedCurrency) {
 
     if (missingQty <= 0 || consumers.isEmpty()) {
       return new ShortfallEstimate(0L, !consumers.isEmpty());
     }
 
+    // Reconcile the consumers against the report's currency AND against each other. Threading the
+    // result through matters: when no earlier signal established a currency the expected value is
+    // null, and checking each consumer only against that null would let two dishes priced in
+    // different currencies be summed into one meaningless total.
+    String currency = expectedCurrency;
     long denominator = 0L;
-    for (RecipeConsumerView c : consumers) {
-      requireSameCurrency(expectedCurrency, c.getCurrency());
-      if (c.getQtyPerPortion() > 0) {
+    for (ConsumerEdge c : consumers) {
+      currency = reconcileCurrency(currency, c.currency());
+      if (c.qtyPerPortion() > 0) {
         denominator =
-            Math.addExact(denominator, Math.multiplyExact(c.getSoldQty(), c.getQtyPerPortion()));
+            Math.addExact(denominator, Math.multiplyExact(c.soldQty(), c.qtyPerPortion()));
       }
     }
 
     long revenue = 0L;
     if (denominator > 0) {
-      for (RecipeConsumerView c : consumers) {
-        if (c.getSoldQty() <= 0 || c.getQtyPerPortion() <= 0) {
+      for (ConsumerEdge c : consumers) {
+        if (c.soldQty() <= 0 || c.qtyPerPortion() <= 0) {
           continue;
         }
         // missing * sold_i * price_i / denominator — multiplied first, divided once, so the
         // rounding happens exactly once instead of compounding across three steps.
         long numerator =
-            Math.multiplyExact(
-                Math.multiplyExact(missingQty, c.getSoldQty()), c.getUnitPriceMinor());
+            Math.multiplyExact(Math.multiplyExact(missingQty, c.soldQty()), c.unitPriceMinor());
         revenue = Math.addExact(revenue, numerator / denominator);
       }
       return new ShortfallEstimate(revenue, true);
     }
 
     // Nothing sold in the window: fall back on structure.
-    List<RecipeConsumerView> usable = new ArrayList<>();
-    for (RecipeConsumerView c : consumers) {
-      if (c.getQtyPerPortion() > 0) {
+    List<ConsumerEdge> usable = new ArrayList<>();
+    for (ConsumerEdge c : consumers) {
+      if (c.qtyPerPortion() > 0) {
         usable.add(c);
       }
     }
@@ -118,9 +131,9 @@ public final class LeakEstimator {
       return new ShortfallEstimate(0L, false);
     }
     long qtyEach = missingQty / usable.size();
-    for (RecipeConsumerView c : usable) {
-      long portions = qtyEach / c.getQtyPerPortion();
-      revenue = Math.addExact(revenue, Math.multiplyExact(portions, c.getUnitPriceMinor()));
+    for (ConsumerEdge c : usable) {
+      long portions = qtyEach / c.qtyPerPortion();
+      revenue = Math.addExact(revenue, Math.multiplyExact(portions, c.unitPriceMinor()));
     }
     return new ShortfallEstimate(revenue, true);
   }
@@ -135,19 +148,6 @@ public final class LeakEstimator {
       return 0L;
     }
     return Math.multiplyExact(missingQty, unitPriceMinor);
-  }
-
-  /**
-   * Groups recipe-consumer rows by the ingredient they consume, preserving query order within each
-   * group so an estimate is reproducible run to run.
-   */
-  public static Map<UUID, List<RecipeConsumerView>> groupByIngredient(
-      List<RecipeConsumerView> rows) {
-    Map<UUID, List<RecipeConsumerView>> byIngredient = new LinkedHashMap<>();
-    for (RecipeConsumerView row : rows) {
-      byIngredient.computeIfAbsent(row.getIngredientId(), id -> new ArrayList<>()).add(row);
-    }
-    return byIngredient;
   }
 
   /**
@@ -169,11 +169,5 @@ public final class LeakEstimator {
       throw new MixedCurrencyLeakReportException(established, trimmed);
     }
     return established;
-  }
-
-  private static void requireSameCurrency(@Nullable String expected, @Nullable String actual) {
-    if (expected != null && actual != null && !expected.equals(actual.strip())) {
-      throw new MixedCurrencyLeakReportException(expected, actual.strip());
-    }
   }
 }

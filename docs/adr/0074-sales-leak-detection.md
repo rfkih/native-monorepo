@@ -70,14 +70,35 @@ signals (void, refund, discount and cash-tender rates; bills cancelled with item
 Attribution is `COALESCE(sold_by_user_id, created_by)` — the verified operator on an outlet-terminal
 device, else the logged-in user.
 
-A per-person rate is compared against **the rest of the outlet, never an average that includes the
-person being judged**: at three cashiers, the one voiding a third of their sales lifts the outlet
+A per-person rate is measured over revenue-bearing payments only (PENDING / ABANDONED / FAILED
+tenders moved no money and belong in neither side of a fraction), and is compared against **the rest
+of the outlet, never an average that includes the person being judged**: at three cashiers, the one voiding a third of their sales lifts the outlet
 average enough to look ordinary, so self-inclusion is precisely how a real pattern hides itself where
 this feature is used. The comparison is cross-multiplied (`a*d >= factor*c*b`), so no rate is ever
 materialised as a fraction and the verdict cannot turn on a rounding step. Three guards keep it from
-naming people it should not: a minimum event count (a 100% rate over three sales is evidence of
-nothing), somebody to compare against (a lone operator is the entire baseline, not an outlier), and a
-real denominator.
+naming people it should not: a minimum EVENT count — counted in times-it-happened, never in the
+numerator, because a money-valued measure like discounting would otherwise have a one-rupiah floor —
+somebody to compare against (a lone operator is the entire baseline, not an outlier), and a real
+denominator. Operators who did none of the thing being measured stay in the baseline: dropping them
+would compare two refunders against each other instead of against the whole roster.
+
+### 2b. Absence is only evidence once the time has passed
+
+Every detector here reasons about something NOT happening — no sale in that hour, no Z-report that
+day, no close on that session. The console's default period is the current month, so the requested
+window routinely ends in the FUTURE, and a naive reading turns the unelapsed remainder of the month
+into findings: tonight's dinner service as a dark hour, today as a day that never closed, a session
+opened this morning as abandoned, and this morning's stock count as three weeks old.
+
+So the report carries two upper bounds. The requested `to` bounds every QUERY, so nothing outside
+the asked-for period is ever included. A derived `observedTo = min(to, now)` bounds every CONCLUSION
+about absence, and the "day that never closed" check is capped tighter still, at the last COMPLETE
+outlet-local day — a day in progress has not failed to close, it has not finished. A dark hour must
+have fully elapsed before its silence counts.
+
+The same rule governs the baseline: an hour's median is taken over every baseline day including the
+ones that sold nothing at that hour. Taking it only over days that did sell turns "busy whenever it
+was busy at all" into "normally busy" and manufactures holes out of ordinary quiet.
 
 ### 3. Three constraints on what this feature is allowed to be
 

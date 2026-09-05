@@ -99,6 +99,23 @@ describe('signal copy parity', () => {
     expect(Object.keys(block.severity).sort()).toEqual(['HIGH', 'LOW', 'MEDIUM'])
   })
 
+  it.each([
+    ['en', en.salesIntegrity],
+    ['id', id.salesIntegrity],
+  ])('%s never interpolates the reserved i18next plural key', (_lang, block) => {
+    // Passing {{count}} makes i18next resolve a plural form, and with no _one/_other variants
+    // English silently renders "1 bills were cancelled". The copy is worded count-last and
+    // interpolates {{n}} instead, so no plural machinery is involved at any number.
+    const strings = [
+      block.coverage.manualCorrections,
+      ...Object.values(block.signal as Record<string, { body: string }>).map((c) => c.body),
+    ]
+    for (const text of strings) {
+      expect(text, text).not.toContain('{{count}}')
+      expect(text, text).toContain('{{n}}')
+    }
+  })
+
   it('leads with the "signal, not proof" disclaimer in both locales', () => {
     // The page can end with somebody being accused of theft. A locale that lost this string would
     // present an estimate as a finding, which is the one failure mode this feature must not have.

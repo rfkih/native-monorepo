@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant.integrity.service;
 
+import id.co.nativeapp.restaurant.config.OutletZone;
 import id.co.nativeapp.restaurant.integrity.domain.LeakSignalType;
 import id.co.nativeapp.restaurant.integrity.dto.LeakCoverageResponse;
 import id.co.nativeapp.restaurant.integrity.dto.LeakDetailResponse;
@@ -12,12 +13,12 @@ import id.co.nativeapp.restaurant.integrity.projection.MissingTrackedItemView;
 import id.co.nativeapp.restaurant.integrity.projection.OperatorActivityView;
 import id.co.nativeapp.restaurant.integrity.projection.OperatorRefundView;
 import id.co.nativeapp.restaurant.integrity.projection.OutsideSessionSalesView;
-import id.co.nativeapp.restaurant.integrity.projection.RecipeConsumerView;
+import id.co.nativeapp.restaurant.integrity.projection.RecipeEdgeView;
 import id.co.nativeapp.restaurant.integrity.projection.RegisterSessionHygieneView;
 import id.co.nativeapp.restaurant.integrity.projection.SoldItemCoverageView;
+import id.co.nativeapp.restaurant.integrity.projection.SoldQuantityView;
 import id.co.nativeapp.restaurant.integrity.projection.UnclosedTradingDayView;
 import id.co.nativeapp.restaurant.integrity.repository.SalesIntegrityRepository;
-import id.co.nativeapp.restaurant.inventory.domain.StockLedgerDay;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import jakarta.annotation.Nullable;
 import java.time.Duration;
@@ -26,6 +27,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -97,6 +99,14 @@ public class SalesIntegrityReader {
    */
   private static final long TENDER_SKEW_MIN_COUNT = 20L;
 
+  /**
+   * The floor for the discount check, counted in DISCOUNTS GIVEN rather than in money. The
+   * numerator there is an amount, so a minimum expressed in minor units would be no minimum at all
+   * — a single one-rupiah discount at an outlet where nobody else discounted would clear it and put
+   * a name in front of the owner.
+   */
+  private static final long DISCOUNT_MIN_COUNT = 5L;
+
   /** Evidence rows returned per signal. The full population is aggregated; the list is a sample. */
   private static final int MAX_DETAILS_PER_SIGNAL = 20;
 
@@ -119,6 +129,23 @@ public class SalesIntegrityReader {
   @Transactional(readOnly = true)
   public SalesIntegrityReportResponse report(UUID businessId, Instant from, Instant to) {
     outletAccessGuard.enforce(businessId);
+
+    // The caller's `to` is routinely in the FUTURE: the console's default period is the current
+    // month, so it asks for the whole month while only part of it has happened. Every detector that
+    // reasons about ABSENCE — a session not closed, a day not reconciled, an hour with no sales,
+    // how long since a stock count — has to be measured against what has actually elapsed, or it
+    // reports the future as evidence: tonight's dinner service as a dark hour, today as a day that
+    // never closed, and this morning's stock count as weeks old. `to` still bounds every query, so
+    // nothing outside the requested period is ever included; `observedTo` only stops a detector
+    // from concluding something about time that has not passed.
+    Instant now = Instant.now();
+    Instant observedTo = to.isBefore(now) ? to : now;
+    // A day can only be judged for "never closed" once it is over. The day in progress has not
+    // failed to produce a Z-report — it has not finished yet.
+    Instant lastCompleteDayEnd =
+        earlier(
+            to,
+            LocalDate.ofInstant(now, OutletZone.ZONE).atStartOfDay(OutletZone.ZONE).toInstant());
 
     List<LeakSignalResponse> signals = new ArrayList<>();
     String currency = null;
@@ -164,13 +191,13 @@ public class SalesIntegrityReader {
         currency = LeakEstimator.reconcileCurrency(currency, shortfall.getCurrency());
         confirmedCost = Math.addExact(confirmedCost, Math.max(0L, shortfall.getMissingCostMinor()));
       }
-      Map<UUID, List<RecipeConsumerView>> consumers =
-          LeakEstimator.groupByIngredient(loadRecipeConsumers(businessId, shortfalls, from, to));
+      Map<UUID, List<LeakEstimator.ConsumerEdge>> consumers =
+          loadConsumerEdges(businessId, shortfalls, from, to);
 
       long total = 0L;
       List<LeakDetailResponse> details = new ArrayList<>();
       for (IngredientShortfallView shortfall : shortfalls) {
-        List<RecipeConsumerView> forIngredient =
+        List<LeakEstimator.ConsumerEdge> forIngredient =
             consumers.getOrDefault(shortfall.getIngredientId(), List.of());
         LeakEstimator.ShortfallEstimate estimate =
             LeakEstimator.estimateShortfallRevenue(
@@ -203,8 +230,8 @@ public class SalesIntegrityReader {
         repository.findDarkHours(
             businessId,
             from.minus(Duration.ofDays(7L * BASELINE_WEEKS)),
-            LocalDate.ofInstant(from, StockLedgerDay.ZONE),
-            to,
+            LocalDate.ofInstant(from, OutletZone.ZONE),
+            observedTo,
             DARK_HOUR_MIN_EXPECTED);
     if (!darkHours.isEmpty()) {
       List<LeakDetailResponse> details = new ArrayList<>();
@@ -249,7 +276,7 @@ public class SalesIntegrityReader {
 
     // --- Trading days that never closed ---------------------------------------------------------
     List<UnclosedTradingDayView> unclosed =
-        repository.findTradingDaysWithoutClose(businessId, from, to);
+        repository.findTradingDaysWithoutClose(businessId, from, lastCompleteDayEnd);
     if (!unclosed.isEmpty()) {
       long total = 0L;
       List<LeakDetailResponse> details = new ArrayList<>();
@@ -279,7 +306,7 @@ public class SalesIntegrityReader {
     // --- Register-close hygiene -----------------------------------------------------------------
     List<RegisterSessionHygieneView> sessions =
         repository.findSessionsInWindow(businessId, from, to);
-    currency = addSessionSignals(sessions, to, currency, signals);
+    currency = addSessionSignals(sessions, observedTo, currency, signals);
 
     // --- Per-operator patterns ------------------------------------------------------------------
     currency = addOperatorSignals(businessId, from, to, currency, signals);
@@ -298,7 +325,7 @@ public class SalesIntegrityReader {
               new LeakDetailResponse(
                   bill.getBillId(),
                   bill.getActor(),
-                  LocalDate.ofInstant(bill.getCancelledAt(), StockLedgerDay.ZONE),
+                  LocalDate.ofInstant(bill.getCancelledAt(), OutletZone.ZONE),
                   null,
                   bill.getLineCount(),
                   bill.getTotalMinor(),
@@ -325,7 +352,7 @@ public class SalesIntegrityReader {
         Math.addExact(tightRevenue, looseRevenue),
         confirmedCost,
         List.copyOf(signals),
-        buildCoverage(businessId, from, to));
+        buildCoverage(businessId, from, to, observedTo));
   }
 
   /**
@@ -359,13 +386,19 @@ public class SalesIntegrityReader {
       currency = LeakEstimator.reconcileCurrency(currency, row.getCurrency());
       paymentsByActor.put(row.getActor(), row.getPaymentCount());
       voidRates.add(
-          new OperatorOutliers.OperatorRate(
+          OperatorOutliers.OperatorRate.counting(
               row.getActor(), row.getVoidCount(), row.getPaymentCount(), row.getVoidMinor()));
+      // The discount rate's numerator is MONEY, so its floor has to be counted in discounts given —
+      // hence the explicit event count rather than the `counting` shorthand.
       discountRates.add(
           new OperatorOutliers.OperatorRate(
-              row.getActor(), row.getDiscountMinor(), row.getGrossMinor(), row.getDiscountMinor()));
+              row.getActor(),
+              row.getDiscountMinor(),
+              row.getGrossMinor(),
+              row.getDiscountMinor(),
+              row.getDiscountCount()));
       cashRates.add(
-          new OperatorOutliers.OperatorRate(
+          OperatorOutliers.OperatorRate.counting(
               row.getActor(), row.getCashCount(), row.getPaymentCount(), 0L));
     }
 
@@ -376,13 +409,9 @@ public class SalesIntegrityReader {
         true,
         signals);
 
-    // The discount check counts MONEY, not incidents, so its minimum is expressed in the same
-    // units: a minor-unit floor would be currency-dependent and meaningless, while requiring a
-    // count would compare a sum against an event threshold. It uses the same relative test and
-    // simply has no count floor -- the gross-rung denominator already suppresses tiny operators.
     addOutlierSignal(
         LeakSignalType.HIGH_DISCOUNT_RATE,
-        OperatorOutliers.outliers(discountRates, OUTLIER_FACTOR, 1L),
+        OperatorOutliers.outliers(discountRates, OUTLIER_FACTOR, DISCOUNT_MIN_COUNT),
         currency,
         true,
         signals);
@@ -393,16 +422,29 @@ public class SalesIntegrityReader {
 
     List<OperatorRefundView> refunds = repository.findOperatorRefunds(businessId, from, to);
     if (!refunds.isEmpty()) {
-      List<OperatorOutliers.OperatorRate> refundRates = new ArrayList<>();
+      Map<String, OperatorRefundView> refundByActor = new HashMap<>();
       for (OperatorRefundView row : refunds) {
         currency = LeakEstimator.reconcileCurrency(currency, row.getCurrency());
-        // Denominator is the operator's payment count from the SAME window; an operator who
-        // refunded here but took no payments (a refund of an older sale) has no rate to speak of
-        // and is skipped rather than divided by zero.
-        long payments = paymentsByActor.getOrDefault(row.getActor(), 0L);
+        refundByActor.put(row.getActor(), row);
+      }
+      // Built from EVERY operator, not only the ones who refunded. The refund query returns rows
+      // only where a refund happened, and feeding just those into the outlier test would silently
+      // drop every clean operator out of the rest-of-outlet baseline — comparing two refunders
+      // against each other instead of against the whole roster, and inflating both their rates.
+      // An operator who refunded nothing is not absent from the question; they are the answer to
+      // it.
+      List<OperatorOutliers.OperatorRate> refundRates = new ArrayList<>();
+      for (Map.Entry<String, Long> operator : paymentsByActor.entrySet()) {
+        OperatorRefundView row = refundByActor.get(operator.getKey());
         refundRates.add(
-            new OperatorOutliers.OperatorRate(
-                row.getActor(), row.getRefundCount(), payments, row.getRefundMinor()));
+            OperatorOutliers.OperatorRate.counting(
+                operator.getKey(),
+                row == null ? 0L : row.getRefundCount(),
+                // Denominator is the operator's payment count from the SAME window; an operator who
+                // refunded here but took no payments (a refund of an older sale) has no rate to
+                // speak of and is skipped by the guard rather than divided by zero.
+                operator.getValue(),
+                row == null ? 0L : row.getRefundMinor()));
       }
       addOutlierSignal(
           LeakSignalType.HIGH_REFUND_RATE,
@@ -459,7 +501,7 @@ public class SalesIntegrityReader {
    */
   private @Nullable String addSessionSignals(
       List<RegisterSessionHygieneView> sessions,
-      Instant to,
+      Instant observedTo,
       @Nullable String currency,
       List<LeakSignalResponse> signals) {
 
@@ -475,9 +517,11 @@ public class SalesIntegrityReader {
 
     for (RegisterSessionHygieneView session : sessions) {
       if (!"CLOSED".equals(session.getStatus())) {
-        // Measured against the window's end, not "now": a report on last month must judge that
-        // month's sessions by what was true then, and re-running it later must not keep aging them.
-        if (session.getOpenedAt().plus(SESSION_STALE_AFTER).isBefore(to)) {
+        // Measured against whichever came first, the window's end or now. A report on a PAST
+        // month must judge that month's sessions by what was true then and not keep aging them on
+        // every re-run; a report on the CURRENT month must not call a session opened this morning
+        // abandoned merely because the requested window runs to month-end.
+        if (session.getOpenedAt().plus(SESSION_STALE_AFTER).isBefore(observedTo)) {
           stale.add(
               new LeakDetailResponse(
                   session.getSessionId(),
@@ -496,7 +540,16 @@ public class SalesIntegrityReader {
       }
 
       currency = LeakEstimator.reconcileCurrency(currency, session.getCurrency());
-      long variance = session.getOverShortMinor() == null ? 0L : session.getOverShortMinor();
+      Long variance = session.getOverShortMinor();
+      if (variance == null) {
+        // A close with no recorded variance is not a close that came out to zero — it is a drawer
+        // that was never compared, the same reasoning applied to an OPEN session above. (V21's
+        // ck_crs_closed_shape makes this unreachable for a CLOSED row; treating null as zero would
+        // still be the wrong default if that ever changed, and costs nothing to get right.)
+        exactRun = 0;
+        runStartedOn = null;
+        continue;
+      }
 
       if (variance == 0L) {
         if (exactRun == 0) {
@@ -574,34 +627,62 @@ public class SalesIntegrityReader {
   }
 
   /**
-   * Loads the recipe edges for every short ingredient, chunking the {@code IN} clause to the
-   * fleet-wide 1000-element convention.
+   * Builds each short ingredient's consumer edges, weighted by what actually sold.
+   *
+   * <p>The sales mix is fetched ONCE and joined in memory. Embedding it in the edge query would
+   * re-scan and re-group every order and bill line of the period for each 1000-id chunk and then
+   * discard all but that chunk's items — the same roll-up, recomputed per chunk, on top of the one
+   * the coverage figure already performs in this request.
+   *
+   * <p>The {@code IN} clause is chunked to the fleet-wide 1000-element convention.
    */
-  private List<RecipeConsumerView> loadRecipeConsumers(
+  private Map<UUID, List<LeakEstimator.ConsumerEdge>> loadConsumerEdges(
       UUID businessId, List<IngredientShortfallView> shortfalls, Instant from, Instant to) {
-    List<UUID> ids = shortfalls.stream().map(IngredientShortfallView::getIngredientId).toList();
-    List<RecipeConsumerView> rows = new ArrayList<>();
-    for (int i = 0; i < ids.size(); i += 1000) {
-      rows.addAll(
-          repository.findRecipeConsumers(
-              businessId, ids.subList(i, Math.min(i + 1000, ids.size())), from, to));
+
+    Map<UUID, Long> soldByItem = new HashMap<>();
+    for (SoldQuantityView sold : repository.findSoldQuantities(businessId, from, to)) {
+      soldByItem.put(sold.getMenuItemId(), sold.getSoldQty());
     }
-    return rows;
+
+    List<UUID> ids = shortfalls.stream().map(IngredientShortfallView::getIngredientId).toList();
+    Map<UUID, List<LeakEstimator.ConsumerEdge>> byIngredient = new LinkedHashMap<>();
+    for (int i = 0; i < ids.size(); i += 1000) {
+      for (RecipeEdgeView edge :
+          repository.findRecipeEdges(businessId, ids.subList(i, Math.min(i + 1000, ids.size())))) {
+        byIngredient
+            .computeIfAbsent(edge.getIngredientId(), id -> new ArrayList<>())
+            .add(
+                new LeakEstimator.ConsumerEdge(
+                    edge.getName(),
+                    edge.getUnitPriceMinor(),
+                    edge.getCurrency(),
+                    edge.getQtyPerPortion(),
+                    // Absent means the dish sold nothing this window — a dormant consumer, which
+                    // the estimator treats as carrying no weight rather than as missing data.
+                    soldByItem.getOrDefault(edge.getMenuItemId(), 0L)));
+      }
+    }
+    return byIngredient;
   }
 
   /** The report's disclosure of its own blind spots. */
-  private LeakCoverageResponse buildCoverage(UUID businessId, Instant from, Instant to) {
+  private LeakCoverageResponse buildCoverage(
+      UUID businessId, Instant from, Instant to, Instant observedTo) {
     SoldItemCoverageView coverage = repository.findSoldItemCoverage(businessId, from, to);
+    // Both date bounds come from the SAME instants the rest of the report uses, and the upper one
+    // stays EXCLUSIVE: taking the calendar date of an exclusive instant and comparing it
+    // inclusively
+    // would fold a whole extra day of corrections into the period.
     long corrections =
         repository.countManualStockCorrections(
             businessId,
-            LocalDate.ofInstant(from, StockLedgerDay.ZONE),
-            LocalDate.ofInstant(to, StockLedgerDay.ZONE));
+            LocalDate.ofInstant(from, OutletZone.ZONE),
+            LocalDate.ofInstant(to, OutletZone.ZONE));
     return new LeakCoverageResponse(
         coverage == null ? 0L : coverage.getTotalSoldQty(),
         coverage == null ? 0L : coverage.getRecipeBackedSoldQty(),
-        daysSince(repository.findLastIngredientCountAt(businessId).orElse(null), to),
-        daysSince(repository.findLastItemCountAt(businessId).orElse(null), to),
+        daysSince(repository.findLastIngredientCountAt(businessId).orElse(null), observedTo),
+        daysSince(repository.findLastItemCountAt(businessId).orElse(null), observedTo),
         corrections);
   }
 
@@ -610,14 +691,24 @@ public class SalesIntegrityReader {
    *
    * <p>{@code null} rather than a large number, because "never counted" and "counted a very long
    * time ago" call for different responses and a sentinel would blur them. Floors at 0 so a count
-   * taken after the window's end (a report re-run on an old period) reads as "counted since", never
-   * as a negative age.
+   * taken after the reference point (a report re-run on an old period) reads as "counted since",
+   * never as a negative age.
+   *
+   * <p>The reference point is {@code observedTo}, not the requested window end: on the current
+   * month the window runs to month-end, and measuring against that would tell an owner who counted
+   * yesterday that their stock was last counted three weeks ago — turning the caveat that exists to
+   * calibrate their trust into the thing that misleads them.
    */
-  private static @Nullable Long daysSince(@Nullable Instant countedAt, Instant to) {
+  private static @Nullable Long daysSince(@Nullable Instant countedAt, Instant observedTo) {
     if (countedAt == null) {
       return null;
     }
-    return Math.max(0L, Duration.between(countedAt, to).toDays());
+    return Math.max(0L, Duration.between(countedAt, observedTo).toDays());
+  }
+
+  /** The earlier of two instants. */
+  private static Instant earlier(Instant a, Instant b) {
+    return a.isBefore(b) ? a : b;
   }
 
   private static LeakSignalResponse signal(
