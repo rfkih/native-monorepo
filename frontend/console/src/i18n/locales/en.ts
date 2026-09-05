@@ -3952,6 +3952,36 @@ export const en = {
         advice:
           'Counter-intuitive but real: cash with no sale behind it is what an unrecorded sale leaves in the till when the money was not taken out.',
       },
+      HIGH_VOID_RATE: {
+        title: 'One person voids far more than the others',
+        body: '{{count}} operators void well above the rest of the outlet.',
+        advice:
+          'The classic shape of "ring it up, take the cash, then void the ticket" \u2014 the sale exists just long enough to hand over the food. Compare against who was on shift, and check whether the till layout makes accidental voids easy.',
+      },
+      HIGH_REFUND_RATE: {
+        title: 'One person refunds far more than the others',
+        body: '{{count}} operators refund well above the rest of the outlet.',
+        advice:
+          'A refund moves money back out of the drawer and, unlike a void, leaves the original sale standing \u2014 so the books look ordinary. Ask to see what was refunded and why.',
+      },
+      HIGH_DISCOUNT_RATE: {
+        title: 'One person discounts far more than the others',
+        body: '{{count}} operators discount well above the rest of the outlet.',
+        advice:
+          'Rarely theft on its own, and often just a generous shift. It is also the cheapest way to hand friends and family the difference in cash, so it is worth knowing which.',
+      },
+      CANCELLED_BILLS_WITH_ITEMS: {
+        title: 'Bills cancelled with items still on them',
+        body: '{{count}} bills were cancelled after items had been added.',
+        advice:
+          'An empty bill cancelled is a wrong table opened. A bill cancelled with food on it is a tab that disappeared after the kitchen had already cooked \u2014 check what happened to those items.',
+      },
+      CASH_TENDER_SKEW: {
+        title: 'One person takes far more cash than the others',
+        body: '{{count}} operators run a much more cash-heavy mix than the rest of the outlet.',
+        advice:
+          'Often nothing \u2014 shift and customer mix explain most of it. It is also the only handle there is on a customer being quietly pointed at a private QRIS, where the sale either never appears or comes back as cash.',
+      },
       SESSION_LEFT_OPEN: {
         title: 'Register sessions left open',
         body: '{{count}} sessions were never closed.',

@@ -48,6 +48,39 @@ public enum LeakSignalType {
    */
   UNEXPLAINED_CASH_OVER(LeakSeverity.MEDIUM),
 
+  /**
+   * One operator voids far more than everyone else at the outlet. The classic shape of "ring it up,
+   * take the cash, then void the ticket" — the sale exists just long enough to hand over the food.
+   */
+  HIGH_VOID_RATE(LeakSeverity.MEDIUM),
+
+  /**
+   * One operator refunds far more than everyone else. A refund moves money back out of the drawer,
+   * and unlike a void it leaves the original sale standing, so the books look ordinary.
+   */
+  HIGH_REFUND_RATE(LeakSeverity.MEDIUM),
+
+  /**
+   * One operator discounts far more than everyone else. Rarely theft on its own; often the cheapest
+   * way to hand friends and family the difference in cash.
+   */
+  HIGH_DISCOUNT_RATE(LeakSeverity.MEDIUM),
+
+  /**
+   * Bills cancelled while they still had items on them. An empty bill cancelled is a wrong table
+   * opened; a bill cancelled with food already on it is a tab that vanished after the kitchen had
+   * already cooked.
+   */
+  CANCELLED_BILLS_WITH_ITEMS(LeakSeverity.MEDIUM),
+
+  /**
+   * One operator's sales are far more cash-weighted than everyone else's. The only handle Native
+   * has on personal-QRIS substitution: if a customer is quietly pointed at a private QR, the sale
+   * either never appears or reappears as cash, and this operator's tender mix drifts away from the
+   * outlet's while their consumption of ingredients does not.
+   */
+  CASH_TENDER_SKEW(LeakSeverity.LOW),
+
   /** A session left open long after the shift ended — the drawer was never reconciled. */
   SESSION_LEFT_OPEN(LeakSeverity.LOW),
 

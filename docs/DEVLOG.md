@@ -46,6 +46,23 @@ which is exactly right: a dish using four times as much absorbs four times the s
 converts its share back into portions at its own heavier rate. All `long`, one integer division at
 the end, no float anywhere near it.
 
+The five per-person detectors (void, refund, discount and cash-tender rates; bills cancelled with
+items on them) were the part worth being most careful about, because a rate comparison that is subtly
+wrong does not crash — it quietly puts somebody's name in front of an owner on a page about theft.
+Two decisions came out of that. Each operator is compared against the REST of the outlet, never
+against an average including themselves: at three cashiers, the one voiding a third of their sales
+lifts the outlet average enough to look ordinary, and small rosters are exactly where this gets used.
+And the comparison is cross-multiplied rather than divided, so no rate is ever materialised and the
+verdict cannot turn on a rounding step.
+
+Most of that component's tests are about restraint rather than detection — a lone operator is never
+an outlier (an owner working their own till is the entire baseline, not an anomaly), a 100% rate over
+three sales is ignored, and being merely above average is not enough. One of those tests caught my
+own wrong premise: I had written a case asserting that two heavy voiders out of three would both be
+flagged, and the code correctly reported neither, because each one's baseline contains the other.
+That is the right answer — when most of the roster does something it is the outlet's practice, not
+one person's anomaly — so the test became a pin for that restraint instead.
+
 The console page puts its own caveats where they cannot be skipped: the disclaimer sits directly
 under the headline number rather than in fine print, and the coverage notes sit ABOVE the findings,
 not below them — a reader who sees a reassuring total first has already drawn a conclusion by the

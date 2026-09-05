@@ -208,6 +208,15 @@ class SalesIntegrityReportTest extends PostgresRlsTestBase {
     // that is missing. Folding them in would double-count the honest takings of a sloppy shift.
     assertThat(report.estimatedLeakMinorLow()).isZero();
     assertThat(report.estimatedLeakMinorHigh()).isZero();
+
+    // And nobody is named. One person did all of this, so there is no rest-of-outlet to compare
+    // them against — an owner who works their own till must never be reported as an anomaly
+    // against themselves. This guards the WIRING of that rule, which OperatorOutliersTest pins in
+    // isolation.
+    assertThat(signalOf(report, LeakSignalType.HIGH_VOID_RATE)).isEmpty();
+    assertThat(signalOf(report, LeakSignalType.HIGH_REFUND_RATE)).isEmpty();
+    assertThat(signalOf(report, LeakSignalType.HIGH_DISCOUNT_RATE)).isEmpty();
+    assertThat(signalOf(report, LeakSignalType.CASH_TENDER_SKEW)).isEmpty();
   }
 
   @Test

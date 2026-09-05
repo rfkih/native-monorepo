@@ -5,9 +5,12 @@ import id.co.nativeapp.restaurant.integrity.dto.LeakCoverageResponse;
 import id.co.nativeapp.restaurant.integrity.dto.LeakDetailResponse;
 import id.co.nativeapp.restaurant.integrity.dto.LeakSignalResponse;
 import id.co.nativeapp.restaurant.integrity.dto.SalesIntegrityReportResponse;
+import id.co.nativeapp.restaurant.integrity.projection.CancelledBillView;
 import id.co.nativeapp.restaurant.integrity.projection.DarkHourView;
 import id.co.nativeapp.restaurant.integrity.projection.IngredientShortfallView;
 import id.co.nativeapp.restaurant.integrity.projection.MissingTrackedItemView;
+import id.co.nativeapp.restaurant.integrity.projection.OperatorActivityView;
+import id.co.nativeapp.restaurant.integrity.projection.OperatorRefundView;
 import id.co.nativeapp.restaurant.integrity.projection.OutsideSessionSalesView;
 import id.co.nativeapp.restaurant.integrity.projection.RecipeConsumerView;
 import id.co.nativeapp.restaurant.integrity.projection.RegisterSessionHygieneView;
@@ -22,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -72,6 +76,26 @@ public class SalesIntegrityReader {
    * do.
    */
   private static final int VARIANCE_PATTERN_MIN = 3;
+
+  /**
+   * How many times an operator's rate must exceed everyone else's before it is worth a name. Two
+   * times is a wide gap in practice — narrow enough to catch a real pattern, wide enough that
+   * ordinary differences in who works the busy shift do not put somebody on a list.
+   */
+  private static final long OUTLIER_FACTOR = 2L;
+
+  /**
+   * The fewest events an operator needs before their rate means anything. Two voids out of three
+   * sales is a 67% rate and evidence of nothing; without a floor the quietest person on the roster
+   * tops every list by arithmetic alone.
+   */
+  private static final long OUTLIER_MIN_COUNT = 5L;
+
+  /**
+   * The floor for the tender-mix check, which counts SALES rather than incidents and so needs a
+   * higher bar than the rest: cash share only carries information across a decent number of them.
+   */
+  private static final long TENDER_SKEW_MIN_COUNT = 20L;
 
   /** Evidence rows returned per signal. The full population is aggregated; the list is a sample. */
   private static final int MAX_DETAILS_PER_SIGNAL = 20;
@@ -257,6 +281,39 @@ public class SalesIntegrityReader {
         repository.findSessionsInWindow(businessId, from, to);
     currency = addSessionSignals(sessions, to, currency, signals);
 
+    // --- Per-operator patterns ------------------------------------------------------------------
+    currency = addOperatorSignals(businessId, from, to, currency, signals);
+
+    // --- Bills cancelled with food already on them ----------------------------------------------
+    List<CancelledBillView> cancelled =
+        repository.findCancelledBillsWithLines(businessId, from, to);
+    if (!cancelled.isEmpty()) {
+      long total = 0L;
+      List<LeakDetailResponse> details = new ArrayList<>();
+      for (CancelledBillView bill : cancelled) {
+        currency = LeakEstimator.reconcileCurrency(currency, bill.getCurrency());
+        total = Math.addExact(total, bill.getTotalMinor());
+        if (details.size() < MAX_DETAILS_PER_SIGNAL) {
+          details.add(
+              new LeakDetailResponse(
+                  bill.getBillId(),
+                  bill.getActor(),
+                  LocalDate.ofInstant(bill.getCancelledAt(), StockLedgerDay.ZONE),
+                  null,
+                  bill.getLineCount(),
+                  bill.getTotalMinor(),
+                  bill.getCurrency()));
+        }
+      }
+      signals.add(
+          signal(
+              LeakSignalType.CANCELLED_BILLS_WITH_ITEMS,
+              cancelled.size(),
+              total,
+              currency,
+              details));
+    }
+
     signals.sort(Comparator.comparing(s -> s.severity().ordinal()));
 
     return new SalesIntegrityReportResponse(
@@ -269,6 +326,126 @@ public class SalesIntegrityReader {
         confirmedCost,
         List.copyOf(signals),
         buildCoverage(businessId, from, to));
+  }
+
+  /**
+   * Folds per-operator activity into the void / refund / discount / tender-mix signals.
+   *
+   * <p>Every one of these compares an operator against the REST of the outlet, never against a
+   * fixed target and never against an average that includes themselves — see {@link
+   * OperatorOutliers}. A signal here puts a person's name in front of an owner, so the bar is
+   * deliberately a wide gap sustained over a real number of events, not a nudge above average.
+   *
+   * @return the report currency, possibly established by these rows
+   */
+  private @Nullable String addOperatorSignals(
+      UUID businessId,
+      Instant from,
+      Instant to,
+      @Nullable String currency,
+      List<LeakSignalResponse> signals) {
+
+    List<OperatorActivityView> activity = repository.findOperatorActivity(businessId, from, to);
+    if (activity.isEmpty()) {
+      return currency;
+    }
+
+    List<OperatorOutliers.OperatorRate> voidRates = new ArrayList<>();
+    List<OperatorOutliers.OperatorRate> discountRates = new ArrayList<>();
+    List<OperatorOutliers.OperatorRate> cashRates = new ArrayList<>();
+    Map<String, Long> paymentsByActor = new HashMap<>();
+
+    for (OperatorActivityView row : activity) {
+      currency = LeakEstimator.reconcileCurrency(currency, row.getCurrency());
+      paymentsByActor.put(row.getActor(), row.getPaymentCount());
+      voidRates.add(
+          new OperatorOutliers.OperatorRate(
+              row.getActor(), row.getVoidCount(), row.getPaymentCount(), row.getVoidMinor()));
+      discountRates.add(
+          new OperatorOutliers.OperatorRate(
+              row.getActor(), row.getDiscountMinor(), row.getGrossMinor(), row.getDiscountMinor()));
+      cashRates.add(
+          new OperatorOutliers.OperatorRate(
+              row.getActor(), row.getCashCount(), row.getPaymentCount(), 0L));
+    }
+
+    addOutlierSignal(
+        LeakSignalType.HIGH_VOID_RATE,
+        OperatorOutliers.outliers(voidRates, OUTLIER_FACTOR, OUTLIER_MIN_COUNT),
+        currency,
+        true,
+        signals);
+
+    // The discount check counts MONEY, not incidents, so its minimum is expressed in the same
+    // units: a minor-unit floor would be currency-dependent and meaningless, while requiring a
+    // count would compare a sum against an event threshold. It uses the same relative test and
+    // simply has no count floor -- the gross-rung denominator already suppresses tiny operators.
+    addOutlierSignal(
+        LeakSignalType.HIGH_DISCOUNT_RATE,
+        OperatorOutliers.outliers(discountRates, OUTLIER_FACTOR, 1L),
+        currency,
+        true,
+        signals);
+
+    List<OperatorOutliers.OperatorRate> skew =
+        OperatorOutliers.outliers(cashRates, OUTLIER_FACTOR, TENDER_SKEW_MIN_COUNT);
+    addOutlierSignal(LeakSignalType.CASH_TENDER_SKEW, skew, currency, false, signals);
+
+    List<OperatorRefundView> refunds = repository.findOperatorRefunds(businessId, from, to);
+    if (!refunds.isEmpty()) {
+      List<OperatorOutliers.OperatorRate> refundRates = new ArrayList<>();
+      for (OperatorRefundView row : refunds) {
+        currency = LeakEstimator.reconcileCurrency(currency, row.getCurrency());
+        // Denominator is the operator's payment count from the SAME window; an operator who
+        // refunded here but took no payments (a refund of an older sale) has no rate to speak of
+        // and is skipped rather than divided by zero.
+        long payments = paymentsByActor.getOrDefault(row.getActor(), 0L);
+        refundRates.add(
+            new OperatorOutliers.OperatorRate(
+                row.getActor(), row.getRefundCount(), payments, row.getRefundMinor()));
+      }
+      addOutlierSignal(
+          LeakSignalType.HIGH_REFUND_RATE,
+          OperatorOutliers.outliers(refundRates, OUTLIER_FACTOR, OUTLIER_MIN_COUNT),
+          currency,
+          true,
+          signals);
+    }
+    return currency;
+  }
+
+  /** Adds one operator-outlier signal, or nothing at all when nobody stood out. */
+  private void addOutlierSignal(
+      LeakSignalType type,
+      List<OperatorOutliers.OperatorRate> flagged,
+      @Nullable String currency,
+      boolean carriesMoney,
+      List<LeakSignalResponse> signals) {
+    if (flagged.isEmpty()) {
+      return;
+    }
+    List<LeakDetailResponse> details = new ArrayList<>();
+    for (OperatorOutliers.OperatorRate rate : flagged) {
+      if (details.size() >= MAX_DETAILS_PER_SIGNAL) {
+        break;
+      }
+      details.add(
+          new LeakDetailResponse(
+              null,
+              rate.actor(),
+              null,
+              null,
+              rate.numerator(),
+              carriesMoney ? rate.valueMinor() : null,
+              carriesMoney ? currency : null));
+    }
+    signals.add(
+        signal(
+            type,
+            flagged.size(),
+            carriesMoney ? OperatorOutliers.totalValue(flagged) : null,
+            currency,
+            details));
   }
 
   /**

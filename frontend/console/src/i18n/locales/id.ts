@@ -3877,6 +3877,36 @@ export const id = {
         advice:
           'Terdengar aneh tapi nyata: uang tanpa penjualan di belakangnya adalah yang tertinggal di laci ketika penjualan tidak dicatat dan uangnya belum diambil.',
       },
+      HIGH_VOID_RATE: {
+        title: 'Satu orang membatalkan jauh lebih sering',
+        body: '{{count}} operator melakukan void jauh di atas rekan-rekannya.',
+        advice:
+          'Pola khas "input dulu, uang diambil, lalu di-void" \u2014 transaksi hanya ada sebentar untuk menyerahkan pesanan. Bandingkan dengan siapa yang jaga, dan cek apakah tata letak kasir membuat void mudah kepencet.',
+      },
+      HIGH_REFUND_RATE: {
+        title: 'Satu orang melakukan refund jauh lebih sering',
+        body: '{{count}} operator melakukan refund jauh di atas rekan-rekannya.',
+        advice:
+          'Refund mengeluarkan uang dari laci dan, tidak seperti void, penjualan aslinya tetap ada \u2014 jadi pembukuan terlihat wajar. Minta lihat apa yang di-refund dan alasannya.',
+      },
+      HIGH_DISCOUNT_RATE: {
+        title: 'Satu orang memberi diskon jauh lebih banyak',
+        body: '{{count}} operator memberi diskon jauh di atas rekan-rekannya.',
+        advice:
+          'Jarang berarti pencurian, sering hanya shift yang murah hati. Tapi ini juga cara termudah memberi selisihnya ke teman atau keluarga dalam bentuk tunai, jadi layak dipastikan yang mana.',
+      },
+      CANCELLED_BILLS_WITH_ITEMS: {
+        title: 'Tagihan dibatalkan padahal sudah ada isinya',
+        body: '{{count}} tagihan dibatalkan setelah ada item di dalamnya.',
+        advice:
+          'Tagihan kosong yang dibatalkan itu salah buka meja. Tagihan yang dibatalkan padahal sudah ada makanannya berarti tab hilang setelah dapur memasak \u2014 cek ke mana item itu pergi.',
+      },
+      CASH_TENDER_SKEW: {
+        title: 'Satu orang menerima tunai jauh lebih banyak',
+        body: '{{count}} operator punya komposisi pembayaran jauh lebih tunai dari rekan-rekannya.',
+        advice:
+          'Sering tidak berarti apa-apa \u2014 shift dan tipe pelanggan sudah menjelaskan sebagian besar. Tapi ini satu-satunya cara melihat pelanggan diarahkan diam-diam ke QRIS pribadi, yang membuat penjualan tidak muncul atau muncul sebagai tunai.',
+      },
       SESSION_LEFT_OPEN: {
         title: 'Sesi kasir dibiarkan terbuka',
         body: '{{count}} sesi tidak pernah ditutup.',

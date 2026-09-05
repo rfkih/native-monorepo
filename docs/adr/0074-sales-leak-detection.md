@@ -66,9 +66,18 @@ call — every signal is restaurant-local, native query + projection, RLS-scoped
 detectors: tracked-item shrinkage → unrecorded units; ingredient shrinkage → portion equivalent via
 `recipe_line`; dark periods (sales outside any register session, trading days with no session, an
 hour whose own historical baseline says it should not be empty); closing hygiene; and the per-person
-signals (void/refund/discount rates against the outlet median, cancelled non-empty bills, tender-mix
-drift). Attribution is `COALESCE(sold_by_user_id, created_by)` — the verified operator on an
-outlet-terminal device, else the logged-in user.
+signals (void, refund, discount and cash-tender rates; bills cancelled with items still on them).
+Attribution is `COALESCE(sold_by_user_id, created_by)` — the verified operator on an outlet-terminal
+device, else the logged-in user.
+
+A per-person rate is compared against **the rest of the outlet, never an average that includes the
+person being judged**: at three cashiers, the one voiding a third of their sales lifts the outlet
+average enough to look ordinary, so self-inclusion is precisely how a real pattern hides itself where
+this feature is used. The comparison is cross-multiplied (`a*d >= factor*c*b`), so no rate is ever
+materialised as a fraction and the verdict cannot turn on a rounding step. Three guards keep it from
+naming people it should not: a minimum event count (a 100% rate over three sales is evidence of
+nothing), somebody to compare against (a lone operator is the entire baseline, not an outlier), and a
+real denominator.
 
 ### 3. Three constraints on what this feature is allowed to be
 

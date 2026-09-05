@@ -1,8 +1,11 @@
 package id.co.nativeapp.restaurant.integrity.repository;
 
+import id.co.nativeapp.restaurant.integrity.projection.CancelledBillView;
 import id.co.nativeapp.restaurant.integrity.projection.DarkHourView;
 import id.co.nativeapp.restaurant.integrity.projection.IngredientShortfallView;
 import id.co.nativeapp.restaurant.integrity.projection.MissingTrackedItemView;
+import id.co.nativeapp.restaurant.integrity.projection.OperatorActivityView;
+import id.co.nativeapp.restaurant.integrity.projection.OperatorRefundView;
 import id.co.nativeapp.restaurant.integrity.projection.OutsideSessionSalesView;
 import id.co.nativeapp.restaurant.integrity.projection.RecipeConsumerView;
 import id.co.nativeapp.restaurant.integrity.projection.RegisterSessionHygieneView;
@@ -436,4 +439,106 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
           """,
       nativeQuery = true)
   Optional<Instant> findLastItemCountAt(@Param("businessId") UUID businessId);
+
+  /**
+   * Per-operator till activity over {@code [from, to)} — the counts behind the void, discount and
+   * tender-mix checks.
+   *
+   * <p>The operator is {@code COALESCE(sold_by_user_id, created_by)}. On an outlet terminal the
+   * verified operator rings the sale while the DEVICE credential owns the audit column, so {@code
+   * created_by} alone would attribute an entire shift to a kiosk; on an ordinary console login
+   * there is no operator session and {@code created_by} IS the person. Neither column alone is the
+   * answer, which is why this is a fallback rather than a choice.
+   *
+   * <p>Returns COUNTS, never rates. Every rate is derived in the service against the rest of the
+   * outlet, which the SQL cannot express per-row without recomputing the whole aggregate for each
+   * actor.
+   */
+  @Query(
+      value =
+          """
+          SELECT COALESCE(p.sold_by_user_id, p.created_by)                        AS actor,
+                 COUNT(*)                                                         AS payment_count,
+                 COUNT(*) FILTER (WHERE p.status = 'VOIDED')                      AS void_count,
+                 COALESCE(SUM(p.amount_minor) FILTER (WHERE p.status = 'VOIDED'), 0)
+                                                                                  AS void_minor,
+                 COALESCE(SUM(p.discount_minor), 0)                               AS discount_minor,
+                 COALESCE(SUM(p.amount_minor), 0)                                 AS gross_minor,
+                 COUNT(*) FILTER (WHERE p.tender_type = 'CASH')                   AS cash_count,
+                 MAX(p.currency)                                                  AS currency
+            FROM payment p
+           WHERE p.business_id = :businessId
+             AND p.occurred_at >= :from
+             AND p.occurred_at <  :to
+           GROUP BY COALESCE(p.sold_by_user_id, p.created_by)
+           ORDER BY COALESCE(p.sold_by_user_id, p.created_by)
+          """,
+      nativeQuery = true)
+  List<OperatorActivityView> findOperatorActivity(
+      @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
+
+  /**
+   * Per-operator refunds over {@code [from, to)}, attributed to whoever took the ORIGINAL payment.
+   *
+   * <p>A separate query from {@link #findOperatorActivity} because a refund has its OWN timestamp
+   * on its own append-only row (V22): a payment taken in March and refunded in April belongs to
+   * March's activity and April's refunds. One query would force a single window onto two different
+   * events and misattribute every refund that crossed a period boundary.
+   *
+   * <p>{@code payment_refund} carries no actor column, so the operator comes through the join —
+   * which is also the right attribution: the question a refund raises is about who took the money,
+   * not who happened to process the reversal.
+   */
+  @Query(
+      value =
+          """
+          SELECT COALESCE(p.sold_by_user_id, p.created_by) AS actor,
+                 COUNT(*)                                  AS refund_count,
+                 COALESCE(SUM(r.amount_minor), 0)          AS refund_minor,
+                 MAX(r.currency)                           AS currency
+            FROM payment_refund r
+            JOIN payment p ON p.id = r.payment_id
+           WHERE r.business_id = :businessId
+             AND r.refunded_at >= :from
+             AND r.refunded_at <  :to
+           GROUP BY COALESCE(p.sold_by_user_id, p.created_by)
+           ORDER BY COALESCE(p.sold_by_user_id, p.created_by)
+          """,
+      nativeQuery = true)
+  List<OperatorRefundView> findOperatorRefunds(
+      @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
+
+  /**
+   * Bills cancelled in {@code [from, to)} that still had lines on them.
+   *
+   * <p>An EMPTY bill cancelled is a wrong table opened — routine, and the open-bill lockdown lets
+   * anyone do it. A bill cancelled with items already on it is a different event: in a restaurant
+   * those items were plausibly cooked and served, and then the tab disappeared without a sale.
+   *
+   * <p>Windowed on {@code updated_at} rather than {@code created_at}: the cancel is what this
+   * detector is about, and a tab opened in one period and cancelled in the next belongs to the
+   * period it was cancelled in. {@code updated_by} names the canceller for the same reason — a
+   * cancel is the last write to the row.
+   */
+  @Query(
+      value =
+          """
+          SELECT b.id                                  AS bill_id,
+                 b.updated_by                          AS actor,
+                 b.updated_at                          AS cancelled_at,
+                 COUNT(bl.id)                          AS line_count,
+                 COALESCE(SUM(bl.line_total_minor), 0) AS total_minor,
+                 b.currency                            AS currency
+            FROM bill b
+            JOIN bill_line bl ON bl.bill_id = b.id
+           WHERE b.business_id = :businessId
+             AND b.status = 'CANCELLED'
+             AND b.updated_at >= :from
+             AND b.updated_at <  :to
+           GROUP BY b.id, b.updated_by, b.updated_at, b.currency
+           ORDER BY COALESCE(SUM(bl.line_total_minor), 0) DESC
+          """,
+      nativeQuery = true)
+  List<CancelledBillView> findCancelledBillsWithLines(
+      @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
 }
