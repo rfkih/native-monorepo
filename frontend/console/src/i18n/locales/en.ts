@@ -447,6 +447,7 @@ export const en = {
     channels: 'Sales channels',
     platformSettlements: 'Platform settlements',
     marketplace: 'Marketplace / Platform Online',
+    salesIntegrity: 'Leak detection',
     openingBalances: 'Opening balances',
   },
   a11y: {
@@ -3869,6 +3870,99 @@ export const en = {
       colGross: 'Gross',
       colNet: 'Net',
       colFee: 'Fee',
+    },
+  },
+  salesIntegrity: {
+    title: 'Leak detection',
+    subtitle:
+      'Sales that may never have been rung up. Every other report is built from what WAS recorded, so none of them can see this.',
+    noCompany: 'No company selected',
+    noCompanyHint: 'Create a company to run leak detection.',
+    error: 'Could not load the leak report.',
+    empty: 'Nothing stood out this period',
+    emptyHint:
+      'No detector fired. Check the coverage notes above — a clean result only means as much as the evidence behind it.',
+    prevPeriod: 'Previous month',
+    nextPeriod: 'Next month',
+    disclaimer:
+      'This is a signal to look into, not proof. Every figure here is an estimate from stock and till patterns, and each one has innocent explanations. Ask questions before drawing conclusions.',
+    headline: {
+      label: 'Estimated sales not recorded',
+      rangeHint:
+        'A range, not a number: the lower figure counts only what is tightly quantified; the upper figure adds the ingredient estimate, which waste and staff meals can also explain.',
+      confirmedCost: 'What the missing stock cost you: {{amount}}',
+    },
+    coverage: {
+      title: 'What this report could not see',
+      recipe: '{{pct}}% of what you sold has a recipe — the rest is invisible to ingredient checks.',
+      noSales: 'Nothing was sold this period, so there is no sales pattern to compare against.',
+      neverCountedIngredients:
+        'Ingredients have never been counted, so ingredient checks found nothing.',
+      lastIngredientCount: 'Ingredients last counted {{days}} days ago.',
+      neverCountedItems: 'Tracked items have never been counted, so item checks found nothing.',
+      lastItemCount: 'Tracked items last counted {{days}} days ago.',
+      manualCorrections: 'Stock was manually corrected {{count}} times this period.',
+    },
+    severity: { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' },
+    detail: {
+      hour: '{{hour}}:00',
+      quantity: '{{qty}} missing',
+      unnamed: 'This period',
+    },
+    signal: {
+      MISSING_TRACKED_ITEMS: {
+        title: 'Stock left the shelf without a sale',
+        body: '{{count}} tracked units are gone with no sale behind them.',
+        advice:
+          'The clearest signal there is: one missing unit is one unrecorded sale. Check for breakage or staff drinks first, then who was on shift.',
+      },
+      INGREDIENT_SHORTFALL: {
+        title: 'Ingredients used beyond the recipes',
+        body: '{{count}} ingredients came up short at the last count.',
+        advice:
+          'More was consumed than the recipes account for. Waste, spoilage, staff meals and over-portioning all look like this too — worth checking portion sizes before anything else.',
+      },
+      DARK_HOUR: {
+        title: 'The till went quiet at a busy hour',
+        body: '{{count}} hours recorded nothing on a day the outlet was trading.',
+        advice:
+          'Compared against this outlet’s own history for that weekday and hour, not a fixed target. A quiet hour happens; a quiet lunch rush usually does not.',
+      },
+      SALES_OUTSIDE_SESSION: {
+        title: 'Sales rung with no register session open',
+        body: '{{count}} sales fell outside every register session.',
+        advice:
+          'A drawer that is never counted against what it took cannot be checked at all. Make opening a session part of the shift.',
+      },
+      TRADING_DAY_WITHOUT_CLOSE: {
+        title: 'Trading days that never closed',
+        body: '{{count}} days took money without a Z-report.',
+        advice:
+          'The amount shown is what went unreconciled, not what went missing. Closing every day is the cheapest control you have.',
+      },
+      PERSISTENT_CASH_SHORT: {
+        title: 'The drawer keeps coming up short',
+        body: 'The count fell short at {{count}} closes.',
+        advice:
+          'One short night is a mistake; a pattern is worth a conversation. Compare against who closed each one.',
+      },
+      UNEXPLAINED_CASH_OVER: {
+        title: 'More cash in the drawer than expected',
+        body: 'The count came out over at {{count}} closes.',
+        advice:
+          'Counter-intuitive but real: cash with no sale behind it is what an unrecorded sale leaves in the till when the money was not taken out.',
+      },
+      SESSION_LEFT_OPEN: {
+        title: 'Register sessions left open',
+        body: '{{count}} sessions were never closed.',
+        advice: 'An uncounted drawer is an unreconciled one. Usually forgetfulness, not theft.',
+      },
+      EXACT_ZERO_CLOSE_RUN: {
+        title: 'Closes that came out exactly right, every time',
+        body: '{{count}} closes in a row landed on exactly zero variance.',
+        advice:
+          'An honest small outlet can genuinely look like this. But a counted drawer that never disagrees with the system by a single rupiah is more often a figure being copied than counted.',
+      },
     },
   },
   marketplace: {

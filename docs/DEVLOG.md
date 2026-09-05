@@ -46,6 +46,13 @@ which is exactly right: a dish using four times as much absorbs four times the s
 converts its share back into portions at its own heavier rate. All `long`, one integer division at
 the end, no float anywhere near it.
 
+The console page puts its own caveats where they cannot be skipped: the disclaimer sits directly
+under the headline number rather than in fine print, and the coverage notes sit ABOVE the findings,
+not below them — a reader who sees a reassuring total first has already drawn a conclusion by the
+time they learn it was computed over 30% of what sold. A vitest pins that every signal type has copy
+in BOTH locales, so adding a detector and forgetting the Indonesian block fails in review instead of
+shipping an owner a card titled `EXACT_ZERO_CLOSE_RUN`.
+
 Two things the tests said that I had wrong. The unsessioned-sales figure is the GRAND total the till
 took, service charge and PB1 included — which is correct, because what went unreconciled is the cash
 in the drawer, not the revenue line under it. And a missing required query parameter returns 500

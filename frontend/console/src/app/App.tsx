@@ -300,6 +300,9 @@ const PlatformSettlements = lazy(() =>
 const Marketplace = lazy(() =>
   import('@/features/marketplace/Marketplace').then((m) => ({ default: m.Marketplace })),
 )
+const SalesIntegrity = lazy(() =>
+  import('@/features/integrity/SalesIntegrity').then((m) => ({ default: m.SalesIntegrity })),
+)
 const CustomerDisplay = lazy(() =>
   import('@/features/pos/display/CustomerDisplay').then((m) => ({ default: m.CustomerDisplay })),
 )
@@ -748,6 +751,16 @@ export function App() {
               <Route
                 path="/marketplace"
                 element={company ? <Marketplace /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {/* Leak detection is OWNER-only, not financeAllowed: findings can name an
+                individual, and a manager can be the subject of one, so a manager must not hold
+                their own scorecard. The gateway enforces the same narrowing (OWNER_ROLES) —
+                this route only keeps the nav honest. */}
+            {isOwner && (
+              <Route
+                path="/sales-integrity"
+                element={company ? <SalesIntegrity /> : <Navigate to="/onboarding" replace />}
               />
             )}
             {financeAllowed && (
