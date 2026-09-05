@@ -1,5 +1,58 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-06 — finding the sales that were never rung (ADR 0074)
+
+Every report Native has is derived from what was recorded, so none of them can see the fraud that
+actually hurts an F&B SME: the meal that gets served, the cash that gets taken, and nothing rung up.
+The books stay perfectly consistent afterwards, because the missing revenue was never an input.
+
+What betrays it is physical — the ingredients still left the kitchen, the bottle still left the
+fridge — and restaurant-service already held every piece of that evidence without ever correlating
+it. So the new `integrity` feature is a READ-ONLY report over rows that already existed: no table,
+no event, no GL impact, one owner-only endpoint. Nine detectors, in two families. Stock that moved
+without a sale (tracked items counted short; ingredient shortfall converted into portions through
+the recipes). And tills that were not watched (an hour with no sales on a day and hour the outlet's
+own history says is busy; sales rung with no register session open; a trading day that never closed;
+persistent cash short; unexplained cash over; a session left open; a run of closes that came out to
+exactly zero).
+
+Four decisions shaped it more than the SQL did:
+
+**The headline is a range, not a number.** The low bound counts only tracked-item shortfall, where
+one missing bottle is one unrecorded sale at one known price. The high bound adds the ingredient
+estimate, which is real but has innocent explanations — waste, spoilage, staff meals, over-portioning
+— that Native cannot yet record and net out. Collapsing them would hand an owner an inference with
+the confidence of a measurement, and they would act on it.
+
+**The report publishes its own blind spots.** Coverage rides in the same response as the estimate,
+not behind a second request: how much of what sold was even backed by a recipe, and how long since
+anyone counted. At 30% recipe coverage a small number means almost nothing, and without that stated
+it reads exactly like a clean bill of health.
+
+**A signal that did not fire is omitted, not returned at zero.** An empty list says "nothing stood
+out". Nine zeroes say "the system looked", which is noisier and weaker.
+
+**The estimate never touches the ledger.** No outbox write, no posting. Real shrinkage already posts
+through the existing stocktake flow; this only reinterprets it as lost revenue, for the owner's eyes.
+The same instinct drove the rest: owner-only at the gateway (a manager can be the subject of a
+finding), variance patterns thresholded on RECURRENCE rather than on an amount (three short closes
+is a pattern, one is a bad night — and a rupiah threshold would be meaningless in another currency),
+and nothing auto-notified to anyone.
+
+The allocation maths turned out prettier than expected. Distributing a missing quantity across the
+dishes that consume it, weighted by the real sales mix, reduces to `missing x sold_i / SUM(sold_j x
+qty_per_portion_j)` — the per-portion quantity cancels from the numerator but not the denominator,
+which is exactly right: a dish using four times as much absorbs four times the shortfall, then
+converts its share back into portions at its own heavier rate. All `long`, one integer division at
+the end, no float anywhere near it.
+
+Two things the tests said that I had wrong. The unsessioned-sales figure is the GRAND total the till
+took, service charge and PB1 included — which is correct, because what went unreconciled is the cash
+in the drawer, not the revenue line under it. And a missing required query parameter returns 500
+rather than 400: that is fleet-wide behaviour in `libs/security`, unchanged here, and pinning it in
+this endpoint's test would have either codified the wart or made one endpoint diverge from the rest.
+Left as a noted gap rather than quietly widened scope.
+
 ## 2026-09-06 — the stock figure now has a history, not just a number (ADR 0074)
 
 Groundwork for sales-leak detection, but useful on its own. `ingredient.stock_qty` was a single

@@ -514,6 +514,32 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * The sales-leak report (ADR 0074) — {@code /api/v1/sales-integrity/**}, restaurant-service.
+   *
+   * <p>{@link #OWNER_ROLES}, narrower than every other restaurant route: some findings name an
+   * individual, and a manager can be the subject of one, so a manager must not be able to read
+   * their own scorecard. This is the same reasoning that puts payroll PII exports on the owner-only
+   * surface.
+   *
+   * <p>No ordering hazard against {@link #salesRoute}: {@code sales-integrity} is a distinct path
+   * SEGMENT, so {@code /api/v1/sales/**} cannot match it however the two are ordered. It is
+   * declared here purely so the two sales-shaped surfaces read together.
+   */
+  @Bean
+  RouterFunction<ServerResponse> salesIntegrityRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-sales-integrity")
+        .route(path("/api/v1/sales-integrity/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> salesRoute(
       GatewayRouteProperties routes,
