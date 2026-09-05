@@ -3,11 +3,13 @@ package id.co.nativeapp.restaurant.inventory.service;
 import id.co.nativeapp.restaurant.inventory.domain.GoodsReceiptIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
+import id.co.nativeapp.restaurant.inventory.domain.StockLedgerDay;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.repository.GoodsReceiptRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
+import id.co.nativeapp.restaurant.inventory.repository.IngredientStockDayRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
@@ -56,6 +58,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class IngredientWriter {
 
   private final IngredientRepository repository;
+  private final IngredientStockDayRepository stockDayRepository;
   private final GoodsReceiptRepository goodsReceiptRepository;
   private final PricedReceiveWriter pricedReceiveWriter;
   private final OutletAccessGuard outletAccessGuard;
@@ -63,11 +66,13 @@ public class IngredientWriter {
 
   public IngredientWriter(
       IngredientRepository repository,
+      IngredientStockDayRepository stockDayRepository,
       GoodsReceiptRepository goodsReceiptRepository,
       PricedReceiveWriter pricedReceiveWriter,
       OutletAccessGuard outletAccessGuard,
       List<IngredientDeactivationGuard> deactivationGuards) {
     this.repository = repository;
+    this.stockDayRepository = stockDayRepository;
     this.goodsReceiptRepository = goodsReceiptRepository;
     this.pricedReceiveWriter = pricedReceiveWriter;
     this.outletAccessGuard = outletAccessGuard;
@@ -82,7 +87,9 @@ public class IngredientWriter {
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public IngredientResponse create(CreateIngredientRequest request) {
-    String companyId = TenantContext.require().companyId();
+    TenantContext.Tenant tenant = TenantContext.require();
+    String companyId = tenant.companyId();
+    String actor = tenant.actor();
     outletAccessGuard.enforce(request.businessId());
 
     Ingredient ingredient =
@@ -99,6 +106,13 @@ public class IngredientWriter {
     }
     ingredient.setCompanyId(companyId);
     Ingredient saved = repository.saveAndFlush(ingredient);
+    if (saved.getStockQty() > 0) {
+      // Opening stock is stock arriving, so the daily ledger (V47) books it as a RECEIPT — not
+      // an adjustment. Nothing was corrected here; the ingredient simply started life holding
+      // something, and a leak report must not read that as a hand-edit.
+      stockDayRepository.addReceipt(
+          saved.getId(), StockLedgerDay.today(), saved.getStockQty(), actor, companyId);
+    }
     return IngredientResponse.from(saved);
   }
 
@@ -157,11 +171,18 @@ public class IngredientWriter {
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public IngredientResponse setStock(UUID id, int quantity) {
-    TenantContext.require();
+    TenantContext.Tenant tenant = TenantContext.require();
     Ingredient ingredient = load(id);
     outletAccessGuard.enforce(ingredient.getBusinessId());
+    long delta = (long) quantity - ingredient.getStockQty();
     ingredient.setStock(quantity);
     Ingredient saved = repository.saveAndFlush(ingredient);
+    // The archetypal manual correction: a human overriding the system's figure. Booked to the
+    // daily ledger's SIGNED adjustment bucket with the count incremented (V47) even when the
+    // delta is 0 — a recount that confirmed the figure still happened, and "berapa kali stok
+    // dikoreksi manual" should say so.
+    stockDayRepository.addAdjustment(
+        saved.getId(), StockLedgerDay.today(), delta, tenant.actor(), tenant.companyId());
     return IngredientResponse.from(saved);
   }
 
@@ -192,7 +213,8 @@ public class IngredientWriter {
       @Nullable Long amountPaidMinor,
       @Nullable String costCurrency,
       @Nullable String idempotencyKey) {
-    String companyId = TenantContext.require().companyId();
+    TenantContext.Tenant tenant = TenantContext.require();
+    String companyId = tenant.companyId();
     Ingredient ingredient = load(id);
     outletAccessGuard.enforce(ingredient.getBusinessId());
     if (amountPaidMinor != null || costCurrency != null) {
@@ -224,6 +246,18 @@ public class IngredientWriter {
     } else {
       ingredient.addStock(amount);
       Ingredient saved = repository.saveAndFlush(ingredient);
+      // A costless delta is signed: stock going UP is a receipt, stock going DOWN is somebody
+      // writing off what is no longer there — a correction, not a negative delivery. Booking
+      // the two to different ledger buckets (V47) is what lets a leak report subtract
+      // already-explained shrinkage instead of double-counting it.
+      String actor = tenant.actor();
+      if (amount > 0) {
+        stockDayRepository.addReceipt(
+            saved.getId(), StockLedgerDay.today(), amount, actor, companyId);
+      } else if (amount < 0) {
+        stockDayRepository.addAdjustment(
+            saved.getId(), StockLedgerDay.today(), amount, actor, companyId);
+      }
       return IngredientResponse.from(saved);
     }
   }

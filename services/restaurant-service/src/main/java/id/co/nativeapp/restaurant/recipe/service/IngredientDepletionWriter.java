@@ -1,12 +1,12 @@
 package id.co.nativeapp.restaurant.recipe.service;
 
+import id.co.nativeapp.restaurant.inventory.domain.StockLedgerDay;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
-import id.co.nativeapp.restaurant.inventory.repository.IngredientUsageDayRepository;
+import id.co.nativeapp.restaurant.inventory.repository.IngredientStockDayRepository;
 import id.co.nativeapp.restaurant.recipe.projection.RecipeDepletionRow;
 import id.co.nativeapp.restaurant.recipe.repository.RecipeLineRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -66,26 +66,14 @@ public class IngredientDepletionWriter {
    */
   public record CogsResult(long cogsMinor, String currency) {}
 
-  /**
-   * Fixed v1 zone for attributing usage to a calendar day ("terpakai hari itu", V42). This is a
-   * SINGLE hardcoded {@code Asia/Jakarta} — it does NOT read the sale's register-session business
-   * zone (which supports a per-session override, ADR 0036), so for a non-Jakarta outlet the usage
-   * day can diverge from that outlet's register business date. Acceptable for v1 (every live outlet
-   * is WIB); a per-outlet usage zone is the additive follow-up. Attribution is by WHEN THE
-   * DEPLETION RUNS: an offline sale replayed the next day counts toward the replay day, matching
-   * when the stock figure actually moved. The console read key ({@code usageDayKey}) pins the same
-   * Asia/Jakarta day, so read and write always agree.
-   */
-  private static final ZoneId USAGE_ZONE = ZoneId.of("Asia/Jakarta");
-
   private final RecipeLineRepository recipeLineRepository;
   private final IngredientRepository ingredientRepository;
-  private final IngredientUsageDayRepository usageRepository;
+  private final IngredientStockDayRepository usageRepository;
 
   public IngredientDepletionWriter(
       RecipeLineRepository recipeLineRepository,
       IngredientRepository ingredientRepository,
-      IngredientUsageDayRepository usageRepository) {
+      IngredientStockDayRepository usageRepository) {
     this.recipeLineRepository = recipeLineRepository;
     this.ingredientRepository = ingredientRepository;
     this.usageRepository = usageRepository;
@@ -157,7 +145,7 @@ public class IngredientDepletionWriter {
     TenantContext.Tenant tenant = TenantContext.require();
     String actor = tenant.actor();
     String companyId = tenant.companyId();
-    LocalDate usageDate = LocalDate.now(USAGE_ZONE);
+    LocalDate usageDate = StockLedgerDay.today();
     // ADR 0067 Phase C: per-currency COGS accumulator, folded from the SAME depletion loop (no
     // second query). TreeMap = deterministic (lexicographically) smallest-currency-first fold, the
     // RecipeReader HPP-fold precedent.
@@ -167,8 +155,8 @@ public class IngredientDepletionWriter {
       if (qty > 0) {
         // 0 rows = the ingredient was hard-deleted concurrently — nothing to deplete, not an error.
         ingredientRepository.depleteStockFloorZero(entry.getKey(), qty);
-        // "Terpakai hari itu" (V42): record the RECIPE quantity consumed, per day, in the SAME
-        // transaction — a rolled-back sale leaves no usage. Recorded as requested (not floored):
+        // "Terpakai hari itu" (V42, now the V47 daily ledger): record the RECIPE quantity consumed,
+        // per day, in the SAME transaction — a rolled-back sale leaves no usage. Recorded as
         // usage reports what the sales consumed by recipe; the stock figure floors separately.
         // The UPSERT runs per-ingredient, right after that ingredient's deplete, so both writes
         // hold the SAME ascending-UUID lock order the depletion relies on. A single multi-row

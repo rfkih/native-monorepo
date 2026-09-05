@@ -17,6 +17,7 @@ import id.co.nativeapp.restaurant.inventory.dto.SubmitIngredientStocktakeRequest
 import id.co.nativeapp.restaurant.inventory.dto.SubmitIngredientStocktakeResult;
 import id.co.nativeapp.restaurant.inventory.projection.IngredientStocktakeView;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
+import id.co.nativeapp.restaurant.inventory.repository.IngredientStockDayRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientStocktakeLineRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientStocktakeRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
@@ -45,11 +46,20 @@ class IngredientStocktakeWriterTest {
   private final IngredientStocktakeLineRepository lineRepository =
       mock(IngredientStocktakeLineRepository.class);
   private final IngredientRepository ingredientRepository = mock(IngredientRepository.class);
+  // The V47 daily-ledger UPSERTs are a mocked no-op here: their SQL (and the ascending-UUID
+  // ordering that keeps them deadlock-free) is exercised by the Testcontainers tests.
+  private final IngredientStockDayRepository stockDayRepository =
+      mock(IngredientStockDayRepository.class);
   private final OutboxWriter outboxWriter = mock(OutboxWriter.class);
   private final OutletAccessGuard guard = mock(OutletAccessGuard.class);
   private final IngredientStocktakeWriter writer =
       new IngredientStocktakeWriter(
-          repository, lineRepository, ingredientRepository, outboxWriter, guard);
+          repository,
+          lineRepository,
+          stockDayRepository,
+          ingredientRepository,
+          outboxWriter,
+          guard);
 
   private static <T> T asTenant(java.util.concurrent.Callable<T> action) {
     try {

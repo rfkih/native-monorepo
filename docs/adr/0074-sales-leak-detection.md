@@ -1,0 +1,98 @@
+# ADR 0074 — Sales-leak detection: the daily stock ledger, and estimating revenue that was never rung
+
+- **Status:** Accepted (2026-09-06)
+- **Deciders:** owner (scope, visibility and waste-log sequencing decisions, 2026-09-05) + tech lead
+- **Plan of record:** `~/.claude/plans/floating-launching-nautilus.md`
+- **Relates to:** [0046](0046-ingredient-inventory-phase1.md) (ingredient opname),
+  [0050](0050-recipes-bom-costing.md) (recipes + per-sale depletion),
+  [0036](0036-register-sessions-and-platform-channel-settlements.md) (register sessions),
+  [0038](0038-daily-close-all-tender-and-inventory.md) (daily close, stocktake shrinkage GL),
+  [0056](0056-moving-average-inventory-cost.md) (moving-average ingredient cost)
+
+## Context
+
+The most damaging fraud in an F&B SME is not a bad journal entry. It is the sale that **never
+reaches the POS at all**: the food is served, the cash is taken (or the customer is pointed at a
+personal QRIS), and nothing is rung. Afterwards the books are perfectly consistent, because the
+missing revenue was never an input. Every report Native has — the Z-report, Laba-Rugi, the
+GL-derived dashboard P&L (ADR 0065) — is derived from what *was* recorded, so all of them are blind
+to this by construction.
+
+What betrays an unrecorded sale is **physical**: the ingredients still left the kitchen, the bottle
+still left the fridge. restaurant-service already stores every piece of that evidence in its own
+database. Nothing correlates it, and one input was missing outright: `ingredient_usage_day` (V42)
+recorded only recipe-driven consumption, so there was no way to tell shrinkage that had already been
+explained (a delivery, a hand-correction, an opname) from shrinkage that had not.
+
+## Decision
+
+### 1. `ingredient_usage_day` becomes `ingredient_stock_day` — the full daily movement ledger (V47)
+
+One row per (ingredient, outlet-local day) with **every** stock movement bucketed by kind:
+`qty_used` (recipe depletion at sale), `received_qty` (+`receipt_count`), `adjustment_qty` (SIGNED,
++`adjustment_count` — opname variance *and* manual "set stok", because from the ledger's point of
+view both are a human overriding the system), `waste_qty` (reserved, always 0 until the waste log
+lands), and `closing_qty`.
+
+Every writer that moves stock now books to it in the SAME transaction as the movement:
+`IngredientDepletionWriter` (usage), `PricedReceiveWriter` (both the HTTP receive and the ADR 0072
+`InventoryPurchaseRecorded` consumer, via the one shared implementation), `IngredientWriter`
+(create/set/add) and `IngredientStocktakeWriter` (per counted line).
+
+Three sub-decisions worth pinning:
+
+- **A daily aggregate, not a per-movement ledger.** A row per sale × per ingredient is the natural
+  audit shape but explodes with volume — which is exactly why V42 chose the (ingredient, day) UPSERT.
+  V47 keeps that and its concurrency discipline: writers UPSERT one ingredient at a time in
+  ascending ingredient-UUID order, so the cross-sale deadlock stays impossible.
+- **`closing_qty` is sourced from `ingredient.stock_qty` inside the UPSERT**, under
+  `@Modifying(flushAutomatically = true)` — an entity-path caller has a dirty, unflushed persistence
+  context and a native query would otherwise read the PRE-movement figure. The flush is what makes
+  the mirror honest.
+- **A movement is booked to the day it is APPLIED, never back-dated.** The ADR 0072 consumer can
+  carry a back-dated purchase; back-dating the ledger row would overwrite an already-closed day's
+  `closing_qty` with today's figure and silently corrupt that day's balance. The ledger records when
+  the *figure* moved — the same rule per-sale depletion already follows for an offline sale replayed
+  the next day. `received_at` remains the business fact, on `goods_receipt` and `StockReceived`.
+
+The rename is safe: Debezium captures **only `public.outbox`** on this database
+(`docker/debezium/outbox-connector.json`, `table.include.list`), so no connector, publication or
+replication slot references this table.
+
+### 2. Leak detection is a READ-ONLY report over data restaurant-service already owns
+
+A new `integrity` feature in restaurant-service. No new service, no new event, no cross-service
+call — every signal is restaurant-local, native query + projection, RLS-scoped (rules 1/2/5). The
+detectors: tracked-item shrinkage → unrecorded units; ingredient shrinkage → portion equivalent via
+`recipe_line`; dark periods (sales outside any register session, trading days with no session, an
+hour whose own historical baseline says it should not be empty); closing hygiene; and the per-person
+signals (void/refund/discount rates against the outlet median, cancelled non-empty bills, tender-mix
+drift). Attribution is `COALESCE(sold_by_user_id, created_by)` — the verified operator on an
+outlet-terminal device, else the logged-in user.
+
+### 3. Three constraints on what this feature is allowed to be
+
+- **The estimate NEVER enters the ledger.** No outbox write, no event, no posting. Real shrinkage
+  already posts to the GL through the existing stocktake flow (ADR 0038/0046); this feature only
+  *reinterprets* it as lost revenue, for the owner's eyes. A revenue estimate is an inference, and
+  inferences do not belong in a general ledger.
+- **Owner-only** (gateway `OWNER_ROLES`). Some signals name an individual, and a manager can be the
+  subject of a finding, so a manager must not hold their own scorecard.
+- **An indication, never an accusation.** Nothing is auto-notified; the UI leads with the estimate,
+  presents it as a *range*, and says plainly that it is a signal to investigate. It also states its
+  own blind spots (recipe coverage %, days since the last opname) — hiding those would let a zero
+  read as a clean bill of health.
+
+## Consequences
+
+- Shrinkage that was already explained can finally be subtracted from shrinkage that was not, which
+  is what makes the estimate defensible rather than alarmist.
+- "Rata-rata pemakaian per hari" and "berapa kali stok dikoreksi manual" fall out of the same ledger
+  for free — useful for reorder decisions independently of any fraud question.
+- The ledger only speaks from V47 forward. Pre-V47 rows carry `closing_qty = NULL`, which readers
+  must treat as *unknown*, never as 0.
+- Until the waste log lands (the planned next phase), `waste_qty` is always 0 and R2 will
+  over-report — hence the range, and hence the sequencing.
+- `latest_closing_qty` is where the *window* left the stock, not the ingredient's current stock.
+- Static/manual QRIS mode stays undetectable directly: there is no per-transaction charge to compare
+  against, so tender-mix drift is the only handle on personal-QR substitution.

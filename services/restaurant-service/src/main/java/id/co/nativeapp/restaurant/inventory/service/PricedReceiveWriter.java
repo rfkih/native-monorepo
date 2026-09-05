@@ -5,10 +5,13 @@ import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.restaurant.inventory.domain.GoodsReceipt;
 import id.co.nativeapp.restaurant.inventory.domain.GoodsReceiptIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
+import id.co.nativeapp.restaurant.inventory.domain.StockLedgerDay;
 import id.co.nativeapp.restaurant.inventory.messaging.StockReceivedSchema;
 import id.co.nativeapp.restaurant.inventory.projection.GoodsReceiptReplayView;
 import id.co.nativeapp.restaurant.inventory.repository.GoodsReceiptRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
+import id.co.nativeapp.restaurant.inventory.repository.IngredientStockDayRepository;
+import id.co.nativeapp.tenant.TenantContext;
 import jakarta.annotation.Nullable;
 import java.time.Instant;
 import java.util.Optional;
@@ -45,14 +48,17 @@ public class PricedReceiveWriter {
   }
 
   private final IngredientRepository ingredientRepository;
+  private final IngredientStockDayRepository stockDayRepository;
   private final GoodsReceiptRepository goodsReceiptRepository;
   private final OutboxWriter outboxWriter;
 
   public PricedReceiveWriter(
       IngredientRepository ingredientRepository,
+      IngredientStockDayRepository stockDayRepository,
       GoodsReceiptRepository goodsReceiptRepository,
       OutboxWriter outboxWriter) {
     this.ingredientRepository = ingredientRepository;
+    this.stockDayRepository = stockDayRepository;
     this.goodsReceiptRepository = goodsReceiptRepository;
     this.outboxWriter = outboxWriter;
   }
@@ -112,6 +118,16 @@ public class PricedReceiveWriter {
       Instant receivedAt) {
     ingredient.receive(qty, valueMinor, currency);
     Ingredient saved = ingredientRepository.saveAndFlush(ingredient);
+
+    // The daily stock ledger (V47). Booked to TODAY, deliberately not to receivedAt's day:
+    // this is the one hook both entry points share, and the consumer path can carry a
+    // back-dated purchase. Back-dating the ledger row would overwrite an already-closed day's
+    // closing_qty with today's stock figure and silently corrupt that day's balance. The
+    // ledger records when the FIGURE moved — the same rule the per-sale depletion follows for
+    // an offline sale replayed the next day. receivedAt remains the business fact, on the
+    // goods_receipt row and the StockReceived event.
+    stockDayRepository.addReceipt(
+        saved.getId(), StockLedgerDay.today(), qty, TenantContext.require().actor(), companyId);
 
     GoodsReceipt receipt =
         GoodsReceipt.of(

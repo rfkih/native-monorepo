@@ -1,5 +1,49 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-06 — the stock figure now has a history, not just a number (ADR 0074)
+
+Groundwork for sales-leak detection, but useful on its own. `ingredient.stock_qty` was a single
+number with no story behind it: you could see that 8 kg of flour was left, never that 40 arrived,
+6 were consumed by recipes and somebody hand-corrected it twice. `ingredient_usage_day` (V42) held
+one bucket — recipe depletion — so shrinkage that had *already been explained* (a delivery, an
+opname, a manual fix) was indistinguishable from shrinkage that had not.
+
+V47 renames that table to **`ingredient_stock_day`** and widens it into the full daily movement
+ledger: `qty_used`, `received_qty`, a SIGNED `adjustment_qty`, a reserved `waste_qty`, `closing_qty`,
+and the two counters an owner actually asks for — `receipt_count` and `adjustment_count` ("berapa
+kali stok dikoreksi manual"). Every writer that moves stock now books to it in the same transaction
+as the movement: depletion, both priced-receive entry points, create/set/add, and each opname line.
+Reads at `GET /api/v1/ingredients/stock-history` (per-ingredient roll-up) and `/{id}/stock-history`
+(day by day).
+
+Three decisions that were not obvious:
+
+**A daily aggregate, not a per-movement ledger.** A row per sale x per ingredient is the natural
+audit shape and explodes with volume — which is exactly why V42 chose the (ingredient, day) UPSERT.
+V47 keeps it and its concurrency discipline intact: one ingredient at a time, ascending UUID order.
+The opname path had to be restructured for that — it collects corrections during its line loop and
+drains a `TreeMap` afterwards, rather than UPSERTing in request order.
+
+**`closing_qty` is sourced from `ingredient.stock_qty` inside the UPSERT, under
+`flushAutomatically = true`.** Entity-path callers (`setStock`, an opname line) have a dirty,
+unflushed persistence context, so a native query would otherwise read the figure from *before* the
+movement it is supposed to be mirroring. Passing the value in from Java would have worked too, but
+sourcing it from the row makes it impossible for the mirror to disagree with what it mirrors.
+
+**A movement is booked to the day it is applied, never back-dated.** The ADR 0072 purchase consumer
+can carry a back-dated bill; writing that into a past day's row would overwrite an already-closed
+day's `closing_qty` with today's figure. The ledger records when the *figure* moved — the same rule
+depletion already follows for an offline sale replayed the next day.
+
+The rename was safe to do at all only because Debezium captures `public.outbox` and nothing else on
+this database, so no connector, publication or slot names the table.
+
+One test failed and was right to: `IngredientUsageAtomicityTest` asserted a rolled-back sale leaves
+**no ledger row**, and its own arrangement (create an ingredient with opening stock) now legitimately
+books one — opening stock is stock arriving, a receipt. The assertion moved to the invariant it
+actually meant, `SUM(qty_used) == 0`, which is stricter than counting rows. Worth noting because the
+failure was the schema change telling the truth about a test whose premise had quietly expired.
+
 ## 2026-09-04 — receipt wording, pack sizes, and a guard that was wrong one step later
 
 Three owner asks on the purchase surfaces, plus the bug the third one uncovered.

@@ -30,10 +30,16 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
 /**
- * Atomicity of the V42 per-day usage aggregate on the sale path: because {@code
+ * Atomicity of the per-day usage bucket on the sale path: because {@code
  * IngredientDepletionWriter.addUsage} runs under {@code Propagation.MANDATORY} in the SAME
- * transaction as the sale + outbox rows, a sale that rolls back must leave NO {@code
- * ingredient_usage_day} row — the usage figure can never drift ahead of committed sales.
+ * transaction as the sale + outbox rows, a sale that rolls back must contribute NOTHING to {@code
+ * ingredient_stock_day.qty_used} — the usage figure can never drift ahead of committed sales.
+ *
+ * <p>The assertion is on the USAGE TOTAL rather than on the absence of a ledger row: since V47 the
+ * same table also records receipts and manual corrections, and this test's own arrangement
+ * legitimately books one — creating the ingredient with opening stock IS a receipt. A row therefore
+ * exists before the checkout ever runs, and summing {@code qty_used} is both the precise statement
+ * of the invariant and a stricter one than counting rows.
  *
  * <p>This is a genuine write-then-rollback proof, not a trivial never-written one: {@code
  * OrderWriter.checkout} runs {@code ingredientDepletionWriter.depleteForLines} (which UPSERTs the
@@ -102,11 +108,11 @@ class IngredientUsageAtomicityTest extends PostgresRlsTestBase {
         .hasMessageContaining(BOOM);
 
     // Assert (over the admin BYPASSRLS connection — the tables are FORCE RLS): the sale rolled
-    // back,
-    // the usage row was discarded with it, and stock is untouched. Nothing drifted ahead of a
-    // committed sale.
+    // back, the usage it had already UPSERTed was discarded with it, and stock is untouched.
+    // Nothing drifted ahead of a committed sale. The ledger row itself survives — it belongs to
+    // the opening-stock receipt from the arrangement, which never rolled back.
     assertThat(rowCountAsAdmin("sale")).isZero();
-    assertThat(usageRowCount(ingredientId)).isZero();
+    assertThat(usedQtyTotal(ingredientId)).isZero();
     assertThat(stockOfIngredient(ingredientId)).isEqualTo(1_000);
   }
 
@@ -121,14 +127,15 @@ class IngredientUsageAtomicityTest extends PostgresRlsTestBase {
     }
   }
 
-  private long usageRowCount(UUID ingredientId) throws Exception {
+  private long usedQtyTotal(UUID ingredientId) throws Exception {
     try (Connection admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement();
         ResultSet rs =
             st.executeQuery(
-                "SELECT count(*) FROM ingredient_usage_day WHERE ingredient_id = '"
+                "SELECT COALESCE(SUM(qty_used), 0) FROM ingredient_stock_day"
+                    + " WHERE ingredient_id = '"
                     + ingredientId
                     + "'")) {
       rs.next();

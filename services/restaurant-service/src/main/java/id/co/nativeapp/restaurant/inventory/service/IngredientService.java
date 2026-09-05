@@ -3,6 +3,8 @@ package id.co.nativeapp.restaurant.inventory.service;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNameConflictException;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientStockDayResponse;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientStockSummaryResponse;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientUsageResponse;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
 import id.co.nativeapp.tenant.TenantContext;
@@ -42,6 +44,18 @@ public class IngredientService {
   public List<IngredientUsageResponse> usageForDate(UUID businessId, LocalDate date) {
     TenantContext.require();
     return reader.usageForDate(businessId, date);
+  }
+
+  /** An outlet's per-ingredient stock-movement roll-up over an inclusive day window (V47). */
+  public List<IngredientStockSummaryResponse> stockSummary(
+      UUID businessId, LocalDate from, LocalDate to) {
+    return reader.stockSummary(businessId, from, to);
+  }
+
+  /** One ingredient's day-by-day stock ledger over an inclusive day window (V47). */
+  public List<IngredientStockDayResponse> stockHistory(
+      UUID ingredientId, LocalDate from, LocalDate to) {
+    return reader.stockHistory(ingredientId, from, to);
   }
 
   /**

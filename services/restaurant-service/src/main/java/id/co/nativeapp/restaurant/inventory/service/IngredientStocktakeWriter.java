@@ -6,6 +6,7 @@ import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientStocktake;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientStocktakeLine;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientStocktakeNotFoundException;
+import id.co.nativeapp.restaurant.inventory.domain.StockLedgerDay;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientStocktakeLineInput;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientStocktakeLineResponse;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientStocktakeResponse;
@@ -14,6 +15,7 @@ import id.co.nativeapp.restaurant.inventory.dto.SubmitIngredientStocktakeResult;
 import id.co.nativeapp.restaurant.inventory.projection.IngredientStocktakeLineView;
 import id.co.nativeapp.restaurant.inventory.projection.IngredientStocktakeView;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
+import id.co.nativeapp.restaurant.inventory.repository.IngredientStockDayRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientStocktakeLineRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientStocktakeRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
@@ -22,6 +24,7 @@ import id.co.nativeapp.restaurant.stocktake.messaging.StocktakeCompletedSchema;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -29,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
 import org.springframework.stereotype.Component;
@@ -68,6 +72,7 @@ public class IngredientStocktakeWriter {
 
   private final IngredientStocktakeRepository repository;
   private final IngredientStocktakeLineRepository lineRepository;
+  private final IngredientStockDayRepository stockDayRepository;
   private final IngredientRepository ingredientRepository;
   private final OutboxWriter outboxWriter;
   private final OutletAccessGuard outletAccessGuard;
@@ -75,11 +80,13 @@ public class IngredientStocktakeWriter {
   public IngredientStocktakeWriter(
       IngredientStocktakeRepository repository,
       IngredientStocktakeLineRepository lineRepository,
+      IngredientStockDayRepository stockDayRepository,
       IngredientRepository ingredientRepository,
       OutboxWriter outboxWriter,
       OutletAccessGuard outletAccessGuard) {
     this.repository = repository;
     this.lineRepository = lineRepository;
+    this.stockDayRepository = stockDayRepository;
     this.ingredientRepository = ingredientRepository;
     this.outboxWriter = outboxWriter;
     this.outletAccessGuard = outletAccessGuard;
@@ -96,7 +103,8 @@ public class IngredientStocktakeWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public SubmitIngredientStocktakeResult submit(
       SubmitIngredientStocktakeRequest request, String idempotencyKey) {
-    String companyId = TenantContext.require().companyId();
+    TenantContext.Tenant tenant = TenantContext.require();
+    String companyId = tenant.companyId();
 
     // Idempotency fast path (the StocktakeWriter pattern): a prior count under this tenant + key
     // short-circuits, no re-adjustment, no second event. The outlet is enforced on the replayed
@@ -122,6 +130,10 @@ public class IngredientStocktakeWriter {
     String currency = null;
     long varianceValueSum = 0L;
     List<ComputedLine> computed = new ArrayList<>(request.lines().size());
+    // The daily ledger's correction bucket, keyed ascending by ingredient UUID — drained after
+    // the loop, NOT inside it, so the UPSERTs follow the same ascending-UUID order the per-sale
+    // depletion uses and the two paths cannot deadlock against each other on this table.
+    TreeMap<UUID, Long> correctionByIngredient = new TreeMap<>();
 
     for (IngredientStocktakeLineInput line : request.lines()) {
       Ingredient ingredient =
@@ -158,6 +170,7 @@ public class IngredientStocktakeWriter {
 
       ingredient.setStock(countedQty);
       ingredientRepository.save(ingredient);
+      correctionByIngredient.put(ingredient.getId(), (long) varianceQty);
 
       computed.add(
           new ComputedLine(
@@ -169,6 +182,16 @@ public class IngredientStocktakeWriter {
               varianceQty,
               unitCostMinor,
               varianceValueMinor));
+    }
+
+    // Book every counted line to the daily ledger (V47) as ONE manual correction. Zero-variance
+    // lines are booked too: a recount that confirmed the figure still happened, and "berapa kali
+    // stok dikoreksi manual" should count it. The first call flushes the pending setStock
+    // updates, so each row's closing_qty is sourced from the already-corrected stock figure.
+    LocalDate ledgerDay = StockLedgerDay.today();
+    for (var correction : correctionByIngredient.entrySet()) {
+      stockDayRepository.addAdjustment(
+          correction.getKey(), ledgerDay, correction.getValue(), tenant.actor(), companyId);
     }
 
     // SIGNED net loss = -Σ varianceValueMinor over cost-bearing lines (non-cost lines contribute 0,

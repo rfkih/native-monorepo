@@ -43,7 +43,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * contributions — no lost update, no double-count.
  *
  * <p>It also proves the V42 per-day usage aggregate accumulates ADDITIVELY under the same race:
- * both concurrent sales UPSERT the same {@code ingredient_usage_day} rows ({@code ON CONFLICT DO
+ * both concurrent sales UPSERT the same {@code ingredient_stock_day} rows ({@code ON CONFLICT DO
  * UPDATE qty_used = existing + EXCLUDED}), so the day's {@code terpakai} figure must equal the
  * exact same per-ingredient sum as the depletion — no lost update on the read-modify-write.
  */
@@ -122,7 +122,7 @@ class IngredientDepletionConcurrencyTest extends PostgresRlsTestBase {
     assertThat(stockOfIngredient(ingredient2)).isEqualTo(1_000_000 - 62);
 
     // V42: the day's usage UPSERT accumulated the exact same per-ingredient sum — both concurrent
-    // sales added to the same ingredient_usage_day rows with no lost update.
+    // sales added to the same ingredient_stock_day rows with no lost update.
     assertThat(usageOfIngredient(ingredient1)).isEqualTo(78);
     assertThat(usageOfIngredient(ingredient2)).isEqualTo(62);
   }
@@ -193,7 +193,7 @@ class IngredientDepletionConcurrencyTest extends PostgresRlsTestBase {
         Statement st = admin.createStatement();
         ResultSet rs =
             st.executeQuery(
-                "SELECT COALESCE(SUM(qty_used), 0) FROM ingredient_usage_day"
+                "SELECT COALESCE(SUM(qty_used), 0) FROM ingredient_stock_day"
                     + " WHERE ingredient_id = '"
                     + ingredientId
                     + "'")) {

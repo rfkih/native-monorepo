@@ -3,6 +3,8 @@ package id.co.nativeapp.restaurant.inventory.controller;
 import id.co.nativeapp.restaurant.inventory.dto.AddIngredientStockRequest;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientStockDayResponse;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientStockSummaryResponse;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientUsageResponse;
 import id.co.nativeapp.restaurant.inventory.dto.SetIngredientStockRequest;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
@@ -71,6 +73,62 @@ public class IngredientController {
       @RequestParam UUID businessId,
       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
     return ResponseEntity.ok(service.usageForDate(businessId, date));
+  }
+
+  /**
+   * An outlet's per-ingredient stock-movement roll-up over an INCLUSIVE day window ("riwayat stok",
+   * V47): how much was consumed, received, corrected by hand and how often — the inputs behind
+   * "rata-rata pemakaian per hari" and "total koreksi manual". The literal {@code /stock-history}
+   * segment cannot collide with an id path (this controller maps no {@code GET /{id}}).
+   */
+  @Operation(
+      summary = "Ingredient stock movement for a period",
+      description =
+          "Per-ingredient stock-movement roll-up over an inclusive [from, to] day window"
+              + " (Asia/Jakarta attribution): total consumed, total received, net signed manual"
+              + " correction, recorded waste, the receive and correction counts, and how many"
+              + " days moved. Returns totals and counts, never an average — the client divides"
+              + " by whichever denominator it means. Ingredients that did not move in the window"
+              + " are absent.")
+  @GetMapping("/stock-history")
+  public ResponseEntity<List<IngredientStockSummaryResponse>> stockHistory(
+      @RequestParam UUID businessId,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+    requireOrderedWindow(from, to);
+    return ResponseEntity.ok(service.stockSummary(businessId, from, to));
+  }
+
+  /**
+   * One ingredient's day-by-day stock ledger over an INCLUSIVE day window, oldest first — the
+   * drill-down behind a row of the roll-up above. Days with no movement are absent; the client
+   * carries the previous day's closing balance across the gap.
+   */
+  @Operation(
+      summary = "One ingredient's daily stock ledger",
+      description =
+          "Day-by-day stock ledger for one ingredient over an inclusive [from, to] window,"
+              + " oldest first: consumption, receipts, signed manual corrections, waste, the"
+              + " per-day counts and the day's closing stock. Days with no movement are absent"
+              + " (the previous day's closing balance carries forward). closingQty is null on"
+              + " rows predating the ledger — treat it as unknown, never as 0.")
+  @GetMapping("/{id}/stock-history")
+  public ResponseEntity<List<IngredientStockDayResponse>> ingredientStockHistory(
+      @PathVariable UUID id,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+    requireOrderedWindow(from, to);
+    return ResponseEntity.ok(service.stockHistory(id, from, to));
+  }
+
+  /**
+   * Rejects an inverted window with a 400 rather than silently returning an empty list — an empty
+   * result would read as "nothing moved", which is a different and misleading answer.
+   */
+  private static void requireOrderedWindow(LocalDate from, LocalDate to) {
+    if (to.isBefore(from)) {
+      throw new IllegalArgumentException("'to' must not be before 'from'");
+    }
   }
 
   /** Creates a new active ingredient. {@code 201 Created} + {@code Location} header on success. */
