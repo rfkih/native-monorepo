@@ -159,6 +159,15 @@ class SalesIntegrityReportTest extends PostgresRlsTestBase {
     // 600 g is the only consumer's, so 600/200 = 3 portions x 25k = 75k.
     assertThat(signal.estimatedValueMinor()).isEqualTo(75_000L);
     assertThat(signal.occurrences()).isEqualTo(1);
+    // The evidence row states the unit the shortfall is counted in. Without it "600 missing" is
+    // ambiguous by a factor of a thousand for an ingredient the stock page shows in kg.
+    assertThat(signal.details())
+        .singleElement()
+        .satisfies(
+            d -> {
+              assertThat(d.quantity()).isEqualTo(600L);
+              assertThat(d.quantityUnit()).isEqualTo("g");
+            });
 
     // The COST of what vanished is not an estimate — 600 g at 10/g, already computed by the
     // stocktake at the moving-average rate.

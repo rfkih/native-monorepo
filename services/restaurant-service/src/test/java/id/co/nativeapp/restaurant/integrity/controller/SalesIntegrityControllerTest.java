@@ -71,6 +71,9 @@ class SalesIntegrityControllerTest {
         .andExpect(jsonPath("$.signals[0].type").value("MISSING_TRACKED_ITEMS"))
         .andExpect(jsonPath("$.signals[0].severity").value("HIGH"))
         .andExpect(jsonPath("$.signals[0].details[0].subjectName").value("Teh Botol"))
+        // A tracked menu item is counted in whole items and the row names which item, so no unit
+        // rides along; an ingredient shortfall sends one, because "600 missing" is ambiguous.
+        .andExpect(jsonPath("$.signals[0].details[0].quantityUnit").doesNotExist())
         // Coverage rides along with the estimate rather than behind a second request, so a client
         // cannot render the number without the caveat.
         .andExpect(jsonPath("$.coverage.totalSoldQty").value(10))
@@ -138,7 +141,7 @@ class SalesIntegrityControllerTest {
                 "IDR",
                 List.of(
                     new LeakDetailResponse(
-                        UUID.randomUUID(), "Teh Botol", null, null, 2L, 30_000L, "IDR")))),
+                        UUID.randomUUID(), "Teh Botol", null, null, 2L, null, 30_000L, "IDR")))),
         new LeakCoverageResponse(10L, 3L, null, null, 0L));
   }
 }

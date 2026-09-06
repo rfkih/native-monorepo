@@ -522,23 +522,39 @@ function RecipeLineRow({
             </option>
           ))}
         </select>
-        <input
-          aria-label={
-            signed
-              ? t('recipe.deltaQtyLabel', { unit: selectedUnitLabel })
-              : t('recipe.qtyLabel', { unit: selectedUnitLabel })
-          }
-          type="number"
-          step="1"
-          value={line.qty}
-          onChange={(e) => onChange({ qty: e.target.value })}
-          placeholder={signed ? '±0' : '0'}
-          className={cn(
-            'tnum h-11 w-[74px] shrink-0 rounded-lg border border-line bg-surface px-2 text-right font-mono text-sm text-ink transition-colors',
-            'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15',
-            error && line.ingredientId && 'border-loss/60',
-          )}
-        />
+        {/* The unit is rendered NEXT TO the field, not only in the aria-label. "60" alone is
+            ambiguous — 60 g and 60 kg are a thousandfold apart and both are plausible for an
+            ingredient displayed in kg on the stock page. A sighted user was being asked to
+            remember which one this field meant; only a screen-reader user was ever told. */}
+        <div className="flex shrink-0 items-center gap-1">
+          <input
+            aria-label={
+              signed
+                ? t('recipe.deltaQtyLabel', { unit: selectedUnitLabel })
+                : t('recipe.qtyLabel', { unit: selectedUnitLabel })
+            }
+            type="number"
+            step="1"
+            value={line.qty}
+            onChange={(e) => onChange({ qty: e.target.value })}
+            placeholder={signed ? '±0' : '0'}
+            className={cn(
+              'tnum h-11 w-[74px] shrink-0 rounded-lg border border-line bg-surface px-2 text-right font-mono text-sm text-ink transition-colors',
+              'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15',
+              error && line.ingredientId && 'border-loss/60',
+            )}
+          />
+          {/* aria-hidden: the aria-label above already carries the unit, and announcing it twice
+              would be worse than not showing it at all. Fixed width so the delete buttons stay
+              aligned down the list whether the unit is "g" or "pcs", and empty until an
+              ingredient is chosen — there is no unit to state yet. */}
+          <span
+            aria-hidden="true"
+            className="w-8 shrink-0 font-mono text-xs font-semibold text-ink-3"
+          >
+            {selectedUnitLabel}
+          </span>
+        </div>
         <button
           type="button"
           onClick={onRemove}
