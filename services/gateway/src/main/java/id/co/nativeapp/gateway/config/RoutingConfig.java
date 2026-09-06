@@ -514,6 +514,32 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * The sales-leak report (ADR 0074) — {@code /api/v1/sales-integrity/**}, restaurant-service.
+   *
+   * <p>{@link #OWNER_ROLES}, narrower than every other restaurant route: some findings name an
+   * individual, and a manager can be the subject of one, so a manager must not be able to read
+   * their own scorecard. This is the same reasoning that puts payroll PII exports on the owner-only
+   * surface.
+   *
+   * <p>No ordering hazard against {@link #salesRoute}: {@code sales-integrity} is a distinct path
+   * SEGMENT, so {@code /api/v1/sales/**} cannot match it however the two are ordered. It is
+   * declared here purely so the two sales-shaped surfaces read together.
+   */
+  @Bean
+  RouterFunction<ServerResponse> salesIntegrityRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-sales-integrity")
+        .route(path("/api/v1/sales-integrity/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> salesRoute(
       GatewayRouteProperties routes,
@@ -624,6 +650,35 @@ public class RoutingConfig {
         .before(uri(routes.restaurantService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * The ingredient unit CONVERSION sub-path — {@code POST /api/v1/ingredients/*}{@code
+   * /convert-unit}, restaurant-service.
+   *
+   * <p>Narrower than the {@link #ingredientsRoute} surface it sits inside: converting a unit
+   * rewrites every historical quantity for that ingredient — its stock, its cost, its recipe lines
+   * and its whole daily ledger. That is a correction to the books, not a till operation, so a
+   * cashier receiving stock at the counter has no business performing it.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing, exactly as on {@link
+   * #registerCloseCorrectionRoute}: this carve-out must match BEFORE the general {@code
+   * /api/v1/ingredients/**} POS route, or a cashier token would reach it. Every other ingredient
+   * path still falls through to that route unchanged.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> ingredientUnitConversionRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-ingredient-convert-unit")
+        .route(path("/api/v1/ingredients/*/convert-unit"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(tenantFilter)
         .build();
   }

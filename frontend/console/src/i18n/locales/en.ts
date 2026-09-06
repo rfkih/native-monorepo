@@ -447,6 +447,7 @@ export const en = {
     channels: 'Sales channels',
     platformSettlements: 'Platform settlements',
     marketplace: 'Marketplace / Platform Online',
+    salesIntegrity: 'Leak detection',
     openingBalances: 'Opening balances',
   },
   a11y: {
@@ -1429,6 +1430,22 @@ export const en = {
     nameRequired: 'Enter a name.',
     unitLabel: 'Unit',
     unitHint: 'Counted in whole numbers — use g or ml for anything you weigh or measure to a fraction.',
+    convertUnit: {
+      badge: 'Cannot be used in a recipe ({{unit}}) — fix',
+      title: 'Change the unit of {{name}}',
+      intro:
+        'One {{unit}} is the smallest amount a recipe can ask for, which is why this ingredient cannot be added to one. Say what a {{unit}} contains and it will be re-counted in that smaller unit — you keep buying it exactly as you do now.',
+      toUnitLabel: 'Count it in',
+      factorLabel: '1 {{from}} contains how many {{to}}?',
+      preview: 'Stock becomes {{after}} (was {{before}}). Nothing is bought or lost.',
+      note: 'Recipes and past stock history are re-counted in the new unit at the same time, so nothing shifts. The total value of your stock does not change.',
+      submit: 'Change unit',
+      errors: {
+        factor: 'Enter a whole number greater than 0.',
+        overflow: 'That would make the stock number too large. Choose a larger unit.',
+        failed: 'Could not change the unit. Try again.',
+      },
+    },
     unitGroup: { weight: 'Weight', volume: 'Volume', count: 'Count' },
     costLabel: 'Cost per unit ({{currency}}, optional)',
     costHint:
@@ -3869,6 +3886,129 @@ export const en = {
       colGross: 'Gross',
       colNet: 'Net',
       colFee: 'Fee',
+    },
+  },
+  salesIntegrity: {
+    title: 'Leak detection',
+    subtitle:
+      'Sales that may never have been rung up. Every other report is built from what WAS recorded, so none of them can see this.',
+    noCompany: 'No company selected',
+    noCompanyHint: 'Create a company to run leak detection.',
+    error: 'Could not load the leak report.',
+    empty: 'Nothing stood out this period',
+    emptyHint:
+      'No detector fired. Check the coverage notes above — a clean result only means as much as the evidence behind it.',
+    prevPeriod: 'Previous month',
+    nextPeriod: 'Next month',
+    disclaimer:
+      'This is a signal to look into, not proof. Every figure here is an estimate from stock and till patterns, and each one has innocent explanations. Ask questions before drawing conclusions.',
+    headline: {
+      label: 'Estimated sales not recorded',
+      rangeHint:
+        'A range, not a number: the lower figure counts only what is tightly quantified; the upper figure adds the ingredient estimate, which waste and staff meals can also explain.',
+      confirmedCost: 'What the missing stock cost you: {{amount}}',
+    },
+    coverage: {
+      title: 'What this report could not see',
+      recipe: '{{pct}}% of what you sold has a recipe — the rest is invisible to ingredient checks.',
+      noSales: 'Nothing was sold this period, so there is no sales pattern to compare against.',
+      neverCountedIngredients:
+        'Ingredients have never been counted, so ingredient checks found nothing.',
+      lastIngredientCount: 'Ingredients last counted {{days}} days ago.',
+      neverCountedItems: 'Tracked items have never been counted, so item checks found nothing.',
+      lastItemCount: 'Tracked items last counted {{days}} days ago.',
+      manualCorrections: 'Manual stock corrections this period: {{n}}',
+    },
+    severity: { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' },
+    detail: {
+      hour: '{{hour}}:00',
+      quantity: '{{qty}} missing',
+      unnamed: 'This period',
+    },
+    signal: {
+      MISSING_TRACKED_ITEMS: {
+        title: 'Stock left the shelf without a sale',
+        body: 'Tracked units gone with no sale behind them: {{n}}',
+        advice:
+          'The clearest signal there is: one missing unit is one unrecorded sale. Check for breakage or staff drinks first, then who was on shift.',
+      },
+      INGREDIENT_SHORTFALL: {
+        title: 'Ingredients used beyond the recipes',
+        body: 'Ingredients that came up short at the last count: {{n}}',
+        advice:
+          'More was consumed than the recipes account for. Waste, spoilage, staff meals and over-portioning all look like this too — worth checking portion sizes before anything else.',
+      },
+      DARK_HOUR: {
+        title: 'The till went quiet at a busy hour',
+        body: 'Hours that recorded nothing on a trading day: {{n}}',
+        advice:
+          'Compared against this outlet’s own history for that weekday and hour, not a fixed target. A quiet hour happens; a quiet lunch rush usually does not.',
+      },
+      SALES_OUTSIDE_SESSION: {
+        title: 'Sales rung with no register session open',
+        body: 'Sales that fell outside every register session: {{n}}',
+        advice:
+          'A drawer that is never counted against what it took cannot be checked at all. Make opening a session part of the shift.',
+      },
+      TRADING_DAY_WITHOUT_CLOSE: {
+        title: 'Trading days that never closed',
+        body: 'Days that took money without a Z-report: {{n}}',
+        advice:
+          'The amount shown is what went unreconciled, not what went missing. Closing every day is the cheapest control you have.',
+      },
+      PERSISTENT_CASH_SHORT: {
+        title: 'The drawer keeps coming up short',
+        body: 'Closes where the drawer came up short: {{n}}',
+        advice:
+          'One short night is a mistake; a pattern is worth a conversation. Compare against who closed each one.',
+      },
+      UNEXPLAINED_CASH_OVER: {
+        title: 'More cash in the drawer than expected',
+        body: 'Closes where the drawer came out over: {{n}}',
+        advice:
+          'Counter-intuitive but real: cash with no sale behind it is what an unrecorded sale leaves in the till when the money was not taken out.',
+      },
+      HIGH_VOID_RATE: {
+        title: 'One person voids far more than the others',
+        body: 'Operators voiding well above the rest of the outlet: {{n}}',
+        advice:
+          'The classic shape of "ring it up, take the cash, then void the ticket" \u2014 the sale exists just long enough to hand over the food. Compare against who was on shift, and check whether the till layout makes accidental voids easy.',
+      },
+      HIGH_REFUND_RATE: {
+        title: 'One person refunds far more than the others',
+        body: 'Operators refunding well above the rest of the outlet: {{n}}',
+        advice:
+          'A refund moves money back out of the drawer and, unlike a void, leaves the original sale standing \u2014 so the books look ordinary. Ask to see what was refunded and why.',
+      },
+      HIGH_DISCOUNT_RATE: {
+        title: 'One person discounts far more than the others',
+        body: 'Operators discounting well above the rest of the outlet: {{n}}',
+        advice:
+          'Rarely theft on its own, and often just a generous shift. It is also the cheapest way to hand friends and family the difference in cash, so it is worth knowing which.',
+      },
+      CANCELLED_BILLS_WITH_ITEMS: {
+        title: 'Bills cancelled with items still on them',
+        body: 'Bills cancelled after items had been added: {{n}}',
+        advice:
+          'An empty bill cancelled is a wrong table opened. A bill cancelled with food on it is a tab that disappeared after the kitchen had already cooked \u2014 check what happened to those items.',
+      },
+      CASH_TENDER_SKEW: {
+        title: 'One person takes far more cash than the others',
+        body: 'Operators running a much more cash-heavy mix than the rest: {{n}}',
+        advice:
+          'Often nothing \u2014 shift and customer mix explain most of it. It is also the only handle there is on a customer being quietly pointed at a private QRIS, where the sale either never appears or comes back as cash.',
+      },
+      SESSION_LEFT_OPEN: {
+        title: 'Register sessions left open',
+        body: 'Sessions that were never closed: {{n}}',
+        advice: 'An uncounted drawer is an unreconciled one. Usually forgetfulness, not theft.',
+      },
+      EXACT_ZERO_CLOSE_RUN: {
+        title: 'Closes that came out exactly right, every time',
+        body: 'Closes in a row at exactly zero variance: {{n}}',
+        advice:
+          'An honest small outlet can genuinely look like this. But a counted drawer that never disagrees with the system by a single rupiah is more often a figure being copied than counted.',
+      },
     },
   },
   marketplace: {

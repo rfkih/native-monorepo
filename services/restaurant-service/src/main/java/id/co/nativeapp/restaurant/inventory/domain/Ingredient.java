@@ -412,6 +412,79 @@ public class Ingredient extends Auditable {
    * @param qty new quantity (&ge; 0)
    * @throws IllegalArgumentException if {@code qty} is negative
    */
+  /**
+   * Re-expresses this ingredient in a finer base unit, rescaling every quantity so the physical
+   * stock is unchanged.
+   *
+   * <p>This is the escape hatch from a base unit that is too coarse to consume from. An ingredient
+   * created as {@code pack} cannot appear in a recipe at all — a pack has nothing beneath it, so
+   * the smallest expressible use is one whole pack — and {@link #update}'s guard rightly refuses a
+   * bare unit change, because reinterpreting "2" from packs to grams would destroy the stock
+   * figure. Converting instead multiplies it: 2 packs at 1000 g per pack becomes 2000 g.
+   *
+   * <p><strong>The invariant that makes this safe is that total VALUE does not move.</strong> Stock
+   * quantity is multiplied by the factor and the per-unit cost is divided by it, so {@code
+   * stock_value_minor} — the figure the books and the moving average actually depend on (ADR 0056)
+   * — is deliberately left untouched rather than recomputed. Nothing was bought, sold or lost here;
+   * only the unit the same physical stock is counted in has changed.
+   *
+   * <p>The per-unit cost is rounded, so a factor that does not divide it evenly loses at most one
+   * minor unit per base unit — unavoidable when the cost of a gram is a whole number of rupiah, and
+   * harmless because the exact total is what is retained and the next priced receive re-derives the
+   * average from it.
+   *
+   * <p>Callers MUST also rescale everything else denominated in this ingredient's base unit — its
+   * recipe lines and its daily ledger rows — in the same transaction. A converted ingredient whose
+   * recipes still say "1" would silently consume a thousandth of what it used to.
+   *
+   * @param toUnit the new base unit
+   * @param toDisplayUnit the display label to show above it, or null for none
+   * @param factor how many NEW base units one OLD base unit is worth; must be positive
+   * @throws IngredientUnitConversionException if the factor is not positive, the unit is blank, or
+   *     the rescaled stock would overflow the column that holds it
+   */
+  public void convertUnit(String toUnit, @Nullable String toDisplayUnit, int factor) {
+    if (toUnit == null || toUnit.isBlank()) {
+      throw new IngredientUnitConversionException("the new unit must not be blank");
+    }
+    if (factor <= 0) {
+      throw new IngredientUnitConversionException(
+          "the conversion factor must be positive; got " + factor);
+    }
+    long rescaledStock = (long) this.stockQty * factor;
+    if (rescaledStock > Integer.MAX_VALUE) {
+      // Fail rather than wrap: a silently truncated stock figure would read as a catastrophic
+      // shrinkage at the next opname and, through the leak report, as theft.
+      throw new IngredientUnitConversionException(
+          "converting '"
+              + this.name
+              + "' by a factor of "
+              + factor
+              + " would overflow its stock column ("
+              + this.stockQty
+              + " x "
+              + factor
+              + " = "
+              + rescaledStock
+              + "); use a coarser unit");
+    }
+
+    this.stockQty = (int) rescaledStock;
+    if (this.unitCostMinor != null) {
+      // Integer round-half-up — never a floating divide (rule 8): money must not acquire a binary
+      // fraction on its way through a conversion.
+      this.unitCostMinor = (this.unitCostMinor + factor / 2L) / factor;
+    }
+    if (this.packSize != null) {
+      long rescaledPack = (long) this.packSize * factor;
+      // A pack size that no longer fits is dropped rather than truncated — it is a remembered
+      // convenience default (V46), and a wrong default is worse than none.
+      this.packSize = rescaledPack > Integer.MAX_VALUE ? null : (int) rescaledPack;
+    }
+    this.unit = toUnit;
+    this.displayUnit = toDisplayUnit;
+  }
+
   public void setStock(int qty) {
     if (qty < 0) {
       throw new IllegalArgumentException("stock_qty must be >= 0, got: " + qty);

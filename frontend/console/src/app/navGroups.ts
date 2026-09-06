@@ -45,6 +45,7 @@ import {
   Radio,
   Receipt,
   Scale,
+  ShieldAlert,
   SlidersHorizontal,
   Store,
   Tag,
@@ -192,6 +193,19 @@ export function useNavGroups(): {
                     label: t('nav.cashFlow'),
                     icon: ArrowLeftRight,
                     page: 'reports' as const,
+                    feature: 'statements' as const,
+                  },
+                ]
+              : []),
+            // Leak detection is gated on `isOwner` alone, not on the REPORTS bundle: it is the
+            // one report whose findings can name an individual, and the gateway narrows it to
+            // OWNER_ROLES to match.
+            ...(isOwner
+              ? [
+                  {
+                    to: '/sales-integrity',
+                    label: t('nav.salesIntegrity'),
+                    icon: ShieldAlert,
                     feature: 'statements' as const,
                   },
                 ]

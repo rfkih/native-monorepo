@@ -1,5 +1,259 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-06 — the migration gate caught what I did not think about
+
+V47 originally renamed `ingredient_usage_day` to `ingredient_stock_day`, because the name no longer
+described a table holding receipts, corrections and a closing balance. Its header reasoned at length
+about whether the rename was safe — checked the Debezium connector, confirmed only `public.outbox` is
+captured, confirmed RENAME preserves data, indexes, constraints and the RLS policy — and concluded it
+was fine.
+
+It never considered app-tier rollback. `scripts/check-migration-safety.sh` refused it: the fleet
+deploys by ROLLING update with an automatic rollback on a failed health gate (ADR 0057), so old and
+new app versions run against this schema at the same time, and a rollback puts the previous image in
+front of a table whose name it has never heard of. Every safety property I checked was real, and I
+checked the wrong axis.
+
+The ledger's entire value is in the added columns, so V47 is now purely additive and the table keeps
+its historical name. The precision moved to Java instead: `IngredientStockDay` and `stockDate` map
+onto `ingredient_usage_day`/`usage_date`, and reads alias the column back to the projection's name.
+A better noun was never worth a broken rollback.
+
+Two things worth keeping from the fix. Reverting the rename by a blanket find-and-replace also renamed
+the SQL ALIAS the read projection maps by, so the drill-down returned a null date — the kind of break
+a rename-by-sed makes and a compiler cannot see; the integration test caught it. And it was safe to
+rewrite V47 in place rather than add a V48 undo only because it had never been applied anywhere real:
+UAT is at V42 and prod is behind that, so its only executions were in ephemeral test containers.
+
+## 2026-09-06 — a pack is not a unit you can cook with
+
+An owner reported two things: 60 g of meat could not be entered against a kg ingredient, and the
+sauce "is in pack but 1 pack is 1 KG and the use is only tiny". Reading production made the shape of
+it obvious, and worse than the report:
+
+    Daging Kebab TIS FOOD   g/kg    1,700 kg    0 recipe lines
+    Delmonte saus sambal    g/kg        2 kg    0 recipe lines
+    Mentega                 g/kg        2 kg    0 recipe lines
+    Delmonte Saus tomat     pack           2    0 recipe lines
+    roti / cheese / tortilla / chicken   pcs    1-4 lines, all qty 1
+
+**Every weight-based ingredient is in no recipe at all.** Only `pcs` items are. 1.7 tonnes of meat,
+the sauces and the butter contribute nothing to HPP and nothing to the ADR 0074 shortfall detector —
+on exactly the ingredients worth stealing. Nobody filed that as a bug; they just stopped writing
+recipes, and the only trace was the leak report's own coverage line.
+
+Two distinct causes, and only one of them was a real modelling hole.
+
+**The kg case was ours to make easier.** The unit model is fine — `kg` stores grams with a kg label,
+and the input did accept 0.06. But no cook writes a recipe in kilograms, and asking someone to
+divide by a thousand on every line, at three decimal places, is not a small friction. Recipes are now
+typed in the ingredient's BASE unit for every ingredient: 60, not 0.06. The display unit stays on
+STOCK, where "beli 1,5 kg" is how buying is genuinely described, so the purchase surfaces are
+untouched. A pleasant side effect: the fraction rule stopped depending on what happens to be on
+screen — base units are whole by definition, so it is now one rule instead of a per-ingredient one.
+
+**The pack case was a genuine hole.** `pack` sat in the picker's "Count" group beside `pcs`, as if a
+pack were an atomic countable thing. It is not — it is a purchase CONTAINER. With `pack` as the base
+unit there is nothing beneath it, so the smallest quantity a recipe can express is one whole pack:
+a kilogram of ketchup per kebab. There was no correct number to type. The system already had the
+right concept — `pack_size` (V46) says "1 pack = 1000 g" at receiving time — but it only works when
+the base unit is the fine one. So `pack` is gone from the picker; buying by the pack stays exactly
+as it was.
+
+**Which left the ingredients already stranded.** `Ingredient.update` rightly refuses a bare unit
+change while stock remains, because reinterpreting "2" from packs to grams would destroy the figure
+rather than convert it. So the fix is a real conversion: `POST /api/v1/ingredients/{id}/convert-unit`
+multiplies stock by the factor, divides the per-unit cost by it, and leaves total VALUE untouched —
+nothing was bought, sold or lost, only the unit changed.
+
+The part that took the most care is what else has to move in the same transaction. A converted
+ingredient whose RECIPES still said "1" would consume one gram per portion instead of a pack's
+worth — a thousandfold under-consumption surfacing only as an inexplicable surplus at the next
+opname, which the leak report would then read as nothing at all. And a converted ingredient whose
+LEDGER was left alone would have "rata-rata pemakaian per hari" averaging grams against packs across
+the conversion date. Both are rescaled alongside it, bounded to the one ingredient, in one
+transaction. A half-applied conversion would be worse than none.
+
+Two guards worth keeping: the factor must be a positive whole number (a fractional one means
+converting toward a COARSER unit, losing the precision this exists to gain), and a result that would
+overflow the INTEGER stock column is refused outright — 1.7 tonnes of meat converted to milligrams
+needs 1.7 billion, and a silently truncated stock figure would read as catastrophic shrinkage at the
+next count. Owner/manager only at the gateway, carved out ahead of the POS ingredients route, since
+this rewrites history rather than recording a movement.
+
+## 2026-09-06 — the leak report was reporting the future (code-review fixes, ADR 0074)
+
+`/code-review` came back with fifteen findings on the detection work, and four of them were the same
+mistake wearing different clothes. Every detector here reasons about something NOT happening, and I
+had measured all of them against the window the caller asked for. The console's default period is the
+CURRENT month, so that window ends in the future — and the unelapsed remainder of the month is, to a
+detector looking for absence, indistinguishable from evidence. Tonight's dinner service came back as
+a dark hour. Today came back as a day that never closed. A session opened this morning came back as
+abandoned. A stock count taken yesterday was reported as three weeks old, in the very block whose job
+is to tell the owner how much to trust the number.
+
+The fix is two upper bounds instead of one. The requested `to` still bounds every query, so nothing
+outside the asked-for period is included; a derived `observedTo = min(to, now)` bounds every
+CONCLUSION about absence. The unclosed-day check is capped tighter still, at the last complete
+outlet-local day: a day in progress has not failed to close, it has not finished. Worth writing down
+because the bug was invisible in tests — every integration test used a window ending in the past.
+
+A fifth finding was the same species one level down: the dark-hour BASELINE took its median only over
+days that actually sold at that hour, because a day with no sales leaves no row to average. An outlet
+selling at 21:00 on three Mondays in eight got a baseline of "about five", and the five silent Mondays
+were each reported as a hole — the exact false positive the minimum-expected floor existed to
+prevent. The baseline now builds the full day x hour grid and left-joins the counts, so a quiet hour
+contributes a real zero.
+
+The rest, briefly. Per-person rates were being computed over ALL payments including PENDING,
+ABANDONED and FAILED, so a cashier generating abandoned QRIS attempts had their void rate diluted
+below the bar while a cash-only till was flagged for ordinary behaviour. The refund baseline was
+built only from operators who had refunded, quietly dropping every clean operator out of the
+comparison and inflating both refunders' rates against each other. The discount check's floor was a
+money floor, so one rupiah of discount at an outlet where nobody else discounted was enough to put a
+name in front of an owner — a minimum has to be counted in times-it-happened when the numerator is
+currency. And the manual-correction count took the calendar date of an EXCLUSIVE instant and compared
+it inclusively, folding an extra day into every period.
+
+Two smaller ones worth the change: the recipe-consumer query had the sold-quantity roll-up embedded
+inside it, so a chunked `IN` clause re-scanned every order and bill line of the period per chunk, on
+top of the identical roll-up the coverage figure already computes — the sales mix is now fetched once
+and joined in memory. And the leak report had borrowed `StockLedgerDay.ZONE`, a constant whose own
+javadoc scopes it to ingredient-ledger bucketing; it is now `OutletZone`, named for what three
+separate features actually mean by it, so the coupling is visible rather than accidental.
+
+Finally, the English copy was interpolating `{{count}}` — i18next's RESERVED plural key — with no
+`_one`/`_other` forms, so a single finding rendered as "1 bills were cancelled after items had been
+added." Rather than add fifteen pairs of plural forms, the bodies are worded count-last and
+interpolate a non-reserved `{{n}}`, which is grammatical at any number in both languages and
+sidesteps plural resolution entirely. A test now fails if `{{count}}` ever reappears.
+
+One finding I checked and did not treat as live: a CLOSED session with a null variance being counted
+as an exact-zero close is unreachable, because V21's `ck_crs_closed_shape` requires the column to be
+present on any CLOSED row. Hardened anyway — treating "never compared" as "agreed exactly" is the
+wrong default to leave lying around, and it cost one branch.
+
+## 2026-09-06 — finding the sales that were never rung (ADR 0074)
+
+Every report Native has is derived from what was recorded, so none of them can see the fraud that
+actually hurts an F&B SME: the meal that gets served, the cash that gets taken, and nothing rung up.
+The books stay perfectly consistent afterwards, because the missing revenue was never an input.
+
+What betrays it is physical — the ingredients still left the kitchen, the bottle still left the
+fridge — and restaurant-service already held every piece of that evidence without ever correlating
+it. So the new `integrity` feature is a READ-ONLY report over rows that already existed: no table,
+no event, no GL impact, one owner-only endpoint. Nine detectors, in two families. Stock that moved
+without a sale (tracked items counted short; ingredient shortfall converted into portions through
+the recipes). And tills that were not watched (an hour with no sales on a day and hour the outlet's
+own history says is busy; sales rung with no register session open; a trading day that never closed;
+persistent cash short; unexplained cash over; a session left open; a run of closes that came out to
+exactly zero).
+
+Four decisions shaped it more than the SQL did:
+
+**The headline is a range, not a number.** The low bound counts only tracked-item shortfall, where
+one missing bottle is one unrecorded sale at one known price. The high bound adds the ingredient
+estimate, which is real but has innocent explanations — waste, spoilage, staff meals, over-portioning
+— that Native cannot yet record and net out. Collapsing them would hand an owner an inference with
+the confidence of a measurement, and they would act on it.
+
+**The report publishes its own blind spots.** Coverage rides in the same response as the estimate,
+not behind a second request: how much of what sold was even backed by a recipe, and how long since
+anyone counted. At 30% recipe coverage a small number means almost nothing, and without that stated
+it reads exactly like a clean bill of health.
+
+**A signal that did not fire is omitted, not returned at zero.** An empty list says "nothing stood
+out". Nine zeroes say "the system looked", which is noisier and weaker.
+
+**The estimate never touches the ledger.** No outbox write, no posting. Real shrinkage already posts
+through the existing stocktake flow; this only reinterprets it as lost revenue, for the owner's eyes.
+The same instinct drove the rest: owner-only at the gateway (a manager can be the subject of a
+finding), variance patterns thresholded on RECURRENCE rather than on an amount (three short closes
+is a pattern, one is a bad night — and a rupiah threshold would be meaningless in another currency),
+and nothing auto-notified to anyone.
+
+The allocation maths turned out prettier than expected. Distributing a missing quantity across the
+dishes that consume it, weighted by the real sales mix, reduces to `missing x sold_i / SUM(sold_j x
+qty_per_portion_j)` — the per-portion quantity cancels from the numerator but not the denominator,
+which is exactly right: a dish using four times as much absorbs four times the shortfall, then
+converts its share back into portions at its own heavier rate. All `long`, one integer division at
+the end, no float anywhere near it.
+
+The five per-person detectors (void, refund, discount and cash-tender rates; bills cancelled with
+items on them) were the part worth being most careful about, because a rate comparison that is subtly
+wrong does not crash — it quietly puts somebody's name in front of an owner on a page about theft.
+Two decisions came out of that. Each operator is compared against the REST of the outlet, never
+against an average including themselves: at three cashiers, the one voiding a third of their sales
+lifts the outlet average enough to look ordinary, and small rosters are exactly where this gets used.
+And the comparison is cross-multiplied rather than divided, so no rate is ever materialised and the
+verdict cannot turn on a rounding step.
+
+Most of that component's tests are about restraint rather than detection — a lone operator is never
+an outlier (an owner working their own till is the entire baseline, not an anomaly), a 100% rate over
+three sales is ignored, and being merely above average is not enough. One of those tests caught my
+own wrong premise: I had written a case asserting that two heavy voiders out of three would both be
+flagged, and the code correctly reported neither, because each one's baseline contains the other.
+That is the right answer — when most of the roster does something it is the outlet's practice, not
+one person's anomaly — so the test became a pin for that restraint instead.
+
+The console page puts its own caveats where they cannot be skipped: the disclaimer sits directly
+under the headline number rather than in fine print, and the coverage notes sit ABOVE the findings,
+not below them — a reader who sees a reassuring total first has already drawn a conclusion by the
+time they learn it was computed over 30% of what sold. A vitest pins that every signal type has copy
+in BOTH locales, so adding a detector and forgetting the Indonesian block fails in review instead of
+shipping an owner a card titled `EXACT_ZERO_CLOSE_RUN`.
+
+Two things the tests said that I had wrong. The unsessioned-sales figure is the GRAND total the till
+took, service charge and PB1 included — which is correct, because what went unreconciled is the cash
+in the drawer, not the revenue line under it. And a missing required query parameter returns 500
+rather than 400: that is fleet-wide behaviour in `libs/security`, unchanged here, and pinning it in
+this endpoint's test would have either codified the wart or made one endpoint diverge from the rest.
+Left as a noted gap rather than quietly widened scope.
+
+## 2026-09-06 — the stock figure now has a history, not just a number (ADR 0074)
+
+Groundwork for sales-leak detection, but useful on its own. `ingredient.stock_qty` was a single
+number with no story behind it: you could see that 8 kg of flour was left, never that 40 arrived,
+6 were consumed by recipes and somebody hand-corrected it twice. `ingredient_usage_day` (V42) held
+one bucket — recipe depletion — so shrinkage that had *already been explained* (a delivery, an
+opname, a manual fix) was indistinguishable from shrinkage that had not.
+
+V47 renames that table to **`ingredient_stock_day`** and widens it into the full daily movement
+ledger: `qty_used`, `received_qty`, a SIGNED `adjustment_qty`, a reserved `waste_qty`, `closing_qty`,
+and the two counters an owner actually asks for — `receipt_count` and `adjustment_count` ("berapa
+kali stok dikoreksi manual"). Every writer that moves stock now books to it in the same transaction
+as the movement: depletion, both priced-receive entry points, create/set/add, and each opname line.
+Reads at `GET /api/v1/ingredients/stock-history` (per-ingredient roll-up) and `/{id}/stock-history`
+(day by day).
+
+Three decisions that were not obvious:
+
+**A daily aggregate, not a per-movement ledger.** A row per sale x per ingredient is the natural
+audit shape and explodes with volume — which is exactly why V42 chose the (ingredient, day) UPSERT.
+V47 keeps it and its concurrency discipline intact: one ingredient at a time, ascending UUID order.
+The opname path had to be restructured for that — it collects corrections during its line loop and
+drains a `TreeMap` afterwards, rather than UPSERTing in request order.
+
+**`closing_qty` is sourced from `ingredient.stock_qty` inside the UPSERT, under
+`flushAutomatically = true`.** Entity-path callers (`setStock`, an opname line) have a dirty,
+unflushed persistence context, so a native query would otherwise read the figure from *before* the
+movement it is supposed to be mirroring. Passing the value in from Java would have worked too, but
+sourcing it from the row makes it impossible for the mirror to disagree with what it mirrors.
+
+**A movement is booked to the day it is applied, never back-dated.** The ADR 0072 purchase consumer
+can carry a back-dated bill; writing that into a past day's row would overwrite an already-closed
+day's `closing_qty` with today's figure. The ledger records when the *figure* moved — the same rule
+depletion already follows for an offline sale replayed the next day.
+
+The rename was safe to do at all only because Debezium captures `public.outbox` and nothing else on
+this database, so no connector, publication or slot names the table.
+
+One test failed and was right to: `IngredientUsageAtomicityTest` asserted a rolled-back sale leaves
+**no ledger row**, and its own arrangement (create an ingredient with opening stock) now legitimately
+books one — opening stock is stock arriving, a receipt. The assertion moved to the invariant it
+actually meant, `SUM(qty_used) == 0`, which is stricter than counting rows. Worth noting because the
+failure was the schema change telling the truth about a test whose premise had quietly expired.
+
 ## 2026-09-04 — receipt wording, pack sizes, and a guard that was wrong one step later
 
 Three owner asks on the purchase surfaces, plus the bug the third one uncovered.

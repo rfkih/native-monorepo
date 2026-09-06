@@ -17,7 +17,9 @@ import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.repository.GoodsReceiptRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
+import id.co.nativeapp.restaurant.inventory.repository.IngredientStockDayRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.recipe.repository.RecipeLineRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,6 +41,10 @@ class IngredientWriterTest {
   private final IngredientRepository repository = mock(IngredientRepository.class);
   private final GoodsReceiptRepository goodsReceiptRepository = mock(GoodsReceiptRepository.class);
   private final OutboxWriter outboxWriter = mock(OutboxWriter.class);
+  // The V47 daily-ledger UPSERTs are a mocked no-op here: their SQL is exercised by the
+  // Testcontainers tests.
+  private final IngredientStockDayRepository stockDayRepository =
+      mock(IngredientStockDayRepository.class);
   private final OutletAccessGuard guard = mock(OutletAccessGuard.class);
   // No deactivation guards in the unit pins — the ADR 0050 recipe veto is integration-tested.
   // The applier is REAL and wraps the same mocks, so the existing verify()/verifyNoInteractions()
@@ -47,8 +53,12 @@ class IngredientWriterTest {
   private final IngredientWriter writer =
       new IngredientWriter(
           repository,
+          stockDayRepository,
+          // Only the unit-CONVERSION path touches recipe lines; the pins here never call it.
+          mock(RecipeLineRepository.class),
           goodsReceiptRepository,
-          new PricedReceiveWriter(repository, goodsReceiptRepository, outboxWriter),
+          new PricedReceiveWriter(
+              repository, stockDayRepository, goodsReceiptRepository, outboxWriter),
           guard,
           java.util.List.of());
 

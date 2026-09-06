@@ -430,6 +430,7 @@ export const id = {
     channels: 'Channel Penjualan',
     platformSettlements: 'Settlement Platform',
     marketplace: 'Marketplace / Platform Online',
+    salesIntegrity: 'Deteksi kebocoran',
     openingBalances: 'Saldo awal',
   },
   a11y: {
@@ -1417,6 +1418,22 @@ export const id = {
     nameRequired: 'Isi nama barang.',
     unitLabel: 'Satuan',
     unitHint: 'Dihitung dalam bilangan bulat — pakai g atau ml untuk yang ditimbang atau ditakar pecahan.',
+    convertUnit: {
+      badge: 'Tidak bisa dipakai di resep ({{unit}}) — perbaiki',
+      title: 'Ubah satuan {{name}}',
+      intro:
+        'Satu {{unit}} adalah jumlah terkecil yang bisa diminta resep, jadi bahan ini tidak bisa dimasukkan ke resep. Sebutkan isi satu {{unit}} dan stoknya akan dihitung ulang dalam satuan yang lebih kecil — cara Anda membeli tetap sama.',
+      toUnitLabel: 'Hitung dalam',
+      factorLabel: '1 {{from}} isinya berapa {{to}}?',
+      preview: 'Stok menjadi {{after}} (sebelumnya {{before}}). Tidak ada yang dibeli atau hilang.',
+      note: 'Resep dan riwayat stok ikut dihitung ulang dalam satuan baru, jadi tidak ada yang bergeser. Nilai total stok Anda tidak berubah.',
+      submit: 'Ubah satuan',
+      errors: {
+        factor: 'Masukkan bilangan bulat lebih dari 0.',
+        overflow: 'Angka stoknya jadi terlalu besar. Pilih satuan yang lebih besar.',
+        failed: 'Gagal mengubah satuan. Coba lagi.',
+      },
+    },
     unitGroup: { weight: 'Berat', volume: 'Volume', count: 'Jumlah' },
     costLabel: 'Biaya per satuan ({{currency}}, opsional)',
     costHint:
@@ -3793,6 +3810,131 @@ export const id = {
       colGross: 'Kotor',
       colNet: 'Bersih',
       colFee: 'Komisi',
+    },
+  },
+  salesIntegrity: {
+    title: 'Deteksi kebocoran',
+    subtitle:
+      'Penjualan yang mungkin tidak pernah dicatat. Semua laporan lain dibangun dari yang SUDAH tercatat, jadi tidak ada yang bisa melihat ini.',
+    noCompany: 'Belum ada perusahaan dipilih',
+    noCompanyHint: 'Buat perusahaan untuk menjalankan deteksi kebocoran.',
+    error: 'Tidak dapat memuat laporan kebocoran.',
+    empty: 'Tidak ada yang mencurigakan periode ini',
+    emptyHint:
+      'Tidak ada indikasi yang muncul. Lihat catatan cakupan di atas — hasil bersih hanya sekuat bukti di baliknya.',
+    prevPeriod: 'Bulan sebelumnya',
+    nextPeriod: 'Bulan berikutnya',
+    disclaimer:
+      'Ini indikasi untuk diperiksa, bukan bukti. Semua angka di sini perkiraan dari pola stok dan kasir, dan masing-masing punya penjelasan yang wajar. Tanya dulu sebelum menyimpulkan.',
+    headline: {
+      label: 'Perkiraan penjualan tidak tercatat',
+      rangeHint:
+        'Rentang, bukan angka pasti: batas bawah hanya menghitung yang terukur jelas; batas atas menambahkan perkiraan dari bahan, yang bisa juga karena terbuang atau makan karyawan.',
+      confirmedCost: 'Nilai modal stok yang hilang: {{amount}}',
+    },
+    coverage: {
+      title: 'Yang tidak terlihat oleh laporan ini',
+      recipe: '{{pct}}% dari yang terjual punya resep — sisanya tidak terjangkau pemeriksaan bahan.',
+      noSales: 'Tidak ada penjualan periode ini, jadi tidak ada pola yang bisa dibandingkan.',
+      neverCountedIngredients:
+        'Bahan belum pernah diopname, jadi pemeriksaan bahan tidak menemukan apa pun.',
+      lastIngredientCount: 'Opname bahan terakhir {{days}} hari lalu.',
+      neverCountedItems:
+        'Item berstok belum pernah diopname, jadi pemeriksaan item tidak menemukan apa pun.',
+      lastItemCount: 'Opname item terakhir {{days}} hari lalu.',
+      manualCorrections: 'Koreksi stok manual periode ini: {{n}}',
+    },
+    severity: { HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah' },
+    detail: {
+      hour: 'Jam {{hour}}.00',
+      quantity: '{{qty}} hilang',
+      unnamed: 'Periode ini',
+    },
+    signal: {
+      MISSING_TRACKED_ITEMS: {
+        title: 'Stok berkurang tanpa penjualan',
+        body: 'Unit hilang tanpa penjualan di belakangnya: {{n}}',
+        advice:
+          'Ini sinyal paling jelas: satu unit hilang sama dengan satu penjualan tidak tercatat. Cek dulu pecah atau minum karyawan, baru siapa yang jaga.',
+      },
+      INGREDIENT_SHORTFALL: {
+        title: 'Bahan terpakai melebihi resep',
+        body: 'Bahan yang kurang saat opname terakhir: {{n}}',
+        advice:
+          'Terpakai lebih banyak dari yang dihitung resep. Terbuang, basi, makan karyawan, dan porsi kelebihan juga terlihat seperti ini — cek takaran porsi dulu sebelum yang lain.',
+      },
+      DARK_HOUR: {
+        title: 'Kasir sepi di jam yang biasanya ramai',
+        body: 'Jam tanpa transaksi padahal outlet buka: {{n}}',
+        advice:
+          'Dibandingkan dengan riwayat outlet ini sendiri untuk hari dan jam yang sama, bukan target tetap. Satu jam sepi itu biasa; jam makan siang sepi biasanya tidak.',
+      },
+      SALES_OUTSIDE_SESSION: {
+        title: 'Penjualan tanpa sesi kasir dibuka',
+        body: 'Penjualan di luar semua sesi kasir: {{n}}',
+        advice:
+          'Laci yang tidak pernah dihitung terhadap yang diterimanya tidak bisa diperiksa sama sekali. Jadikan buka sesi bagian dari shift.',
+      },
+      TRADING_DAY_WITHOUT_CLOSE: {
+        title: 'Hari jualan yang tidak pernah di-closing',
+        body: 'Hari yang menerima uang tanpa closing: {{n}}',
+        advice:
+          'Angka yang tampil adalah yang belum direkonsiliasi, bukan yang hilang. Closing tiap hari adalah kontrol termurah yang Anda punya.',
+      },
+      PERSISTENT_CASH_SHORT: {
+        title: 'Laci sering kurang saat dihitung',
+        body: 'Closing dengan hitungan laci kurang: {{n}}',
+        advice:
+          'Sekali kurang itu kekeliruan; kalau berpola layak dibicarakan. Bandingkan dengan siapa yang melakukan closing.',
+      },
+      UNEXPLAINED_CASH_OVER: {
+        title: 'Uang di laci lebih banyak dari seharusnya',
+        body: 'Closing dengan hitungan laci lebih: {{n}}',
+        advice:
+          'Terdengar aneh tapi nyata: uang tanpa penjualan di belakangnya adalah yang tertinggal di laci ketika penjualan tidak dicatat dan uangnya belum diambil.',
+      },
+      HIGH_VOID_RATE: {
+        title: 'Satu orang membatalkan jauh lebih sering',
+        body: 'Operator dengan void jauh di atas rekannya: {{n}}',
+        advice:
+          'Pola khas "input dulu, uang diambil, lalu di-void" \u2014 transaksi hanya ada sebentar untuk menyerahkan pesanan. Bandingkan dengan siapa yang jaga, dan cek apakah tata letak kasir membuat void mudah kepencet.',
+      },
+      HIGH_REFUND_RATE: {
+        title: 'Satu orang melakukan refund jauh lebih sering',
+        body: 'Operator dengan refund jauh di atas rekannya: {{n}}',
+        advice:
+          'Refund mengeluarkan uang dari laci dan, tidak seperti void, penjualan aslinya tetap ada \u2014 jadi pembukuan terlihat wajar. Minta lihat apa yang di-refund dan alasannya.',
+      },
+      HIGH_DISCOUNT_RATE: {
+        title: 'Satu orang memberi diskon jauh lebih banyak',
+        body: 'Operator dengan diskon jauh di atas rekannya: {{n}}',
+        advice:
+          'Jarang berarti pencurian, sering hanya shift yang murah hati. Tapi ini juga cara termudah memberi selisihnya ke teman atau keluarga dalam bentuk tunai, jadi layak dipastikan yang mana.',
+      },
+      CANCELLED_BILLS_WITH_ITEMS: {
+        title: 'Tagihan dibatalkan padahal sudah ada isinya',
+        body: 'Tagihan dibatalkan setelah ada isinya: {{n}}',
+        advice:
+          'Tagihan kosong yang dibatalkan itu salah buka meja. Tagihan yang dibatalkan padahal sudah ada makanannya berarti tab hilang setelah dapur memasak \u2014 cek ke mana item itu pergi.',
+      },
+      CASH_TENDER_SKEW: {
+        title: 'Satu orang menerima tunai jauh lebih banyak',
+        body: 'Operator dengan komposisi jauh lebih tunai: {{n}}',
+        advice:
+          'Sering tidak berarti apa-apa \u2014 shift dan tipe pelanggan sudah menjelaskan sebagian besar. Tapi ini satu-satunya cara melihat pelanggan diarahkan diam-diam ke QRIS pribadi, yang membuat penjualan tidak muncul atau muncul sebagai tunai.',
+      },
+      SESSION_LEFT_OPEN: {
+        title: 'Sesi kasir dibiarkan terbuka',
+        body: 'Sesi yang tidak pernah ditutup: {{n}}',
+        advice:
+          'Laci yang tidak dihitung berarti tidak direkonsiliasi. Biasanya lupa, bukan pencurian.',
+      },
+      EXACT_ZERO_CLOSE_RUN: {
+        title: 'Closing selalu pas, terus-menerus',
+        body: 'Closing berturut-turut dengan selisih persis nol: {{n}}',
+        advice:
+          'Outlet kecil yang jujur memang bisa seperti ini. Tapi laci yang dihitung dan tidak pernah beda satu rupiah pun dari sistem lebih sering disalin daripada dihitung.',
+      },
     },
   },
   marketplace: {

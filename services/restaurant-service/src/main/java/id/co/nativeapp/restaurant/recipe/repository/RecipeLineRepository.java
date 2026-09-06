@@ -83,6 +83,35 @@ public interface RecipeLineRepository extends JpaRepository<RecipeLine, UUID> {
       nativeQuery = true)
   List<ItemHppView> findHppViewsByBusinessId(@Param("businessId") UUID businessId);
 
+  /**
+   * Rescales every recipe line that consumes an ingredient by {@code factor} — the recipe half of a
+   * unit conversion.
+   *
+   * <p>This is the part that must not be forgotten. A pack of sauce converted to 1000 g whose
+   * recipes still say "1" would deplete one GRAM per portion instead of one pack, quietly
+   * under-consuming by three orders of magnitude — and the error would surface only as an
+   * inexplicable surplus at the next opname.
+   *
+   * <p>Signed by design: a modifier-option delta may be negative, and multiplying preserves its
+   * sign. Bounded to one ingredient's lines and run inside the conversion's transaction.
+   */
+  @Modifying(flushAutomatically = true)
+  @Query(
+      value =
+          """
+          UPDATE recipe_line
+             SET qty_per_portion = qty_per_portion * :factor,
+                 updated_at      = now(),
+                 updated_by      = :actor,
+                 version         = version + 1
+           WHERE ingredient_id = :ingredientId
+          """,
+      nativeQuery = true)
+  int rescaleForUnitConversion(
+      @Param("ingredientId") UUID ingredientId,
+      @Param("factor") int factor,
+      @Param("actor") String actor);
+
   /** Full-replace support: clears the item's recipe before inserting the new line set. */
   @Modifying
   @Query(value = "DELETE FROM recipe_line WHERE menu_item_id = :menuItemId", nativeQuery = true)

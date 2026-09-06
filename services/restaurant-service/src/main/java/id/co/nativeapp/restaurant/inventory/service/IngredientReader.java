@@ -1,10 +1,13 @@
 package id.co.nativeapp.restaurant.inventory.service;
 
+import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientStockDayResponse;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientStockSummaryResponse;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientUsageResponse;
 import id.co.nativeapp.restaurant.inventory.projection.IngredientView;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
-import id.co.nativeapp.restaurant.inventory.repository.IngredientUsageDayRepository;
+import id.co.nativeapp.restaurant.inventory.repository.IngredientStockDayRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import java.time.LocalDate;
 import java.util.List;
@@ -26,15 +29,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class IngredientReader {
 
   private final IngredientRepository repository;
-  private final IngredientUsageDayRepository usageRepository;
+  private final IngredientStockDayRepository stockDayRepository;
   private final OutletAccessGuard outletAccessGuard;
 
   public IngredientReader(
       IngredientRepository repository,
-      IngredientUsageDayRepository usageRepository,
+      IngredientStockDayRepository stockDayRepository,
       OutletAccessGuard outletAccessGuard) {
     this.repository = repository;
-    this.usageRepository = usageRepository;
+    this.stockDayRepository = stockDayRepository;
     this.outletAccessGuard = outletAccessGuard;
   }
 
@@ -55,8 +58,73 @@ public class IngredientReader {
   @Transactional(readOnly = true)
   public List<IngredientUsageResponse> usageForDate(UUID businessId, LocalDate date) {
     outletAccessGuard.enforce(businessId);
-    return usageRepository.findByBusinessIdAndDate(businessId, date).stream()
+    return stockDayRepository.findByBusinessIdAndDate(businessId, date).stream()
         .map(v -> new IngredientUsageResponse(v.getIngredientId(), v.getQtyUsed()))
+        .toList();
+  }
+
+  /**
+   * An outlet's per-ingredient movement roll-up over {@code [from, to]} (inclusive) — the "riwayat
+   * stok" table (V47). One row per ingredient that moved at all in the window; ingredients that did
+   * not move are absent.
+   *
+   * <p>Returns totals and counts, never an average: the client divides {@code totalUsedQty} by
+   * whichever denominator it means and formats with locale-aware {@code Intl}, so the rounding
+   * choice is made where the presentation is.
+   */
+  @Transactional(readOnly = true)
+  public List<IngredientStockSummaryResponse> stockSummary(
+      UUID businessId, LocalDate from, LocalDate to) {
+    outletAccessGuard.enforce(businessId);
+    return stockDayRepository.findStockSummary(businessId, from, to).stream()
+        .map(
+            v ->
+                new IngredientStockSummaryResponse(
+                    v.getIngredientId(),
+                    v.getName(),
+                    v.getUnit(),
+                    v.getTotalUsedQty(),
+                    v.getTotalReceivedQty(),
+                    v.getNetAdjustmentQty(),
+                    v.getTotalWasteQty(),
+                    v.getReceiptCount(),
+                    v.getAdjustmentCount(),
+                    v.getDaysWithMovement(),
+                    v.getDaysWithUsage(),
+                    v.getLatestClosingQty()))
+        .toList();
+  }
+
+  /**
+   * One ingredient's day-by-day ledger across {@code [from, to]} (inclusive), oldest first — the
+   * drill-down behind a row of {@link #stockSummary}. Days with no movement are ABSENT rather than
+   * zero-filled: the client carries the previous row's closing balance across the gap, which is
+   * what actually happened.
+   *
+   * <p>Outlet access is enforced via the ingredient's OWN outlet, read back through RLS — an
+   * ingredient belonging to another tenant is invisible and 404s exactly like a missing one, so
+   * this cannot be used to probe for ids.
+   */
+  @Transactional(readOnly = true)
+  public List<IngredientStockDayResponse> stockHistory(
+      UUID ingredientId, LocalDate from, LocalDate to) {
+    UUID businessId =
+        repository
+            .findBusinessIdById(ingredientId)
+            .orElseThrow(() -> new IngredientNotFoundException(ingredientId));
+    outletAccessGuard.enforce(businessId);
+    return stockDayRepository.findDailyLedger(ingredientId, from, to).stream()
+        .map(
+            v ->
+                new IngredientStockDayResponse(
+                    v.getStockDate(),
+                    v.getQtyUsed(),
+                    v.getReceivedQty(),
+                    v.getAdjustmentQty(),
+                    v.getWasteQty(),
+                    v.getReceiptCount(),
+                    v.getAdjustmentCount(),
+                    v.getClosingQty()))
         .toList();
   }
 

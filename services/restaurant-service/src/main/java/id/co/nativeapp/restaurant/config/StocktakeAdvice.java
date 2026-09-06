@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant.config;
 
+import id.co.nativeapp.restaurant.inventory.domain.IngredientUnitConversionException;
 import id.co.nativeapp.restaurant.stocktake.domain.StocktakeCurrencyMismatchException;
 import id.co.nativeapp.restaurant.stocktake.domain.StocktakeNotFoundException;
 import id.co.nativeapp.restaurant.stocktake.domain.StocktakeStockRacedException;
@@ -19,6 +20,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * style.
  *
  * <ul>
+ *   <li>{@link IngredientUnitConversionException} — a unit conversion whose arithmetic cannot be
+ *       carried out honestly (non-positive factor, overflowing result) → {@code 422} ({@code
+ *       ingredient-unit-conversion})
  *   <li>{@link StocktakeCurrencyMismatchException} — lines priced in different currencies → {@code
  *       422} ({@code stocktake-currency-mismatch})
  *   <li>{@link StocktakeNotFoundException} — unknown/cross-tenant id → {@code 404} ({@code
@@ -32,6 +36,18 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class StocktakeAdvice {
 
   private static final String TYPE_BASE = "https://errors.nativeapp.id/";
+
+  @ExceptionHandler(IngredientUnitConversionException.class)
+  public ProblemDetail handleUnitConversion(
+      IngredientUnitConversionException ex, HttpServletRequest request) {
+    // 422, not 400: the request is well-formed and the server is healthy — what cannot be processed
+    // is this ingredient's numbers against that factor.
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "ingredient-unit-conversion", request);
+    problem.setTitle("Cannot convert this ingredient's unit");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
 
   @ExceptionHandler(StocktakeCurrencyMismatchException.class)
   public ProblemDetail handleCurrencyMismatch(
