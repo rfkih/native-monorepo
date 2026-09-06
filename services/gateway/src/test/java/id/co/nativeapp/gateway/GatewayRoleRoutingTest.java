@@ -1463,6 +1463,37 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aCashierIsDeniedTheIngredientUnitConversionWith403() throws Exception {
+    // Converting an ingredient's unit rewrites every historical quantity it has — stock, cost,
+    // recipe lines and the whole daily ledger. That is a correction to the books, not a till
+    // operation, so it is carved out of the POS_ROLES /api/v1/ingredients/** surface a cashier
+    // legitimately uses to receive stock at the counter.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/ingredients/11111111-1111-1111-1111-111111111111/convert-unit")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body("{\"toUnit\":\"g\",\"factor\":1000}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    // The carve-out must be matched BEFORE the general ingredients route, or the cashier's token
+    // would fall through to it — so proving the request never reached the service is the real
+    // assertion here, not the status code.
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
   void aManagerIsDeniedTheSalesIntegrityReportWith403() throws Exception {
     // The sales-leak report (ADR 0074) is the one restaurant-service surface narrowed to
     // OWNER_ROLES rather than POS_ROLES, and the MANAGER is the persona that narrowing exists for:

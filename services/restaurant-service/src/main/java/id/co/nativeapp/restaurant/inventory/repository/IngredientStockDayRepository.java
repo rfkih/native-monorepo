@@ -151,6 +151,39 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
       @Param("actor") String actor,
       @Param("companyId") String companyId);
 
+  /**
+   * Rescales every one of an ingredient's daily ledger rows by {@code factor} — the history half of
+   * a unit conversion.
+   *
+   * <p>Without it a converted ingredient's ledger mixes units either side of the conversion date,
+   * and "rata-rata pemakaian per hari" silently averages grams against packs. Every quantity bucket
+   * moves together, including {@code closing_qty} (which may be NULL on a pre-V47 row and must stay
+   * NULL rather than become 0 — that row's balance is unknown, not zero).
+   *
+   * <p>Bounded to one ingredient's rows, and run inside the conversion's own transaction so the
+   * ledger can never be left in a half-converted state.
+   */
+  @Modifying(flushAutomatically = true)
+  @Query(
+      value =
+          """
+          UPDATE ingredient_stock_day
+             SET qty_used       = qty_used * :factor,
+                 received_qty   = received_qty * :factor,
+                 adjustment_qty = adjustment_qty * :factor,
+                 waste_qty      = waste_qty * :factor,
+                 closing_qty    = closing_qty * :factor,
+                 updated_at     = now(),
+                 updated_by     = :actor,
+                 version        = version + 1
+           WHERE ingredient_id = :ingredientId
+          """,
+      nativeQuery = true)
+  int rescaleForUnitConversion(
+      @Param("ingredientId") UUID ingredientId,
+      @Param("factor") int factor,
+      @Param("actor") String actor);
+
   /** An outlet's per-ingredient usage for one day — the opname sheet + riwayat detail read. */
   @Query(
       value =

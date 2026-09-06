@@ -19,6 +19,7 @@ import id.co.nativeapp.restaurant.inventory.repository.GoodsReceiptRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientStockDayRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.recipe.repository.RecipeLineRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,6 +54,8 @@ class IngredientWriterTest {
       new IngredientWriter(
           repository,
           stockDayRepository,
+          // Only the unit-CONVERSION path touches recipe lines; the pins here never call it.
+          mock(RecipeLineRepository.class),
           goodsReceiptRepository,
           new PricedReceiveWriter(
               repository, stockDayRepository, goodsReceiptRepository, outboxWriter),

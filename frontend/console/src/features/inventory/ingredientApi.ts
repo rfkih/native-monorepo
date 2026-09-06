@@ -26,7 +26,14 @@ export type IngredientUnit = (typeof INGREDIENT_UNITS)[number]
 export const INGREDIENT_UNIT_GROUPS: { key: 'weight' | 'volume' | 'count'; units: IngredientUnit[] }[] = [
   { key: 'weight', units: ['g', 'kg'] },
   { key: 'volume', units: ['ml', 'liter'] },
-  { key: 'count', units: ['pcs', 'pack'] },
+  // `pack` is deliberately ABSENT. A pack is a purchase CONTAINER, not a unit of consumption:
+  // you buy sauce by the pack and use it by the gram. An ingredient whose base unit is `pack`
+  // cannot appear in a recipe at all — a pack has nothing beneath it, so the only expressible
+  // quantity is one whole pack — and in production that is exactly what happened to the sauce.
+  // Buying by the pack is still first-class: pick the fine unit and set `packSize` (V46), which
+  // is what the "isi per kemasan" field on the create form is for. Existing `pack` ingredients
+  // are moved across with the unit conversion (`lib/unitConversion.ts`).
+  { key: 'count', units: ['pcs'] },
 ]
 
 export interface Ingredient {
@@ -202,6 +209,47 @@ export function useSetIngredientStock(session: CompanySession) {
         body: { quantity },
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: INGREDIENTS_KEY(session) }),
+  })
+}
+
+/**
+ * Re-expresses an ingredient in a finer base unit, rescaling its stock, cost, recipe lines and whole
+ * daily ledger together so the physical stock it represents is unchanged (`POST
+ * /api/v1/ingredients/{id}/convert-unit`).
+ *
+ * Owner/manager only at the gateway — narrower than the rest of this surface, because it rewrites
+ * every historical quantity for the ingredient rather than recording a new movement.
+ *
+ * Invalidates the ingredient list AND the recipe caches: a conversion changes recipe quantities
+ * server-side, so a drawer left open on stale data would show the pre-conversion numbers.
+ */
+export function useConvertIngredientUnit(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      toUnit,
+      toDisplayUnit,
+      factor,
+    }: {
+      id: string
+      toUnit: string
+      toDisplayUnit: string | null
+      factor: number
+    }) =>
+      apiFetch<Ingredient>(`/api/v1/ingredients/${id}/convert-unit`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: { toUnit, toDisplayUnit, factor },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: INGREDIENTS_KEY(session) })
+      // Prefix keys, matching recipeApi's own invalidation idiom: a conversion rescales recipe
+      // quantities and per-unit costs server-side, so a drawer or HPP summary left on stale data
+      // would show the pre-conversion numbers.
+      void qc.invalidateQueries({ queryKey: ['recipe', session.companyId] })
+      void qc.invalidateQueries({ queryKey: ['hpp-summary', session.companyId] })
+    },
   })
 }
 

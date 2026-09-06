@@ -1418,6 +1418,22 @@ export const id = {
     nameRequired: 'Isi nama barang.',
     unitLabel: 'Satuan',
     unitHint: 'Dihitung dalam bilangan bulat — pakai g atau ml untuk yang ditimbang atau ditakar pecahan.',
+    convertUnit: {
+      badge: 'Tidak bisa dipakai di resep ({{unit}}) — perbaiki',
+      title: 'Ubah satuan {{name}}',
+      intro:
+        'Satu {{unit}} adalah jumlah terkecil yang bisa diminta resep, jadi bahan ini tidak bisa dimasukkan ke resep. Sebutkan isi satu {{unit}} dan stoknya akan dihitung ulang dalam satuan yang lebih kecil — cara Anda membeli tetap sama.',
+      toUnitLabel: 'Hitung dalam',
+      factorLabel: '1 {{from}} isinya berapa {{to}}?',
+      preview: 'Stok menjadi {{after}} (sebelumnya {{before}}). Tidak ada yang dibeli atau hilang.',
+      note: 'Resep dan riwayat stok ikut dihitung ulang dalam satuan baru, jadi tidak ada yang bergeser. Nilai total stok Anda tidak berubah.',
+      submit: 'Ubah satuan',
+      errors: {
+        factor: 'Masukkan bilangan bulat lebih dari 0.',
+        overflow: 'Angka stoknya jadi terlalu besar. Pilih satuan yang lebih besar.',
+        failed: 'Gagal mengubah satuan. Coba lagi.',
+      },
+    },
     unitGroup: { weight: 'Berat', volume: 'Volume', count: 'Jumlah' },
     costLabel: 'Biaya per satuan ({{currency}}, opsional)',
     costHint:

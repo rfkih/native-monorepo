@@ -655,6 +655,35 @@ public class RoutingConfig {
   }
 
   /**
+   * The ingredient unit CONVERSION sub-path — {@code POST /api/v1/ingredients/*}{@code
+   * /convert-unit}, restaurant-service.
+   *
+   * <p>Narrower than the {@link #ingredientsRoute} surface it sits inside: converting a unit
+   * rewrites every historical quantity for that ingredient — its stock, its cost, its recipe lines
+   * and its whole daily ledger. That is a correction to the books, not a till operation, so a
+   * cashier receiving stock at the counter has no business performing it.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing, exactly as on {@link
+   * #registerCloseCorrectionRoute}: this carve-out must match BEFORE the general {@code
+   * /api/v1/ingredients/**} POS route, or a cashier token would reach it. Every other ingredient
+   * path still falls through to that route unchanged.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> ingredientUnitConversionRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-ingredient-convert-unit")
+        .route(path("/api/v1/ingredients/*/convert-unit"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * Ingredient catalog (ADR 0046 phase 1): the raw-material (bahan) list an outlet counts at a
    * stock opname. Same POS_ROLES surface as {@link #menuRoute} — cashiers manage/receive stock at
    * the till.

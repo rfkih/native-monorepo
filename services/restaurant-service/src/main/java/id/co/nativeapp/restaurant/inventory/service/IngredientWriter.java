@@ -4,6 +4,7 @@ import id.co.nativeapp.restaurant.inventory.domain.GoodsReceiptIdempotencyKeyCon
 import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
 import id.co.nativeapp.restaurant.inventory.domain.StockLedgerDay;
+import id.co.nativeapp.restaurant.inventory.dto.ConvertIngredientUnitRequest;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
@@ -11,6 +12,7 @@ import id.co.nativeapp.restaurant.inventory.repository.GoodsReceiptRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
 import id.co.nativeapp.restaurant.inventory.repository.IngredientStockDayRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.recipe.repository.RecipeLineRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -59,6 +61,7 @@ public class IngredientWriter {
 
   private final IngredientRepository repository;
   private final IngredientStockDayRepository stockDayRepository;
+  private final RecipeLineRepository recipeLineRepository;
   private final GoodsReceiptRepository goodsReceiptRepository;
   private final PricedReceiveWriter pricedReceiveWriter;
   private final OutletAccessGuard outletAccessGuard;
@@ -67,12 +70,14 @@ public class IngredientWriter {
   public IngredientWriter(
       IngredientRepository repository,
       IngredientStockDayRepository stockDayRepository,
+      RecipeLineRepository recipeLineRepository,
       GoodsReceiptRepository goodsReceiptRepository,
       PricedReceiveWriter pricedReceiveWriter,
       OutletAccessGuard outletAccessGuard,
       List<IngredientDeactivationGuard> deactivationGuards) {
     this.repository = repository;
     this.stockDayRepository = stockDayRepository;
+    this.recipeLineRepository = recipeLineRepository;
     this.goodsReceiptRepository = goodsReceiptRepository;
     this.pricedReceiveWriter = pricedReceiveWriter;
     this.outletAccessGuard = outletAccessGuard;
@@ -183,6 +188,45 @@ public class IngredientWriter {
     // dikoreksi manual" should say so.
     stockDayRepository.addAdjustment(
         saved.getId(), StockLedgerDay.today(), delta, tenant.actor(), tenant.companyId());
+    return IngredientResponse.from(saved);
+  }
+
+  /**
+   * Re-expresses an ingredient in a finer base unit, rescaling its stock, its cost, its recipe
+   * lines and its whole daily ledger together so nothing about the physical truth changes.
+   *
+   * <p>The operation this exists for: an ingredient created as {@code pack} cannot be put in a
+   * recipe at all, because a pack has nothing beneath it and the smallest expressible use is one
+   * whole pack. In production that is exactly what happened to the sauce — and {@link #update}'s
+   * guard correctly refuses a bare unit change, because reinterpreting "2" from packs to grams
+   * would destroy the stock figure rather than convert it.
+   *
+   * <p><strong>All four rescales are one transaction, and that is the point.</strong> Converting
+   * the ingredient without its recipes would leave every portion consuming a thousandth of what it
+   * should; converting the recipes without the ledger would leave "average consumption per day"
+   * averaging grams against packs across the conversion date. A half-applied conversion is worse
+   * than none, and would surface only as an inexplicable variance at the next stock count.
+   *
+   * <p>Total VALUE is deliberately not recomputed — see {@link Ingredient#convertUnit}. Nothing was
+   * bought, sold or lost; only the unit changed.
+   *
+   * @throws IngredientNotFoundException if not found or not visible to the current tenant
+   * @throws IngredientUnitConversionException if the factor is not positive or the result overflows
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public IngredientResponse convertUnit(UUID id, ConvertIngredientUnitRequest request) {
+    TenantContext.Tenant tenant = TenantContext.require();
+    Ingredient ingredient = load(id);
+    outletAccessGuard.enforce(ingredient.getBusinessId());
+
+    ingredient.convertUnit(request.toUnit(), request.toDisplayUnit(), request.factor());
+    Ingredient saved = repository.saveAndFlush(ingredient);
+
+    // Everything else denominated in the OLD base unit, moved with it. Both are bounded to this
+    // ingredient and both flush the pending ingredient update first.
+    recipeLineRepository.rescaleForUnitConversion(id, request.factor(), tenant.actor());
+    stockDayRepository.rescaleForUnitConversion(id, request.factor(), tenant.actor());
+
     return IngredientResponse.from(saved);
   }
 

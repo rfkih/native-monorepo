@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ClipboardList, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-react'
+import { needsUnitConversion, previewConversion } from './lib/unitConversion'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
@@ -54,6 +55,7 @@ import {
 } from './lib/units'
 import {
   INGREDIENT_UNIT_GROUPS,
+  useConvertIngredientUnit,
   useAddIngredientStock,
   useCreateIngredient,
   useDeactivateIngredient,
@@ -106,6 +108,7 @@ function IngredientManagementInner({
   const [editing, setEditing] = useState<Ingredient | null>(null)
   const [receiving, setReceiving] = useState<Ingredient | null>(null)
   const [setting, setSetting] = useState<Ingredient | null>(null)
+  const [converting, setConverting] = useState<Ingredient | null>(null)
   // Riwayat opname (V42 usage in the detail).
   const [showHistory, setShowHistory] = useState(false)
 
@@ -197,6 +200,7 @@ function IngredientManagementInner({
                   onReceive={() => setReceiving(ing)}
                   onSet={() => setSetting(ing)}
                   onEdit={() => setEditing(ing)}
+                  onConvert={() => setConverting(ing)}
                 />
               ))}
             </Card>
@@ -231,6 +235,14 @@ function IngredientManagementInner({
       {setting ? (
         <SetQtyDialog session={session} ingredient={setting} locale={locale} onClose={() => setSetting(null)} />
       ) : null}
+      {converting ? (
+        <ConvertUnitDialog
+          session={session}
+          ingredient={converting}
+          locale={locale}
+          onClose={() => setConverting(null)}
+        />
+      ) : null}
       {showHistory ? (
         <StocktakeHistorySheet
           session={session}
@@ -253,12 +265,14 @@ function IngredientRow({
   onReceive,
   onSet,
   onEdit,
+  onConvert,
 }: {
   ingredient: Ingredient
   locale: string
   onReceive: () => void
   onSet: () => void
   onEdit: () => void
+  onConvert: () => void
 }) {
   const { t } = useTranslation()
   const low = ingredient.stockQty === 0
@@ -290,6 +304,20 @@ function IngredientRow({
         ) : (
           <div className="mt-0.5 text-xs text-ink-3">{t('inventory.noCost')}</div>
         )}
+        {/* A base unit nothing can be cooked from (a `pack`, or a legacy `kg` stored as the base):
+            the smallest quantity a recipe can express is one whole one, so the ingredient ends up
+            in no recipe at all — invisible to HPP and to shortfall detection. Surfaced on the row
+            itself rather than buried in the edit dialog, because the owner has no reason to go
+            looking for a problem they experience as "the recipe form won't take my number". */}
+        {needsUnitConversion(ingredient) ? (
+          <button
+            type="button"
+            onClick={onConvert}
+            className="mt-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-500/20 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 dark:text-amber-400"
+          >
+            {t('inventory.convertUnit.badge', { unit: ingredient.unit })}
+          </button>
+        ) : null}
       </div>
 
       <div
@@ -327,6 +355,147 @@ function IngredientRow({
         </button>
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Unit conversion — moving an ingredient off a base unit too coarse to cook with
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-expresses an ingredient in a finer base unit.
+ *
+ * A `pack` is a purchase container, not a unit of consumption: you buy sauce by the pack and use it
+ * by the gram. With `pack` as the BASE unit the smallest quantity a recipe can express is one whole
+ * pack, so the ingredient ends up in no recipe at all — invisible to HPP and to ingredient-shortfall
+ * detection alike. The picker no longer offers `pack`, but ingredients created before that (and
+ * legacy `kg`-as-base rows) still need moving.
+ *
+ * The dialog asks one question — "1 pack = how many grams?" — and previews the resulting stock, so
+ * the factor is checkable before it is committed. The server rescales stock, cost, recipe lines and
+ * the whole daily ledger in one transaction; total stock VALUE is unchanged, because nothing was
+ * bought, sold or lost.
+ */
+function ConvertUnitDialog({
+  session,
+  ingredient,
+  locale,
+  onClose,
+}: {
+  session: CompanySession
+  ingredient: Ingredient
+  locale: string
+  onClose: () => void
+}) {
+  useBackDismiss(onClose)
+  useScrollLock()
+  const { t } = useTranslation()
+  const convert = useConvertIngredientUnit(session)
+  const [unitChoice, setUnitChoice] = useState('kg')
+  const [factorInput, setFactorInput] = useState('')
+
+  const preview = previewConversion(unitChoice, factorInput, ingredient.stockQty)
+  const touched = factorInput.trim() !== ''
+
+  function handleSubmit() {
+    if (!preview.ok) return
+    convert.mutate(
+      {
+        id: ingredient.id,
+        toUnit: preview.toUnit,
+        toDisplayUnit: preview.toDisplayUnit,
+        factor: preview.factor,
+      },
+      { onSuccess: onClose },
+    )
+  }
+
+  return (
+    <DialogShell title={t('inventory.convertUnit.title', { name: ingredient.name })} onClose={onClose}>
+      <p className="text-sm text-ink-3">
+        {t('inventory.convertUnit.intro', { unit: ingredient.unit })}
+      </p>
+
+      <div className="mt-4">
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">
+          {t('inventory.convertUnit.toUnitLabel')}
+        </div>
+        <div className="flex flex-col gap-2">
+          {INGREDIENT_UNIT_GROUPS.map((group) => (
+            <div key={group.key} className="flex flex-wrap items-center gap-1.5">
+              <span className="w-14 shrink-0 text-[11px] text-ink-3">
+                {t(`inventory.unitGroup.${group.key}` as Parameters<typeof t>[0])}
+              </span>
+              {group.units.map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setUnitChoice(u)}
+                  className={cn(
+                    'rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors',
+                    unitChoice === u
+                      ? 'border-brand-500 bg-emerald-tint text-brand-600'
+                      : 'border-line bg-surface text-ink-2 hover:bg-hover',
+                  )}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <label className="mt-4 block">
+        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">
+          {t('inventory.convertUnit.factorLabel', { from: ingredient.unit, to: unitChoice })}
+        </span>
+        <input
+          type="number"
+          inputMode="numeric"
+          step="1"
+          min="1"
+          value={factorInput}
+          onChange={(e) => setFactorInput(e.target.value)}
+          placeholder="1000"
+          className="tnum h-11 w-full rounded-lg border border-line bg-surface px-3 text-right font-mono text-sm text-ink focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+        />
+      </label>
+
+      {/* The preview is the whole safety mechanism: a mistyped factor is invisible as a number and
+          obvious as a resulting stock figure. */}
+      {touched ? (
+        preview.ok ? (
+          <p className="mt-2 text-xs text-ink-2">
+            {t('inventory.convertUnit.preview', {
+              before: `${formatShownQty(ingredient.stockQty, ingredient, locale)} ${shownUnit(ingredient)}`,
+              after: `${new Intl.NumberFormat(locale).format(preview.newStockQty)} ${preview.toUnit}`,
+            })}
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-loss">
+            {t(`inventory.convertUnit.errors.${preview.reason}` as Parameters<typeof t>[0])}
+          </p>
+        )
+      ) : null}
+
+      <p className="mt-3 rounded-lg bg-surface-2 p-2.5 text-xs text-ink-3">
+        {t('inventory.convertUnit.note')}
+      </p>
+
+      {convert.isError ? (
+        <p className="mt-2 text-xs text-loss">{t('inventory.convertUnit.errors.failed')}</p>
+      ) : null}
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>
+          {t('common.cancel')}
+        </Button>
+        <Button onClick={handleSubmit} disabled={!preview.ok || convert.isPending}>
+          {convert.isPending ? <Spinner className="size-4" /> : t('inventory.convertUnit.submit')}
+        </Button>
+      </div>
+    </DialogShell>
   )
 }
 

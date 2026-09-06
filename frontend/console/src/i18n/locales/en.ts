@@ -1430,6 +1430,22 @@ export const en = {
     nameRequired: 'Enter a name.',
     unitLabel: 'Unit',
     unitHint: 'Counted in whole numbers — use g or ml for anything you weigh or measure to a fraction.',
+    convertUnit: {
+      badge: 'Cannot be used in a recipe ({{unit}}) — fix',
+      title: 'Change the unit of {{name}}',
+      intro:
+        'One {{unit}} is the smallest amount a recipe can ask for, which is why this ingredient cannot be added to one. Say what a {{unit}} contains and it will be re-counted in that smaller unit — you keep buying it exactly as you do now.',
+      toUnitLabel: 'Count it in',
+      factorLabel: '1 {{from}} contains how many {{to}}?',
+      preview: 'Stock becomes {{after}} (was {{before}}). Nothing is bought or lost.',
+      note: 'Recipes and past stock history are re-counted in the new unit at the same time, so nothing shifts. The total value of your stock does not change.',
+      submit: 'Change unit',
+      errors: {
+        factor: 'Enter a whole number greater than 0.',
+        overflow: 'That would make the stock number too large. Choose a larger unit.',
+        failed: 'Could not change the unit. Try again.',
+      },
+    },
     unitGroup: { weight: 'Weight', volume: 'Volume', count: 'Count' },
     costLabel: 'Cost per unit ({{currency}}, optional)',
     costHint:

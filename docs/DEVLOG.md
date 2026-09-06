@@ -1,5 +1,61 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-06 — a pack is not a unit you can cook with
+
+An owner reported two things: 60 g of meat could not be entered against a kg ingredient, and the
+sauce "is in pack but 1 pack is 1 KG and the use is only tiny". Reading production made the shape of
+it obvious, and worse than the report:
+
+    Daging Kebab TIS FOOD   g/kg    1,700 kg    0 recipe lines
+    Delmonte saus sambal    g/kg        2 kg    0 recipe lines
+    Mentega                 g/kg        2 kg    0 recipe lines
+    Delmonte Saus tomat     pack           2    0 recipe lines
+    roti / cheese / tortilla / chicken   pcs    1-4 lines, all qty 1
+
+**Every weight-based ingredient is in no recipe at all.** Only `pcs` items are. 1.7 tonnes of meat,
+the sauces and the butter contribute nothing to HPP and nothing to the ADR 0074 shortfall detector —
+on exactly the ingredients worth stealing. Nobody filed that as a bug; they just stopped writing
+recipes, and the only trace was the leak report's own coverage line.
+
+Two distinct causes, and only one of them was a real modelling hole.
+
+**The kg case was ours to make easier.** The unit model is fine — `kg` stores grams with a kg label,
+and the input did accept 0.06. But no cook writes a recipe in kilograms, and asking someone to
+divide by a thousand on every line, at three decimal places, is not a small friction. Recipes are now
+typed in the ingredient's BASE unit for every ingredient: 60, not 0.06. The display unit stays on
+STOCK, where "beli 1,5 kg" is how buying is genuinely described, so the purchase surfaces are
+untouched. A pleasant side effect: the fraction rule stopped depending on what happens to be on
+screen — base units are whole by definition, so it is now one rule instead of a per-ingredient one.
+
+**The pack case was a genuine hole.** `pack` sat in the picker's "Count" group beside `pcs`, as if a
+pack were an atomic countable thing. It is not — it is a purchase CONTAINER. With `pack` as the base
+unit there is nothing beneath it, so the smallest quantity a recipe can express is one whole pack:
+a kilogram of ketchup per kebab. There was no correct number to type. The system already had the
+right concept — `pack_size` (V46) says "1 pack = 1000 g" at receiving time — but it only works when
+the base unit is the fine one. So `pack` is gone from the picker; buying by the pack stays exactly
+as it was.
+
+**Which left the ingredients already stranded.** `Ingredient.update` rightly refuses a bare unit
+change while stock remains, because reinterpreting "2" from packs to grams would destroy the figure
+rather than convert it. So the fix is a real conversion: `POST /api/v1/ingredients/{id}/convert-unit`
+multiplies stock by the factor, divides the per-unit cost by it, and leaves total VALUE untouched —
+nothing was bought, sold or lost, only the unit changed.
+
+The part that took the most care is what else has to move in the same transaction. A converted
+ingredient whose RECIPES still said "1" would consume one gram per portion instead of a pack's
+worth — a thousandfold under-consumption surfacing only as an inexplicable surplus at the next
+opname, which the leak report would then read as nothing at all. And a converted ingredient whose
+LEDGER was left alone would have "rata-rata pemakaian per hari" averaging grams against packs across
+the conversion date. Both are rescaled alongside it, bounded to the one ingredient, in one
+transaction. A half-applied conversion would be worse than none.
+
+Two guards worth keeping: the factor must be a positive whole number (a fractional one means
+converting toward a COARSER unit, losing the precision this exists to gain), and a result that would
+overflow the INTEGER stock column is refused outright — 1.7 tonnes of meat converted to milligrams
+needs 1.7 billion, and a silently truncated stock figure would read as catastrophic shrinkage at the
+next count. Owner/manager only at the gateway, carved out ahead of the POS ingredients route, since
+this rewrites history rather than recording a movement.
+
 ## 2026-09-06 — the leak report was reporting the future (code-review fixes, ADR 0074)
 
 `/code-review` came back with fifteen findings on the detection work, and four of them were the same

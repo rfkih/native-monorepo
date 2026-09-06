@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.inventory.controller;
 
 import id.co.nativeapp.restaurant.inventory.dto.AddIngredientStockRequest;
+import id.co.nativeapp.restaurant.inventory.dto.ConvertIngredientUnitRequest;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientStockDayResponse;
@@ -172,6 +173,28 @@ public class IngredientController {
   public ResponseEntity<Void> delete(@PathVariable UUID id) {
     service.deactivate(id);
     return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * Re-expresses an ingredient in a finer base unit, rescaling stock, cost, recipes and the daily
+   * ledger together. The escape hatch from a base unit too coarse to consume from — an ingredient
+   * created as {@code pack} cannot appear in a recipe at all.
+   *
+   * <p>Owner/manager only at the gateway, narrower than the rest of this controller: it rewrites
+   * every historical quantity for the ingredient, which is not a till operation.
+   */
+  @Operation(
+      summary = "Convert an ingredient to a finer base unit",
+      description =
+          "Re-expresses the ingredient in a new base unit without changing the physical stock it"
+              + " represents: stock quantity, pack size, recipe lines and every daily-ledger row"
+              + " are multiplied by the factor, and the per-unit cost is divided by it, so the"
+              + " total stock value is unchanged. '1 pack = 1000 g' is a factor of 1000. Returns"
+              + " 422 when the factor is not positive or the rescaled stock would overflow.")
+  @PostMapping("/{id}/convert-unit")
+  public ResponseEntity<IngredientResponse> convertUnit(
+      @PathVariable UUID id, @Valid @RequestBody ConvertIngredientUnitRequest request) {
+    return ResponseEntity.ok(service.convertUnit(id, request));
   }
 
   /**

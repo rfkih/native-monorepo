@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.inventory.service;
 
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNameConflictException;
+import id.co.nativeapp.restaurant.inventory.dto.ConvertIngredientUnitRequest;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientStockDayResponse;
@@ -104,6 +105,15 @@ public class IngredientService {
   }
 
   /** Sets the absolute stock quantity for an ingredient. */
+  /**
+   * Re-expresses an ingredient in a finer base unit (see {@link IngredientWriter#convertUnit}) —
+   * the escape hatch from a unit too coarse to write a recipe against.
+   */
+  public IngredientResponse convertUnit(UUID id, ConvertIngredientUnitRequest request) {
+    TenantContext.require();
+    return writer.convertUnit(id, request);
+  }
+
   public IngredientResponse setStock(UUID id, int quantity) {
     TenantContext.require();
     return writer.setStock(id, quantity);
