@@ -30,15 +30,8 @@ import { cn } from '@/lib/cn'
 import { formatMoney, formatPercent } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { useIngredients, type Ingredient } from '@/features/inventory/ingredientApi'
-import {
-  allowsFraction,
-  parseShownQtyInput,
-  shownUnit,
-  toBaseQty,
-  toDisplayQty,
-  type UnitBearing,
-} from '@/features/inventory/lib/units'
 import { useAdminModifierGroups, type MenuItem, type ModifierGroupResponse } from './api'
+import { parseRecipeQty } from './lib/recipeQty'
 import {
   computeMarginRatio,
   useAutoLinkItem,
@@ -155,22 +148,6 @@ interface IngredientLike {
   active: boolean
 }
 
-/**
- * Parses a recipe line's typed quantity — in the ingredient's SHOWN unit — into a signed base
- * INTEGER. `parseShownQtyInput` only accepts non-negative magnitudes (it is shared with the
- * stocktake counted-qty input, which is never negative), so a modifier-option DELTA line (which
- * may be negative, e.g. "no cheese" = -20 g) strips a leading '-' before parsing and reapplies
- * the sign to the parsed base value. Returns `null` when the typed text isn't a valid quantity
- * for this ingredient (wrong shape, or a fraction on a base-unit ingredient).
- */
-function parseLineQty(raw: string, ing: UnitBearing): number | null {
-  const trimmed = raw.trim()
-  const negative = trimmed.startsWith('-')
-  const magnitude = negative ? trimmed.slice(1) : trimmed
-  const base = parseShownQtyInput(magnitude, ing)
-  if (base == null) return null
-  return negative ? -base : base
-}
 
 function computeHppPreview(
   baseLines: DraftLine[],
@@ -189,11 +166,10 @@ function computeHppPreview(
     }
     if (currency == null) currency = ing.costCurrency
     else if (currency !== ing.costCurrency) mismatch = true
-    // qty is typed in the SHOWN unit (kg may be fractional) — unitCostMinor is PER-BASE, so
-    // convert to the base quantity (grams) BEFORE multiplying; never scale a per-base cost by a
-    // fractional kg value.
+    // qty is typed in the BASE unit and unitCostMinor is PER-BASE, so this is a direct product —
+    // no conversion, and no chance of scaling a per-base cost by a fractional display value.
     const qty = Number(line.qty)
-    if (Number.isFinite(qty)) sum += toBaseQty(qty, ing) * ing.unitCostMinor
+    if (Number.isFinite(qty)) sum += qty * ing.unitCostMinor
   }
   return {
     hppMinor: currency != null ? sum : null,
@@ -257,16 +233,13 @@ function RecipeEditor({
   }
 
   const [lines, setLines] = useState<DraftLine[]>(() =>
-    recipe.lines.map((l) => {
-      const ing = ingredientById.get(l.ingredientId)
-      const shownQty = ing ? toDisplayQty(l.qtyPerPortion, ing) : l.qtyPerPortion
-      return {
-        key: l.id,
-        ingredientId: l.ingredientId,
-        modifierOptionId: l.modifierOptionId,
-        qty: String(shownQty),
-      }
-    }),
+    recipe.lines.map((l) => ({
+      key: l.id,
+      ingredientId: l.ingredientId,
+      modifierOptionId: l.modifierOptionId,
+      // Stored base integer, shown as-is: the recipe is written in base units.
+      qty: String(l.qtyPerPortion),
+    })),
   )
 
   const pickableIngredients = [...ingredientById.entries()]
@@ -286,11 +259,9 @@ function RecipeEditor({
   // ---- Validation — mirrors the server's rules (see recipeApi.ts docs) --------------------
   function lineError(line: DraftLine): string | null {
     if (!line.ingredientId) return t('recipe.errors.ingredientRequired')
-    // Defensive fallback (ingredient not resolvable) — treat as a base unit, factor 1.
-    const ing: UnitBearing = ingredientById.get(line.ingredientId) ?? { unit: '', displayUnit: null }
-    // Typed in the ingredient's SHOWN unit — a fraction is only valid for kg/liter (parseLineQty
-    // rejects it otherwise); the base qty this resolves to is what actually gets saved/summed.
-    const qty = parseLineQty(line.qty, ing)
+    // Typed in the ingredient's BASE unit — always a whole number, which is exactly what gets
+    // saved and summed, so the parse needs nothing from the ingredient itself.
+    const qty = parseRecipeQty(line.qty)
     if (qty == null) return t('recipe.errors.qtyInteger')
     if (line.modifierOptionId === null) {
       if (qty <= 0) return t('recipe.errors.baseQtyPositive')
@@ -316,16 +287,13 @@ function RecipeEditor({
 
   function handleSave() {
     if (hasErrors) return
-    const body: PutRecipeLineInput[] = lines.map((l) => {
-      const ing: UnitBearing = ingredientById.get(l.ingredientId) ?? { unit: '', displayUnit: null }
-      // Convert the SHOWN-unit input back to the BASE integer the server stores — `hasErrors`
-      // already guarantees every line parses (parseLineQty null-check in `lineError` above).
-      return {
-        ingredientId: l.ingredientId,
-        modifierOptionId: l.modifierOptionId,
-        qtyPerPortion: parseLineQty(l.qty, ing) ?? 0,
-      }
-    })
+    const body: PutRecipeLineInput[] = lines.map((l) => ({
+      ingredientId: l.ingredientId,
+      modifierOptionId: l.modifierOptionId,
+      // Already the BASE integer the server stores — `hasErrors` guarantees every line parses
+      // (the parseRecipeQty null-check in `lineError` above).
+      qtyPerPortion: parseRecipeQty(l.qty) ?? 0,
+    }))
     putRecipe.mutate({ itemId: item.id, lines: body }, { onSuccess: onClose })
   }
 
@@ -534,7 +502,8 @@ function RecipeLineRow({
 }) {
   const { t } = useTranslation()
   const selected = ingredients.find((i) => i.id === line.ingredientId)
-  const selectedUnitLabel = selected ? shownUnit(selected) : ''
+  // The BASE unit, not the display one: a recipe line is written in grams, not kilograms.
+  const selectedUnitLabel = selected ? selected.unit : ''
   return (
     <div>
       <div className="flex items-center gap-2">
@@ -560,7 +529,7 @@ function RecipeLineRow({
               : t('recipe.qtyLabel', { unit: selectedUnitLabel })
           }
           type="number"
-          step={selected && allowsFraction(selected) ? 'any' : '1'}
+          step="1"
           value={line.qty}
           onChange={(e) => onChange({ qty: e.target.value })}
           placeholder={signed ? '±0' : '0'}
