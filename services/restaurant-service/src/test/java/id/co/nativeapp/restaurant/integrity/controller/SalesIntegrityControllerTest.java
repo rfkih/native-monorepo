@@ -141,7 +141,15 @@ class SalesIntegrityControllerTest {
                 "IDR",
                 List.of(
                     new LeakDetailResponse(
-                        UUID.randomUUID(), "Teh Botol", null, null, 2L, null, 30_000L, "IDR")))),
+                        UUID.randomUUID(),
+                        "Teh Botol",
+                        null,
+                        null,
+                        2L,
+                        null,
+                        null,
+                        30_000L,
+                        "IDR")))),
         new LeakCoverageResponse(10L, 3L, null, null, 0L));
   }
 }
