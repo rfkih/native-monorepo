@@ -1,5 +1,30 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-06 — the migration gate caught what I did not think about
+
+V47 originally renamed `ingredient_usage_day` to `ingredient_stock_day`, because the name no longer
+described a table holding receipts, corrections and a closing balance. Its header reasoned at length
+about whether the rename was safe — checked the Debezium connector, confirmed only `public.outbox` is
+captured, confirmed RENAME preserves data, indexes, constraints and the RLS policy — and concluded it
+was fine.
+
+It never considered app-tier rollback. `scripts/check-migration-safety.sh` refused it: the fleet
+deploys by ROLLING update with an automatic rollback on a failed health gate (ADR 0057), so old and
+new app versions run against this schema at the same time, and a rollback puts the previous image in
+front of a table whose name it has never heard of. Every safety property I checked was real, and I
+checked the wrong axis.
+
+The ledger's entire value is in the added columns, so V47 is now purely additive and the table keeps
+its historical name. The precision moved to Java instead: `IngredientStockDay` and `stockDate` map
+onto `ingredient_usage_day`/`usage_date`, and reads alias the column back to the projection's name.
+A better noun was never worth a broken rollback.
+
+Two things worth keeping from the fix. Reverting the rename by a blanket find-and-replace also renamed
+the SQL ALIAS the read projection maps by, so the drill-down returned a null date — the kind of break
+a rename-by-sed makes and a compiler cannot see; the integration test caught it. And it was safe to
+rewrite V47 in place rather than add a V48 undo only because it had never been applied anywhere real:
+UAT is at V42 and prod is behind that, so its only executions were in ephemeral test containers.
+
 ## 2026-09-06 — a pack is not a unit you can cook with
 
 An owner reported two things: 60 g of meat could not be entered against a kg ingredient, and the

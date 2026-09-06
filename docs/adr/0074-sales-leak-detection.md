@@ -26,9 +26,10 @@ explained (a delivery, a hand-correction, an opname) from shrinkage that had not
 
 ## Decision
 
-### 1. `ingredient_usage_day` becomes `ingredient_stock_day` — the full daily movement ledger (V47)
+### 1. `ingredient_usage_day` becomes the full daily movement ledger (V47)
 
-One row per (ingredient, outlet-local day) with **every** stock movement bucketed by kind:
+The table keeps its V42 name and gains columns. One row per (ingredient, outlet-local day) with
+**every** stock movement bucketed by kind:
 `qty_used` (recipe depletion at sale), `received_qty` (+`receipt_count`), `adjustment_qty` (SIGNED,
 +`adjustment_count` — opname variance *and* manual "set stok", because from the ledger's point of
 view both are a human overriding the system), `waste_qty` (reserved, always 0 until the waste log
@@ -55,9 +56,15 @@ Three sub-decisions worth pinning:
   the *figure* moved — the same rule per-sale depletion already follows for an offline sale replayed
   the next day. `received_at` remains the business fact, on `goods_receipt` and `StockReceived`.
 
-The rename is safe: Debezium captures **only `public.outbox`** on this database
-(`docker/debezium/outbox-connector.json`, `table.include.list`), so no connector, publication or
-replication slot references this table.
+**The table is NOT renamed, though the name now undersells it.** The first draft renamed it to
+`ingredient_stock_day` for accuracy and reasoned carefully about Debezium — and not at all about
+app-tier rollback. A rename is non-backward-compatible DDL: the fleet deploys by rolling update with
+an automatic rollback on a failed health gate (ADR 0057), so old and new app versions run against
+this schema simultaneously and a rollback puts the previous image in front of a name it has never
+heard of. migration-safety: clean (1 new migration(s) checked against origin/master) refused it, correctly. The ledger's whole value is in
+the added columns, so the migration is purely additive; the Java side keeps the precise names
+(`IngredientStockDay`, `stockDate`) mapped onto the historical column names, and reads alias back
+to them. A better noun is not worth a broken rollback.
 
 ### 2. Leak detection is a READ-ONLY report over data restaurant-service already owns
 

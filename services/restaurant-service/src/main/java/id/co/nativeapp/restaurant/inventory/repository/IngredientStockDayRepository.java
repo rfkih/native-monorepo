@@ -206,7 +206,9 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
   @Query(
       value =
           """
-          SELECT d.usage_date       AS usage_date,
+          -- Aliased to the PRECISE name the projection maps by: the column is historical
+          -- (V42), the read model is not.
+          SELECT d.usage_date       AS stock_date,
                  d.qty_used         AS qty_used,
                  d.received_qty     AS received_qty,
                  d.adjustment_qty   AS adjustment_qty,
