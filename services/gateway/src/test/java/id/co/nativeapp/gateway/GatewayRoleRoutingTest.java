@@ -1463,6 +1463,60 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aManagerIsDeniedTheSalesIntegrityReportWith403() throws Exception {
+    // The sales-leak report (ADR 0074) is the one restaurant-service surface narrowed to
+    // OWNER_ROLES rather than POS_ROLES, and the MANAGER is the persona that narrowing exists for:
+    // its findings can name an individual, and a manager can be the subject of one, so a manager
+    // must not be able to read their own scorecard. A cashier is denied every dashboard route
+    // anyway and proves nothing about this boundary; manager-acme carries ONLY "manager", unlike
+    // owner-acme which also carries it and could never prove the gate holds.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/sales-integrity/report?businessId=x&from=y&to=z")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    // Denied AT THE EDGE: the request never reached restaurant-service, so the report was never
+    // built and no per-person finding was ever assembled for a token that must not see one.
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aCashierIsDeniedTheSalesIntegrityReportWith403() throws Exception {
+    // The other half of the same gate: `sales-integrity` is a distinct path SEGMENT from `sales`,
+    // so a cashier's POS_ROLES token reaching /api/v1/sales/** must not fall through to it.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/sales-integrity/report?businessId=x&from=y&to=z")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
   void aManagerIsDeniedTheBankFileRouteWith403() throws Exception {
     // W2 review fix: the persona the owner-only gate EXISTS to exclude is the MANAGER (a cashier
     // is denied everywhere anyway, proving nothing about the owner/manager boundary specifically).
