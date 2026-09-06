@@ -139,10 +139,6 @@ function newLine(modifierOptionId: string | null): DraftLine {
 interface IngredientLike {
   name: string
   unit: string
-  /** The unit SHOWN to the user (kg/liter) when it sits above the base; null = the base unit
-   *  itself. A pre-existing-but-inactive recipe line has no catalog entry to read this from —
-   *  see the `recipe.lines` fallback below, which treats it as absent (factor 1). */
-  displayUnit: string | null
   unitCostMinor: number | null
   costCurrency: string | null
   active: boolean
@@ -205,13 +201,14 @@ function RecipeEditor({
   const autoLink = useAutoLinkItem(session)
 
   // Built BEFORE the draft state so the initial qty seed below can convert each line's
-  // BASE qtyPerPortion into its ingredient's SHOWN unit (e.g. 1500 g -> "1.5" for a kg item).
+  // The ingredient map is built before the draft state because `computeHppPreview` and the
+  // picker both need it. It is NOT used to convert the seeded quantities: a recipe line is
+  // stored and shown in the ingredient's BASE unit, so the stored integer is what appears.
   const ingredientById = new Map<string, IngredientLike>()
   for (const ing of ingredients) {
     ingredientById.set(ing.id, {
       name: ing.name,
       unit: ing.unit,
-      displayUnit: ing.displayUnit,
       unitCostMinor: ing.unitCostMinor,
       costCurrency: ing.costCurrency,
       active: ing.active,
@@ -219,12 +216,11 @@ function RecipeEditor({
   }
   for (const l of recipe.lines) {
     if (!ingredientById.has(l.ingredientId)) {
-      // No catalog entry (ingredient gone inactive) — the recipe response has no displayUnit of
-      // its own, so this falls back to the base unit as-is (factor 1, see `lib/units.ts`).
+      // No catalog entry (ingredient gone inactive) — the recipe response still carries the base
+      // unit, which is the only unit a recipe line is ever written in.
       ingredientById.set(l.ingredientId, {
         name: l.ingredientName,
         unit: l.unit,
-        displayUnit: null,
         unitCostMinor: l.unitCostMinor,
         costCurrency: l.costCurrency,
         active: l.ingredientActive,
@@ -494,7 +490,9 @@ function RecipeLineRow({
   onRemove,
 }: {
   line: DraftLine
-  ingredients: { id: string; name: string; unit: string; displayUnit: string | null; active: boolean }[]
+  // No `displayUnit`: a recipe line is written in the BASE unit, and having the display label
+  // in scope here would only ever be a way to relabel a gram field as kg.
+  ingredients: { id: string; name: string; unit: string; active: boolean }[]
   error: string | null
   signed: boolean
   onChange: (patch: Partial<DraftLine>) => void
@@ -528,10 +526,16 @@ function RecipeLineRow({
             remember which one this field meant; only a screen-reader user was ever told. */}
         <div className="flex shrink-0 items-center gap-1">
           <input
+            // Without an ingredient there is no unit to state, and interpolating an empty one
+            // makes a screen reader announce "Quantity, left paren, right paren".
             aria-label={
-              signed
-                ? t('recipe.deltaQtyLabel', { unit: selectedUnitLabel })
-                : t('recipe.qtyLabel', { unit: selectedUnitLabel })
+              selectedUnitLabel
+                ? signed
+                  ? t('recipe.deltaQtyLabel', { unit: selectedUnitLabel })
+                  : t('recipe.qtyLabel', { unit: selectedUnitLabel })
+                : signed
+                  ? t('recipe.deltaQtyLabelNoUnit')
+                  : t('recipe.qtyLabelNoUnit')
             }
             type="number"
             step="1"
@@ -550,7 +554,11 @@ function RecipeLineRow({
               ingredient is chosen — there is no unit to state yet. */}
           <span
             aria-hidden="true"
-            className="w-8 shrink-0 font-mono text-xs font-semibold text-ink-3"
+            title={selectedUnitLabel}
+            // min-w keeps the delete buttons aligned down the list for the common short units;
+            // it can still grow, and truncates rather than colliding with the button, because the
+            // API accepts any unit up to 16 characters and "bungkus"/"sachet" are plausible.
+            className="min-w-8 max-w-16 shrink-0 truncate font-mono text-xs font-semibold text-ink-3"
           >
             {selectedUnitLabel}
           </span>

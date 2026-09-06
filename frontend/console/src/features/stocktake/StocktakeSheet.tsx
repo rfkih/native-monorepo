@@ -465,17 +465,34 @@ function StocktakeIngredientRow({
         ) : null}
       </div>
 
-      <input
-        aria-label={t('stocktake.countedForItem', { name: ingredient.name })}
-        type="number"
-        min="0"
-        step={fractional ? 'any' : '1'}
-        inputMode={fractional ? 'decimal' : 'numeric'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="0"
-        className="h-10 w-20 shrink-0 rounded-lg border border-line bg-surface px-2 text-right font-mono text-sm tnum text-ink placeholder:text-ink-3/50 focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10"
-      />
+      {/* The unit sits beside the field, not only above it. This is the counting surface, and a
+          count entered in the wrong unit does not merely display wrong — it MANUFACTURES the
+          variance that the leak report then reads as theft. Typing 1500 against an item shown as
+          "1,5 kg" would record 1500 kg counted and fabricate a 1498,5 kg overage. */}
+      <div className="flex shrink-0 items-center gap-1">
+        <input
+          aria-label={t('stocktake.countedForItemWithUnit', {
+            name: ingredient.name,
+            unit: shownUnit(ingredient),
+          })}
+          type="number"
+          min="0"
+          step={fractional ? 'any' : '1'}
+          inputMode={fractional ? 'decimal' : 'numeric'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="0"
+          className="h-10 w-20 shrink-0 rounded-lg border border-line bg-surface px-2 text-right font-mono text-sm tnum text-ink placeholder:text-ink-3/50 focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10"
+        />
+        {/* aria-hidden: the label above already carries the unit; announcing it twice is worse. */}
+        <span
+          aria-hidden="true"
+          title={shownUnit(ingredient)}
+          className="min-w-8 max-w-16 shrink-0 truncate font-mono text-xs font-semibold text-ink-3"
+        >
+          {shownUnit(ingredient)}
+        </span>
+      </div>
 
       <div className="w-24 shrink-0 text-right">
         {varianceQty != null ? (

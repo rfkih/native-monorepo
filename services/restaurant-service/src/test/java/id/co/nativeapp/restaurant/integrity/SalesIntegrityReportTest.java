@@ -118,7 +118,7 @@ class SalesIntegrityReportTest extends PostgresRlsTestBase {
                 ingredientService
                     .create(
                         new CreateIngredientRequest(
-                            outlet, "Beras-" + outlet, "g", null, 10L, "IDR", 2_000, null))
+                            outlet, "Beras-" + outlet, "g", "kg", 10L, "IDR", 2_000, null))
                     .id());
     UUID dishId =
         asTenant(
@@ -235,6 +235,28 @@ class SalesIntegrityReportTest extends PostgresRlsTestBase {
     assertThat(signalOf(report, LeakSignalType.HIGH_REFUND_RATE)).isEmpty();
     assertThat(signalOf(report, LeakSignalType.HIGH_DISCOUNT_RATE)).isEmpty();
     assertThat(signalOf(report, LeakSignalType.CASH_TENDER_SKEW)).isEmpty();
+  }
+
+  @Test
+  void anOperatorDetailCountsEVENTSNeverMoney() {
+    // The discount signal's rate numerator is an AMOUNT in minor units. If that reached `quantity`
+    // the row would render "25000" beside the same figure formatted as "Rp 25.000" — one fact
+    // shown twice, once mislabelled and off by the currency's exponent. Whatever an operator row
+    // reports as a quantity must be a count of times, which is what every signal here means.
+    UUID outlet = UUID.randomUUID();
+    Instant from = Instant.now().minus(Duration.ofDays(1));
+
+    SalesIntegrityReportResponse report = report(TENANT, outlet, from);
+
+    for (LeakSignalResponse signal : report.signals()) {
+      for (var detail : signal.details()) {
+        if (detail.quantity() != null) {
+          assertThat(detail.quantity())
+              .as("%s quantity must be a count, not an amount", signal.type())
+              .isLessThan(1_000_000L);
+        }
+      }
+    }
   }
 
   @Test

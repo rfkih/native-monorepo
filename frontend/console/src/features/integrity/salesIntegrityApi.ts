@@ -52,9 +52,12 @@ export interface LeakDetail {
   businessDate: string | null
   hourOfDay: number | null
   quantity: number | null
-  /** The unit `quantity` is counted in (an ingredient's g / ml / pcs), or null when the signal
-   *  type already says what it counts — sales, days, closes. */
+  /** The BASE unit `quantity` is counted in (an ingredient's g / ml / pcs), or null when the
+   *  signal type already says what it counts — sales, days, closes. */
   quantityUnit: string | null
+  /** The label above that base unit (kg over g), or null when the base unit is what is shown.
+   *  Rendered through `formatShownQty`/`shownUnit` so this report and Persediaan agree. */
+  quantityDisplayUnit: string | null
   valueMinor: number | null
   currency: string | null
 }

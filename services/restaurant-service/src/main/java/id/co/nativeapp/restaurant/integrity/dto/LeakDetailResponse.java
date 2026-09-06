@@ -37,5 +37,6 @@ public record LeakDetailResponse(
     @Nullable Integer hourOfDay,
     @Nullable Long quantity,
     @Nullable String quantityUnit,
+    @Nullable String quantityDisplayUnit,
     @Nullable Long valueMinor,
     @Nullable String currency) {}

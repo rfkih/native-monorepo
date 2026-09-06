@@ -1365,6 +1365,7 @@ export const id = {
     historyEmpty: 'Belum ada stock opname tercatat.',
     historyVariedCount: '{{formatted}} barang selisih',
     countedForItem: 'Jumlah terhitung untuk {{name}}',
+    countedForItemWithUnit: 'Hasil hitung {{name}}, dalam {{unit}}',
     notCounted: 'Belum dihitung',
     submitAction: 'Kirim stock opname',
     errorGeneric: 'Tidak dapat mengirim stock opname. Silakan coba lagi.',
@@ -3121,6 +3122,10 @@ export const id = {
     ingredientPlaceholder: 'Pilih bahan…',
     qtyLabel: 'Jumlah ({{unit}})',
     deltaQtyLabel: 'Perubahan jumlah ({{unit}})',
+    // Announced before an ingredient is picked, when there is no unit to state —
+    // interpolating an empty one reads as "Quantity, left paren, right paren".
+    qtyLabelNoUnit: 'Jumlah',
+    deltaQtyLabelNoUnit: 'Perubahan jumlah',
     removeLine: 'Hapus baris',
     ingredientInactiveWarning: 'Bahan ini sudah tidak aktif — pertimbangkan untuk menggantinya.',
     save: 'Simpan resep',
@@ -3847,7 +3852,6 @@ export const id = {
     severity: { HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah' },
     detail: {
       hour: 'Jam {{hour}}.00',
-      quantity: '{{qty}} hilang',
       unnamed: 'Periode ini',
     },
     signal: {
@@ -3856,30 +3860,35 @@ export const id = {
         body: 'Unit hilang tanpa penjualan di belakangnya: {{n}}',
         advice:
           'Ini sinyal paling jelas: satu unit hilang sama dengan satu penjualan tidak tercatat. Cek dulu pecah atau minum karyawan, baru siapa yang jaga.',
+        qty: '{{qty}} unit hilang',
       },
       INGREDIENT_SHORTFALL: {
         title: 'Bahan terpakai melebihi resep',
         body: 'Bahan yang kurang saat opname terakhir: {{n}}',
         advice:
           'Terpakai lebih banyak dari yang dihitung resep. Terbuang, basi, makan karyawan, dan porsi kelebihan juga terlihat seperti ini — cek takaran porsi dulu sebelum yang lain.',
+        qty: 'kurang {{qty}} {{unit}}',
       },
       DARK_HOUR: {
         title: 'Kasir sepi di jam yang biasanya ramai',
         body: 'Jam tanpa transaksi padahal outlet buka: {{n}}',
         advice:
           'Dibandingkan dengan riwayat outlet ini sendiri untuk hari dan jam yang sama, bukan target tetap. Satu jam sepi itu biasa; jam makan siang sepi biasanya tidak.',
+        qty: 'biasanya sekitar {{qty}} transaksi',
       },
       SALES_OUTSIDE_SESSION: {
         title: 'Penjualan tanpa sesi kasir dibuka',
         body: 'Penjualan di luar semua sesi kasir: {{n}}',
         advice:
           'Laci yang tidak pernah dihitung terhadap yang diterimanya tidak bisa diperiksa sama sekali. Jadikan buka sesi bagian dari shift.',
+        qty: '{{qty}} transaksi',
       },
       TRADING_DAY_WITHOUT_CLOSE: {
         title: 'Hari jualan yang tidak pernah di-closing',
         body: 'Hari yang menerima uang tanpa closing: {{n}}',
         advice:
           'Angka yang tampil adalah yang belum direkonsiliasi, bukan yang hilang. Closing tiap hari adalah kontrol termurah yang Anda punya.',
+        qty: '{{qty}} transaksi hari itu',
       },
       PERSISTENT_CASH_SHORT: {
         title: 'Laci sering kurang saat dihitung',
@@ -3898,30 +3907,35 @@ export const id = {
         body: 'Operator dengan void jauh di atas rekannya: {{n}}',
         advice:
           'Pola khas "input dulu, uang diambil, lalu di-void" \u2014 transaksi hanya ada sebentar untuk menyerahkan pesanan. Bandingkan dengan siapa yang jaga, dan cek apakah tata letak kasir membuat void mudah kepencet.',
+        qty: '{{qty}} kali void',
       },
       HIGH_REFUND_RATE: {
         title: 'Satu orang melakukan refund jauh lebih sering',
         body: 'Operator dengan refund jauh di atas rekannya: {{n}}',
         advice:
           'Refund mengeluarkan uang dari laci dan, tidak seperti void, penjualan aslinya tetap ada \u2014 jadi pembukuan terlihat wajar. Minta lihat apa yang di-refund dan alasannya.',
+        qty: '{{qty}} kali refund',
       },
       HIGH_DISCOUNT_RATE: {
         title: 'Satu orang memberi diskon jauh lebih banyak',
         body: 'Operator dengan diskon jauh di atas rekannya: {{n}}',
         advice:
           'Jarang berarti pencurian, sering hanya shift yang murah hati. Tapi ini juga cara termudah memberi selisihnya ke teman atau keluarga dalam bentuk tunai, jadi layak dipastikan yang mana.',
+        qty: '{{qty}} kali diskon',
       },
       CANCELLED_BILLS_WITH_ITEMS: {
         title: 'Tagihan dibatalkan padahal sudah ada isinya',
         body: 'Tagihan dibatalkan setelah ada isinya: {{n}}',
         advice:
           'Tagihan kosong yang dibatalkan itu salah buka meja. Tagihan yang dibatalkan padahal sudah ada makanannya berarti tab hilang setelah dapur memasak \u2014 cek ke mana item itu pergi.',
+        qty: '{{qty}} item di tagihan',
       },
       CASH_TENDER_SKEW: {
         title: 'Satu orang menerima tunai jauh lebih banyak',
         body: 'Operator dengan komposisi jauh lebih tunai: {{n}}',
         advice:
           'Sering tidak berarti apa-apa \u2014 shift dan tipe pelanggan sudah menjelaskan sebagian besar. Tapi ini satu-satunya cara melihat pelanggan diarahkan diam-diam ke QRIS pribadi, yang membuat penjualan tidak muncul atau muncul sebagai tunai.',
+        qty: '{{qty}} transaksi tunai',
       },
       SESSION_LEFT_OPEN: {
         title: 'Sesi kasir dibiarkan terbuka',
@@ -3934,6 +3948,7 @@ export const id = {
         body: 'Closing berturut-turut dengan selisih persis nol: {{n}}',
         advice:
           'Outlet kecil yang jujur memang bisa seperti ini. Tapi laci yang dihitung dan tidak pernah beda satu rupiah pun dari sistem lebih sering disalin daripada dihitung.',
+        qty: '{{qty}} closing berturut-turut',
       },
     },
   },

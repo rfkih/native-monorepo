@@ -92,6 +92,39 @@ describe('signal copy parity', () => {
     }
   })
 
+  // The signals that fill `quantity`. The other three (persistent short, unexplained over, session
+  // left open) send null and carry their money in `valueMinor` instead.
+  const SIGNALS_WITH_QUANTITY: LeakSignalType[] = [
+    'MISSING_TRACKED_ITEMS',
+    'INGREDIENT_SHORTFALL',
+    'DARK_HOUR',
+    'SALES_OUTSIDE_SESSION',
+    'TRADING_DAY_WITHOUT_CLOSE',
+    'EXACT_ZERO_CLOSE_RUN',
+    'CANCELLED_BILLS_WITH_ITEMS',
+    'HIGH_VOID_RATE',
+    'HIGH_REFUND_RATE',
+    'HIGH_DISCOUNT_RATE',
+    'CASH_TENDER_SKEW',
+  ]
+
+  it.each([
+    ['en', en.salesIntegrity],
+    ['id', id.salesIntegrity],
+  ])('%s phrases every quantity per signal, never one generic label', (_lang, block) => {
+    // A single shared "{{qty}} missing" was wrong for eight of these: five consecutive CLEAN closes
+    // read as "5 missing", and sales that WERE recorded read as "45 missing" — on a page an owner
+    // uses to decide whether a member of staff is stealing.
+    for (const type of SIGNALS_WITH_QUANTITY) {
+      const copy = (block.signal as Record<string, { qty?: string }>)[type]
+      expect(copy?.qty, `missing qty copy for ${type}`).toBeDefined()
+      expect(copy.qty).toContain('{{qty}}')
+    }
+    // Only the ingredient shortfall carries a unit; the rest count something the signal names.
+    const shortfall = (block.signal as Record<string, { qty: string }>).INGREDIENT_SHORTFALL
+    expect(shortfall.qty).toContain('{{unit}}')
+  })
+
   it.each([
     ['en', en.salesIntegrity],
     ['id', id.salesIntegrity],

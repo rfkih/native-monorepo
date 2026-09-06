@@ -178,6 +178,7 @@ public class SalesIntegrityReader {
                   // No unit: a tracked menu item is counted in whole items, and the row already
                   // names which item. "2 missing" of a named bottle cannot be misread.
                   null,
+                  null,
                   value,
                   item.getCurrency()));
         }
@@ -214,9 +215,12 @@ public class SalesIntegrityReader {
                   null,
                   null,
                   shortfall.getMissingQty(),
-                  // The ingredient's BASE unit. Without it "600 missing" is ambiguous by a factor
-                  // of a thousand for an ingredient the stock page shows in kg.
+                  // BOTH units. The base one is what the quantity is counted in; the display label
+                  // is what every other stock surface shows this ingredient as, and the console
+                  // renders through it so the leak report and Persediaan do not disagree about one
+                  // fact.
                   shortfall.getUnit(),
+                  shortfall.getDisplayUnit(),
                   // An ingredient no recipe consumes cannot be priced into revenue, so its detail
                   // row carries its COST instead of a fabricated zero — the loss is real even
                   // though the menu cannot say what it would have sold as.
@@ -254,6 +258,7 @@ public class SalesIntegrityReader {
                 hour.getExpectedCount(),
                 null,
                 null,
+                null,
                 null));
       }
       signals.add(signal(LeakSignalType.DARK_HOUR, darkHours.size(), null, null, details));
@@ -278,6 +283,7 @@ public class SalesIntegrityReader {
                       null,
                       outside.getSaleCount(),
                       null,
+                      null,
                       outside.getTotalMinor(),
                       currency))));
     }
@@ -299,6 +305,7 @@ public class SalesIntegrityReader {
                   day.getBusinessDate(),
                   null,
                   day.getSaleCount(),
+                  null,
                   null,
                   day.getTotalMinor(),
                   day.getCurrency()));
@@ -337,6 +344,7 @@ public class SalesIntegrityReader {
                   LocalDate.ofInstant(bill.getCancelledAt(), OutletZone.ZONE),
                   null,
                   bill.getLineCount(),
+                  null,
                   null,
                   bill.getTotalMinor(),
                   bill.getCurrency()));
@@ -487,7 +495,14 @@ public class SalesIntegrityReader {
               rate.actor(),
               null,
               null,
-              rate.numerator(),
+              // eventCount, NOT numerator: for the discount signal the numerator is an AMOUNT in
+              // minor units, and rendering it as a bare count would show "25000" beside the same
+              // figure formatted as "Rp 25.000" — the identical fact twice, once mislabelled and
+              // off by the currency's exponent. eventCount is how many times it happened, which is
+              // what a count means for every one of these signals (and equals the numerator for
+              // the three that already count events).
+              rate.eventCount(),
+              null,
               null,
               carriesMoney ? rate.valueMinor() : null,
               carriesMoney ? currency : null));
@@ -542,6 +557,7 @@ public class SalesIntegrityReader {
                   null,
                   null,
                   null,
+                  null,
                   null));
         }
         // An open session breaks a run of exact closes rather than continuing it — the run is a
@@ -580,6 +596,7 @@ public class SalesIntegrityReader {
                 session.getSessionId(),
                 session.getClosedBy(),
                 session.getBusinessDate(),
+                null,
                 null,
                 null,
                 null,
@@ -639,6 +656,7 @@ public class SalesIntegrityReader {
                       longestRunStartedOn,
                       null,
                       (long) longestExactRun,
+                      null,
                       null,
                       null,
                       null))));
