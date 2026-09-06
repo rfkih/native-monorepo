@@ -20,8 +20,19 @@ public interface IngredientShortfallView {
 
   String getName();
 
-  /** The ingredient's display unit (g / ml / pcs) — opaque text, no conversion. */
+  /**
+   * The ingredient's BASE unit (g / ml / pcs) — the unit {@link #getMissingQty()} is counted in.
+   * NOT the display label: the query selects {@code i.unit}, and calling this "display" would
+   * invite a maintainer to swap in {@code i.display_unit} and turn 600 g missing into 600 kg.
+   */
   String getUnit();
+
+  /**
+   * The label that sits ABOVE the base unit (kg over g, liter over ml), or {@code null} when the
+   * base unit is what the console shows. Carried so the report renders the figure the way every
+   * other stock surface does.
+   */
+  String getDisplayUnit();
 
   /** Quantity missing across every count in the window — POSITIVE (the query negates it). */
   long getMissingQty();

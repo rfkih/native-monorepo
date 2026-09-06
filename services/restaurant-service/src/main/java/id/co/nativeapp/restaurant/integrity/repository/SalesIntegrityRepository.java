@@ -93,6 +93,7 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
           SELECT isl.ingredient_id            AS ingredient_id,
                  i.name                       AS name,
                  i.unit                       AS unit,
+                 i.display_unit               AS display_unit,
                  SUM(-isl.variance_qty)       AS missing_qty,
                  SUM(-isl.variance_value_minor) AS missing_cost_minor,
                  MAX(ist.currency)            AS currency,
@@ -104,7 +105,7 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
              AND ist.counted_at >= :from
              AND ist.counted_at <  :to
              AND isl.variance_qty < 0
-           GROUP BY isl.ingredient_id, i.name, i.unit
+           GROUP BY isl.ingredient_id, i.name, i.unit, i.display_unit
            ORDER BY SUM(-isl.variance_value_minor) DESC
           """,
       nativeQuery = true)

@@ -1380,6 +1380,7 @@ export const en = {
     historyEmpty: 'No stock opnames recorded yet.',
     historyVariedCount: '{{formatted}} items with variance',
     countedForItem: 'Counted quantity for {{name}}',
+    countedForItemWithUnit: 'Counted for {{name}}, in {{unit}}',
     notCounted: 'Not counted',
     submitAction: 'Submit stock count',
     errorGeneric: 'Could not submit the stock count. Please try again.',
@@ -3182,6 +3183,10 @@ export const en = {
     ingredientPlaceholder: 'Select an ingredient…',
     qtyLabel: 'Quantity ({{unit}})',
     deltaQtyLabel: 'Quantity change ({{unit}})',
+    // Announced before an ingredient is picked, when there is no unit to state —
+    // interpolating an empty one reads as "Quantity, left paren, right paren".
+    qtyLabelNoUnit: 'Quantity',
+    deltaQtyLabelNoUnit: 'Quantity change',
     removeLine: 'Remove line',
     ingredientInactiveWarning: 'This ingredient is no longer active — consider replacing it.',
     save: 'Save recipe',
@@ -3922,7 +3927,6 @@ export const en = {
     severity: { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' },
     detail: {
       hour: '{{hour}}:00',
-      quantity: '{{qty}} missing',
       unnamed: 'This period',
     },
     signal: {
@@ -3931,30 +3935,35 @@ export const en = {
         body: 'Tracked units gone with no sale behind them: {{n}}',
         advice:
           'The clearest signal there is: one missing unit is one unrecorded sale. Check for breakage or staff drinks first, then who was on shift.',
+        qty: '{{qty}} units gone',
       },
       INGREDIENT_SHORTFALL: {
         title: 'Ingredients used beyond the recipes',
         body: 'Ingredients that came up short at the last count: {{n}}',
         advice:
           'More was consumed than the recipes account for. Waste, spoilage, staff meals and over-portioning all look like this too — worth checking portion sizes before anything else.',
+        qty: '{{qty}} {{unit}} short',
       },
       DARK_HOUR: {
         title: 'The till went quiet at a busy hour',
         body: 'Hours that recorded nothing on a trading day: {{n}}',
         advice:
           'Compared against this outlet’s own history for that weekday and hour, not a fixed target. A quiet hour happens; a quiet lunch rush usually does not.',
+        qty: 'normally about {{qty}} sales',
       },
       SALES_OUTSIDE_SESSION: {
         title: 'Sales rung with no register session open',
         body: 'Sales that fell outside every register session: {{n}}',
         advice:
           'A drawer that is never counted against what it took cannot be checked at all. Make opening a session part of the shift.',
+        qty: '{{qty}} sales',
       },
       TRADING_DAY_WITHOUT_CLOSE: {
         title: 'Trading days that never closed',
         body: 'Days that took money without a Z-report: {{n}}',
         advice:
           'The amount shown is what went unreconciled, not what went missing. Closing every day is the cheapest control you have.',
+        qty: '{{qty}} sales that day',
       },
       PERSISTENT_CASH_SHORT: {
         title: 'The drawer keeps coming up short',
@@ -3973,30 +3982,35 @@ export const en = {
         body: 'Operators voiding well above the rest of the outlet: {{n}}',
         advice:
           'The classic shape of "ring it up, take the cash, then void the ticket" \u2014 the sale exists just long enough to hand over the food. Compare against who was on shift, and check whether the till layout makes accidental voids easy.',
+        qty: '{{qty}} voids',
       },
       HIGH_REFUND_RATE: {
         title: 'One person refunds far more than the others',
         body: 'Operators refunding well above the rest of the outlet: {{n}}',
         advice:
           'A refund moves money back out of the drawer and, unlike a void, leaves the original sale standing \u2014 so the books look ordinary. Ask to see what was refunded and why.',
+        qty: '{{qty}} refunds',
       },
       HIGH_DISCOUNT_RATE: {
         title: 'One person discounts far more than the others',
         body: 'Operators discounting well above the rest of the outlet: {{n}}',
         advice:
           'Rarely theft on its own, and often just a generous shift. It is also the cheapest way to hand friends and family the difference in cash, so it is worth knowing which.',
+        qty: '{{qty}} discounts given',
       },
       CANCELLED_BILLS_WITH_ITEMS: {
         title: 'Bills cancelled with items still on them',
         body: 'Bills cancelled after items had been added: {{n}}',
         advice:
           'An empty bill cancelled is a wrong table opened. A bill cancelled with food on it is a tab that disappeared after the kitchen had already cooked \u2014 check what happened to those items.',
+        qty: '{{qty}} items on the bill',
       },
       CASH_TENDER_SKEW: {
         title: 'One person takes far more cash than the others',
         body: 'Operators running a much more cash-heavy mix than the rest: {{n}}',
         advice:
           'Often nothing \u2014 shift and customer mix explain most of it. It is also the only handle there is on a customer being quietly pointed at a private QRIS, where the sale either never appears or comes back as cash.',
+        qty: '{{qty}} cash sales',
       },
       SESSION_LEFT_OPEN: {
         title: 'Register sessions left open',
@@ -4008,6 +4022,7 @@ export const en = {
         body: 'Closes in a row at exactly zero variance: {{n}}',
         advice:
           'An honest small outlet can genuinely look like this. But a counted drawer that never disagrees with the system by a single rupiah is more often a figure being copied than counted.',
+        qty: '{{qty}} closes in a row',
       },
     },
   },

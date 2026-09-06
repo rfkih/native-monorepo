@@ -31,6 +31,7 @@ import { OutletPicker } from '@/components/OutletPicker'
 import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
+import { formatShownQty, shownUnit } from '@/features/inventory/lib/units'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { cn } from '@/lib/cn'
 import {
@@ -40,6 +41,7 @@ import {
   type LeakDetail,
   type LeakSeverity,
   type LeakSignal,
+  type LeakSignalType,
 } from './salesIntegrityApi'
 
 export function SalesIntegrity() {
@@ -230,12 +232,36 @@ function CoverageCard({ report, locale }: { report: { coverage: LeakCoverage }; 
         </li>
         <li>
           {t('salesIntegrity.coverage.manualCorrections', {
-            n: new Intl.NumberFormat(locale).format(coverage.manualStockCorrections),
+            n: numberFormatter(locale).format(coverage.manualStockCorrections),
           })}
         </li>
       </ul>
     </Card>
   )
+}
+
+// Built once per locale rather than per row. `describe` is called for every evidence row on
+// every render — up to 14 signals x 20 rows — and constructing an Intl formatter costs far more
+// than the formatting itself.
+const NUMBER_FORMATTERS = new Map<string, Intl.NumberFormat>()
+const DATE_FORMATTERS = new Map<string, Intl.DateTimeFormat>()
+
+function numberFormatter(locale: string): Intl.NumberFormat {
+  let f = NUMBER_FORMATTERS.get(locale)
+  if (!f) {
+    f = new Intl.NumberFormat(locale)
+    NUMBER_FORMATTERS.set(locale, f)
+  }
+  return f
+}
+
+function dateFormatter(locale: string): Intl.DateTimeFormat {
+  let f = DATE_FORMATTERS.get(locale)
+  if (!f) {
+    f = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
+    DATE_FORMATTERS.set(locale, f)
+  }
+  return f
 }
 
 const SEVERITY_CLASS: Record<LeakSeverity, string> = {
@@ -279,7 +305,7 @@ function SignalCard({
               // resolution, and without _one/_other forms English renders "1 bills were
               // cancelled". The copy is worded count-last so it is grammatical at any number,
               // and the number itself is grouped by Intl like every other figure on the page.
-              n: new Intl.NumberFormat(locale).format(signal.occurrences),
+              n: numberFormatter(locale).format(signal.occurrences),
             })}
           </p>
         </div>
@@ -297,7 +323,7 @@ function SignalCard({
               key={`${signal.type}-${index}`}
               className="flex flex-wrap items-center justify-between gap-2 py-2"
             >
-              <span className="min-w-0 truncate text-ink-2">{describe(detail, locale, t)}</span>
+              <span className="min-w-0 truncate text-ink-2">{describe(detail, signal.type, locale, t)}</span>
               {detail.valueMinor !== null && (
                 <span className="shrink-0 tabular-nums text-ink-3">
                   {formatMoney(detail.valueMinor, detail.currency ?? currency, locale)}
@@ -318,34 +344,43 @@ function SignalCard({
 /**
  * Renders one evidence row's identity from whichever fields the signal filled.
  *
- * Every part is either DATA (a stored name) or locale-formatted through `Intl` — no date or number
- * is ever concatenated by hand (rule 9).
+ * The quantity's phrasing belongs to the SIGNAL, not to a generic label: the same field carries
+ * units gone, sales counted, closes in a run and discounts given, and calling all of them "missing"
+ * turned five clean closes into "5 missing" on a page an owner reads to decide whether somebody is
+ * stealing.
+ *
+ * A stock quantity is rendered through the SAME helpers as Persediaan and the opname sheet, so an
+ * ingredient shown there as "0,6 kg" is not shown here as "600 g" — one fact, one figure. Every
+ * part is either data (a stored name) or locale-formatted through `Intl`; the unit is a separate
+ * interpolation, so a locale controls the separator and the order rather than receiving a
+ * pre-joined string.
  */
 function describe(
   detail: LeakDetail,
+  type: LeakSignalType,
   locale: string,
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): string {
   const parts: string[] = []
   if (detail.subjectName) parts.push(detail.subjectName)
   if (detail.businessDate) {
-    parts.push(
-      new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
-        new Date(`${detail.businessDate}T00:00:00`),
-      ),
-    )
+    parts.push(dateFormatter(locale).format(new Date(`${detail.businessDate}T00:00:00`)))
   }
   if (detail.hourOfDay !== null) {
     parts.push(t('salesIntegrity.detail.hour', { hour: String(detail.hourOfDay).padStart(2, '0') }))
   }
   if (detail.quantity !== null) {
-    // The unit rides WITH the number when the subject has one. "600 missing" is ambiguous by a
-    // factor of a thousand for an ingredient the stock page displays in kg; "600 g missing" is not.
-    // Signals whose count needs no unit (sales, days, closes) send null and read as before.
-    const qty = new Intl.NumberFormat(locale).format(detail.quantity)
+    // A stock quantity arrives in the ingredient's BASE unit; `formatShownQty` scales it into the
+    // display unit the rest of the console uses. Anything without a unit is a plain count.
+    const bearing = detail.quantityUnit
+      ? { unit: detail.quantityUnit, displayUnit: detail.quantityDisplayUnit }
+      : null
     parts.push(
-      t('salesIntegrity.detail.quantity', {
-        qty: detail.quantityUnit ? `${qty} ${detail.quantityUnit}` : qty,
+      t(`salesIntegrity.signal.${type}.qty`, {
+        qty: bearing
+          ? formatShownQty(detail.quantity, bearing, locale)
+          : numberFormatter(locale).format(detail.quantity),
+        unit: bearing ? shownUnit(bearing) : '',
       }),
     )
   }
