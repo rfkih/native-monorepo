@@ -59,6 +59,12 @@ describe('SEVERITY_ORDER', () => {
  * detector server-side and forgetting the Indonesian block ships an owner a card titled
  * `EXACT_ZERO_CLOSE_RUN` — the failure is silent in review and glaring in production.
  */
+/** Every signal's copy. `qty` is optional: three signals send no quantity at all. */
+type SignalCopyMap = Record<
+  string,
+  { title: string; body: string; advice: string; qty?: string }
+>
+
 describe('signal copy parity', () => {
   const SIGNAL_TYPES: LeakSignalType[] = [
     'MISSING_TRACKED_ITEMS',
@@ -82,9 +88,7 @@ describe('signal copy parity', () => {
     ['id', id.salesIntegrity],
   ])('%s has a title, body and advice for every signal', (_lang, block) => {
     for (const type of SIGNAL_TYPES) {
-      const copy = (block.signal as Record<string, { title: string; body: string; advice: string }>)[
-        type
-      ]
+      const copy = (block.signal as SignalCopyMap)[type]
       expect(copy, `missing copy for ${type}`).toBeDefined()
       expect(copy.title.length).toBeGreaterThan(0)
       expect(copy.body.length).toBeGreaterThan(0)
@@ -116,12 +120,12 @@ describe('signal copy parity', () => {
     // read as "5 missing", and sales that WERE recorded read as "45 missing" — on a page an owner
     // uses to decide whether a member of staff is stealing.
     for (const type of SIGNALS_WITH_QUANTITY) {
-      const copy = (block.signal as Record<string, { qty?: string }>)[type]
+      const copy = (block.signal as SignalCopyMap)[type]
       expect(copy?.qty, `missing qty copy for ${type}`).toBeDefined()
       expect(copy.qty).toContain('{{qty}}')
     }
     // Only the ingredient shortfall carries a unit; the rest count something the signal names.
-    const shortfall = (block.signal as Record<string, { qty: string }>).INGREDIENT_SHORTFALL
+    const shortfall = (block.signal as SignalCopyMap).INGREDIENT_SHORTFALL
     expect(shortfall.qty).toContain('{{unit}}')
   })
 
@@ -141,7 +145,7 @@ describe('signal copy parity', () => {
     // interpolates {{n}} instead, so no plural machinery is involved at any number.
     const strings = [
       block.coverage.manualCorrections,
-      ...Object.values(block.signal as Record<string, { body: string }>).map((c) => c.body),
+      ...Object.values(block.signal as SignalCopyMap).map((c) => c.body),
     ]
     for (const text of strings) {
       expect(text, text).not.toContain('{{count}}')
