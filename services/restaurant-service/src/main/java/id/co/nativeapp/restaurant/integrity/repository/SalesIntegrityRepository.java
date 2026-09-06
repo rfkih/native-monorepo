@@ -44,7 +44,7 @@ import org.springframework.data.repository.query.Param;
  * shifts {@code occurred_at} (a {@code TIMESTAMPTZ}) into that zone FIRST — the DB session runs in
  * UTC, so a plain cast would push every sale rung after 17:00 WIB into the following day and
  * misalign it with the register's own {@code business_date}. Same convention as {@code
- * ingredient_stock_day} and the channel summary.
+ * ingredient_usage_day} and the channel summary.
  */
 public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
 
@@ -437,10 +437,10 @@ public interface SalesIntegrityRepository extends JpaRepository<Sale, UUID> {
       value =
           """
           SELECT COALESCE(SUM(d.adjustment_count), 0)
-            FROM ingredient_stock_day d
+            FROM ingredient_usage_day d
            WHERE d.business_id = :businessId
-             AND d.stock_date >= :fromDate
-             AND d.stock_date <  :toDateExclusive
+             AND d.usage_date >= :fromDate
+             AND d.usage_date <  :toDateExclusive
           """,
       nativeQuery = true)
   long countManualStockCorrections(

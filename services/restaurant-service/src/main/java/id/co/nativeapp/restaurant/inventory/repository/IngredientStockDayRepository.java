@@ -23,7 +23,7 @@ import org.springframework.data.repository.query.Param;
  * session tenant (the {@code IngredientWriter#create} note).
  *
  * <p><strong>Every bucket writer shares one shape</strong> — {@code INSERT … SELECT FROM ingredient
- * i … ON CONFLICT (ingredient_id, stock_date) DO UPDATE}:
+ * i … ON CONFLICT (ingredient_id, usage_date) DO UPDATE}:
  *
  * <ul>
  *   <li>{@code business_id} AND {@code closing_qty} are sourced from the {@code ingredient} row
@@ -56,19 +56,19 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
   @Query(
       value =
           """
-          INSERT INTO ingredient_stock_day
-                 (id, business_id, ingredient_id, stock_date, qty_used, closing_qty,
+          INSERT INTO ingredient_usage_day
+                 (id, business_id, ingredient_id, usage_date, qty_used, closing_qty,
                   created_at, created_by, updated_at, updated_by, version, company_id)
           SELECT gen_random_uuid(), i.business_id, i.id, :stockDate, :qty, i.stock_qty,
                  now(), :actor, now(), :actor, 0, :companyId
             FROM ingredient i
            WHERE i.id = :ingredientId
-          ON CONFLICT (ingredient_id, stock_date)
-          DO UPDATE SET qty_used    = ingredient_stock_day.qty_used + EXCLUDED.qty_used,
+          ON CONFLICT (ingredient_id, usage_date)
+          DO UPDATE SET qty_used    = ingredient_usage_day.qty_used + EXCLUDED.qty_used,
                         closing_qty = EXCLUDED.closing_qty,
                         updated_at  = now(),
                         updated_by  = EXCLUDED.updated_by,
-                        version     = ingredient_stock_day.version + 1
+                        version     = ingredient_usage_day.version + 1
           """,
       nativeQuery = true)
   int addUsage(
@@ -88,8 +88,8 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
   @Query(
       value =
           """
-          INSERT INTO ingredient_stock_day
-                 (id, business_id, ingredient_id, stock_date, qty_used, received_qty,
+          INSERT INTO ingredient_usage_day
+                 (id, business_id, ingredient_id, usage_date, qty_used, received_qty,
                   receipt_count, closing_qty,
                   created_at, created_by, updated_at, updated_by, version, company_id)
           SELECT gen_random_uuid(), i.business_id, i.id, :stockDate, 0, :qty,
@@ -97,13 +97,13 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
                  now(), :actor, now(), :actor, 0, :companyId
             FROM ingredient i
            WHERE i.id = :ingredientId
-          ON CONFLICT (ingredient_id, stock_date)
-          DO UPDATE SET received_qty  = ingredient_stock_day.received_qty + EXCLUDED.received_qty,
-                        receipt_count = ingredient_stock_day.receipt_count + 1,
+          ON CONFLICT (ingredient_id, usage_date)
+          DO UPDATE SET received_qty  = ingredient_usage_day.received_qty + EXCLUDED.received_qty,
+                        receipt_count = ingredient_usage_day.receipt_count + 1,
                         closing_qty   = EXCLUDED.closing_qty,
                         updated_at    = now(),
                         updated_by    = EXCLUDED.updated_by,
-                        version       = ingredient_stock_day.version + 1
+                        version       = ingredient_usage_day.version + 1
           """,
       nativeQuery = true)
   int addReceipt(
@@ -125,8 +125,8 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
   @Query(
       value =
           """
-          INSERT INTO ingredient_stock_day
-                 (id, business_id, ingredient_id, stock_date, qty_used, adjustment_qty,
+          INSERT INTO ingredient_usage_day
+                 (id, business_id, ingredient_id, usage_date, qty_used, adjustment_qty,
                   adjustment_count, closing_qty,
                   created_at, created_by, updated_at, updated_by, version, company_id)
           SELECT gen_random_uuid(), i.business_id, i.id, :stockDate, 0, :deltaQty,
@@ -134,14 +134,14 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
                  now(), :actor, now(), :actor, 0, :companyId
             FROM ingredient i
            WHERE i.id = :ingredientId
-          ON CONFLICT (ingredient_id, stock_date)
-          DO UPDATE SET adjustment_qty   = ingredient_stock_day.adjustment_qty
+          ON CONFLICT (ingredient_id, usage_date)
+          DO UPDATE SET adjustment_qty   = ingredient_usage_day.adjustment_qty
                                              + EXCLUDED.adjustment_qty,
-                        adjustment_count = ingredient_stock_day.adjustment_count + 1,
+                        adjustment_count = ingredient_usage_day.adjustment_count + 1,
                         closing_qty      = EXCLUDED.closing_qty,
                         updated_at       = now(),
                         updated_by       = EXCLUDED.updated_by,
-                        version          = ingredient_stock_day.version + 1
+                        version          = ingredient_usage_day.version + 1
           """,
       nativeQuery = true)
   int addAdjustment(
@@ -167,7 +167,7 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
   @Query(
       value =
           """
-          UPDATE ingredient_stock_day
+          UPDATE ingredient_usage_day
              SET qty_used       = qty_used * :factor,
                  received_qty   = received_qty * :factor,
                  adjustment_qty = adjustment_qty * :factor,
@@ -190,9 +190,9 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
           """
           SELECT d.ingredient_id AS ingredient_id,
                  d.qty_used      AS qty_used
-            FROM ingredient_stock_day d
+            FROM ingredient_usage_day d
            WHERE d.business_id = :businessId
-             AND d.stock_date  = :stockDate
+             AND d.usage_date  = :stockDate
           """,
       nativeQuery = true)
   List<IngredientUsageView> findByBusinessIdAndDate(
@@ -206,7 +206,7 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
   @Query(
       value =
           """
-          SELECT d.stock_date       AS stock_date,
+          SELECT d.usage_date       AS usage_date,
                  d.qty_used         AS qty_used,
                  d.received_qty     AS received_qty,
                  d.adjustment_qty   AS adjustment_qty,
@@ -214,11 +214,11 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
                  d.receipt_count    AS receipt_count,
                  d.adjustment_count AS adjustment_count,
                  d.closing_qty      AS closing_qty
-            FROM ingredient_stock_day d
+            FROM ingredient_usage_day d
            WHERE d.ingredient_id = :ingredientId
-             AND d.stock_date   >= :from
-             AND d.stock_date   <= :to
-           ORDER BY d.stock_date
+             AND d.usage_date   >= :from
+             AND d.usage_date   <= :to
+           ORDER BY d.usage_date
           """,
       nativeQuery = true)
   List<IngredientStockDayView> findDailyLedger(
@@ -254,13 +254,13 @@ public interface IngredientStockDayRepository extends JpaRepository<IngredientSt
                  SUM(d.adjustment_count)                AS adjustment_count,
                  COUNT(*)                               AS days_with_movement,
                  COUNT(*) FILTER (WHERE d.qty_used > 0) AS days_with_usage,
-                 (ARRAY_AGG(d.closing_qty ORDER BY d.stock_date DESC))[1]
+                 (ARRAY_AGG(d.closing_qty ORDER BY d.usage_date DESC))[1]
                                                         AS latest_closing_qty
-            FROM ingredient_stock_day d
+            FROM ingredient_usage_day d
             JOIN ingredient i ON i.id = d.ingredient_id
            WHERE d.business_id = :businessId
-             AND d.stock_date >= :from
-             AND d.stock_date <= :to
+             AND d.usage_date >= :from
+             AND d.usage_date <= :to
            GROUP BY d.ingredient_id, i.name, i.unit
            ORDER BY i.name
           """,

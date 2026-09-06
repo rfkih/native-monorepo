@@ -33,7 +33,7 @@ import org.springframework.context.annotation.Primary;
  * Atomicity of the per-day usage bucket on the sale path: because {@code
  * IngredientDepletionWriter.addUsage} runs under {@code Propagation.MANDATORY} in the SAME
  * transaction as the sale + outbox rows, a sale that rolls back must contribute NOTHING to {@code
- * ingredient_stock_day.qty_used} — the usage figure can never drift ahead of committed sales.
+ * ingredient_usage_day.qty_used} — the usage figure can never drift ahead of committed sales.
  *
  * <p>The assertion is on the USAGE TOTAL rather than on the absence of a ledger row: since V47 the
  * same table also records receipts and manual corrections, and this test's own arrangement
@@ -134,7 +134,7 @@ class IngredientUsageAtomicityTest extends PostgresRlsTestBase {
         Statement st = admin.createStatement();
         ResultSet rs =
             st.executeQuery(
-                "SELECT COALESCE(SUM(qty_used), 0) FROM ingredient_stock_day"
+                "SELECT COALESCE(SUM(qty_used), 0) FROM ingredient_usage_day"
                     + " WHERE ingredient_id = '"
                     + ingredientId
                     + "'")) {

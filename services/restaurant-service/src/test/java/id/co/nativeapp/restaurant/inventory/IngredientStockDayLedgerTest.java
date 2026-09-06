@@ -21,7 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /**
  * Testcontainers proof of the V47 daily stock ledger against real Postgres: every way an
- * ingredient's stock can move lands in the RIGHT bucket of {@code ingredient_stock_day}, the
+ * ingredient's stock can move lands in the RIGHT bucket of {@code ingredient_usage_day}, the
  * per-(ingredient, day) UPSERT accumulates instead of overwriting, {@code closing_qty} always
  * mirrors the stock figure after the movement, and the roll-up read reproduces the totals.
  *

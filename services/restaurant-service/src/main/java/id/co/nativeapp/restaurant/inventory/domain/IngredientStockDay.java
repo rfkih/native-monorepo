@@ -29,7 +29,7 @@ import java.util.UUID;
  * {@link Auditable} (rules 4 + 5, V42 RLS policy carried through the V47 rename).
  */
 @Entity
-@Table(name = "ingredient_stock_day")
+@Table(name = "ingredient_usage_day")
 public class IngredientStockDay extends Auditable {
 
   @jakarta.persistence.Id
@@ -42,7 +42,7 @@ public class IngredientStockDay extends Auditable {
   @Column(name = "ingredient_id", nullable = false, updatable = false)
   private UUID ingredientId;
 
-  @Column(name = "stock_date", nullable = false, updatable = false)
+  @Column(name = "usage_date", nullable = false, updatable = false)
   private LocalDate stockDate;
 
   /**

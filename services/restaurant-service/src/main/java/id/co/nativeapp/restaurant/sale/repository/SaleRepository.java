@@ -134,7 +134,7 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
    * TIMESTAMPTZ}, so it is shifted to {@code Asia/Jakarta} BEFORE {@code to_char} — otherwise an
    * order rung 00:00–07:00 WIB on the 1st would bucket into the prior month (the DB session TZ is
    * UTC). Mirrors the {@code Asia/Jakarta} attribution the register business-date / V42
-   * ingredient_stock_day (V42 as ingredient_usage_day) convention already uses (NOT the DATE-column
+   * ingredient_usage_day convention already uses (NOT the DATE-column
    * {@code BillRepository} idiom, which is timezone-immune). RLS-scoped automatically (rule 5) — no
    * manual {@code company_id} predicate, matching this repository's other native queries.
    */
