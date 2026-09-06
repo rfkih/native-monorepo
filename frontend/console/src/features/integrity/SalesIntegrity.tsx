@@ -339,9 +339,13 @@ function describe(
     parts.push(t('salesIntegrity.detail.hour', { hour: String(detail.hourOfDay).padStart(2, '0') }))
   }
   if (detail.quantity !== null) {
+    // The unit rides WITH the number when the subject has one. "600 missing" is ambiguous by a
+    // factor of a thousand for an ingredient the stock page displays in kg; "600 g missing" is not.
+    // Signals whose count needs no unit (sales, days, closes) send null and read as before.
+    const qty = new Intl.NumberFormat(locale).format(detail.quantity)
     parts.push(
       t('salesIntegrity.detail.quantity', {
-        qty: new Intl.NumberFormat(locale).format(detail.quantity),
+        qty: detail.quantityUnit ? `${qty} ${detail.quantityUnit}` : qty,
       }),
     )
   }

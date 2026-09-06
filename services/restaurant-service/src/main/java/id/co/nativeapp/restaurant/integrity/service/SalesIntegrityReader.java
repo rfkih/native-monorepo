@@ -175,6 +175,9 @@ public class SalesIntegrityReader {
                   null,
                   null,
                   item.getMissingQty(),
+                  // No unit: a tracked menu item is counted in whole items, and the row already
+                  // names which item. "2 missing" of a named bottle cannot be misread.
+                  null,
                   value,
                   item.getCurrency()));
         }
@@ -211,6 +214,9 @@ public class SalesIntegrityReader {
                   null,
                   null,
                   shortfall.getMissingQty(),
+                  // The ingredient's BASE unit. Without it "600 missing" is ambiguous by a factor
+                  // of a thousand for an ingredient the stock page shows in kg.
+                  shortfall.getUnit(),
                   // An ingredient no recipe consumes cannot be priced into revenue, so its detail
                   // row carries its COST instead of a fabricated zero — the loss is real even
                   // though the menu cannot say what it would have sold as.
@@ -247,6 +253,7 @@ public class SalesIntegrityReader {
                 hour.getHourOfDay(),
                 hour.getExpectedCount(),
                 null,
+                null,
                 null));
       }
       signals.add(signal(LeakSignalType.DARK_HOUR, darkHours.size(), null, null, details));
@@ -270,6 +277,7 @@ public class SalesIntegrityReader {
                       null,
                       null,
                       outside.getSaleCount(),
+                      null,
                       outside.getTotalMinor(),
                       currency))));
     }
@@ -291,6 +299,7 @@ public class SalesIntegrityReader {
                   day.getBusinessDate(),
                   null,
                   day.getSaleCount(),
+                  null,
                   day.getTotalMinor(),
                   day.getCurrency()));
         }
@@ -328,6 +337,7 @@ public class SalesIntegrityReader {
                   LocalDate.ofInstant(bill.getCancelledAt(), OutletZone.ZONE),
                   null,
                   bill.getLineCount(),
+                  null,
                   bill.getTotalMinor(),
                   bill.getCurrency()));
         }
@@ -478,6 +488,7 @@ public class SalesIntegrityReader {
               null,
               null,
               rate.numerator(),
+              null,
               carriesMoney ? rate.valueMinor() : null,
               carriesMoney ? currency : null));
     }
@@ -530,6 +541,7 @@ public class SalesIntegrityReader {
                   null,
                   null,
                   null,
+                  null,
                   null));
         }
         // An open session breaks a run of exact closes rather than continuing it — the run is a
@@ -568,6 +580,7 @@ public class SalesIntegrityReader {
                 session.getSessionId(),
                 session.getClosedBy(),
                 session.getBusinessDate(),
+                null,
                 null,
                 null,
                 Math.abs(variance),
@@ -621,7 +634,14 @@ public class SalesIntegrityReader {
               null,
               List.of(
                   new LeakDetailResponse(
-                      null, null, longestRunStartedOn, null, (long) longestExactRun, null, null))));
+                      null,
+                      null,
+                      longestRunStartedOn,
+                      null,
+                      (long) longestExactRun,
+                      null,
+                      null,
+                      null))));
     }
     return currency;
   }
