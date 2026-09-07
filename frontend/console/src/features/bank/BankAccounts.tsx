@@ -11,7 +11,8 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
 import { useBankAccounts, useCreateBankAccount } from './api'
 import { INDONESIAN_BANKS, OTHER_BANK } from './banks'
-import { DialogOverlay, SELECT_CLASSES } from './parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
+import { SELECT_CLASSES } from './parts'
 
 /**
  * Bank accounts — the roster of company bank accounts: a Card table (name/account number/
@@ -155,8 +156,10 @@ function NewBankAccountDialog({
     )
   }
 
+  // `size="lg"` preserves the wide card the bank dialogs always had — the deleted bank/parts copy
+  // hard-coded max-w-2xl for both of them, where every other feature's copy used max-w-md.
   return (
-    <DialogOverlay onClose={onClose}>
+    <DialogOverlay size="lg" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <h2 className="font-display text-lg font-semibold text-ink">
           {t('bank.accounts.createDialog.title')}

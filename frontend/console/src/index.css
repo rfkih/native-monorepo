@@ -166,6 +166,38 @@ body {
   --animate-sheet-up: sheet-up 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
   /* Side-panel entrance (Native Console Web design — the "Kelola" panel). */
   --animate-drawer-in: drawer-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  /* EXITS. Overlays used to vanish on the frame they closed — every one of them was rendered as
+     `{open ? <X/> : null}`, so there was nowhere for an exit to live. `Dialog` (components/ui)
+     delays telling its parent to unmount until these have run. Deliberately faster than the
+     matching entrance: leaving should feel like a dismissal, not a performance. Keep
+     DIALOG_EXIT_MS in components/ui/Dialog.tsx in step with these durations. */
+  --animate-dialog-in: pop 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-dialog-out: dialog-out 0.16s cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-sheet-down: sheet-down 0.16s cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-scrim-in: scrim-in 0.18s ease-out both;
+  --animate-scrim-out: scrim-out 0.16s ease-in both;
+}
+
+/*
+ * The overlay z-ladder, in one place. These are the levels the SHARED primitives use; the numbers
+ * match what the app already had, so nothing re-stacks — what changes is that the ladder is now
+ * written down instead of being 12 different literals spread over 60-odd files.
+ *
+ *   30  MobileTabBar            — chrome, below everything modal
+ *   50  Dialog / Drawer / sheet — the modal layer
+ *   70  app banner rail         — offline + update-available, deliberately ABOVE modals: they are
+ *                                 app-global state, not part of the screen you are working in
+ *  100  transient toasts/hints  — the back-guard exit hint
+ *
+ * Bespoke POS overlays still carry their own literals (they compose a stack of their own inside
+ * the till); this ladder is what anything OUTSIDE the till should be built on.
+ */
+:root {
+  --z-tabbar: 30;
+  --z-overlay: 50;
+  --z-banner: 70;
+  --z-toast: 100;
 }
 
 /* Dark theme — reassign the same variables; var()-based utilities follow automatically.
@@ -295,6 +327,23 @@ body {
   .sheet-up {
     animation: var(--animate-sheet-up);
   }
+  /* Dialog entrance/exit (components/ui/Dialog): a centred card on tablet+, a bottom sheet on
+     phone — each with the matching way out. */
+  .dialog-in {
+    animation: var(--animate-dialog-in);
+  }
+  .dialog-out {
+    animation: var(--animate-dialog-out);
+  }
+  .sheet-down {
+    animation: var(--animate-sheet-down);
+  }
+  .scrim-in {
+    animation: var(--animate-scrim-in);
+  }
+  .scrim-out {
+    animation: var(--animate-scrim-out);
+  }
   /* The in-app welcome's trend line drawing itself in (AppWelcome; pathLength=100). */
   .draw-path {
     stroke-dasharray: 100;
@@ -302,6 +351,11 @@ body {
   }
   @media (prefers-reduced-motion: reduce) {
     .sheet-up,
+    .dialog-in,
+    .dialog-out,
+    .sheet-down,
+    .scrim-in,
+    .scrim-out,
     .draw-path {
       animation: none;
     }
@@ -372,6 +426,27 @@ body {
   }
   to {
     transform: translateY(0);
+  }
+}
+@keyframes sheet-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes scrim-out {
+  to {
+    opacity: 0;
   }
 }
 @keyframes draw-path {

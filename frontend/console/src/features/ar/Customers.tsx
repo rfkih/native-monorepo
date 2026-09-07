@@ -9,7 +9,7 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
 import { useCreateCustomer, useCustomers } from './api'
-import { DialogOverlay } from './parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 
 /**
  * Customers — the AR customer roster: a Card table (name/email/tax ID/status) plus a "New

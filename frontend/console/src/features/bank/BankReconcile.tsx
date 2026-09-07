@@ -30,7 +30,8 @@ import {
   majorToSignedMinor,
   reconcileErrorKey,
 } from './format'
-import { CountTile, DialogOverlay, SELECT_CLASSES, StatementStatusBadge } from './parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
+import { CountTile, SELECT_CLASSES, StatementStatusBadge } from './parts'
 
 type LineFilter = StatementLineStatus | 'ALL'
 
@@ -371,8 +372,9 @@ function ImportLinesDialog({
     mutation.mutate({ lines: validBodies }, { onSuccess: () => onClose() })
   }
 
+  // `size="lg"` — see BankAccounts: the deleted bank/parts copy was the wide one.
   return (
-    <DialogOverlay onClose={onClose}>
+    <DialogOverlay size="lg" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <h2 className="font-display text-lg font-semibold text-ink">
           {t('bank.reconcile.importDialog.title')}

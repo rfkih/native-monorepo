@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { ToggleRow } from '@/components/ui/ToggleRow'
-import { DialogOverlay } from '@/features/org/parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import {
   isDeviceCredentialAlreadyExists,
   isDeviceCredentialNotFound,

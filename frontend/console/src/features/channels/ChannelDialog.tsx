@@ -18,7 +18,7 @@ import { Field, TextInput } from '@/components/ui/Field'
 import type { CompanySession } from '@/lib/session'
 import { normalizeChannelCode } from './channelCode'
 import { useCreateSalesChannel, useUpdateSalesChannel, type SalesChannel } from './channelsApi'
-import { DialogOverlay } from './parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 
 interface Props {
   session: CompanySession

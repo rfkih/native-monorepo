@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
-import { DialogOverlay } from '@/features/org/parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import { cn } from '@/lib/cn'
 import { useCreateLeaveRequest, useCreateOvertimeEntry } from '@/features/me/api'
 

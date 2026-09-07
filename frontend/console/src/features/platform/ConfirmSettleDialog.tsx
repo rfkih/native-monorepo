@@ -29,7 +29,7 @@ import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { useSettlePlatform } from './platformApi'
-import { DialogOverlay } from './parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 
 export interface PendingSettlement {
   channelCode: string

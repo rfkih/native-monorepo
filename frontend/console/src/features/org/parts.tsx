@@ -7,9 +7,7 @@
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Card } from '@/components/ui/Card'
-import { useBackDismiss } from '@/components/mobile/useBackDismiss'
-import { useScrollLock } from '@/components/mobile/useScrollLock'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Spinner } from '@/components/ui/Spinner'
@@ -67,36 +65,6 @@ export function VerticalBadge({ vertical }: { vertical: string | null }) {
   )
 }
 
-/** Simple modal overlay — closes on backdrop click, Escape, or the phone/browser Back button.
- *  Bottom-sheet feel on phone (Native Console Android): bottom-anchored, full-width, rounded top
- *  corners. */
-export function DialogOverlay({
-  children,
-  onClose,
-}: {
-  children: React.ReactNode
-  onClose: () => void
-}) {
-  useBackDismiss(onClose)
-  useScrollLock()
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose()
-      }}
-    >
-      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]">
-        {children}
-      </Card>
-    </div>
-  )
-}
 
 /** Add-outlet dialog. ADR 0070: every outlet is top-level, so the name is the whole form. */
 export function AddUnitDialog({

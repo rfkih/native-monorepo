@@ -21,7 +21,7 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { apiFetch } from '@/lib/api'
 import { type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
-import { DialogOverlay } from './parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 
 /**
  * The module keys the console has a display label for (mirrors entitlement-service's

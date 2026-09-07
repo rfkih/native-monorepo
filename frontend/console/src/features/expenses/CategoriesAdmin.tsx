@@ -19,7 +19,7 @@ import { Select } from '@/components/ui/Select'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/features/_shared/financeUi'
-import { DialogOverlay } from '@/features/org/parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import { useSession } from '@/lib/session'
 import {
   GL_HINT_OPTIONS,

@@ -22,6 +22,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
@@ -282,6 +283,14 @@ export function BillDetail({
   // count between the loading render and the loaded render, which crashes React ("Rendered more
   // hooks than during the previous render") and blanks the whole POS on every freshly opened bill.
   const isTablet = useMediaQuery('(min-width: 640px)')
+
+  // Hardware/browser Back collapses whichever bill surface is actually showing, instead of falling
+  // through to the route guard's "leave this page?" dialog — these were the last two overlays in
+  // the console that Back could not close. Both are MOUNTED-but-translated sheets rather than
+  // conditionally rendered ones, which is exactly what `enabled` is for; the two conditions are
+  // mutually exclusive via `isTablet`, so only one entry is ever parked.
+  useBackDismiss(() => setBillOpen(false), !isTablet && billOpen)
+  useBackDismiss(() => onSheetOpenChange(false), isTablet && sheetOpen)
 
   function openPayModal() {
     if (splitMode) {

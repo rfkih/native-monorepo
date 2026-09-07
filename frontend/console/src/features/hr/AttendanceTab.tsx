@@ -16,7 +16,7 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState } from '@/features/_shared/financeUi'
-import { DialogOverlay } from '@/features/org/parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import { cn } from '@/lib/cn'
 import {
   useAdjustLeaveBalance,

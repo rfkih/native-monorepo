@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
 import { ListSkeleton } from '@/components/ui/Skeleton'
-import { DialogOverlay } from '@/features/org/parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import { cn } from '@/lib/cn'
 import {
   useCancelLeaveRequest,

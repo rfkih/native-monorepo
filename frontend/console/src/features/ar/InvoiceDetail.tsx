@@ -19,7 +19,8 @@ import {
   type InvoiceDetail as InvoiceDetailDto,
 } from './api'
 import { formatDate, invoiceErrorKey } from './format'
-import { DialogOverlay, InvoiceStatusBadge } from './parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
+import { InvoiceStatusBadge } from './parts'
 
 /**
  * Invoice detail (/invoices/:id) — header (number, customer, status, dates), KPI tiles (total/
