@@ -12,7 +12,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, KeyRound, MoreVertical, Store, UserRound, Wifi, WifiOff } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { BackButton } from '@/components/mobile/BackButton'
 import { cn } from '@/lib/cn'
 
 export interface StatusBarAction {
@@ -74,15 +74,17 @@ export function PosStatusBar({
         'bg-ink-900 text-white dark:border-b dark:border-line dark:bg-surface dark:text-ink',
       )}
     >
-      {/* Back to dashboard (role-gated for service cashiers) */}
+      {/* Leave the till (role-gated for service cashiers). Pops back to the office page the till
+          was opened from — `/` is only the fallback for a cold start straight into /pos. It used
+          to be an unconditional `<Link to="/">`, the last back arrow in the console that pushed a
+          fixed destination (rule N1). */}
       {showBack ? (
-        <Link
-          to="/"
-          aria-label={t('a11y.backToDashboard')}
+        <BackButton
+          fallback="/"
           className="grid size-9 shrink-0 place-items-center rounded-xl text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300 dark:text-ink-3 dark:hover:bg-hover dark:hover:text-ink"
         >
           <ArrowLeft className="size-4" />
-        </Link>
+        </BackButton>
       ) : null}
 
       {/* Identity (md+) */}

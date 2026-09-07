@@ -32,6 +32,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
+import { BackButton } from '@/components/mobile/BackButton'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
@@ -2508,14 +2509,16 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
       {/* Header — mirrors POS chrome */}
       <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3 sm:px-5">
-        <Link
-          to="/pos"
-          aria-label={t('menu.backToPos')}
-          title={t('menu.backToPos')}
+        {/* Pops back to wherever this page was opened FROM — the office sidebar, the phone More
+            sheet, or the till. `/pos` is only the deep-link fallback; it used to be the
+            unconditional destination, which dropped an owner editing prices from the back office
+            straight into the cashier till. */}
+        <BackButton
+          fallback="/pos"
           className="grid size-[38px] shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
         >
           <ArrowLeft className="size-[18px]" />
-        </Link>
+        </BackButton>
 
         <div className="min-w-0 flex-1">
           <div className="font-display text-[17px] font-bold leading-tight tracking-[-0.01em] text-ink">

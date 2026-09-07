@@ -1412,7 +1412,6 @@ export const en = {
      * (cups, paper plates, straws). The internal API/domain keeps "ingredient". */
     title: 'Inventory',
     tillMenuLabel: 'Inventory',
-    backToPos: 'Back to the POS',
     addAction: 'Add item',
     loadError: 'Could not load the inventory list.',
     emptyTitle: 'No inventory items yet',
@@ -2951,7 +2950,6 @@ export const en = {
   },
   menu: {
     title: 'Menu management',
-    backToPos: 'Back to point of sale',
     addItem: 'Add item',
     loadError: 'Could not load the menu.',
     errorGeneric: 'Something went wrong. Please try again.',
@@ -3296,7 +3294,6 @@ export const en = {
   },
   kitchen: {
     title: 'Kitchen',
-    backToPos: 'Back to point of sale',
     live: 'Live',
     updatedAt: 'Updated {{time}}',
     activeCount: '{{count}} active',

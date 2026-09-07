@@ -10,7 +10,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -18,7 +17,7 @@ import { Field } from '@/components/ui/Field'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { ScreenHeader } from '@/components/mobile/ScreenHeader'
 import { EmptyState } from '@/features/_shared/financeUi'
-import { DialogOverlay } from '@/features/org/parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import {
   useApproveClaim,
   useClaims,
@@ -53,7 +52,6 @@ interface DecisionTarget {
 export function ApprovalsScreen() {
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
-  const navigate = useNavigate()
   const { companyId, actor } = useTenant()
 
   const [tab, setTab] = useState<Tab>('claims')
@@ -86,7 +84,9 @@ export function ApprovalsScreen() {
 
   return (
     <div className="min-h-[100dvh] bg-paper">
-      <ScreenHeader title={t('staff.approvals.title')} onBack={() => navigate('/me')} />
+      {/* Was `onBack={() => navigate('/me')}` — a PUSH, while its sibling ClaimDetailScreen popped:
+          two visually identical arrows, two behaviours. Both now go through the one control. */}
+      <ScreenHeader title={t('staff.approvals.title')} backFallback="/me" />
 
       <div className="flex flex-col gap-3.5 p-4">
         {/* Segmented control */}

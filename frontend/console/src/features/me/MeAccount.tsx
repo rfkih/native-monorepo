@@ -40,8 +40,8 @@ export function MeAccount() {
 
   return (
     <div className="min-h-[100dvh] bg-paper">
-      {/* Phone chrome (Native Console Android): back to /me. */}
-      <ScreenHeader className="sm:hidden" title={t('me.account.title')} backTo="/me" />
+      {/* Phone chrome (Native Console Android): back, falling back to /me on a deep link. */}
+      <ScreenHeader className="sm:hidden" title={t('me.account.title')} backFallback="/me" />
       {/* Topbar — mirrors features/expenses/MyExpenses.tsx's chrome */}
       <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur max-sm:hidden lg:px-8">
         <Wordmark />

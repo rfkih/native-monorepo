@@ -32,6 +32,7 @@ import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { apiFetch } from '@/lib/api'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { BackButton } from '@/components/mobile/BackButton'
 import { OutletPicker } from '@/components/OutletPicker'
 import { useBill, type BillSummaryResponse } from '@/features/pos/billsApi'
 import { useTables, type TableResponse } from '@/features/pos/api'
@@ -109,15 +110,14 @@ function KitchenInner({ session }: { session: CompanySession }) {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur-sm">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
-          {/* Back to POS */}
-          <Link
-            to="/pos"
-            aria-label={t('kitchen.backToPos')}
-            title={t('kitchen.backToPos')}
+          {/* Back to the opener (More-sheet tile, sidebar, or the till); `/pos` is the deep-link
+              fallback only — see MenuManagement's twin. */}
+          <BackButton
+            fallback="/pos"
             className="grid size-9 shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           >
             <ArrowLeft className="size-4" />
-          </Link>
+          </BackButton>
 
           {/* Identity */}
           <div className="flex min-w-0 flex-1 items-center gap-2.5">

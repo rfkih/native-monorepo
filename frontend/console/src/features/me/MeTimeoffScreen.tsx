@@ -29,7 +29,7 @@ export function MeTimeoffScreen() {
   if (!isPhone) return <Navigate to="/me" replace />
 
   return (
-    <PhoneScreen title={t('me.timeoff.title')} backTo="/me">
+    <PhoneScreen title={t('me.timeoff.title')} backFallback="/me">
       {profile.isLoading ? (
         <div className="flex flex-col gap-3">
           <StatCardsSkeleton cards={4} />
