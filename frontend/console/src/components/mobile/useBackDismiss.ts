@@ -33,6 +33,12 @@
  * `enabled=false` parks nothing (and unwinds if currently parked): used by overlays that must not
  * be dismissable mid-operation (e.g. a payment in flight) — Back then falls through to the route
  * guard's confirm dialog, which is safe.
+ *
+ * `rearmKey` is for an overlay whose `onClose` may DECLINE to close — one holding unsaved work, which
+ * answers a Back press with "discard your count?" instead. That press has already spent the parked
+ * entry, so the overlay would be left open with nothing parked and the NEXT Back would escape it.
+ * Bumping `rearmKey` re-runs the effect: the teardown knows the entry was consumed by a Back (it does
+ * not unwind), and the fresh run parks a new one. A caller that always closes never needs it.
  */
 import { useEffect, useRef } from 'react'
 import {
@@ -47,7 +53,7 @@ import {
 // the adopting instance are different hook instances.
 const pendingUnwindTimers: number[] = []
 
-export function useBackDismiss(onClose: () => void, enabled = true) {
+export function useBackDismiss(onClose: () => void, enabled = true, rearmKey = 0) {
   // Keep the latest onClose without re-running the park effect (which would re-park an entry each
   // render). Synced in its own effect — writing a ref during render is disallowed (react-hooks/refs)
   // and unnecessary here, since onCloseRef is only read later in the popstate/teardown handlers.
@@ -110,5 +116,5 @@ export function useBackDismiss(onClose: () => void, enabled = true) {
       }, 0)
       pendingUnwindTimers.push(id)
     }
-  }, [enabled])
+  }, [enabled, rearmKey])
 }

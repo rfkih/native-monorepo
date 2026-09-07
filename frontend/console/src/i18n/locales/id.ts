@@ -1352,8 +1352,21 @@ export const id = {
      * Stok item menu tetap di /menu sebagai penanda habis (86). */
     title: 'Stock opname',
     tillMenuLabel: 'Stock opname',
+    /** Dipendekkan: di HP versi lamanya memakan ~5 baris tepat di atas daftar hitungan, dan
+     * menyusut jadi 3 baris terlihat begitu keyboard naik. */
     entryHint:
-      'Jumlah terisi otomatis dengan kuantitas sistem — ubah hanya yang berbeda dari hasil hitung fisik Anda. Untuk menu yang sudah punya resep, selisih bahan berbiaya dibaca sebagai pemborosan/kehilangan; untuk yang lain, selisih masih mencakup pemakaian normal, bukan hanya kehilangan.',
+      'Terisi otomatis dengan angka sistem — ubah hanya yang berbeda dari hasil hitung fisik Anda. Selisih pada bahan berbiaya dibukukan sebagai penyusutan.',
+    /** Filter daftar bahan (muncul di atas 12 bahan) — hanya menyaring tampilan; yang dikirim
+     * tetap SELURUH bahan, yang tak disentuh terkirim pada angka sistemnya. */
+    searchLabel: 'Cari bahan',
+    searchPlaceholder: 'Cari bahan…',
+    searchEmpty: 'Tidak ada bahan yang cocok.',
+    /** Ringkasan footer sebelum kirim — angka yang dulu baru terlihat SESUDAH pembukuan jalan. */
+    changedLines: 'Barang selisih: {{formatted}}',
+    invalidLines: 'Belum dihitung: {{formatted}}',
+    showInvalid: 'Tunjukkan',
+    /** Ditempel di belakang nilai bila ada bahan berbiaya mata uang lain yang tak ikut dijumlah. */
+    partialValueMark: '(sebagian)',
     soldTodayTitle: 'Barang terjual hari ini',
     soldTodayEmpty: 'Belum ada penjualan hari ini.',
     systemQty: 'Sistem: {{qty}} {{unit}}',
@@ -1391,6 +1404,13 @@ export const id = {
       'Hitungan untuk satu atau lebih barang tampak jauh di luar perkiraan — penyebab umumnya salah kg/g atau kelebihan angka nol. Periksa jumlahnya di bawah ini sebelum menyimpan:',
     varianceGuardRecount: 'Periksa lagi',
     varianceGuardProceed: 'Simpan saja',
+    /** Keluar dengan hitungan yang sudah diketik tapi belum dikirim — dulu langsung hilang tanpa
+     * sepatah kata (tombol BACK fisik adalah cara paling umum kehilangannya). */
+    discardTitle: 'Buang hitungan ini?',
+    discardBody:
+      'Hitungan yang Anda ketik belum dikirim. Kalau keluar sekarang, semuanya hilang.',
+    discardKeep: 'Lanjut menghitung',
+    discardLeave: 'Buang hitungan',
   },
   inventory: {
     /** ADR 0046 fase 1 — katalog barang stok per gerai di balik stock opname. Penamaan owner
