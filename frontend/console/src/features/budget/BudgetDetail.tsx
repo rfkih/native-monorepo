@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { ArrowLeft, Download, TriangleAlert } from 'lucide-react'
+import { BackButton } from '@/components/mobile/BackButton'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -81,13 +82,19 @@ export function BudgetDetail() {
   return (
     <div className="flex flex-col gap-[18px]">
       <div>
-        <Link
-          to="/budgets"
+        {/* Shaped like a back control, so it POPS (rule N1) — `/budgets` is the fallback for a
+            deep link. The accessible name repeats the visible text so it still satisfies
+            label-in-name. */}
+        <BackButton
+          fallback="/budgets"
+          label={t('budget.backToList')}
           className="inline-flex items-center gap-1.5 text-sm text-ink-3 transition-colors hover:text-ink"
         >
-          <ArrowLeft className="size-4" />
-          {t('budget.backToList')}
-        </Link>
+          <>
+            <ArrowLeft className="size-4" />
+            {t('budget.backToList')}
+          </>
+        </BackButton>
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-4">

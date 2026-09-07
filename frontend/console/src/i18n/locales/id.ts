@@ -1400,7 +1400,6 @@ export const id = {
      * sedotan). API/domain internal tetap "ingredient". */
     title: 'Persediaan',
     tillMenuLabel: 'Persediaan',
-    backToPos: 'Kembali ke POS',
     addAction: 'Tambah barang',
     loadError: 'Tidak dapat memuat daftar persediaan.',
     emptyTitle: 'Belum ada barang',
@@ -2892,7 +2891,6 @@ export const id = {
   },
   menu: {
     title: 'Manajemen menu',
-    backToPos: 'Kembali ke kasir',
     addItem: 'Tambah item',
     loadError: 'Tidak dapat memuat menu.',
     errorGeneric: 'Terjadi kesalahan. Silakan coba lagi.',
@@ -3231,7 +3229,6 @@ export const id = {
   },
   kitchen: {
     title: 'Dapur',
-    backToPos: 'Kembali ke kasir',
     live: 'Langsung',
     updatedAt: 'Diperbarui {{time}}',
     activeCount: '{{count}} aktif',

@@ -26,7 +26,7 @@ import { Wordmark } from '@/components/Wordmark'
 import { ScreenHeader } from '@/components/mobile/ScreenHeader'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState } from '@/features/_shared/financeUi'
-import { DialogOverlay } from '@/features/org/parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import { useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { useSession } from '@/lib/session'
@@ -69,11 +69,12 @@ export function MyExpenses() {
 
   return (
     <div className="min-h-[100dvh] bg-paper">
-      {/* Phone chrome (Native Console Android): back to /me + a compact new-claim action. */}
+      {/* Phone chrome (Native Console Android): back (falling back to /me) + a compact
+          new-claim action. */}
       <ScreenHeader
         className="sm:hidden"
         title={t('me.expenses.title')}
-        backTo="/me"
+        backFallback="/me"
         trailing={
           <button
             type="button"

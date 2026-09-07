@@ -19,6 +19,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Pencil, Plus, Wrench } from 'lucide-react'
+import { BackButton } from '@/components/mobile/BackButton'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
@@ -116,13 +117,15 @@ function CatalogManagementInner({
           inline at a fixed h-16 it crushed the title (the header-crush class). Desktop keeps
           the original single h-16 row. */}
       <div className="flex flex-wrap items-center gap-2.5 border-b border-line bg-surface px-4 py-2.5 sm:h-16 sm:flex-nowrap sm:px-6 sm:py-0">
-        <Link
-          to="/pos"
-          aria-label={t('a11y.backToDashboard')}
+        {/* Back to the opener; `/pos` is the deep-link fallback only. The old label said
+            "back to dashboard" while the link went to the till — the control now promises
+            nothing it cannot deliver. */}
+        <BackButton
+          fallback="/pos"
           className="grid size-9 shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           <ArrowLeft className="size-4" />
-        </Link>
+        </BackButton>
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-display text-[15px] font-bold text-ink">{t('serviceCatalog.title')}</h1>
         </div>

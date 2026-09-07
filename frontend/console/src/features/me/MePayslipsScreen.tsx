@@ -31,7 +31,7 @@ export function MePayslipsScreen() {
   if (!isPhone) return <Navigate to="/me" replace />
 
   return (
-    <PhoneScreen title={t('me.payslips.title')} backTo="/me">
+    <PhoneScreen title={t('me.payslips.title')} backFallback="/me">
       {profile.isLoading ? (
         <div className="flex flex-col gap-2">
           <StatCardsSkeleton cards={2} />
