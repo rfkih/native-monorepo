@@ -1367,8 +1367,21 @@ export const en = {
      * menu items. Menu-item stock stays on /menu as the sold-out gate. */
     title: 'Stock count',
     tillMenuLabel: 'Stock count',
+    /** Shortened: on a phone the old wording ran ~5 lines directly above the counting list, and
+     * squeezed it to three visible rows as soon as the keyboard came up. */
     entryHint:
-      'Counts start pre-filled with the system quantity — only change what differs from your physical count. For a menu covered by a recipe, a costed ingredient’s difference reads as waste/loss; for the rest, it still includes normal usage, not just loss.',
+      'Counts start pre-filled with the system quantity — only change what differs from your physical count. A costed ingredient’s difference is posted as shrinkage.',
+    /** Ingredient filter (appears above 12 ingredients) — it narrows the VIEW only; the submission
+     * still carries every ingredient, untouched ones at their system quantity. */
+    searchLabel: 'Search ingredients',
+    searchPlaceholder: 'Search ingredients…',
+    searchEmpty: 'No ingredient matches that.',
+    /** The pre-submit footer — the figures that used to appear only AFTER the posting had run. */
+    changedLines: 'With a variance: {{formatted}}',
+    invalidLines: 'Not counted yet: {{formatted}}',
+    showInvalid: 'Show me',
+    /** Appended to the value when a costed line priced in another currency was left out of it. */
+    partialValueMark: '(partial)',
     soldTodayTitle: 'Items sold today',
     soldTodayEmpty: 'No sales yet today.',
     systemQty: 'System: {{qty}} {{unit}}',
@@ -1405,6 +1418,12 @@ export const en = {
       'One or more counts look far outside the expected range — a common cause is a kg/g mix-up or an extra zero. Check the amounts below before saving:',
     varianceGuardRecount: 'Check again',
     varianceGuardProceed: 'Save anyway',
+    /** Leaving with counts typed but not submitted — they used to be dropped without a word, and
+     * the hardware Back button is the most common way to lose them. */
+    discardTitle: 'Discard this count?',
+    discardBody: 'The counts you typed have not been submitted. Leaving now loses all of them.',
+    discardKeep: 'Keep counting',
+    discardLeave: 'Discard count',
   },
   inventory: {
     /** ADR 0046 phase 1 — the per-outlet stock-item catalog behind the stock opname. Owner

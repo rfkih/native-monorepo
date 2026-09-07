@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   allowsFraction,
   formatShownQty,
+  formatSignedShownQty,
   parseShownQtyInput,
+  sanitizeShownQtyInput,
   shownFactor,
+  shownQtyInputValue,
   shownUnit,
   shownUnitCostMinor,
   storedToUnitSelection,
@@ -74,6 +77,56 @@ describe('parseShownQtyInput', () => {
     expect(parseShownQtyInput('', kg)).toBeNull()
     expect(parseShownQtyInput('abc', kg)).toBeNull()
     expect(parseShownQtyInput('-1', kg)).toBeNull()
+  })
+  it('accepts a COMMA decimal separator — the one an id-ID keypad offers', () => {
+    expect(parseShownQtyInput('1,5', kg)).toBe(1500)
+    expect(parseShownQtyInput('0,25', kg)).toBe(250)
+    expect(parseShownQtyInput('1,5', pcs)).toBeNull() // still no half a pcs
+  })
+  it('refuses to guess at a grouped or exponential figure', () => {
+    expect(parseShownQtyInput('1.234,5', kg)).toBeNull()
+    expect(parseShownQtyInput('1,234.5', kg)).toBeNull()
+    expect(parseShownQtyInput('1e3', kg)).toBeNull()
+    expect(parseShownQtyInput('+2', kg)).toBeNull()
+  })
+})
+
+describe('sanitizeShownQtyInput', () => {
+  it('drops what the parse would reject and keeps the FIRST separator only', () => {
+    expect(sanitizeShownQtyInput('1,5')).toBe('1,5')
+    expect(sanitizeShownQtyInput('1.5')).toBe('1.5')
+    expect(sanitizeShownQtyInput('1-2e3')).toBe('123')
+    expect(sanitizeShownQtyInput('1,5,7')).toBe('1,57')
+    expect(sanitizeShownQtyInput('1.234,5')).toBe('1.2345')
+  })
+  it('leaves a cleared field cleared', () => {
+    expect(sanitizeShownQtyInput('')).toBe('')
+    expect(sanitizeShownQtyInput('abc')).toBe('')
+  })
+})
+
+describe('shownQtyInputValue — the seeded field value', () => {
+  it('seeds in the operator locale, so the field matches the line above it', () => {
+    expect(shownQtyInputValue(1500, kg, 'id-ID')).toBe('1,5')
+    expect(shownQtyInputValue(1500, kg, 'en-US')).toBe('1.5')
+  })
+  it('never groups — a grouped seed would re-parse ambiguously', () => {
+    expect(shownQtyInputValue(12_000, pcs, 'id-ID')).toBe('12000')
+    expect(shownQtyInputValue(9_500_000, kg, 'id-ID')).toBe('9500')
+  })
+  it('round-trips through the parse', () => {
+    for (const locale of ['id-ID', 'en-US']) {
+      expect(parseShownQtyInput(shownQtyInputValue(1234, kg, locale), kg)).toBe(1234)
+      expect(parseShownQtyInput(shownQtyInputValue(7, pcs, locale), pcs)).toBe(7)
+    }
+  })
+})
+
+describe('formatSignedShownQty', () => {
+  it('signs the variance in the shown unit', () => {
+    expect(formatSignedShownQty(-411, kg, 'en-US')).toBe('-0.411')
+    expect(formatSignedShownQty(3, pcs, 'en-US')).toBe('+3')
+    expect(formatSignedShownQty(0, pcs, 'en-US')).toBe('0')
   })
 })
 

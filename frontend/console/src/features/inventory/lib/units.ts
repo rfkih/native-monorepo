@@ -63,17 +63,52 @@ export function toBaseQty(displayValue: number, ing: UnitBearing): number {
 }
 
 /**
+ * Digits with AT MOST one decimal separator, which may be a dot OR a comma. Anything else — a sign,
+ * an exponent, a second separator (a grouped "1.234,5") — is rejected rather than guessed at.
+ */
+const QTY_INPUT_PATTERN = /^\d*[.,]?\d*$/
+
+/**
  * Parses a quantity typed in the SHOWN unit into a base INTEGER, or `null` when invalid/negative.
  * A base unit (factor 1) rejects fractions (there is no half a pcs); a display unit (kg/liter)
  * accepts decimals and rounds the ×1000 result to whole base units.
+ *
+ * EITHER decimal separator is accepted. An Indonesian phone keypad offers "," where en-US offers
+ * "."; the counting field used to be a `type=number`, which silently discards a comma — the row
+ * then read as "not counted" and greyed out Submit with a value still visible on screen and nothing
+ * to explain it. Accepting both is the only reading that matches what the operator sees.
  */
 export function parseShownQtyInput(raw: string, ing: UnitBearing): number | null {
   const trimmed = raw.trim()
   if (trimmed === '') return null
-  const val = Number(trimmed)
+  if (!QTY_INPUT_PATTERN.test(trimmed)) return null
+  const val = Number(trimmed.replace(',', '.'))
   if (!Number.isFinite(val) || val < 0) return null
   if (!allowsFraction(ing) && !Number.isInteger(val)) return null
   return toBaseQty(val, ing)
+}
+
+/** Strips what `parseShownQtyInput` would reject, so a keystroke can never enter an unparseable
+ *  character in the first place (a text field with `inputMode=decimal` has no browser-side filter
+ *  of its own). Keeps the FIRST separator only; an empty result is a legitimate cleared field. */
+export function sanitizeShownQtyInput(raw: string): string {
+  const kept = raw.replace(/[^\d.,]/g, '')
+  const firstSeparator = kept.search(/[.,]/)
+  if (firstSeparator < 0) return kept
+  const head = kept.slice(0, firstSeparator + 1)
+  return head + kept.slice(firstSeparator + 1).replace(/[.,]/g, '')
+}
+
+/**
+ * The value an editable quantity field is SEEDED with, in the shown unit: locale-formatted, so an
+ * id-ID operator sees "1,5" in the field under a "Sistem: 1,5 kg" line instead of the raw "1.5" —
+ * but WITHOUT grouping separators, which the parse above would (rightly) refuse to disambiguate.
+ */
+export function shownQtyInputValue(baseQty: number, ing: UnitBearing, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    useGrouping: false,
+    maximumFractionDigits: allowsFraction(ing) ? 3 : 0,
+  }).format(toDisplayQty(baseQty, ing))
 }
 
 /**
@@ -107,4 +142,14 @@ export function formatShownQty(baseQty: number, ing: UnitBearing, locale: string
   const value = toDisplayQty(baseQty, ing)
   const maximumFractionDigits = allowsFraction(ing) ? 3 : 0
   return new Intl.NumberFormat(locale, { maximumFractionDigits }).format(value)
+}
+
+/** Signed variant for a VARIANCE ("+0,4" / "−1,5"), in the ingredient's shown unit — Intl's
+ *  signDisplay does the sign, never manual string concatenation (rule 9). */
+export function formatSignedShownQty(baseQty: number, ing: UnitBearing, locale: string): string {
+  const maximumFractionDigits = allowsFraction(ing) ? 3 : 0
+  return new Intl.NumberFormat(locale, {
+    signDisplay: 'exceptZero',
+    maximumFractionDigits,
+  }).format(toDisplayQty(baseQty, ing))
 }
