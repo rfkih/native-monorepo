@@ -70,12 +70,28 @@ export function openOverlayCount(): number {
 // pending-unwind count lives here: the first handler to see the event consumes one pending pop,
 // and every later handler for the SAME event reads it as already-consumed.
 
+// The token MUST be consumed by the unwind's own popstate, and "the first handler to see it" is
+// not enough on its own: by the time the unwind fires, the overlay that scheduled it has already
+// unmounted, and if it was the last one open AND the route guard is inactive (any plain browser or
+// PWA — the guard only runs inside the Android shells), then nobody is listening at all. The token
+// then survived to be spent on the user's NEXT Back press, which silently did nothing. So the
+// unwind registers its own one-shot listener as a backstop. Order against the overlay handlers
+// does not matter: consumption is idempotent per event, so whichever runs first decides and the
+// rest agree.
+
 let pendingOverlaySelfPops = 0
 let overlaySelfPopConsumedFor: unknown = null
+
+function consumeSelfPopBackstop(event: Event): void {
+  consumeOverlaySelfPop(event)
+}
 
 /** Call immediately before the unwinding history.back() in useBackDismiss cleanup. */
 export function beginOverlaySelfPop(): void {
   pendingOverlaySelfPops += 1
+  if (typeof window !== 'undefined') {
+    window.addEventListener('popstate', consumeSelfPopBackstop, { once: true })
+  }
 }
 
 /** True when this popstate event is an overlay's own unwind — ignore it. Idempotent per event. */
@@ -117,12 +133,33 @@ export function isAtRoot(pathname: string, state: unknown, homePath: string): bo
 }
 
 /**
- * Deliberate in-app back (ScreenHeader arrow etc.) — must not trigger the confirm. While guarded,
- * a sentinel sits on top of the current route entry, so "previous page" is one atomic `go(-2)`;
- * the pop lands on the previous route's own sentinel, which the guard ignores.
+ * What a deliberate in-app back control (ScreenHeader's arrow, a page's own back button) should
+ * DO when pressed. The contract: **a back control pops, it never pushes a destination.**
+ *
+ * A back arrow written as `<Link to="/somewhere">` grows the history stack on every press, so two
+ * "backs" then need three hardware-Back presses to undo — and the guard's `confirmLeave` go(-2)
+ * can land the user FORWARD of where they started. Every back control therefore asks this what the
+ * press means, and only falls back to a declared destination when there is genuinely nothing to
+ * pop.
+ *
+ * Pure over `history.state` (no `window` read) so it is unit-testable and shared by both apps:
+ *  - **Overlay entry on top** → that entry belongs to a live overlay (useBackDismiss owns its pop);
+ *    page chrome must not eat it. Fail toward the fallback.
+ *  - **First in-app entry** (`idx <= 0` — react-router seeds 0 on the entry it booted on, and a
+ *    missing/foreign `idx` means a state we did not write) → there is no in-app previous page;
+ *    popping would leave for the cross-document IdP page. Use the fallback.
+ *  - **Guard sentinel on top** → the previous ROUTE is two entries down (sentinel + this route),
+ *    the same arithmetic `confirmLeave` does; the pop lands on the previous route's own sentinel,
+ *    which the guard ignores.
+ *  - **Otherwise** → a plain `-1`.
  */
-export function guardedNavigateBack(navigate: (delta: number) => void): void {
-  navigate(isGuardState(window.history.state) ? -2 : -1)
+export type BackIntent = { kind: 'pop'; delta: -1 | -2 } | { kind: 'fallback' }
+
+export function backIntentFor(state: unknown): BackIntent {
+  if (isOverlayState(state)) return { kind: 'fallback' }
+  const idx = (state as { idx?: unknown } | null)?.idx
+  if (typeof idx !== 'number' || idx <= 0) return { kind: 'fallback' }
+  return { kind: 'pop', delta: isGuardState(state) ? -2 : -1 }
 }
 
 // ---------------------------------------------------------------------------
