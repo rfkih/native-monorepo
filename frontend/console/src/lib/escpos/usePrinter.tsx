@@ -89,7 +89,8 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           paper,
           drawerKick,
           // Fresh localStorage read, not the state closure (connect is a stable callback).
-          autoPrint: loadPrinterConfig()?.autoPrint ?? false,
+          // Absent means ON (autoPrintEnabled) — pairing a printer is the opt-in.
+          autoPrint: loadPrinterConfig()?.autoPrint ?? true,
           label: transport.label,
           deviceId: native?.deviceId,
         }

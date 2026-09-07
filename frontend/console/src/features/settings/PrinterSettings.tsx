@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { ToggleRow } from '@/components/ui/ToggleRow'
 import { usePrinter } from '@/lib/escpos/printerContext'
+import { autoPrintEnabled } from '@/lib/escpos/printerStore'
 import type { PaperWidth } from '@/lib/escpos/receipt'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
@@ -229,8 +230,8 @@ export function PrinterSettings() {
             <ToggleRow
               label={t('settings.printer.autoPrint')}
               hint={t('settings.printer.autoPrintHint')}
-              checked={printer.config?.autoPrint ?? false}
-              onToggle={() => printer.setAutoPrint(!(printer.config?.autoPrint ?? false))}
+              checked={autoPrintEnabled(printer.config)}
+              onToggle={() => printer.setAutoPrint(!autoPrintEnabled(printer.config))}
             />
             <ToggleRow
               label={t('settings.printer.drawerKick')}

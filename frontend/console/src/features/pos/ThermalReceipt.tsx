@@ -32,6 +32,7 @@ import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { usePrinter } from '@/lib/escpos/printerContext'
+import { autoPrintEnabled } from '@/lib/escpos/printerStore'
 import { toEscposReceiptData } from '@/lib/escpos/fromThermalProps'
 import { cn } from '@/lib/cn'
 
@@ -405,7 +406,7 @@ export function ThermalReceipt({
     // the Android till): idle SPP printers drop their socket between sales, and the mount-time
     // re-attach can lose the race with a fast first sale — printReceipt now self-heals from the
     // saved config, and a genuine failure surfaces via the autoFailed notice below.
-    if (!printer.config?.autoPrint) return
+    if (!autoPrintEnabled(printer.config)) return
     const timer = setTimeout(() => {
       if (autoPrinted.current) return
       autoPrinted.current = true
