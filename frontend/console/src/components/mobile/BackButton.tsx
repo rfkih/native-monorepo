@@ -1,5 +1,5 @@
 /**
- * BackButton — the ONE in-app back control (navigation contract, rule N1).
+ * BackButton — the ONE in-app back control (navigation contract, ADR 0075 rule N1).
  *
  * Back is an ACTION, not a destination, so this is a `<button>` that POPS history — never a
  * `<Link>`. A linking back arrow pushes a new entry on every press, so two "backs" then need three
