@@ -77,7 +77,7 @@ export function PosStatusBar({
       {/* Leave the till (role-gated for service cashiers). Pops back to the office page the till
           was opened from — `/` is only the fallback for a cold start straight into /pos. It used
           to be an unconditional `<Link to="/">`, the last back arrow in the console that pushed a
-          fixed destination (rule N1). */}
+          fixed destination (ADR 0075 rule N1). */}
       {showBack ? (
         <BackButton
           fallback="/"

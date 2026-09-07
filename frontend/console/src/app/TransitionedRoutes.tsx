@@ -1,6 +1,6 @@
 /**
  * TransitionedRoutes — app-wide smooth route changes for a declarative <BrowserRouter> app, and
- * the one place that owns WHERE a navigation leaves the page (navigation contract, rule N4).
+ * the one place that owns WHERE a navigation leaves the page (navigation contract, ADR 0075 rule N4).
  *
  * React Router only drives the View Transitions API from its data router (RouterProvider); under
  * <BrowserRouter> the `viewTransition` Link prop is a no-op. This wrapper supplies the same effect

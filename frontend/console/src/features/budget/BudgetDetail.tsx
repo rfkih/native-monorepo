@@ -82,7 +82,7 @@ export function BudgetDetail() {
   return (
     <div className="flex flex-col gap-[18px]">
       <div>
-        {/* Shaped like a back control, so it POPS (rule N1) — `/budgets` is the fallback for a
+        {/* Shaped like a back control, so it POPS (ADR 0075 rule N1) — `/budgets` is the fallback for a
             deep link. The accessible name repeats the visible text so it still satisfies
             label-in-name. */}
         <BackButton

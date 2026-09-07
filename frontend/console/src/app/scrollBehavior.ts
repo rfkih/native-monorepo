@@ -1,5 +1,5 @@
 /**
- * scrollBehavior — where a navigation leaves the page (navigation contract, rule N4).
+ * scrollBehavior — where a navigation leaves the page (navigation contract, ADR 0075 rule N4).
  *
  * The console had NO scroll management at all: `window.scrollTo` appeared exactly twice in the
  * whole app (the phone tab bar and the landing page's mount). So scrolling halfway down /invoices

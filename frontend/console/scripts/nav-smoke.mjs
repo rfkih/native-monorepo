@@ -1,5 +1,5 @@
 /**
- * nav-smoke — the NAVIGATION CONTRACT walk (ADR 0075 draft, rules N1/N4). Sibling of
+ * nav-smoke — the NAVIGATION CONTRACT walk (ADR 0075, rules N1/N3/N4/N6). Sibling of
  * backguard-smoke.mjs, which covers the hardware-Back *guard*; this one covers what an in-app
  * BACK CONTROL does and where a navigation leaves the scroll position.
  *

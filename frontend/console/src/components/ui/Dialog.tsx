@@ -1,5 +1,5 @@
 /**
- * DialogOverlay — the ONE modal overlay (navigation contract, rule N3).
+ * DialogOverlay — the ONE modal overlay (navigation contract, ADR 0075 rule N3).
  *
  * This is `features/org/parts.tsx`'s version promoted, not a new component: that copy had already
  * won on merit (bottom sheet on phone, centred card on tablet+) and was already being imported
