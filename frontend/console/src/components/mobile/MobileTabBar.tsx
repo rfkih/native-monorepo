@@ -6,6 +6,10 @@
  *
  * A fixed element bypasses the body's safe-area padding (index.css), so the bar carries
  * its own safe-area-inset-bottom.
+ *
+ * Tapping a tab used to carry its own `window.scrollTo(0, 0)` — the app's only scroll handling
+ * anywhere. That now belongs to the app-wide rule (scrollBehavior: PUSH lands at the top), so the
+ * bar no longer special-cases itself.
  */
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -80,7 +84,6 @@ export function MobileTabBar({ tabs }: { tabs: MobileTab[] }) {
               viewTransition
               aria-current={active ? 'page' : undefined}
               className={tabClass}
-              onClick={() => window.scrollTo(0, 0)}
             >
               <TabInner tab={tab} active={active} />
             </Link>
