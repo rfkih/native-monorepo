@@ -7,7 +7,7 @@ import { TransitionedRoutes } from '@/app/TransitionedRoutes'
 import { MobileTabBarGate } from '@/app/MobileTabBarGate'
 import { SettingsChrome } from '@/components/SettingsChrome'
 import { Spinner } from '@/components/ui/Spinner'
-import { AppSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
+import { AppSkeleton, PageSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
@@ -667,11 +667,18 @@ export function App() {
               the normal shell around it. */}
           {opsOk && <Route path="/onboarding" element={<OnboardingRoute />} />}
 
-          {/* Everything else shares the back-office shell, mounted once via a layout route. */}
+          {/* Everything else shares the back-office shell, mounted once via a layout route.
+              The Suspense boundary sits INSIDE the Shell: a lazy route chunk that has not been
+              prefetched yet then swaps only the content column, leaving the sidebar and topbar
+              painted. Against the outer boundary (which still covers the full-screen routes above)
+              the whole screen — chrome included — was replaced by AppSkeleton mid-navigation, and
+              the accordion's open group came back collapsed. */}
           <Route
             element={
               <Shell>
-                <Outlet />
+                <Suspense fallback={<PageSkeleton />}>
+                  <Outlet />
+                </Suspense>
               </Shell>
             }
           >
@@ -908,8 +915,14 @@ export function App() {
                 element={company ? <PeoplePage /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            <Route path="*" element={<Navigate to={home} replace />} />
           </Route>
+          {/* The catch-all sits OUTSIDE the Shell layout route. Inside it, every unknown path
+              mounted the whole back office for one commit before redirecting — a cashier, who is
+              never meant to see the Shell at all, got a flash of the back-office sidebar on the
+              way back to the till (and PosSwitch remounted, losing the till's state). Route
+              matching is by specificity, not source order, so `*` still loses to every route
+              above it. */}
+          <Route path="*" element={<Navigate to={home} replace />} />
         </TransitionedRoutes>
       </Suspense>
       {/* Phone bottom navigation (Native Console Android) — mounts below 640px on every

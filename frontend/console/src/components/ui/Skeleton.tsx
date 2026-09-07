@@ -95,6 +95,30 @@ export function FormSkeleton({ fields = 4, className }: { fields?: number; class
   )
 }
 
+/**
+ * The CONTENT-area ghost: page title, stat row, main panel. No outer container of its own, so it
+ * drops straight into Shell's `<main>` as a route-level Suspense fallback (App.tsx) — the chrome
+ * around it stays put while a lazy route chunk loads, instead of the whole screen (sidebar
+ * included) being replaced by AppSkeleton mid-navigation.
+ *
+ * AppSkeleton renders this same block inside a container matching Shell's `<main>`, so the boot
+ * ghost and the in-shell ghost can never drift apart in width or rhythm.
+ */
+export function PageSkeleton() {
+  return (
+    <div aria-busy="true">
+      <Skeleton className="h-7 w-48 max-w-[60vw]" />
+      <Skeleton className="mt-2 h-4 w-72 max-w-[80vw]" />
+      <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <Skeleton className="h-28 rounded-card" />
+        <Skeleton className="h-28 rounded-card" />
+        <Skeleton className="h-28 rounded-card" />
+      </div>
+      <Skeleton className="mt-4 h-64 rounded-card sm:h-80" />
+    </div>
+  )
+}
+
 /** Full-screen shell ghost — same geometry as Shell (240px sidebar at lg+, 64px topbar). */
 export function AppSkeleton() {
   return (
@@ -127,16 +151,11 @@ export function AppSkeleton() {
           <Skeleton className="size-9 rounded-full" />
           <Skeleton className="hidden h-9 w-28 rounded-xl sm:block" />
         </div>
-        {/* Content: page title + stat cards + main panel */}
-        <div className="mx-auto w-full max-w-[1100px] flex-1 px-4 py-6 sm:px-6">
-          <Skeleton className="h-7 w-48 max-w-[60vw]" />
-          <Skeleton className="mt-2 h-4 w-72 max-w-[80vw]" />
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <Skeleton className="h-28 rounded-card" />
-            <Skeleton className="h-28 rounded-card" />
-            <Skeleton className="h-28 rounded-card" />
-          </div>
-          <Skeleton className="mt-4 h-64 rounded-card sm:h-80" />
+        {/* Content column — the class list MIRRORS Shell's <main> exactly (max-w-[1200px] px-5
+            py-7 lg:px-8). It used to be max-w-[1100px] px-4 py-6, so the content column jumped
+            ~100px sideways the instant the ghost handed over to the real page. */}
+        <div className="mx-auto w-full max-w-[1200px] flex-1 px-5 py-7 lg:px-8">
+          <PageSkeleton />
         </div>
       </div>
     </div>
