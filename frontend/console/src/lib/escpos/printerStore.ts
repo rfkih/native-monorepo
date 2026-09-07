@@ -14,7 +14,10 @@ export interface PrinterConfig {
   paper: PaperWidth
   /** Pulse the cash drawer on each cash receipt. */
   drawerKick: boolean
-  /** Print the receipt automatically as soon as a sale is paid (optional — older configs lack it). */
+  /**
+   * Print the receipt automatically as soon as a sale is paid. OPTIONAL, and absent means ON —
+   * read it through {@link autoPrintEnabled}, never `?? false`.
+   */
   autoPrint?: boolean
   /** Last-known device label, for the settings UI (informational only). */
   label?: string
@@ -53,6 +56,23 @@ export function clearPrinterConfig(): void {
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * Whether a paid sale should print itself without anyone tapping Print.
+ *
+ * Absent means ON. Setting up a printer at all is the opt-in — a till that paired one wants its
+ * receipts on paper, and making every device rediscover a buried toggle to get that was the wrong
+ * default. An operator who genuinely prints on request only still turns it off, and that explicit
+ * `false` is preserved: only the ABSENCE of a choice reads as yes.
+ *
+ * The `config == null` guard is what keeps this safe to flip: with no printer configured this is
+ * false, so a till without a printer is untouched. Auto-print also never falls back to
+ * `window.print()` (see ThermalReceipt's `autoPrint` prop), so the worst case of a wrong guess is
+ * paper, never an OS dialog popping unprompted after a sale.
+ */
+export function autoPrintEnabled(config: PrinterConfig | null): boolean {
+  return config != null && (config.autoPrint ?? true)
 }
 
 /**
