@@ -341,6 +341,43 @@ await section('[8] desktop — one dialog primitive (N3)', async () => {
   await ctx.close()
 })
 
+// ═══ 9. The tab a page shows is the tab the URL names (N5) ══════════════════
+// The sidebar has three People entries (/people?tab=…) and marks one active by matching pathname
+// AND search — but the page's own Segmented control never wrote back, so the nav went on
+// highlighting a tab the page was no longer showing, and the tab could not be linked.
+await section('[9] desktop — tab state is two-directional (N5)', async () => {
+  const { ctx, page } = await makeContext({ phone: false, guard: false })
+  await page.goto(`${BASE}/`, { waitUntil: 'load' })
+  await page.waitForTimeout(1500)
+  const homeIdx = await idxOf(page)
+
+  await page.getByRole('button', { name: /SDM/ }).click({ timeout: 8000 })
+  await page.getByRole('link', { name: 'Karyawan', exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(1500)
+  check('sidebar opened the People employees tab', page.url().endsWith('/people?tab=employees'), page.url())
+
+  // Switching tab IN THE PAGE must move the URL with it.
+  await page.getByRole('tab', { name: 'Absensi', exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(900)
+  check('in-page tab switch updates the URL', page.url().endsWith('/people?tab=attendance'), page.url())
+  check('the nav follows the page', await page.evaluate(() => {
+    const link = [...document.querySelectorAll('a[href*="tab=attendance"]')].find((a) => a.closest('aside'))
+    return link?.getAttribute('aria-current') === 'page'
+  }))
+  check('a tab switch does not grow history', (await idxOf(page)) === homeIdx + 1, `${homeIdx} -> ${await idxOf(page)}`)
+
+  // Back leaves the page rather than walking the tabs one at a time.
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('Back leaves the page, it does not undo the tab', pathOf(page) === '/', pathOf(page))
+
+  // A deep link opens on the tab it names.
+  await page.goto(`${BASE}/people?tab=payroll`, { waitUntil: 'load' })
+  await page.waitForTimeout(2000)
+  check('a linked tab opens on that tab', await visible(page.getByRole('tab', { name: 'Penggajian', selected: true })))
+  await ctx.close()
+})
+
 await browser.close()
 console.log(failures === 0 ? '\nNAV SMOKE OK' : `\nNAV SMOKE FAILED (${failures})`)
 process.exit(failures === 0 ? 0 : 1)

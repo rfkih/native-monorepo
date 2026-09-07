@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
+import { needsCanonicalTab, resolveTab, withTabParam } from '@/lib/tabParam'
 import { TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Segmented } from '@/components/ui/Segmented'
@@ -51,24 +52,21 @@ export function PeoplePage() {
   const payrollOk = canPayroll(roles)
   const tabKeys = visiblePeopleTabs(roles)
 
-  const [searchParams] = useSearchParams()
+  // The URL is the tab (ADR 0075 rule N5). There is no local `tab` state to drift from it any
+  // more: the Segmented control writes back, so the sidebar's three People entries can no longer
+  // highlight a tab this page is not showing, and the tab is linkable. `replace`, never `push` —
+  // Back must leave the page, not walk the tabs one at a time.
+  const [searchParams, setSearchParams] = useSearchParams()
   const urlTab = searchParams.get('tab')
-  const [tab, setTab] = useState<PeopleTabKey>(() =>
-    (tabKeys as readonly string[]).includes(urlTab ?? '')
-      ? (urlTab as PeopleTabKey)
-      : (tabKeys[0] ?? 'employees'),
-  )
-  // Resync from the URL on a genuine change only (e.g. hopping from the Employees to the Payroll
-  // nav item while already on this page) — same one-directional URL→state pattern OrgUnitDetail
-  // uses for its own `?tab=` (react.dev "you might not need an effect"). Manually switching tabs
-  // via the Segmented control below never writes back to the URL, so this never fights that.
-  const [lastUrlTab, setLastUrlTab] = useState(urlTab)
-  if (urlTab !== lastUrlTab) {
-    setLastUrlTab(urlTab)
-    if (urlTab && (tabKeys as readonly string[]).includes(urlTab)) {
-      setTab(urlTab as PeopleTabKey)
-    }
-  }
+  const tab = resolveTab(urlTab, tabKeys, tabKeys[0] ?? 'employees')
+  const setTab = (next: PeopleTabKey) =>
+    setSearchParams(withTabParam(searchParams, next), { replace: true })
+  // Canonicalise on arrival so the URL always names the tab, which keeps Shell's nav matching on a
+  // plain exact compare. Self-terminating: after the write the URL already states it.
+  useEffect(() => {
+    if (!needsCanonicalTab(urlTab, tab)) return
+    setSearchParams(withTabParam(searchParams, tab), { replace: true })
+  }, [urlTab, tab, searchParams, setSearchParams])
 
   const unitsQuery = useOrgUnits({
     companyId: company?.companyId ?? '',

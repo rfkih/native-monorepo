@@ -13,9 +13,10 @@
  * (ADR 0049 P3b `effectiveRoles`) — this file has no route-level gate of its own to read from.
  */
 
-import { useState } from 'react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { needsCanonicalTab, resolveTab, withTabParam } from '@/lib/tabParam'
 import { Plus, Settings } from 'lucide-react'
 import { Segmented } from '@/components/ui/Segmented'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
@@ -30,7 +31,18 @@ export function ExpensesHub() {
   const { t } = useTranslation()
   const { roles, elevatedRoles } = useAuth()
   const financeOk = canFinance(effectiveRoles(roles, elevatedRoles))
-  const [tab, setTab] = useState<Tab>('inbox')
+  // The URL is the tab (ADR 0075 rule N5). This one had no URL at all — the tab could not be
+  // linked, and returning to /expenses always dropped you back on the inbox.
+  const tabKeys: Tab[] = financeOk ? ['inbox', 'all', 'company'] : ['inbox', 'all']
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlTab = searchParams.get('tab')
+  const tab = resolveTab(urlTab, tabKeys, 'inbox')
+  const setTab = (next: Tab) =>
+    setSearchParams(withTabParam(searchParams, next), { replace: true })
+  useEffect(() => {
+    if (!needsCanonicalTab(urlTab, tab)) return
+    setSearchParams(withTabParam(searchParams, tab), { replace: true })
+  }, [urlTab, tab, searchParams, setSearchParams])
 
   return (
     <div className="flex flex-col gap-[18px]">
