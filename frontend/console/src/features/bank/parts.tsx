@@ -5,38 +5,15 @@
  * file only exports components (keeps react-refresh/only-export-components clean).
  */
 
-import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { useBackDismiss } from '@/components/mobile/useBackDismiss'
-import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { cn } from '@/lib/cn'
 import type { StatementLineStatus } from './api'
 
 export const SELECT_CLASSES =
   'h-11 rounded-xl border border-line bg-surface px-3 text-sm text-ink focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
 
-/** Simple modal overlay — closes on backdrop click, Escape, or the phone/browser Back button. */
-export function DialogOverlay({ children, onClose }: { children: ReactNode; onClose: () => void }) {
-  useBackDismiss(onClose)
-  useScrollLock()
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose()
-      }}
-    >
-      <Card className="w-full max-w-2xl p-6">{children}</Card>
-    </div>
-  )
-}
 
 /** Status pill — RECONCILED is the only "profit" (green) tone; green stays reserved for that. */
 export function StatementStatusBadge({ status }: { status: StatementLineStatus }) {

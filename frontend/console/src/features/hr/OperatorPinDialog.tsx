@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
-import { DialogOverlay } from '@/features/org/parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import { useSetOperatorPin, type EmployeeListRow } from './api'
 
 const PIN_PATTERN = /^[0-9]{4,6}$/

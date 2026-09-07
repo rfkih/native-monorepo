@@ -18,7 +18,7 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
 import { Spinner } from '@/components/ui/Spinner'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { DialogOverlay } from '@/features/org/parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
 import { cn } from '@/lib/cn'
 import { isoMinorExponent } from '@/lib/money'
 import {

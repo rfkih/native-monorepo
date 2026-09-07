@@ -25,7 +25,8 @@ import {
   type BillLine,
 } from './api'
 import { formatDate, billErrorKey } from './format'
-import { DialogOverlay, BillStatusBadge, SELECT_CLASSES } from './parts'
+import { DialogOverlay } from '@/components/ui/Dialog'
+import { BillStatusBadge, SELECT_CLASSES } from './parts'
 
 /**
  * ADR 0072 P4 — resolves a linked line's `ingredientQtyBase` into the ingredient's DISPLAY unit
