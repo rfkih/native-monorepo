@@ -77,6 +77,4 @@ Back press. The unwind now registers its own one-shot backstop.
 
 **Deferred, deliberately.** (1) The 73 dialog call sites pass no `aria-label`, so the dialogs have
 no accessible name — a pre-existing WCAG gap, not a regression, and 73 naming decisions is its own
-piece of work. (2) The `z-50` literals outside the shared primitives are not swept. (3) N5 is not
-yet applied to `PeoplePage`, `OrgUnitDetail` and `ExpensesHub`, whose tabs are still one-directional
-URL→state, so the sidebar can highlight a tab the page is not showing.
+piece of work. (2) The `z-50` literals outside the shared primitives are not swept.

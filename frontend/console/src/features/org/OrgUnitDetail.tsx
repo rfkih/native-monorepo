@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { needsCanonicalTab, resolveTab, withTabParam } from '@/lib/tabParam'
 import {
   ArrowUpRight,
   Briefcase,
@@ -95,28 +96,20 @@ export function OrgUnitDetail() {
   // exposes a reveal-on-demand secret.
   const isOwnerOrManager = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
 
-  // Preset role-based access model Phase 2 — the People nav group (App.tsx's /people redirector)
-  // deep-links here as `/org/:unitId?tab=employees|payroll|attendance`; read it once on mount AND
-  // resync it whenever it changes (the redirector navigates here WITHOUT unmounting this
-  // component when only the `tab` query changes, e.g. hopping from the Employees to the Payroll
-  // nav item while already on this unit). Adjusted DURING RENDER, not in an effect (react.dev
-  // "you might not need an effect" — the same pattern SessionProvider/Shell's Sidebar already use
-  // elsewhere in this codebase): `lastUrlTab` tracks the last SEEN `?tab=` value so the sync only
-  // fires on a genuine URL change, never on every render. Manually switching tabs via the
-  // Segmented control below does NOT write back to the URL (one-directional: URL → state only),
-  // so this never fights that.
-  const [searchParams] = useSearchParams()
+  // The URL is the tab (ADR 0075 rule N5): deep-linked here as `/org/:unitId?tab=…`, and the
+  // Segmented control writes back, so the two can no longer disagree. This replaces a
+  // one-directional URL→state sync that needed a `lastUrlTab` shadow to know when the query had
+  // genuinely changed; with no local state there is nothing to keep in step. `replace`, never
+  // `push` — Back must leave the page, not walk the tabs.
+  const [searchParams, setSearchParams] = useSearchParams()
   const urlTab = searchParams.get('tab')
-  const [tab, setTab] = useState<TabKey>(() =>
-    (TAB_KEYS as readonly string[]).includes(urlTab ?? '') ? (urlTab as TabKey) : 'overview',
-  )
-  const [lastUrlTab, setLastUrlTab] = useState(urlTab)
-  if (urlTab !== lastUrlTab) {
-    setLastUrlTab(urlTab)
-    if (urlTab && (TAB_KEYS as readonly string[]).includes(urlTab)) {
-      setTab(urlTab as TabKey)
-    }
-  }
+  const tab = resolveTab(urlTab, TAB_KEYS, 'overview')
+  const setTab = (next: TabKey) =>
+    setSearchParams(withTabParam(searchParams, next), { replace: true })
+  useEffect(() => {
+    if (!needsCanonicalTab(urlTab, tab)) return
+    setSearchParams(withTabParam(searchParams, tab), { replace: true })
+  }, [urlTab, tab, searchParams, setSearchParams])
   const [period, setPeriod] = useState(currentPeriod())
   const [dialog, setDialog] = useState<DialogState | null>(null)
 
