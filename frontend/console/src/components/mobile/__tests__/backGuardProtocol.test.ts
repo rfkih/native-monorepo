@@ -1,13 +1,12 @@
 /**
- * backGuardProtocol — pure-module tests (vitest runs `environment: 'node'`, no DOM; the browser-
- * touching helpers are exercised against a minimal stubbed `window`, following the MemoryStorage
- * precedent in lib/__tests__/SessionProvider.test.ts).
+ * backGuardProtocol — pure-module tests (vitest runs `environment: 'node'`, no DOM). Every export
+ * under test is pure over its arguments, so no `window` stub is needed.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  backIntentFor,
   beginOverlaySelfPop,
   consumeOverlaySelfPop,
-  guardedNavigateBack,
   isAtRoot,
   isGuardablePath,
   isGuardState,
@@ -16,10 +15,6 @@ import {
   openOverlayCount,
   registerOverlay,
 } from '../backGuardProtocol'
-
-afterEach(() => {
-  vi.unstubAllGlobals()
-})
 
 describe('state classifiers', () => {
   it('recognizes the guard sentinel', () => {
@@ -126,6 +121,43 @@ describe('overlay self-pop consumption', () => {
     expect(consumeOverlaySelfPop({ type: 'popstate' })).toBe(false) // a NEW event is not self
   })
 
+  it('a token is consumed even when nothing is mounted to see the unwind', () => {
+    // The regression: in a plain browser (no route guard) with the last overlay already unmounted,
+    // NOBODY handled the unwind's popstate, so the token survived and swallowed the user's next
+    // real Back press. `beginOverlaySelfPop` now registers its own one-shot backstop.
+    const listeners: Array<(e: Event) => void> = []
+    vi.stubGlobal('window', {
+      addEventListener: (type: string, fn: (e: Event) => void) => {
+        if (type === 'popstate') listeners.push(fn)
+      },
+    })
+    beginOverlaySelfPop()
+    expect(listeners).toHaveLength(1)
+
+    const unwind = { type: 'popstate' } as unknown as Event
+    listeners[0](unwind) // the backstop fires — nothing else was listening
+    // The user's next, genuine Back must NOT read as a self-pop.
+    expect(consumeOverlaySelfPop({ type: 'popstate' })).toBe(false)
+    vi.unstubAllGlobals()
+  })
+
+  it('the backstop and a live overlay handler agree on the same event', () => {
+    const listeners: Array<(e: Event) => void> = []
+    vi.stubGlobal('window', {
+      addEventListener: (type: string, fn: (e: Event) => void) => {
+        if (type === 'popstate') listeners.push(fn)
+      },
+    })
+    beginOverlaySelfPop()
+    const unwind = { type: 'popstate' } as unknown as Event
+    // Whichever runs first decides; the other must still read "already consumed", never decrement
+    // a second token.
+    expect(consumeOverlaySelfPop(unwind)).toBe(true)
+    listeners[0](unwind)
+    expect(consumeOverlaySelfPop({ type: 'popstate' })).toBe(false)
+    vi.unstubAllGlobals()
+  })
+
   it('pending pops pair 1:1 with distinct events', () => {
     beginOverlaySelfPop()
     beginOverlaySelfPop()
@@ -140,18 +172,31 @@ describe('overlay self-pop consumption', () => {
   })
 })
 
-describe('guardedNavigateBack', () => {
+describe('backIntentFor', () => {
   it('skips the parked sentinel with -2 when guarded', () => {
-    vi.stubGlobal('window', { history: { state: { backGuard: true, idx: 4 } } })
-    const navigate = vi.fn()
-    guardedNavigateBack(navigate)
-    expect(navigate).toHaveBeenCalledWith(-2)
+    expect(backIntentFor({ backGuard: true, idx: 4 })).toEqual({ kind: 'pop', delta: -2 })
   })
 
   it('plain -1 when unguarded (browser / excluded route)', () => {
-    vi.stubGlobal('window', { history: { state: { idx: 4, usr: null } } })
-    const navigate = vi.fn()
-    guardedNavigateBack(navigate)
-    expect(navigate).toHaveBeenCalledWith(-1)
+    expect(backIntentFor({ idx: 4, usr: null })).toEqual({ kind: 'pop', delta: -1 })
+  })
+
+  it('the first in-app entry has nothing to pop — use the declared fallback', () => {
+    // A deep link / cold open straight onto a sub-page: popping here leaves for the IdP page.
+    expect(backIntentFor({ idx: 0, usr: null })).toEqual({ kind: 'fallback' })
+    expect(backIntentFor({ backGuard: true, idx: 0 })).toEqual({ kind: 'fallback' })
+    expect(backIntentFor({ idx: -1 })).toEqual({ kind: 'fallback' })
+  })
+
+  it('missing or foreign state falls back rather than guessing a delta', () => {
+    for (const s of [null, undefined, {}, { idx: 'x' }, { idx: null }]) {
+      expect(backIntentFor(s)).toEqual({ kind: 'fallback' })
+    }
+  })
+
+  it('never eats an overlay entry — that pop belongs to useBackDismiss', () => {
+    expect(backIntentFor({ nativeBackDismiss: true })).toEqual({ kind: 'fallback' })
+    // …even when the overlay entry carries a usable idx (adopted entry, stacked sheets).
+    expect(backIntentFor({ nativeBackDismiss: true, idx: 4 })).toEqual({ kind: 'fallback' })
   })
 })
