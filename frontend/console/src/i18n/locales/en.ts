@@ -3966,6 +3966,54 @@ export const en = {
       'Record payouts from delivery and marketplace platforms and track what each channel still owes.',
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to record platform settlements.',
+    /** ADR 0076 — one payout clears everything a payer settled. */
+    payout: {
+      owedHeading: 'Who still owes you',
+      noneTitle: 'Nothing is waiting to be paid out',
+      noneHint:
+        'Balances appear here once a marketplace order or a QRIS sale is rung up.',
+      error: 'Could not load what is owed.',
+      formTitle: 'Record a payout from {{source}}',
+      formHint:
+        'Tick what this transfer covered, then enter the amount that actually reached your bank. The deduction is worked out for you.',
+      settledHeading: 'Settled',
+      grossHeading: 'Gross',
+      totalGross: 'Total settled',
+      netLabel: 'Reached your bank',
+      netHint: 'The figure on the bank statement, before you split anything out.',
+      netPlaceholder: 'e.g. 2216100',
+      feeLabel: 'Deduction',
+      netExceedsGross:
+        'The amount received is more than what was settled. Check the figures — a platform paying more than it owed is not something this can record.',
+      review: 'Review payout',
+      confirmTitle: 'Record this payout?',
+      confirmBody:
+        'This records the money as settled and books the deduction. It reaches your bank account in the books once you reconcile the statement line.',
+      confirm: 'Record payout',
+      submitFailed: 'Could not record the payout. Check the figures and try again.',
+      kind: {
+        MARKETPLACE: 'Marketplace orders',
+        QRIS: 'QRIS at the counter',
+        CARD: 'Card at the counter',
+      },
+    },
+    sourceConfig: {
+      heading: 'Who pays out your QRIS',
+      hint:
+        'If your QR came from a marketplace, its money arrives in the same transfer as your orders from them. Naming them here puts both in one payout — and moves what has already built up.',
+      qrisLabel: 'QRIS is settled by',
+      placeholder: 'e.g. SHOPEE',
+      save: 'Save',
+      saveFailed: 'Could not save. Try again.',
+    },
+    overdue: {
+      title: 'Money a platform is still holding',
+      body:
+        'These have gone past their usual payout cycle without being recorded as settled.',
+      never: 'never paid out',
+      days: 'last paid out {{count}} days ago',
+      action: 'Record a payout',
+    },
     outstanding: {
       title: 'Outstanding by channel',
       empty: 'No platform channels yet',

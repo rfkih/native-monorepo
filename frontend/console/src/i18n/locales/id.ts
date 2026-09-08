@@ -3891,6 +3891,54 @@ export const id = {
       'Catat pencairan dana dari platform pengantaran dan marketplace, serta pantau saldo yang masih menjadi kewajiban tiap channel.',
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk mencatat settlement platform.',
+    /** ADR 0076 — satu payout melunasi semua yang dibayar satu pihak. */
+    payout: {
+      owedHeading: 'Siapa yang masih berutang ke Anda',
+      noneTitle: 'Tidak ada yang menunggu dicairkan',
+      noneHint:
+        'Saldo muncul di sini setelah ada pesanan marketplace atau penjualan QRIS.',
+      error: 'Gagal memuat tagihan.',
+      formTitle: 'Catat pencairan dari {{source}}',
+      formHint:
+        'Centang apa saja yang tercakup transfer ini, lalu isi jumlah yang benar-benar masuk rekening. Potongannya dihitungkan.',
+      settledHeading: 'Yang dilunasi',
+      grossHeading: 'Bruto',
+      totalGross: 'Total bruto',
+      netLabel: 'Masuk rekening',
+      netHint: 'Angka di mutasi bank, sebelum Anda pecah-pecah.',
+      netPlaceholder: 'mis. 2216100',
+      feeLabel: 'Potongan',
+      netExceedsGross:
+        'Yang diterima lebih besar daripada yang dilunasi. Periksa lagi angkanya — platform membayar lebih dari utangnya bukan hal yang bisa dicatat di sini.',
+      review: 'Periksa pencairan',
+      confirmTitle: 'Catat pencairan ini?',
+      confirmBody:
+        'Ini mencatat uangnya sebagai sudah cair dan membukukan potongannya. Di pembukuan, uangnya masuk ke rekening setelah Anda merekonsiliasi baris mutasinya.',
+      confirm: 'Catat pencairan',
+      submitFailed: 'Pencairan gagal dicatat. Periksa angkanya dan coba lagi.',
+      kind: {
+        MARKETPLACE: 'Pesanan marketplace',
+        QRIS: 'QRIS di konter',
+        CARD: 'Kartu di konter',
+      },
+    },
+    sourceConfig: {
+      heading: 'Siapa yang mencairkan QRIS Anda',
+      hint:
+        'Kalau QR Anda berasal dari sebuah marketplace, uangnya datang di transfer yang sama dengan pesanan dari mereka. Menyebutkannya di sini menyatukan keduanya jadi satu pencairan — sekaligus memindahkan saldo yang sudah menumpuk.',
+      qrisLabel: 'QRIS dicairkan oleh',
+      placeholder: 'mis. SHOPEE',
+      save: 'Simpan',
+      saveFailed: 'Gagal menyimpan. Coba lagi.',
+    },
+    overdue: {
+      title: 'Uang yang masih ditahan platform',
+      body:
+        'Ini sudah lewat dari siklus pencairan biasanya dan belum tercatat cair.',
+      never: 'belum pernah cair',
+      days: 'terakhir cair {{count}} hari lalu',
+      action: 'Catat pencairan',
+    },
     outstanding: {
       title: 'Saldo tertunda per channel',
       empty: 'Belum ada channel platform',
