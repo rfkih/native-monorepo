@@ -39,11 +39,22 @@ one payout clear several sources at once.
 We will make the settlement dimension **who pays the merchant** (the settlement *source*), not which
 tender the customer used, and record **one payout as one settlement with several lines**.
 
-1. **Source-dimensioned sub-ledger.** Generalize the `platform_receivable` accumulator to carry a
-   source kind (`MARKETPLACE | QRIS | CARD`) alongside `channel_code`, plus the `AccountRole` its
-   rows credit. Marketplace rows keep crediting `PLATFORM_RECEIVABLE` (1250); QRIS rows credit
-   `QRIS_CLEARING` (1901). One sub-ledger, two GL accounts, separation preserved. The migration is
-   additive — existing rows default to `MARKETPLACE`.
+1. **Source-dimensioned sub-ledger.** The `platform_receivable` accumulator gains two columns, which
+   answer two different questions:
+   - `source_kind` (`MARKETPLACE | QRIS | CARD`) — **which GL account** the row's balance lives in.
+     Marketplace rows keep crediting `PLATFORM_RECEIVABLE` (1250); QRIS rows credit `QRIS_CLEARING`
+     (1901); card rows `CARD_CLEARING` (1902). The `AccountRole` is **derived** from this value in
+     one place in the writer and never stored per row — a stored role could drift out of agreement
+     with its own kind.
+   - `source_code` — **who pays**, the grouping key for a payout. `SHOPEE` owns both the ShopeeFood
+     channel and the Shopee QRIS row, so one settlement clears both.
+
+   The existing unique key `(company_id, channel_code, currency)` is deliberately **left alone**.
+   Widening it to include `source_kind` would be the tidier shape, but the previous image upserts
+   with `ON CONFLICT` on exactly that key, so dropping it would break a rollback onto the new
+   schema. A QRIS row instead carries its own namespaced `channel_code` (`QRIS:SHOPEE`) and shares
+   the payer through `source_code`. Both columns are added with defaults and no `SET NOT NULL`, so
+   the migration passes `check-migration-safety.sh` and an old image keeps inserting successfully.
 2. **A payout is a header plus lines.** The header holds the payout date, the source, and the
    **net actually received** (the figure the merchant reads off the bank statement, entered once).
    Each line names one receivable and its **gross**. `fee = Σ gross − net`, and `net > Σ gross`
