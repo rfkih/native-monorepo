@@ -1354,8 +1354,7 @@ export const id = {
     tillMenuLabel: 'Stock opname',
     /** Dipendekkan: di HP versi lamanya memakan ~5 baris tepat di atas daftar hitungan, dan
      * menyusut jadi 3 baris terlihat begitu keyboard naik. */
-    entryHint:
-      'Terisi otomatis dengan angka sistem — ubah hanya yang berbeda dari hasil hitung fisik Anda. Selisih pada bahan berbiaya dibukukan sebagai penyusutan.',
+    entryHint: 'Angka sistem sudah terisi — ubah yang berbeda dari hasil hitung fisik Anda.',
     /** Filter daftar bahan (muncul di atas 12 bahan) — hanya menyaring tampilan; yang dikirim
      * tetap SELURUH bahan, yang tak disentuh terkirim pada angka sistemnya. */
     searchLabel: 'Cari bahan',
@@ -1369,8 +1368,11 @@ export const id = {
     partialValueMark: '(sebagian)',
     soldTodayTitle: 'Barang terjual hari ini',
     soldTodayEmpty: 'Belum ada penjualan hari ini.',
-    systemQty: 'Sistem: {{qty}} {{unit}}',
-    usedToday: 'Terpakai hari ini: {{qty}} {{unit}}',
+    /** Baris lembar hitung — huruf kecil tanpa titik dua supaya muat satu baris di samping kolom
+     * angka. "hari ini" dibuang: opname-nya memang hari ini, dan panel di atasnya sudah menyebut
+     * "hari ini". Satuan tetap menempel pada KEDUA angka (aturan unit-di-samping-angka). */
+    systemQty: 'sistem {{qty}} {{unit}}',
+    usedToday: 'terpakai {{qty}} {{unit}}',
     usedThatDay: 'Terpakai hari itu: {{qty}} {{unit}}',
     historyTitle: 'Riwayat opname',
     historyAction: 'Riwayat opname',
