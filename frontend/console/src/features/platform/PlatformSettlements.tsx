@@ -61,7 +61,12 @@ function PlatformSettlementsInner({ company }: { company: CompanySession }) {
       <HistorySection
         query={historyQuery}
         rows={history}
-        channelCodes={sources.map((s) => s.sourceCode)}
+        // Union with the codes the history itself carries: `sources` only lists payers that
+        // still owe something, so a payer would vanish from its own history filter the moment it
+        // was cleared to zero — which is exactly what this page exists to do.
+        channelCodes={Array.from(
+          new Set([...sources.map((s) => s.sourceCode), ...history.map((h) => h.channelCode)]),
+        ).sort()}
         channel={historyChannel}
         onChannelChange={setHistoryChannel}
         locale={locale}

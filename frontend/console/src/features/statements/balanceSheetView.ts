@@ -86,6 +86,15 @@ export function netFixedAssetLines(lines: readonly BalanceLine[]): BalanceLine[]
     .map((l) => (l.accountCode === FIXED_ASSET_COST_CODE ? { ...l, balanceMinor: netBookValue } : l))
 }
 
+/**
+ * A netted equipment row is worth showing even at zero. Fully depreciated does not mean gone: the
+ * business still owns the equipment, and hiding the row as a zero balance would tell an owner they
+ * have no equipment at all.
+ */
+export function isNettedFixedAssetRow(line: BalanceLine): boolean {
+  return line.accountCode === FIXED_ASSET_COST_CODE
+}
+
 /** One asset group ready to render: its heading key, its lines in display order, and its subtotal. */
 export interface AssetGroup {
   labelKey: string

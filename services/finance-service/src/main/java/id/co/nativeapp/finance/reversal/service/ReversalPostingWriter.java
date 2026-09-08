@@ -351,8 +351,18 @@ public class ReversalPostingWriter {
     SettlementSourceReader.SettlementSourceRef voidSource =
         settlementSource.resolve(companyId, event.tenderType(), event.channel());
     if (voidSource != null) {
+      // The STORED net tender (V64), not the grand total: a QRIS sale part-paid by a gift card
+      // accrued only what the acquirer collected, so clawing back the grand total would drive the
+      // sub-ledger below the GL. Falls back to the grand total for pre-V64 entries, where only
+      // ONLINE accrued and ONLINE cannot carry a gift-card leg — so the two are equal there.
+      Money accrued =
+          originalEntry
+              .map(e -> e.getNetTenderMinor())
+              .filter(java.util.Objects::nonNull)
+              .map(minor -> Money.ofMinor(minor, currencyCode))
+              .orElse(saleGrandTotal);
       platformReceivable.accumulate(
-          companyId, voidSource, currencyCode, negatedGross.amountMinor(), actor);
+          companyId, voidSource, currencyCode, accrued.negate().amountMinor(), actor);
     }
   }
 
@@ -535,6 +545,12 @@ public class ReversalPostingWriter {
 
     // ADR 0036 Phase B, widened by ADR 0076: a refund claws back whatever the sale accrued, routed
     // by the same resolver as the accrual (negative delta; negative balances are tolerated).
+    //
+    // refundAmount IS the accrued basis here, unlike the void twin which needs the stored net
+    // tender: a partial refund is rejected above, and a gift-card-settled sale can only be refunded
+    // up to its cash residual — so it is ALWAYS classified partial and never reaches this point.
+    // Every refund that gets here therefore had no gift-card leg, where refundAmount == grand total
+    // == net tender.
     SettlementSourceReader.SettlementSourceRef refundSource =
         settlementSource.resolve(companyId, event.tenderType(), event.channel());
     if (refundSource != null) {

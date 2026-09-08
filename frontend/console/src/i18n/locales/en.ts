@@ -869,7 +869,8 @@ export const en = {
     unnatural: {
       oneTitle: '{{name}} is negative at {{amount}}',
       manyTitle: '{{count}} things you own show a negative value',
-      body: 'Usually a purchase recorded as an expense twice. Check this account.',
+      body:
+        'Usually a purchase recorded as an expense twice — or, for equipment, depreciation booked past what it cost. Check this account.',
     },
     /** Asset groups, ordered by how quickly each turns into money — not by account code. */
     groups: {
@@ -3985,6 +3986,10 @@ export const en = {
       feeLabel: 'Deduction',
       netExceedsGross:
         'The amount received is more than what was settled. Check the figures — a platform paying more than it owed is not something this can record.',
+      nothingSettleable:
+        'Everything this payer holds is card money, which cannot be recorded here yet — it still settles through bank reconciliation.',
+      reconcileWarning:
+        'When the deposit shows up on your statement, reconcile it as a plain clearing line — not as QRIS. Recording it twice would double the fee.',
       review: 'Review payout',
       confirmTitle: 'Record this payout?',
       confirmBody:

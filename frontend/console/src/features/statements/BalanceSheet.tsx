@@ -16,6 +16,7 @@ import { downloadCsv } from '@/lib/csv'
 import { accountLabel } from './accountLabels'
 import {
   groupAssetLines,
+  isNettedFixedAssetRow,
   netFixedAssetLines,
   splitZeroLines,
   unnaturalAssetLines,
@@ -110,7 +111,9 @@ export function BalanceSheet() {
       // Only assets are checked for an impossible balance; a liability or equity row must never
       // inherit the treatment just because its code happens to collide.
       flagged: options.flag === true && flaggedCodes.has(l.accountCode),
-      printOnly: !showZeros && l.balanceMinor === 0,
+      // Fully depreciated equipment nets to zero but is still owned — hiding it would tell an
+      // owner they have none, so it stays on screen even when other zero rows are folded away.
+      printOnly: !showZeros && l.balanceMinor === 0 && !isNettedFixedAssetRow(l),
     })
 
   const toAssetDisplay = toDisplay({ flag: true })

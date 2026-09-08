@@ -298,6 +298,10 @@ public class RevenuePostingWriter {
     //    is routed by tender type (ADR 0006 slice 2); a gift-card-covered residual splits the
     //    clearing debit onto GIFT_CARD_LIABILITY via the template, not this override.
     AccountRole clearingRole = resolveClearingRole(event.tenderType());
+    // The clearing leg's basis, exactly as JournalPostingService resolves "NET_TENDER": what the
+    // acquirer/platform actually collected. For a sale with no gift card this equals the grand
+    // total, so ONLINE behaviour is byte-identical to before.
+    Money netTender = amount.minus(event.effectiveGiftCardRedeemed());
     JournalEntry glEntry =
         journalPostingService.buildEntryForSale(
             EventKind.SALE,
@@ -323,6 +327,10 @@ public class RevenuePostingWriter {
     // on
     // the mutable role_account_map — fragile once an SME remaps the contra-revenue accounts).
     glEntry.setGrandTotalMinor(amount.amountMinor());
+    // V64: the clearing leg's basis. Stored so a later void/refund claws the receivable sub-ledger
+    // back by the SAME amount this sale accrued — SaleVoidedEvent carries no gift-card field, so
+    // without this the unwind would use the grand total against a net-tender accrual.
+    glEntry.setNetTenderMinor(netTender.amountMinor());
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
     generalLedgerWriter.post(glEntry, companyId);
@@ -337,7 +345,7 @@ public class RevenuePostingWriter {
         settlementSource.resolve(companyId, event.tenderType(), event.channel());
     if (source != null) {
       platformReceivable.accumulate(
-          companyId, source, amount.currency().getCurrencyCode(), amount.amountMinor(), actor);
+          companyId, source, amount.currency().getCurrencyCode(), netTender.amountMinor(), actor);
     }
 
     // Cross-topic reorder (QA sweep 2026-08-05): a SaleVoided/SaleRefunded consumed BEFORE this

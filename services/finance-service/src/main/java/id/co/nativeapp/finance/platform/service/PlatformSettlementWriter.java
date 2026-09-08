@@ -196,7 +196,7 @@ public class PlatformSettlementWriter {
     //    negative-forbidden movement — accruals and clawbacks tolerate negative balances, but a
     //    payout may never take more than a source is owed. RLS scopes the UPDATE (rule 5).
     for (SourceLine line : lines) {
-      decrementOutstanding(line, currency, companyId, actor);
+      decrementOutstanding(payer, line, currency, companyId, actor);
     }
 
     Instant now = clock.instant();
@@ -241,7 +241,7 @@ public class PlatformSettlementWriter {
             && existing.getNetMinor() == netMinor
             && existing.getCurrency() != null
             && existing.getCurrency().strip().equals(currency)
-            && readLines(existing.getId()).equals(lines);
+            && readLinesNormalized(existing.getId()).equals(lines);
     if (!samePayload) {
       throw new PlatformSettlementIdempotencyKeyConflictException(
           "Idempotency-Key was already used for a different settlement");
@@ -249,9 +249,16 @@ public class PlatformSettlementWriter {
     return new PlatformSettlementResult(existing, false);
   }
 
-  /** Takes one source's gross off its accumulator, or fails the whole payout (422). */
+  /**
+   * Takes one source's gross off its accumulator, or fails the whole payout (422).
+   *
+   * <p>Scoped to the PAYER as well as the source: without that, a caller could name one payer in
+   * the header and drain another's balance — the money would leave the right GL account but the
+   * payout would be filed under the wrong payer, and the drained one would read as never having
+   * been paid out for as long as it held a balance.
+   */
   private void decrementOutstanding(
-      SourceLine line, String currency, String companyId, String actor) {
+      String payer, SourceLine line, String currency, String companyId, String actor) {
     int updated =
         jdbcTemplate.update(
             """
@@ -264,6 +271,7 @@ public class PlatformSettlementWriter {
                AND currency = ?
                AND company_id = ?
                AND source_kind = ?
+               AND source_code = ?
                AND outstanding_minor >= ?
             """,
             line.grossMinor(),
@@ -272,6 +280,7 @@ public class PlatformSettlementWriter {
             currency,
             companyId,
             line.kind().name(),
+            payer,
             line.grossMinor());
     if (updated == 0) {
       throw new PlatformOverSettlementException(line.channelCode(), line.grossMinor(), currency);
@@ -288,12 +297,21 @@ public class PlatformSettlementWriter {
         SELECT source_kind, channel_code, gross_minor
           FROM platform_settlement_line
          WHERE settlement_id = ?
-         ORDER BY source_kind, channel_code
         """,
         (rs, rowNum) ->
             new SourceLine(
                 SettlementSourceKind.valueOf(rs.getString(1)), rs.getString(2), rs.getLong(3)),
         settlementId);
+  }
+
+  /**
+   * Ordered the same way {@link #settleSources} orders what it is compared against. Deliberately
+   * sorted in Java rather than by the query: Postgres collates punctuation with variable weight, so
+   * an `ORDER BY channel_code` and {@code String.compareTo} disagree on codes containing `:` — and
+   * a genuine idempotent retry would then 409 instead of replaying.
+   */
+  private List<SourceLine> readLinesNormalized(UUID settlementId) {
+    return SettlementAllocation.normalize(readLines(settlementId));
   }
 
   private void insertLines(
@@ -365,7 +383,7 @@ public class PlatformSettlementWriter {
             SELECT source_code, currency, source_kind, channel_code, outstanding_minor
               FROM platform_receivable
              WHERE outstanding_minor <> 0
-             ORDER BY source_code, source_kind, channel_code
+             ORDER BY source_code, currency, source_kind, channel_code
             """,
             (rs, rowNum) ->
                 new Row(
@@ -381,7 +399,13 @@ public class PlatformSettlementWriter {
     String currentCurrency = null;
     long total = 0L;
     for (Row row : rows) {
-      boolean newGroup = currentSource == null || !currentSource.equals(row.sourceCode());
+      // Currency is part of the group, not just carried along: platform_receivable is keyed by it,
+      // so one payer can hold IDR and USD rows and adding their minor units would be nonsense
+      // (rule 8 — every amount travels with its own currency).
+      boolean newGroup =
+          currentSource == null
+              || !currentSource.equals(row.sourceCode())
+              || !currentCurrency.equals(row.currency());
       if (newGroup && currentSource != null) {
         grouped.add(
             new PayoutSourceResponse(currentSource, currentCurrency, total, List.copyOf(lines)));
@@ -432,7 +456,18 @@ public class PlatformSettlementWriter {
               .max()
               .orElse(SettlementSourceKind.MARKETPLACE.defaultCadenceDays());
 
-      Instant lastPaidAt = lastPayoutAt(source.sourceCode());
+      // Nudging about a balance this flow cannot clear is a dead end: card has no mapped fee
+      // account, so its payer would be flagged forever with a form that has nothing to tick.
+      long settleable =
+          source.lines().stream()
+              .filter(PayoutSourceResponse.Line::settleable)
+              .mapToLong(PayoutSourceResponse.Line::outstandingMinor)
+              .sum();
+      if (settleable <= 0) {
+        continue;
+      }
+
+      Instant lastPaidAt = lastPayoutAt(source);
       Long daysSince =
           lastPaidAt == null ? null : Duration.between(lastPaidAt, now).toDays();
       if (daysSince != null && daysSince < cadenceDays) {
@@ -449,20 +484,35 @@ public class PlatformSettlementWriter {
     return List.copyOf(overdue);
   }
 
-  /** When this payer last paid out, or {@code null} if it never has. Named columns, no SELECT *. */
-  private Instant lastPayoutAt(String sourceCode) {
+  /**
+   * When this payer last paid out, or {@code null} if it never has.
+   *
+   * <p>Found through the payout's LINES rather than the header's payer name. A settlement header
+   * records the payer as it was named at the time, but naming an acquirer re-points a balance from
+   * (say) `QRIS` to `SHOPEE` — matching on the header alone would make a payer that settled
+   * yesterday read as "never paid out" the moment it was configured. The line's channel_code is
+   * stable across that move, so it is the durable link. Named columns, no {@code SELECT *}.
+   */
+  private Instant lastPayoutAt(PayoutSourceResponse source) {
+    List<String> channels = source.lines().stream().map(PayoutSourceResponse.Line::channelCode).toList();
+    if (channels.isEmpty()) {
+      return null;
+    }
+    String placeholders = String.join(", ", java.util.Collections.nCopies(channels.size(), "?"));
     List<Instant> found =
         jdbcTemplate.query(
             """
-            SELECT MAX(settled_at)
-              FROM platform_settlement
-             WHERE channel_code = ?
-            """,
+            SELECT MAX(s.settled_at)
+              FROM platform_settlement s
+              JOIN platform_settlement_line l ON l.settlement_id = s.id
+             WHERE l.channel_code IN (%s)
+            """
+                .formatted(placeholders),
             (rs, rowNum) -> {
               java.sql.Timestamp ts = rs.getTimestamp(1);
               return ts == null ? null : ts.toInstant();
             },
-            sourceCode);
+            channels.toArray());
     return found.isEmpty() ? null : found.getFirst();
   }
 

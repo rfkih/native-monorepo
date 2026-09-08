@@ -47,4 +47,14 @@ public interface JournalEntrySaleView {
    * reconstruction.
    */
   Long getGrandTotalMinor();
+
+  /**
+   * The precomputed NET TENDER in minor units — what the acquirer/platform actually collected
+   * ({@code amount − gift_card_redeemed}), stored at posting time (V64). The reversal writer
+   * claws the receivable sub-ledger back by exactly this, so an accrual and its unwind can never
+   * use different bases. NULL for SALE entries predating V64; the reversal writer falls back to
+   * the grand total, which is exactly right for those rows (only ONLINE accrued, and ONLINE
+   * cannot carry a gift-card leg).
+   */
+  Long getNetTenderMinor();
 }

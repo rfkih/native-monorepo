@@ -69,7 +69,8 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
                  je.currency                 AS currency,
                  je.uses_illustrative_rules  AS uses_illustrative_rules,
                  je.net_revenue_minor        AS net_revenue_minor,
-                 je.grand_total_minor        AS grand_total_minor
+                 je.grand_total_minor        AS grand_total_minor,
+                 je.net_tender_minor         AS net_tender_minor
             FROM journal_entry je
            WHERE je.sale_aggregate_id = :saleAggregateId
            LIMIT 1

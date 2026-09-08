@@ -853,7 +853,8 @@ export const id = {
     unnatural: {
       oneTitle: '{{name}} bernilai minus {{amount}}',
       manyTitle: '{{count}} harta bernilai minus',
-      body: 'Biasanya karena pembelian tercatat sebagai beban dua kali. Periksa akun ini.',
+      body:
+        'Biasanya karena pembelian tercatat sebagai beban dua kali — atau, untuk peralatan, penyusutan yang sudah melebihi harga belinya. Periksa akun ini.',
     },
     /** Kelompok harta, diurut dari yang paling cepat jadi uang — bukan menurut kode akun. */
     groups: {
@@ -3910,6 +3911,10 @@ export const id = {
       feeLabel: 'Potongan',
       netExceedsGross:
         'Yang diterima lebih besar daripada yang dilunasi. Periksa lagi angkanya — platform membayar lebih dari utangnya bukan hal yang bisa dicatat di sini.',
+      nothingSettleable:
+        'Semua yang ditahan pihak ini adalah uang kartu, yang belum bisa dicatat di sini — pencairannya masih lewat rekonsiliasi bank.',
+      reconcileWarning:
+        'Saat setorannya muncul di mutasi, rekonsiliasikan sebagai baris kliring biasa — bukan sebagai QRIS. Mencatatnya dua kali akan menggandakan biayanya.',
       review: 'Periksa pencairan',
       confirmTitle: 'Catat pencairan ini?',
       confirmBody:

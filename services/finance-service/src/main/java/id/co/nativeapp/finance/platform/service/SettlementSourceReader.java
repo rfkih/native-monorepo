@@ -92,9 +92,21 @@ public class SettlementSourceReader {
          ORDER BY source_kind
         """,
         (rs, rowNum) -> {
+          // The REAL stable channel_code, not the kind's name: a ref built with a fabricated code
+          // and later handed to PlatformReceivableWriter would open a second, stranded row.
           SettlementSourceKind kind = SettlementSourceKind.valueOf(rs.getString(1));
-          return new SettlementSourceRef(kind, kind.name(), rs.getString(2));
+          return new SettlementSourceRef(kind, channelCodeFor(kind), rs.getString(2));
         });
+  }
+
+  /** The stable sub-ledger key for a tender family — the single source of these constants. */
+  private static String channelCodeFor(SettlementSourceKind kind) {
+    return switch (kind) {
+      case QRIS -> QRIS_CHANNEL;
+      case CARD -> CARD_CHANNEL;
+      case MARKETPLACE ->
+          throw new IllegalArgumentException("a marketplace row is keyed by its own channel code");
+    };
   }
 
   /** The merchant's configured payer for a tender family, defaulting to the family's own name. */

@@ -1,0 +1,30 @@
+-- ============================================================================================================================
+-- V64 — store the sale's NET TENDER so a reversal can unwind the receivable it actually accrued
+-- ============================================================================================================================
+-- ADR 0076 widened the receivable sub-ledger from ONLINE to every tender someone else settles. The
+-- old accrual used the sale's GRAND TOTAL, which was correct only because of a guarantee that is
+-- ONLINE-only: an ONLINE sale cannot carry a gift-card leg (the producer rejects the combination).
+--
+-- QRIS and card CAN. On a Rp 100.000 QRIS sale where Rp 40.000 came off a gift card, the acquirer
+-- collects — and will settle — Rp 60.000. The GL already knows this: the clearing leg debits
+-- NET_TENDER (`amount − gift_card_redeemed`), not the grand total. The sub-ledger must accrue the
+-- same Rp 60.000, or the payout form offers money the acquirer never held and settling it drives
+-- 1901 negative.
+--
+-- The accrual side can compute that from the sale event. The REVERSAL side cannot: SaleVoidedEvent
+-- carries no gift-card field, so a void would claw back the grand total against an accrual of the
+-- net tender and push the sub-ledger the other way.
+--
+-- This is the same problem V19 (net_revenue_minor) and V38 (grand_total_minor) already solved on
+-- this very table, and it takes the same answer: STORE the basis at posting time rather than
+-- reconstruct it from the GL lines, which would depend on the mutable role_account_map and break
+-- the moment an SME remaps the clearing accounts.
+--
+-- NULLABLE with no default and no backfill, deliberately:
+--   * an old image writes entries without it and keeps working (rollback-safe — no DEFAULT is
+--     needed because the column accepts NULL);
+--   * every SALE entry predating this migration accrued under the ONLINE-only rule, where net
+--     tender EQUALS the grand total, so the reversal writer's fallback to grand_total_minor is not
+--     an approximation — it is exactly right for those rows.
+ALTER TABLE journal_entry
+    ADD COLUMN net_tender_minor BIGINT;

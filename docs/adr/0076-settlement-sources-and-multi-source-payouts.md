@@ -113,4 +113,16 @@ two acquirers at once (v1 attributes QRIS to the company's configured source at 
   fixable additively by carrying the acquirer on the sale.
 - The Beranda card is only as good as the cadence configured per source; a wrong cadence makes it
   either silent or nagging. It is a nudge, not a control: nothing blocks on it.
+- **KNOWN RISK — the QRIS balance now has two writers that credit it.** Recording a payout credits
+  1901; so does reconciling a bank line under the existing `QRIS_CLEARING` category (ADR 0045),
+  which is the flow merchants have been using. Doing both for the same transfer credits 1901 twice
+  and doubles the MDR expense. v1 mitigates with wording only — the payout confirmation names the
+  plain CLEARING category as the follow-up step — because a hard interlock needs the payout and the
+  statement line to know about each other, which is the deferred "reconcile from inside the
+  settlement form" item above. Until then the wrong click is one step away, and it is the one the
+  merchant has been trained on.
+- The accrual basis is the sale's NET TENDER (`amount − gift_card_redeemed`), stored on the journal
+  entry by V64 so a void unwinds by exactly what it accrued. Using the grand total — correct while
+  only ONLINE accrued, since ONLINE cannot carry a gift-card leg — would have driven 1901 negative
+  on every QRIS sale part-paid by a gift card.
 - As throughout 0036, all account codes are ILLUSTRATIVE until an SME remaps `role_account_map`.

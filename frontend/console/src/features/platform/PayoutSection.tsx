@@ -89,7 +89,17 @@ export function PayoutSection({
         </div>
       </Card>
 
-      {source ? <PayoutForm session={session} source={source} locale={locale} /> : null}
+      {/* `key` REMOUNTS the form when the payer changes: its ticked lines and prefilled gross are
+          useState initializers, which only run on mount — without this, switching payer left every
+          box unticked and every amount blank. */}
+      {source ? (
+        <PayoutForm
+          key={`${source.sourceCode}:${source.currency}`}
+          session={session}
+          source={source}
+          locale={locale}
+        />
+      ) : null}
     </div>
   )
 }
@@ -153,6 +163,12 @@ function PayoutForm({
           </h2>
           <p className="mt-1 text-[13px] text-ink-3">{t('platform.payout.formHint')}</p>
         </div>
+
+        {/* A payer holding only card money has nothing to tick — say why, rather than showing an
+            empty list above a permanently disabled button. */}
+        {settleable.length === 0 ? (
+          <p className="text-[13px] text-ink-2">{t('platform.payout.nothingSettleable')}</p>
+        ) : null}
 
         <div className="flex flex-col">
           <div className="flex items-baseline gap-3 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
@@ -311,6 +327,10 @@ function ConfirmPayout({
           {/* Says "recorded as settled", not "in the bank": the money reaches 1000 Bank only once
               the statement line is reconciled (ADR 0016 keeps that the single Dr-BANK writer). */}
           <p className="mt-1 text-[13px] text-ink-2">{t('platform.payout.confirmBody')}</p>
+          {/* The old habit — reconciling the deposit under the QRIS category — would credit 1901 a
+              SECOND time and double the MDR expense. Name the right category here, where the
+              decision is about to be made. */}
+          <p className="mt-1.5 text-[12.5px] text-amber-2">{t('platform.payout.reconcileWarning')}</p>
         </div>
 
         <div className="flex flex-col gap-1.5 rounded-lg border border-line p-3.5">
