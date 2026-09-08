@@ -9,6 +9,7 @@ import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
 import id.co.nativeapp.finance.platform.service.PlatformReceivableWriter;
+import id.co.nativeapp.finance.platform.service.SettlementSourceReader;
 import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
@@ -108,6 +109,7 @@ public class RevenuePostingWriter {
   private final GeneralLedgerWriter generalLedgerWriter;
   private final ErrorInboxWriter errorInbox;
   private final PlatformReceivableWriter platformReceivable;
+  private final SettlementSourceReader settlementSource;
   private final PendingSaleReversalRepository pendingReversals;
   private final ReversalPostingWriter reversalWriter;
 
@@ -125,6 +127,7 @@ public class RevenuePostingWriter {
       GeneralLedgerWriter generalLedgerWriter,
       ErrorInboxWriter errorInbox,
       PlatformReceivableWriter platformReceivable,
+      SettlementSourceReader settlementSource,
       PendingSaleReversalRepository pendingReversals,
       ReversalPostingWriter reversalWriter) {
     this.ledgerRepository = ledgerRepository;
@@ -136,6 +139,7 @@ public class RevenuePostingWriter {
     this.journalPostingService = journalPostingService;
     this.errorInbox = errorInbox;
     this.platformReceivable = platformReceivable;
+    this.settlementSource = settlementSource;
     this.pendingReversals = pendingReversals;
     this.reversalWriter = reversalWriter;
   }
@@ -323,16 +327,17 @@ public class RevenuePostingWriter {
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
     generalLedgerWriter.post(glEntry, companyId);
 
-    // ADR 0036 Phase B: an ONLINE sale accrues the per-channel receivable sub-ledger by the GROSS
-    // amount (ONLINE carries no gift-card legs — the producer rejects the combination), atomically
-    // with the GL posting above. Null channel → UNKNOWN bucket + warn, never dropped.
-    if ("ONLINE".equals(event.tenderType())) {
+    // ADR 0036 Phase B, widened by ADR 0076: every tender that someone ELSE settles accrues the
+    // receivable sub-ledger by the GROSS amount, atomically with the GL posting above. ONLINE
+    // accrues per channel as before; QRIS and card accrue under their own stable rows, carrying the
+    // payer the merchant configured — that is what lets one Shopee transfer clear both its
+    // ShopeeFood orders and its counter QRIS. CASH settles in the drawer and accrues nothing.
+    // Null channel → UNKNOWN bucket + warn, never dropped.
+    SettlementSourceReader.SettlementSourceRef source =
+        settlementSource.resolve(companyId, event.tenderType(), event.channel());
+    if (source != null) {
       platformReceivable.accumulate(
-          companyId,
-          event.channel(),
-          amount.currency().getCurrencyCode(),
-          amount.amountMinor(),
-          actor);
+          companyId, source, amount.currency().getCurrencyCode(), amount.amountMinor(), actor);
     }
 
     // Cross-topic reorder (QA sweep 2026-08-05): a SaleVoided/SaleRefunded consumed BEFORE this

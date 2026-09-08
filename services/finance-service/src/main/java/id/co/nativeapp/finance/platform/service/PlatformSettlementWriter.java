@@ -147,6 +147,7 @@ public class PlatformSettlementWriter {
              WHERE channel_code = ?
                AND currency = ?
                AND company_id = ?
+               AND source_kind = 'MARKETPLACE'
                AND outstanding_minor >= ?
             """,
             grossMinor,
@@ -175,13 +176,21 @@ public class PlatformSettlementWriter {
     return new PlatformSettlementResult(settlement, true);
   }
 
-  /** Every channel's outstanding balance (dashboard read; RLS-scoped), alphabetical. */
+  /**
+   * Every MARKETPLACE channel's outstanding balance (dashboard read; RLS-scoped), alphabetical.
+   *
+   * <p>Scoped to MARKETPLACE by ADR 0076 phase 1: QRIS and card balances now accrue into the same
+   * sub-ledger, but their balances live in DIFFERENT GL accounts (1901 / 1902). Until the
+   * multi-source payout of phase 2 credits each row against its own account, offering them to this
+   * single-account settle form would credit 1250 for money that is not there.
+   */
   @Transactional(readOnly = true)
   public List<PlatformOutstandingResponse> outstanding() {
     return jdbcTemplate.query(
         """
         SELECT r.channel_code, r.currency, r.outstanding_minor
           FROM platform_receivable r
+         WHERE r.source_kind = 'MARKETPLACE'
          ORDER BY r.channel_code
         """,
         (rs, rowNum) ->

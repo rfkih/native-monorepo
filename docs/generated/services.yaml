@@ -19,7 +19,7 @@ services:
     events: true
   - name: finance-service
     module: ":services:finance-service"
-    migrations: { count: 61, range: "V1..V61" }
+    migrations: { count: 62, range: "V1..V62" }
     events: true
   - name: gateway
     module: ":services:gateway"

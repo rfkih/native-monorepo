@@ -14,6 +14,7 @@ import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
 import id.co.nativeapp.finance.platform.service.PlatformReceivableWriter;
+import id.co.nativeapp.finance.platform.service.SettlementSourceReader;
 import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.finance.revenue.domain.PostingType;
@@ -121,6 +122,7 @@ public class ReversalPostingWriter {
   private final JournalLineRepository journalLineRepository;
   private final RoleAccountResolver roleAccountResolver;
   private final PlatformReceivableWriter platformReceivable;
+  private final SettlementSourceReader settlementSource;
   private final PendingSaleReversalRepository pendingReversalRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -136,6 +138,7 @@ public class ReversalPostingWriter {
       JournalLineRepository journalLineRepository,
       RoleAccountResolver roleAccountResolver,
       PlatformReceivableWriter platformReceivable,
+      SettlementSourceReader settlementSource,
       PendingSaleReversalRepository pendingReversalRepository) {
     this.ledgerRepository = ledgerRepository;
     this.generalLedgerWriter = generalLedgerWriter;
@@ -148,6 +151,7 @@ public class ReversalPostingWriter {
     this.journalLineRepository = journalLineRepository;
     this.roleAccountResolver = roleAccountResolver;
     this.platformReceivable = platformReceivable;
+    this.settlementSource = settlementSource;
     this.pendingReversalRepository = pendingReversalRepository;
   }
 
@@ -341,11 +345,14 @@ public class ReversalPostingWriter {
       saveEntryAndLines(glEntry, companyId);
     }
 
-    // ADR 0036 Phase B: an ONLINE void claws back the per-channel receivable sub-ledger by the
-    // grand total (negative delta; the bucket tolerates going negative by design).
-    if ("ONLINE".equals(event.tenderType())) {
+    // ADR 0036 Phase B, widened by ADR 0076: a void claws back whatever the sale accrued — the
+    // same resolver decides the row, so the clawback can never land on a different one than the
+    // accrual did (negative delta; the bucket tolerates going negative by design).
+    SettlementSourceReader.SettlementSourceRef voidSource =
+        settlementSource.resolve(companyId, event.tenderType(), event.channel());
+    if (voidSource != null) {
       platformReceivable.accumulate(
-          companyId, event.channel(), currencyCode, negatedGross.amountMinor(), actor);
+          companyId, voidSource, currencyCode, negatedGross.amountMinor(), actor);
     }
   }
 
@@ -526,12 +533,14 @@ public class ReversalPostingWriter {
       saveEntryAndLines(glEntry, companyId);
     }
 
-    // ADR 0036 Phase B: an ONLINE refund claws back the per-channel receivable sub-ledger by the
-    // refunded amount (negative delta; negative bucket balances are tolerated by design).
-    if ("ONLINE".equals(event.tenderType())) {
+    // ADR 0036 Phase B, widened by ADR 0076: a refund claws back whatever the sale accrued, routed
+    // by the same resolver as the accrual (negative delta; negative balances are tolerated).
+    SettlementSourceReader.SettlementSourceRef refundSource =
+        settlementSource.resolve(companyId, event.tenderType(), event.channel());
+    if (refundSource != null) {
       platformReceivable.accumulate(
           companyId,
-          event.channel(),
+          refundSource,
           refundAmount.currency().getCurrencyCode(),
           negatedRefund.amountMinor(),
           actor);
