@@ -6,15 +6,13 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { useSession } from '@/lib/session'
-import { effectiveRoles, useAuth } from '@/lib/authContext'
-import { canFinance } from '@/lib/rolePreset'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
 import { printCurrentPage } from '@/lib/nativeShell'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
-import { useAccounts } from '@/features/budget/api'
-import { useIncomeStatement } from './api'
+import { useIncomeStatement, type IncomeLine } from './api'
 import { downloadCsv } from '@/lib/csv'
+import { accountLabel, accountLabelMap } from './accountLabels'
 import { IncomeDetailDrawer, type IncomeDetailKind } from './IncomeDetailDrawer'
 import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
@@ -28,12 +26,7 @@ import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard }
 export function IncomeStatement() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
-  const auth = useAuth()
   const locale = localeOf(i18n.language)
-  // The COA name endpoint (/budgets/accounts) is FINANCE_ROLES-gated (owner/accountant), but this
-  // page is open to the wider REPORTS_ROLES (incl. manager). Only owners/accountants may fetch names;
-  // a manager's drawer gracefully shows account codes instead of 403-ing on every load.
-  const canSeeAccountNames = canFinance(effectiveRoles(auth.roles, auth.elevatedRoles))
 
   const [period, setPeriod] = useState(currentPeriod())
   // Which summary card's drill-down drawer is open (null = none). Cleared on close / period change.
@@ -46,19 +39,11 @@ export function IncomeStatement() {
     enabled: !!company,
   })
 
-  // Chart-of-accounts for the drill-down drawer: code → friendly name (falls back to the code).
-  // Shares the budget module's COA endpoint + personal bearer; cached under one key fleet-wide.
-  // Fetched ONLY when a finance-role user has a drawer open — avoids an unused call on every P&L
-  // view and the manager 403 (the endpoint is FINANCE_ROLES-gated; see canSeeAccountNames above).
-  const accountsQuery = useAccounts({
-    companyId: company?.companyId ?? '',
-    actor: company?.actor ?? '',
-    enabled: !!company && canSeeAccountNames && detail !== null,
-  })
-  const accountNames = useMemo(
-    () => new Map((accountsQuery.data ?? []).map((a) => [a.accountCode, a.name])),
-    [accountsQuery.data],
-  )
+  // Chart-of-accounts names for the drill-down drawer: code → localized name (falls back to the
+  // code). Read from the console's own account-label map rather than the /budgets/accounts
+  // endpoint that used to back this: that endpoint is FINANCE_ROLES-gated, so a manager — who may
+  // read this page — saw bare codes here, and the names it serves are English-only regardless.
+  const accountNames = useMemo(() => accountLabelMap(t), [t])
 
   if (!company) {
     return (
@@ -86,6 +71,15 @@ export function IncomeStatement() {
     .sort((a, b) => b.netMinor - a.netMinor)
     .slice(0, 5)
 
+  // Each exported line carries the account NAME beside its code — the spreadsheet is read by the
+  // same people as the page, and a bare code is just as opaque there.
+  //
+  // COLUMN CONTRACT: code | name | amount. A total row leaves the code cell empty and puts its
+  // label in the NAME cell, so every figure in the file lands in column C and `SUM(C:C)` reaches
+  // the totals too.
+  const csvLine = (l: IncomeLine) => [l.accountCode, accountLabel(t, l.accountCode) ?? '', l.netMinor]
+  const csvTotal = (label: string, amountMinor: number) => ['', label, amountMinor]
+
   const exportCsv = () => {
     if (!data) return
     downloadCsv(`income-statement-${period}.csv`, [
@@ -93,14 +87,14 @@ export function IncomeStatement() {
       [t('statements.incomeTitle'), period, currency],
       [],
       [t('statements.revenue')],
-      ...data.revenueLines.map((l) => [l.accountCode, l.netMinor]),
-      [t('statements.totalRevenue'), data.totalRevenueMinor],
+      ...data.revenueLines.map(csvLine),
+      csvTotal(t('statements.totalRevenue'), data.totalRevenueMinor),
       [],
       [t('statements.expense')],
-      ...data.expenseLines.map((l) => [l.accountCode, l.netMinor]),
-      [t('statements.totalExpense'), data.totalExpenseMinor],
+      ...data.expenseLines.map(csvLine),
+      csvTotal(t('statements.totalExpense'), data.totalExpenseMinor),
       [],
-      [profit ? t('statements.netProfit') : t('statements.netLoss'), data.netMinor],
+      csvTotal(profit ? t('statements.netProfit') : t('statements.netLoss'), data.netMinor),
     ])
   }
 
@@ -216,11 +210,19 @@ export function IncomeStatement() {
                 {topExpenses.map((line) => {
                   // Clamped: with contra lines netting totalExpense down, a raw share can top 100%.
                   const share = Math.min(1, line.netMinor / totalExpense)
+                  const name = accountLabel(t, line.accountCode)
                   return (
                     <div key={line.accountCode}>
                       <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                        <span className="min-w-0 truncate font-mono text-[13px] font-semibold text-ink">
-                          {line.accountCode}
+                        {/* Name leads; the code trails as a quiet chip so the row is still
+                            traceable back to the ledger. An unnamed account shows its code alone. */}
+                        <span className="min-w-0 truncate text-[13px] font-semibold text-ink">
+                          {name ?? line.accountCode}
+                          {name ? (
+                            <span className="ml-1.5 font-mono text-[11px] font-normal text-ink-3">
+                              {line.accountCode}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="flex shrink-0 items-baseline gap-3">
                           <span className="tnum font-mono text-[13.5px] font-semibold text-ink">

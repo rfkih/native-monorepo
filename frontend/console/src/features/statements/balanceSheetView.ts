@@ -1,0 +1,132 @@
+/**
+ * Pure shaping helpers for the Balance Sheet (Neraca) — no React, no fetch, no formatting, so the
+ * grouping, zero-row and unnatural-balance rules are unit-testable on their own (the house idiom,
+ * cf. `incomeDetail.ts` / `openingBalances/lines.ts`). Amounts stay integer minor units (rule 8);
+ * the page formats them at the edge.
+ *
+ * The three rules this module owns, and why each exists:
+ *
+ *  1. ORDER. The statement endpoint returns lines `ORDER BY account_code`, which buries Kas (1900)
+ *     below prepaid tax and accumulated depreciation — the one figure an owner opens the page for
+ *     sorts tenth. Assets are re-ordered here by how quickly each turns into money.
+ *  2. ZERO ROWS. The GL query keeps any account that ever moved
+ *     (`HAVING SUM(debit) <> 0 OR SUM(credit) <> 0`), so a settled clearing account still renders as
+ *     a row worth nothing. A balance sheet omits zero balances; the page offers a reveal so nothing
+ *     disappears silently.
+ *  3. UNNATURAL BALANCES. A negative asset is physically impossible — you cannot own less than none
+ *     of something — and in this product it is the visible symptom of stock being expensed twice.
+ *     It must not render in the same ink as every other figure.
+ */
+import type { BalanceLine } from './api'
+
+/**
+ * The asset accounts where a negative balance is genuinely IMPOSSIBLE rather than merely unusual —
+ * things the business physically holds. An ALLOWLIST, not a blocklist: most asset accounts can
+ * legitimately swing negative from ordinary timing, and a red "go investigate this" banner over a
+ * healthy, self-correcting balance costs more trust than it saves.
+ *
+ * Deliberately excluded, with the reason each one goes negative on its own:
+ *  - 1590 accumulated depreciation — a contra-asset, negative BY DESIGN.
+ *  - 1901 / 1902 QRIS + card settlement clearing — a settlement landing before its capture leaves
+ *    the clearing account credit-balanced until reconciliation catches up.
+ *  - 1200 / 1250 receivables — a customer overpayment, or a marketplace settlement received ahead
+ *    of the sale posting.
+ *  - 1000 bank — an account can be overdrawn.
+ *  - 1300 / 1310 / 1400 tax and prepayments — net positions that swing either way by period.
+ *
+ * That leaves stock and equipment, which is exactly the case `unnatural.body` describes ("a
+ * purchase recorded as an expense twice") — see [[inventory-expense-double-count]].
+ */
+export const IMPOSSIBLY_NEGATIVE_ASSET_CODES: ReadonlySet<string> = new Set(['1100', '1500'])
+
+/**
+ * The asset groups, in display order, each listing its member codes in DISPLAY order — so Kas leads
+ * the statement and the rest follow by how near they are to being spendable money. Any asset code
+ * not named here falls into the catch-all group, so a newly seeded account is never dropped from
+ * the page (`balanceSheetView.test.ts` asserts the partition stays total).
+ */
+export const ASSET_GROUPS: readonly { labelKey: string; codes: readonly string[] }[] = [
+  {
+    labelKey: 'statements.groups.liquid',
+    codes: ['1900', '1000', '1901', '1902', '1200', '1250'],
+  },
+  { labelKey: 'statements.groups.goods', codes: ['1100', '1500', '1590'] },
+  { labelKey: 'statements.groups.prepaid', codes: ['1300', '1310', '1400'] },
+]
+
+/** The catch-all group's label — holds any asset account the groups above don't name. */
+export const OTHER_ASSETS_LABEL_KEY = 'statements.groups.other'
+
+/** One asset group ready to render: its heading key, its lines in display order, and its subtotal. */
+export interface AssetGroup {
+  labelKey: string
+  lines: BalanceLine[]
+  subtotalMinor: number
+}
+
+/**
+ * Splits lines into the ones worth showing and the ones that net to nothing. Hiding a zero row
+ * never moves a total — zero adds zero — so the section totals the server sent stay authoritative.
+ */
+export function splitZeroLines(lines: readonly BalanceLine[]): {
+  visible: BalanceLine[]
+  hidden: BalanceLine[]
+} {
+  const visible: BalanceLine[] = []
+  const hidden: BalanceLine[] = []
+  for (const line of lines) (line.balanceMinor === 0 ? hidden : visible).push(line)
+  return { visible, hidden }
+}
+
+/**
+ * Groups asset lines by how quickly each turns into money, dropping groups that end up empty (a
+ * warung has no prepaid tax, and an empty heading is noise). Every input line lands in exactly one
+ * group; each subtotal sums the lines actually in that group, so the subtotals always add up to the
+ * server's total assets.
+ */
+export function groupAssetLines(lines: readonly BalanceLine[]): AssetGroup[] {
+  // Tracked BY POSITION, not by account code: the endpoint groups by account_code today, but if it
+  // ever returned two rows for one code, a code-keyed map would silently drop one of them and the
+  // subtotals would stop reconciling to the server's total.
+  const taken = new Array<boolean>(lines.length).fill(false)
+  const groups: AssetGroup[] = []
+
+  for (const group of ASSET_GROUPS) {
+    const picked: BalanceLine[] = []
+    for (const code of group.codes) {
+      lines.forEach((line, index) => {
+        if (!taken[index] && line.accountCode === code) {
+          taken[index] = true
+          picked.push(line)
+        }
+      })
+    }
+    if (picked.length > 0) {
+      groups.push({ labelKey: group.labelKey, lines: picked, ...subtotal(picked) })
+    }
+  }
+
+  // Anything the groups above don't name keeps the server's order rather than vanishing.
+  const rest = lines.filter((_, index) => !taken[index])
+  if (rest.length > 0) {
+    groups.push({ labelKey: OTHER_ASSETS_LABEL_KEY, lines: rest, ...subtotal(rest) })
+  }
+  return groups
+}
+
+function subtotal(lines: readonly BalanceLine[]): { subtotalMinor: number } {
+  return { subtotalMinor: lines.reduce((sum, l) => sum + l.balanceMinor, 0) }
+}
+
+/**
+ * The asset lines carrying a balance that cannot be real: negative, on an account that holds
+ * something physical. These get flagged on the row AND called out above the tables, because they
+ * are the only thing on a balance sheet that asks the reader to go and do something — which is
+ * exactly why the rule is an allowlist (see {@link IMPOSSIBLY_NEGATIVE_ASSET_CODES}) and not
+ * "every negative asset".
+ */
+export function unnaturalAssetLines(lines: readonly BalanceLine[]): BalanceLine[] {
+  return lines.filter(
+    (l) => l.balanceMinor < 0 && IMPOSSIBLY_NEGATIVE_ASSET_CODES.has(l.accountCode),
+  )
+}

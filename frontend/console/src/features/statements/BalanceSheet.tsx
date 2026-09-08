@@ -4,24 +4,42 @@ import { Check, Download, Printer, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { ListSkeleton, Skeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { useSession } from '@/lib/session'
+import { cn } from '@/lib/cn'
 import { localeOf } from '@/i18n'
-import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
+import { formatMoney, formatAmount } from '@/lib/money'
 import { printCurrentPage } from '@/lib/nativeShell'
-import { currentPeriod, shiftPeriod } from '@/lib/period'
+import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { useBalanceSheet, type BalanceLine } from './api'
 import { downloadCsv } from '@/lib/csv'
-import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
+import { accountLabel } from './accountLabels'
+import { groupAssetLines, splitZeroLines, unnaturalAssetLines } from './balanceSheetView'
+import {
+  EntityScope,
+  LineSection,
+  PeriodNav,
+  StatementEmptyState,
+  type DisplayLine,
+} from './parts'
 
-/** The synthetic retained-earnings account code finance-service appends to every balance sheet. */
+/** The synthetic profit row finance-service appends to every balance sheet (not a chart account). */
 const RETAINED_EARNINGS_ACCOUNT = '3000-RETAINED-EARNINGS'
 
 /**
- * Balance Sheet (Laporan Posisi Keuangan) — design 2c: the balance check leads, because
- * that's the question being asked. Liabilities take an ink tone rather than red — they
- * aren't a loss — and the funding bar replaces the old composition chart.
- * All data hooks, queries, and existing i18n keys are preserved unchanged.
+ * Balance Sheet (Neraca) — rebuilt around the question an owner actually opens it with.
+ *
+ * The previous design led with the balance check: the largest element on the page, saying "nothing
+ * is wrong" in every normal case, in an alphabet (Δ) most readers don't have. It now leads with NET
+ * WORTH — the one figure the statement exists to produce — followed by the equation that produces
+ * it (owned − owed = yours), so the relationship between the three sections is the layout rather
+ * than something the reader has to already know. The check survives as a chip, and swells back into
+ * a full banner only when the sheet does NOT balance, which is when it deserves the room.
+ *
+ * Three further rules, all in `balanceSheetView.ts`: assets are ordered by how quickly each turns
+ * into money (the API returns them by account code, which buries cash), rows worth nothing are
+ * hidden behind a reveal, and an asset that has gone negative is flagged instead of rendering in
+ * the same ink as every sound figure.
  */
 export function BalanceSheet() {
   const { t, i18n } = useTranslation()
@@ -29,6 +47,9 @@ export function BalanceSheet() {
   const locale = localeOf(i18n.language)
 
   const [asOf, setAsOf] = useState(currentPeriod())
+  // Zero-balance rows are hidden by default. One switch for the whole statement — each section
+  // still states its own count, so nothing is hidden without saying so where it happened.
+  const [showZeros, setShowZeros] = useState(false)
 
   const query = useBalanceSheet({
     companyId: company?.companyId ?? '',
@@ -50,24 +71,91 @@ export function BalanceSheet() {
   const currency = data?.currency ?? company.baseCurrency
   const showEmpty = !query.isLoading && !query.isError && data == null
 
-  // Localize the synthetic retained-earnings line; pass other accounts through by code.
-  const equityLine = (l: BalanceLine) => ({
-    accountCode: l.accountCode,
-    label:
-      l.accountCode === RETAINED_EARNINGS_ACCOUNT
-        ? t('statements.retainedEarnings')
-        : undefined,
-    amountMinor: l.balanceMinor,
-  })
-
   const totalAssets = data?.totalAssetsMinor ?? 0
   const totalLiabilities = data?.totalLiabilitiesMinor ?? 0
   const totalEquity = data?.totalEquityMinor ?? 0
   const delta = totalAssets - (data?.totalLiabilitiesAndEquityMinor ?? 0)
   const balanced = delta === 0
-  const funded = totalLiabilities + totalEquity
-  const liabilityShare = funded > 0 ? totalLiabilities / funded : 0
-  const equityShare = funded > 0 ? totalEquity / funded : 0
+
+  const assetLines = data?.assetLines ?? []
+  const liabilityLines = data?.liabilityLines ?? []
+  const equityLines = data?.equityLines ?? []
+
+  // Figures that cannot be real. Flagged on their own row AND called out above the tables — the
+  // only thing on a balance sheet that asks the reader to go and do something.
+  const flagged = unnaturalAssetLines(assetLines)
+  const flaggedCodes = new Set(flagged.map((l) => l.accountCode))
+
+  const assetSplit = splitZeroLines(assetLines)
+  const liabilitySplit = splitZeroLines(liabilityLines)
+  const equitySplit = splitZeroLines(equityLines)
+
+  /**
+   * Rows worth nothing stay in the DOM and are hidden by CSS, so the PRINTED statement still lists
+   * every account the ledger holds — dropping them from the markup would leave a printout quietly
+   * shorter than the books, and the on-screen disclosure is itself `print:hidden`.
+   */
+  const toDisplay =
+    (options: { flag?: boolean } = {}) =>
+    (l: BalanceLine): DisplayLine => ({
+      accountCode: l.accountCode,
+      amountMinor: l.balanceMinor,
+      // Only assets are checked for an impossible balance; a liability or equity row must never
+      // inherit the treatment just because its code happens to collide.
+      flagged: options.flag === true && flaggedCodes.has(l.accountCode),
+      printOnly: !showZeros && l.balanceMinor === 0,
+    })
+
+  const toAssetDisplay = toDisplay({ flag: true })
+  const toPlainDisplay = toDisplay()
+
+  // The synthetic profit row is not a chart account: show its name with no code chip, since
+  // `3000-RETAINED-EARNINGS` means nothing to a reader. The CSV still carries the code.
+  const toEquityDisplay = (l: BalanceLine): DisplayLine =>
+    l.accountCode === RETAINED_EARNINGS_ACCOUNT
+      ? { accountCode: '', label: accountLabel(t, l.accountCode), amountMinor: l.balanceMinor }
+      : toPlainDisplay(l)
+
+  const assetGroups = groupAssetLines(assetLines).map((g) => ({
+    label: t(g.labelKey),
+    lines: g.lines.map(toAssetDisplay),
+    subtotalMinor: g.subtotalMinor,
+  }))
+
+  /** The "n accounts worth nothing are hidden · Show" line under a section that has any. */
+  const zeroFootnote = (hiddenCount: number) =>
+    hiddenCount === 0 ? undefined : (
+      <p className="text-[11.5px] text-ink-3 print:hidden">
+        {/* The sentence tracks the state — it said "hidden" even after the reader revealed them. */}
+        {showZeros
+          ? hiddenCount === 1
+            ? t('statements.zeroShownOne')
+            : t('statements.zeroShownMany', { count: hiddenCount })
+          : hiddenCount === 1
+            ? t('statements.zeroHiddenOne')
+            : t('statements.zeroHiddenMany', { count: hiddenCount })}{' '}
+        <button
+          type="button"
+          onClick={() => setShowZeros((v) => !v)}
+          className="font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+        >
+          {showZeros ? t('statements.zeroHide') : t('statements.zeroShow')}
+        </button>
+      </p>
+    )
+
+  // The export keeps the FORMAL wording (assets / liabilities / equity) and every line including
+  // the ones worth nothing: the spreadsheet is the accountant's artefact, the page is the owner's.
+  //
+  // COLUMN CONTRACT: code | name | amount. A total row leaves the code cell empty and the label in
+  // the NAME cell, so every figure in the file sits in column C and `SUM(C:C)` reaches the totals
+  // too. Getting this wrong silently mixes text and numbers down one column.
+  const csvLine = (l: BalanceLine) => [
+    l.accountCode,
+    accountLabel(t, l.accountCode) ?? '',
+    l.balanceMinor,
+  ]
+  const csvTotal = (label: string, amountMinor: number) => ['', label, amountMinor]
 
   const exportCsv = () => {
     if (!data) return
@@ -76,16 +164,16 @@ export function BalanceSheet() {
       [t('statements.balanceTitle'), asOf, currency],
       [],
       [t('statements.assets')],
-      ...data.assetLines.map((l) => [l.accountCode, l.balanceMinor]),
-      [t('statements.totalAssets'), data.totalAssetsMinor],
+      ...data.assetLines.map(csvLine),
+      csvTotal(t('statements.totalAssets'), data.totalAssetsMinor),
       [],
       [t('statements.liabilities')],
-      ...data.liabilityLines.map((l) => [l.accountCode, l.balanceMinor]),
-      [t('statements.totalLiabilities'), data.totalLiabilitiesMinor],
+      ...data.liabilityLines.map(csvLine),
+      csvTotal(t('statements.totalLiabilities'), data.totalLiabilitiesMinor),
       [],
       [t('statements.equity')],
-      ...data.equityLines.map((l) => [l.accountCode, l.balanceMinor]),
-      [t('statements.totalEquity'), data.totalEquityMinor],
+      ...data.equityLines.map(csvLine),
+      csvTotal(t('statements.totalEquity'), data.totalEquityMinor),
     ])
   }
 
@@ -136,9 +224,8 @@ export function BalanceSheet() {
         <StatementEmptyState title={t('statements.noData')} hint={t('statements.noDataHint')} />
       ) : query.isLoading && !data ? (
         <>
-          <Skeleton className="h-16 rounded-[20px]" />
-          <StatCardsSkeleton cards={3} />
-          <Skeleton className="h-24 rounded-card" />
+          <Skeleton className="h-[132px] rounded-card" />
+          <Skeleton className="h-[86px] rounded-card" />
           <div className="grid gap-5 lg:grid-cols-2">
             <ListSkeleton rows={5} className="rounded-[20px]" />
             <ListSkeleton rows={5} className="rounded-[20px]" />
@@ -146,128 +233,213 @@ export function BalanceSheet() {
         </>
       ) : (
         <>
-          {/* Trust framing — the first thing on the page answers the only question anyone
-              opens a balance sheet to check. */}
-          <div
-            className={`flex items-center gap-3.5 rounded-[20px] border px-5 py-[18px] ${
-              balanced
-                ? 'border-profit/25 bg-tint-profit'
-                : 'border-warning/30 bg-tint-warning'
-            }`}
-          >
-            <span
-              className={`grid size-8 shrink-0 place-items-center rounded-full ${
-                balanced ? 'bg-profit' : 'bg-warning'
-              }`}
-            >
-              {balanced ? (
-                <Check className="size-[17px] text-white" strokeWidth={3} aria-hidden />
-              ) : (
-                <TriangleAlert className="size-4 text-white" aria-hidden />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[15px] font-bold text-ink">
-                {balanced ? t('statements.balancedTitle') : t('statements.unbalancedTitle')}
-              </div>
-              <div className="mt-0.5 text-[13px] text-ink-2">
-                {balanced ? t('statements.balancedBody') : t('statements.unbalancedBody')}
-              </div>
+          {/* Net worth — the answer the statement exists to produce, in the position the balance
+              check used to occupy. */}
+          <Card className="border-emerald-line bg-emerald-tint p-6 print:break-inside-avoid">
+            <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-2">
+              {t('statements.netWorth')} · {formatPeriod(asOf, locale)}
             </div>
-            <span
-              className={`tnum shrink-0 font-mono text-[15px] font-bold ${
-                balanced ? 'text-profit-ink' : 'text-amber-2'
-              }`}
-            >
-              Δ {formatMoney(delta, currency, locale)}
-            </span>
-          </div>
+            <div className="tnum mt-1.5 font-mono text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink print:text-2xl">
+              {formatMoney(totalEquity, currency, locale)}
+            </div>
+            {/* The promise ("settle every debt and this is what is left") is owned − owed, which
+                equals equity ONLY when the sheet balances. When it doesn't, the banner below
+                explains instead of this sentence overstating what the figure means. */}
+            {balanced ? (
+              <p className="mt-1.5 max-w-[46ch] text-[13px] text-ink-2">
+                {t('statements.netWorthSay')}
+              </p>
+            ) : null}
+          </Card>
 
-          {/* Summary cards — liabilities in ink: they aren't a loss */}
-          <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-3">
-            <SummaryCard
-              chipClass="bg-emerald"
-              label={t('statements.assets')}
-              value={formatMoney(totalAssets, currency, locale)}
-            />
-            <SummaryCard
-              chipClass="bg-ink-300"
-              label={t('statements.liabilities')}
-              value={formatMoney(totalLiabilities, currency, locale)}
-            />
-            <SummaryCard
-              chipClass="bg-profit"
-              label={t('statements.equity')}
-              value={formatMoney(totalEquity, currency, locale)}
-            />
-          </div>
+          {/* Where it comes from: owned − owed = yours. The equation IS the layout, so the reader
+              doesn't have to already know how the three sections relate. */}
+          <Card className="p-5 print:break-inside-avoid">
+            <div className="flex max-w-[460px] flex-col gap-2.5">
+              <EquationRow
+                label={t('statements.plain.assets')}
+                value={formatMoney(totalAssets, currency, locale)}
+              />
+              <EquationRow
+                op="−"
+                label={t('statements.plain.liabilities')}
+                value={formatMoney(totalLiabilities, currency, locale)}
+              />
+              {/* Without this line the sum is visibly wrong on an unbalanced sheet — owned − owed
+                  only equals yours when delta is zero. Naming the gap keeps the arithmetic true
+                  AND puts the discrepancy where the reader is already doing the subtraction. */}
+              {balanced ? null : (
+                <EquationRow
+                  op="−"
+                  label={t('statements.plain.difference')}
+                  value={formatMoney(delta, currency, locale)}
+                  tone="warning"
+                />
+              )}
+              <EquationRow
+                op="="
+                label={t('statements.plain.equity')}
+                value={formatMoney(totalEquity, currency, locale)}
+                answer
+              />
+            </div>
+            {balanced ? (
+              <div className="mt-4">
+                <Badge tone="profit">
+                  <Check className="size-3" /> {t('statements.checksOut')}
+                </Badge>
+              </div>
+            ) : null}
+          </Card>
 
-          {/* Funding bar */}
-          <Card className="p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-display text-[15px] font-semibold text-ink">
-                {t('statements.funding')}
-              </h2>
-              <span className="text-[13px] text-ink-3">
-                {t('statements.fundingSplit', {
-                  liabilities: formatPercent(liabilityShare, locale),
-                  equity: formatPercent(equityShare, locale),
+          {/* The check only takes the room when it has something to report. */}
+          {!balanced ? (
+            <div className="flex items-center gap-3.5 rounded-[20px] border border-warning/30 bg-tint-warning px-5 py-[18px]">
+              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-warning">
+                <TriangleAlert className="size-4 text-white" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[15px] font-bold text-ink">
+                  {t('statements.unbalancedTitle')}
+                </div>
+                <div className="mt-0.5 text-[13px] text-ink-2">
+                  {t('statements.unbalancedBody')}
+                </div>
+              </div>
+              <span className="tnum shrink-0 font-mono text-[15px] font-bold text-amber-2">
+                {t('statements.difference', {
+                  amount: formatMoney(delta, currency, locale),
                 })}
               </span>
             </div>
-            <div className="flex h-3.5 overflow-hidden rounded-full bg-ink-50">
-              <div className="bg-ink-300" style={{ width: `${liabilityShare * 100}%` }} />
-              <div className="bg-profit" style={{ width: `${equityShare * 100}%` }} />
-            </div>
-          </Card>
+          ) : null}
 
-          {/* Account tables */}
+          {/* A figure that cannot be real. The UI can't fix the ledger, but staying silent is a
+              choice too — this is the only row on the page that asks for action. */}
+          {flagged.length > 0 ? (
+            <div className="flex items-start gap-3 rounded-[20px] border border-loss/30 bg-tint-loss px-5 py-4 print:break-inside-avoid">
+              <span className="mt-0.5 grid size-[22px] shrink-0 place-items-center rounded-full bg-loss text-[13px] font-bold text-white">
+                !
+              </span>
+              <div className="min-w-0">
+                <div className="text-[13.5px] font-bold text-ink">
+                  {flagged.length === 1
+                    ? t('statements.unnatural.oneTitle', {
+                        name:
+                          accountLabel(t, flagged[0].accountCode) ?? flagged[0].accountCode,
+                        amount: formatMoney(
+                          Math.abs(flagged[0].balanceMinor),
+                          currency,
+                          locale,
+                        ),
+                      })
+                    : t('statements.unnatural.manyTitle', { count: flagged.length })}
+                </div>
+                <p className="mt-0.5 max-w-[62ch] text-[12.5px] text-ink-2">
+                  {t('statements.unnatural.body')}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Account tables — assets on one side, the two claims on it on the other. */}
           <div className="grid gap-5 lg:grid-cols-2">
             <Card className="p-6">
               <LineSection
-                heading={t('statements.assets')}
-                lines={(data?.assetLines ?? []).map((l) => ({
-                  accountCode: l.accountCode,
-                  amountMinor: l.balanceMinor,
-                }))}
-                totalLabel={t('statements.totalAssets')}
+                heading={t('statements.plain.assets')}
+                gloss={t('statements.plain.assetsGloss')}
+                groups={assetGroups}
+                totalLabel={t('statements.plain.totalAssets')}
                 totalMinor={totalAssets}
                 currency={currency}
                 locale={locale}
                 emptyLabel={t('statements.noLines')}
                 format={formatAmount}
+                footnote={zeroFootnote(assetSplit.hidden.length)}
               />
             </Card>
             <Card className="p-6">
               <LineSection
-                heading={t('statements.liabilities')}
-                lines={(data?.liabilityLines ?? []).map((l) => ({
-                  accountCode: l.accountCode,
-                  amountMinor: l.balanceMinor,
-                }))}
-                totalLabel={t('statements.totalLiabilities')}
+                heading={t('statements.plain.liabilities')}
+                gloss={t('statements.plain.liabilitiesGloss')}
+                lines={liabilityLines.map(toPlainDisplay)}
+                totalLabel={t('statements.plain.totalLiabilities')}
                 totalMinor={totalLiabilities}
                 currency={currency}
                 locale={locale}
                 emptyLabel={t('statements.noLines')}
                 format={formatAmount}
+                footnote={zeroFootnote(liabilitySplit.hidden.length)}
               />
-              <div className="mt-5">
+              <div className="mt-6">
                 <LineSection
-                  heading={t('statements.equity')}
-                  lines={(data?.equityLines ?? []).map(equityLine)}
-                  totalLabel={t('statements.totalEquity')}
+                  heading={t('statements.plain.equity')}
+                  gloss={t('statements.plain.equityGloss')}
+                  lines={equityLines.map(toEquityDisplay)}
+                  totalLabel={t('statements.plain.totalEquity')}
                   totalMinor={totalEquity}
                   currency={currency}
                   locale={locale}
                   emptyLabel={t('statements.noLines')}
                   format={formatAmount}
+                  footnote={zeroFootnote(equitySplit.hidden.length)}
                 />
               </div>
             </Card>
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * One line of the owned − owed = yours sum. Laid out as a vertical calculation rather than an inline
+ * row: inline, the three terms spread across the full card on a desktop and the `=` strands at the
+ * end of a wrapped line on a phone. Stacked, it reads as the arithmetic it is at every width, and
+ * the answer sits under a rule where the eye already expects a result.
+ */
+function EquationRow({
+  op,
+  label,
+  value,
+  answer,
+  tone,
+}: {
+  op?: string
+  label: string
+  value: string
+  answer?: boolean
+  tone?: 'warning'
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-baseline gap-3',
+        answer && 'border-t border-line-strong pt-2.5',
+      )}
+    >
+      {/* The operator column keeps every label on the same left edge, sum-style. */}
+      <span aria-hidden className="w-3 shrink-0 font-mono text-sm text-ink-3">
+        {op}
+      </span>
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.08em]',
+          tone === 'warning' ? 'text-amber-2' : answer ? 'text-emerald-2' : 'text-ink-3',
+        )}
+      >
+        {label}
+      </span>
+      <span
+        className={cn(
+          'tnum shrink-0 font-mono text-[15px]',
+          tone === 'warning' ? 'text-amber-2' : 'text-ink',
+          answer ? 'font-bold' : 'font-semibold',
+        )}
+      >
+        {value}
+      </span>
     </div>
   )
 }

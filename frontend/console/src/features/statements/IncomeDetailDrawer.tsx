@@ -10,8 +10,9 @@ import { detailRows } from './incomeDetail'
  * The Income Statement (Laba Rugi) card drill-down: a right-side drawer opened by clicking a summary
  * card. `revenue`/`expense` show that section's accounts (name + amount + % share of the section
  * total, largest first) reusing the statement data already on screen; `net` is a compact recap
- * (revenue − expense = net + margin). Read-only, no new fetch — account names come from the
- * chart-of-accounts map the page already loaded. All copy is i18n (rule 9); money via Intl (rule 8).
+ * (revenue − expense = net + margin). Read-only, no fetch at all — account names come from the
+ * console's own localized account-label map (see accountLabels.ts), so a manager sees the same
+ * names an owner does. All copy is i18n (rule 9); money via Intl (rule 8).
  */
 export type IncomeDetailKind = 'revenue' | 'expense' | 'net'
 

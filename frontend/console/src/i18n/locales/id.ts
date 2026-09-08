@@ -820,7 +820,53 @@ export const id = {
     incomeTitle: 'Laporan laba rugi',
     incomeSubtitle: 'Pendapatan, beban, dan laba bersih untuk periode ini.',
     balanceTitle: 'Neraca',
-    balanceSubtitle: 'Aset, liabilitas, dan ekuitas pada akhir periode.',
+    balanceSubtitle: 'Apa yang dimiliki, apa yang masih harus dibayar, dan sisanya milik Anda.',
+    /**
+     * Kata polos untuk tiga bagian neraca. Istilah formal di atas (aset / liabilitas / ekuitas)
+     * adalah terjemahan buku teks; Harta / Utang / Milik Anda adalah kata yang sudah dipunyai
+     * pemilik usaha. Istilah formal tetap dipakai di ekspor CSV — itu berkas untuk akuntan.
+     */
+    plain: {
+      assets: 'Harta',
+      liabilities: 'Utang',
+      equity: 'Milik Anda',
+      assetsGloss: 'Apa yang dimiliki bisnis saat ini',
+      liabilitiesGloss: 'Apa yang masih harus dibayar',
+      equityGloss: 'Bagian pemilik atas bisnis ini',
+      totalAssets: 'Total harta',
+      totalLiabilities: 'Total utang',
+      totalEquity: 'Total milik Anda',
+      /** Hanya saat neraca tidak seimbang — selisih yang membuat harta − utang = milik Anda benar. */
+      difference: 'Selisih belum terjelaskan',
+    },
+    netWorth: 'Kekayaan bersih',
+    netWorthSay: 'Kalau semua utang dilunasi hari ini, sebanyak ini yang tersisa jadi milik Anda.',
+    checksOut: 'Pembukuan cocok',
+    difference: 'Selisih {{amount}}',
+    /**
+     * Baris bersaldo nol disembunyikan; tidak ada yang hilang tanpa jalan kembali. Dua kunci
+     * terpisah yang dipilih di kode, bukan sufiks jamak i18next — bahasa Indonesia hanya punya
+     * satu bentuk jamak, jadi mesin sufiksnya tidak memberi apa-apa di sini.
+     */
+    zeroHiddenOne: '1 akun bersaldo nol disembunyikan',
+    zeroHiddenMany: '{{count}} akun bersaldo nol disembunyikan',
+    zeroShownOne: '1 akun bersaldo nol ditampilkan',
+    zeroShownMany: '{{count}} akun bersaldo nol ditampilkan',
+    zeroShow: 'Tampilkan',
+    zeroHide: 'Sembunyikan lagi',
+    /** Harta yang bernilai minus — mustahil dimiliki, jadi barisnya meminta pembaca bertindak. */
+    unnatural: {
+      oneTitle: '{{name}} bernilai minus {{amount}}',
+      manyTitle: '{{count}} harta bernilai minus',
+      body: 'Tidak mungkin memiliki sesuatu kurang dari nol. Biasanya ini karena pembelian tercatat sebagai beban dua kali. Periksa akun ini.',
+    },
+    /** Kelompok harta, diurut dari yang paling cepat jadi uang — bukan menurut kode akun. */
+    groups: {
+      liquid: 'Uang & yang segera jadi uang',
+      goods: 'Barang & alat',
+      prepaid: 'Pajak & bayar di muka',
+      other: 'Lainnya',
+    },
     prevPeriod: 'Periode sebelumnya',
     nextPeriod: 'Periode berikutnya',
     revenue: 'Pendapatan',
@@ -835,14 +881,8 @@ export const id = {
     totalAssets: 'Total aset',
     totalLiabilities: 'Total liabilitas',
     totalEquity: 'Total ekuitas',
-    retainedEarnings: 'Laba ditahan',
-    balanced: 'Seimbang',
-    balancedTitle: 'Neraca seimbang',
-    balancedBody: 'Aset sama dengan liabilitas ditambah ekuitas, tanpa saldo perantara.',
     unbalancedTitle: 'Neraca tidak seimbang',
     unbalancedBody: 'Aset berbeda dari liabilitas ditambah ekuitas sebesar selisih berikut.',
-    funding: 'Bagaimana neraca didanai',
-    fundingSplit: 'Liabilitas {{liabilities}} · Ekuitas {{equity}}',
     breakdown: 'Rincian',
     topExpenses: 'Beban terbesar',
     topExpensesNote: 'porsi dari total beban',
@@ -861,6 +901,73 @@ export const id = {
     netDetailTitle: 'Ringkasan laba-rugi',
     detailShareNote: '% dari total',
     netDetailHint: 'Pendapatan dikurangi beban untuk periode ini. Ketuk Pendapatan atau Beban untuk melihat tiap akun.',
+    /**
+     * Nama akun untuk tabel rincian laporan. Buku besar hanya mengirim kodenya, dan
+     * `chart_of_account.name` berbahasa Inggris serta hanya bisa diambil owner/akuntan — jadi
+     * konsol menyimpan nama terjemahannya sendiri. Dipetakan di
+     * features/statements/accountLabels.ts; tesnya menggagalkan build bila ada akun baru tanpa
+     * nama di sini.
+     */
+    accounts: {
+      bank: 'Bank',
+      inventory: 'Persediaan',
+      accountsReceivable: 'Piutang usaha',
+      platformReceivable: 'Piutang marketplace',
+      vatInput: 'PPN masukan (dapat dikreditkan)',
+      vatCarryforward: 'Lebih bayar PPN dibawa ke depan',
+      prepaidExpense: 'Sudah dibayar di muka',
+      fixedAssetsCost: 'Peralatan & kendaraan (harga beli)',
+      accumulatedDepreciation: 'Penyusutan sejauh ini',
+      cash: 'Kas',
+      qrisClearing: 'Dana QRIS belum cair',
+      cardClearing: 'Dana kartu belum cair',
+      accountsPayable: 'Utang usaha',
+      grniClearing: 'Barang diterima, belum ditagih',
+      restaurantTaxPayable: 'Utang pajak restoran (PB1)',
+      serviceChargePayable: 'Utang service charge (tip)',
+      vatOutputPayable: 'PPN keluaran terutang',
+      vatPayable: 'Utang PPN',
+      deferredRevenue: 'Pendapatan diterima di muka',
+      giftCardLiability: 'Saldo voucher belum terpakai',
+      loyaltyLiability: 'Kewajiban poin loyalitas',
+      employeeExpensePayable: 'Utang reimburse karyawan',
+      pph21Payable: 'Utang PPh 21',
+      bpjsHealthPayable: 'Utang BPJS Kesehatan',
+      bpjsEmploymentPayable: 'Utang BPJS Ketenagakerjaan',
+      netWagesPayable: 'Utang gaji bersih',
+      otherPayrollDeductionsPayable: 'Utang potongan gaji lainnya',
+      otherLiabilities: 'Kewajiban lain / pinjaman',
+      ownersCapital: 'Modal pemilik',
+      retainedEarningsPrior: 'Laba tahun-tahun sebelumnya',
+      openingBalanceEquity: 'Modal awal',
+      /** Baris sintetis: laba sejak pembukuan dimulai yang belum diambil pemilik. */
+      accumulatedProfit: 'Laba terkumpul dari usaha',
+      salesRevenue: 'Pendapatan penjualan',
+      salesDiscount: 'Diskon penjualan',
+      serviceChargeRevenue: 'Pendapatan service charge',
+      loyaltyRedemption: 'Penukaran poin (pengurang pendapatan)',
+      interestIncome: 'Pendapatan bunga',
+      gainOnDisposal: 'Laba pelepasan aset',
+      cashOver: 'Selisih kas lebih',
+      giftCardBreakage: 'Pendapatan voucher kedaluwarsa',
+      generalExpense: 'Beban umum',
+      costOfGoodsSold: 'Harga pokok penjualan',
+      suppliesExpense: 'Beban perlengkapan',
+      utilitiesExpense: 'Beban listrik, air & gas',
+      bankCharges: 'Biaya administrasi bank',
+      depreciationExpense: 'Beban penyusutan',
+      lossOnDisposal: 'Rugi pelepasan aset',
+      cashShort: 'Selisih kas kurang',
+      platformFee: 'Biaya marketplace',
+      qrisFee: 'Biaya QRIS (MDR)',
+      inventoryShrinkage: 'Selisih stok (susut)',
+      salariesExpense: 'Beban gaji',
+      bpjsEmployerExpense: 'Beban BPJS — bagian perusahaan',
+      overtimeExpense: 'Beban lembur',
+      commissionExpense: 'Beban komisi',
+      unallocatedLabor: 'Biaya tenaga kerja belum dialokasikan',
+      suspense: 'Beban belum terpetakan',
+    },
     cashFlow: {
       title: 'Laporan arus kas',
       disposalProceeds: 'Hasil pelepasan aset',
