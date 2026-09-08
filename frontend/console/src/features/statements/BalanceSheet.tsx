@@ -14,7 +14,12 @@ import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { useBalanceSheet, type BalanceLine } from './api'
 import { downloadCsv } from '@/lib/csv'
 import { accountLabel } from './accountLabels'
-import { groupAssetLines, splitZeroLines, unnaturalAssetLines } from './balanceSheetView'
+import {
+  groupAssetLines,
+  netFixedAssetLines,
+  splitZeroLines,
+  unnaturalAssetLines,
+} from './balanceSheetView'
 import {
   EntityScope,
   LineSection,
@@ -77,7 +82,9 @@ export function BalanceSheet() {
   const delta = totalAssets - (data?.totalLiabilitiesAndEquityMinor ?? 0)
   const balanced = delta === 0
 
-  const assetLines = data?.assetLines ?? []
+  // Equipment is shown at what it is WORTH: cost and its depreciation land on one row. The CSV
+  // export reads `data.assetLines` directly, so it still carries both lines untouched.
+  const assetLines = netFixedAssetLines(data?.assetLines ?? [])
   const liabilityLines = data?.liabilityLines ?? []
   const equityLines = data?.equityLines ?? []
 
@@ -186,24 +193,31 @@ export function BalanceSheet() {
           <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
             {t('statements.balanceTitle')}
           </h1>
-          <p className="mt-1.5 text-[15px] text-ink-3">{t('statements.balanceSubtitle')}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5 print:hidden">
-          <PeriodNav
-            period={asOf}
-            locale={locale}
-            onPrev={() => setAsOf((p) => shiftPeriod(p, -1))}
-            onNext={() => setAsOf((p) => shiftPeriod(p, 1))}
-            prevLabel={t('statements.prevPeriod')}
-            nextLabel={t('statements.nextPeriod')}
-          />
-          <Button variant="outline" onClick={() => printCurrentPage('balance-sheet')}>
+        <div className="flex flex-wrap items-center gap-2.5 print:hidden max-sm:w-full max-sm:justify-end">
+          <div className="max-sm:w-full">
+            <PeriodNav
+              period={asOf}
+              locale={locale}
+              onPrev={() => setAsOf((p) => shiftPeriod(p, -1))}
+              onNext={() => setAsOf((p) => shiftPeriod(p, 1))}
+              prevLabel={t('statements.prevPeriod')}
+              nextLabel={t('statements.nextPeriod')}
+            />
+          </div>
+          {/* Icon-only on a phone: with the stepper on its own row above, the two actions pair up
+              at the right instead of one of them being orphaned on a line of its own. */}
+          <Button
+            variant="outline"
+            onClick={() => printCurrentPage('balance-sheet')}
+            aria-label={t('statements.print')}
+          >
             <Printer className="size-[15px]" aria-hidden />
-            {t('statements.print')}
+            <span className="max-sm:hidden">{t('statements.print')}</span>
           </Button>
-          <Button onClick={exportCsv} disabled={!data}>
+          <Button onClick={exportCsv} disabled={!data} aria-label={t('statements.export')}>
             <Download className="size-[15px]" aria-hidden />
-            {t('statements.export')}
+            <span className="max-sm:hidden">{t('statements.export')}</span>
           </Button>
         </div>
       </div>
@@ -226,7 +240,7 @@ export function BalanceSheet() {
         <>
           <Skeleton className="h-[132px] rounded-card" />
           <Skeleton className="h-[86px] rounded-card" />
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <ListSkeleton rows={5} className="rounded-[20px]" />
             <ListSkeleton rows={5} className="rounded-[20px]" />
           </div>
@@ -242,14 +256,6 @@ export function BalanceSheet() {
             <div className="tnum mt-1.5 font-mono text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink print:text-2xl">
               {formatMoney(totalEquity, currency, locale)}
             </div>
-            {/* The promise ("settle every debt and this is what is left") is owned − owed, which
-                equals equity ONLY when the sheet balances. When it doesn't, the banner below
-                explains instead of this sentence overstating what the figure means. */}
-            {balanced ? (
-              <p className="mt-1.5 max-w-[46ch] text-[13px] text-ink-2">
-                {t('statements.netWorthSay')}
-              </p>
-            ) : null}
           </Card>
 
           {/* Where it comes from: owned − owed = yours. The equation IS the layout, so the reader
@@ -302,9 +308,6 @@ export function BalanceSheet() {
                 <div className="text-[15px] font-bold text-ink">
                   {t('statements.unbalancedTitle')}
                 </div>
-                <div className="mt-0.5 text-[13px] text-ink-2">
-                  {t('statements.unbalancedBody')}
-                </div>
               </div>
               <span className="tnum shrink-0 font-mono text-[15px] font-bold text-amber-2">
                 {t('statements.difference', {
@@ -343,11 +346,10 @@ export function BalanceSheet() {
           ) : null}
 
           {/* Account tables — assets on one side, the two claims on it on the other. */}
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <Card className="p-6">
               <LineSection
                 heading={t('statements.plain.assets')}
-                gloss={t('statements.plain.assetsGloss')}
                 groups={assetGroups}
                 totalLabel={t('statements.plain.totalAssets')}
                 totalMinor={totalAssets}
@@ -361,7 +363,6 @@ export function BalanceSheet() {
             <Card className="p-6">
               <LineSection
                 heading={t('statements.plain.liabilities')}
-                gloss={t('statements.plain.liabilitiesGloss')}
                 lines={liabilityLines.map(toPlainDisplay)}
                 totalLabel={t('statements.plain.totalLiabilities')}
                 totalMinor={totalLiabilities}
@@ -374,7 +375,6 @@ export function BalanceSheet() {
               <div className="mt-6">
                 <LineSection
                   heading={t('statements.plain.equity')}
-                  gloss={t('statements.plain.equityGloss')}
                   lines={equityLines.map(toEquityDisplay)}
                   totalLabel={t('statements.plain.totalEquity')}
                   totalMinor={totalEquity}

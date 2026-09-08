@@ -835,7 +835,6 @@ export const en = {
     incomeTitle: 'Income statement',
     incomeSubtitle: 'Revenue, expense and net for the period.',
     balanceTitle: 'Balance sheet',
-    balanceSubtitle: 'What you own, what you still owe, and what is left over as yours.',
     /**
      * PLAIN wording for the balance sheet's three sections. The formal terms above (assets /
      * liabilities / equity) are textbook translations most owners never learned; these are the
@@ -846,9 +845,6 @@ export const en = {
       assets: 'What you own',
       liabilities: 'What you owe',
       equity: 'Yours',
-      assetsGloss: 'What the business holds right now',
-      liabilitiesGloss: 'What still has to be paid',
-      equityGloss: "The owner's share of the business",
       totalAssets: 'Total owned',
       totalLiabilities: 'Total owed',
       totalEquity: 'Total yours',
@@ -856,7 +852,6 @@ export const en = {
       difference: 'Unexplained difference',
     },
     netWorth: 'Net worth',
-    netWorthSay: 'If every debt were settled today, this is what would be left as yours.',
     checksOut: 'The books tie out',
     difference: 'Off by {{amount}}',
     /**
@@ -874,7 +869,7 @@ export const en = {
     unnatural: {
       oneTitle: '{{name}} is negative at {{amount}}',
       manyTitle: '{{count}} things you own show a negative value',
-      body: 'You cannot own less than none of something. This usually means a purchase was recorded as an expense twice. Check this account.',
+      body: 'Usually a purchase recorded as an expense twice. Check this account.',
     },
     /** Asset groups, ordered by how quickly each turns into money — not by account code. */
     groups: {
@@ -898,7 +893,6 @@ export const en = {
     totalLiabilities: 'Total liabilities',
     totalEquity: 'Total equity',
     unbalancedTitle: 'The sheet does not balance',
-    unbalancedBody: 'Assets differ from liabilities plus equity by the amount shown.',
     breakdown: 'Breakdown',
     topExpenses: 'Largest expenses',
     topExpensesNote: 'share of total expense',
@@ -931,7 +925,7 @@ export const en = {
       vatInput: 'VAT input (recoverable)',
       vatCarryforward: 'VAT credit carried forward',
       prepaidExpense: 'Paid in advance',
-      fixedAssetsCost: 'Equipment & vehicles (what they cost)',
+      fixedAssetsCost: 'Equipment & vehicles',
       accumulatedDepreciation: 'Wear and tear so far',
       cash: 'Cash',
       qrisClearing: 'QRIS funds not yet settled',

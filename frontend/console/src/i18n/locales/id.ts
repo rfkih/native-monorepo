@@ -820,7 +820,6 @@ export const id = {
     incomeTitle: 'Laporan laba rugi',
     incomeSubtitle: 'Pendapatan, beban, dan laba bersih untuk periode ini.',
     balanceTitle: 'Neraca',
-    balanceSubtitle: 'Apa yang dimiliki, apa yang masih harus dibayar, dan sisanya milik Anda.',
     /**
      * Kata polos untuk tiga bagian neraca. Istilah formal di atas (aset / liabilitas / ekuitas)
      * adalah terjemahan buku teks; Harta / Utang / Milik Anda adalah kata yang sudah dipunyai
@@ -830,9 +829,6 @@ export const id = {
       assets: 'Harta',
       liabilities: 'Utang',
       equity: 'Milik Anda',
-      assetsGloss: 'Apa yang dimiliki bisnis saat ini',
-      liabilitiesGloss: 'Apa yang masih harus dibayar',
-      equityGloss: 'Bagian pemilik atas bisnis ini',
       totalAssets: 'Total harta',
       totalLiabilities: 'Total utang',
       totalEquity: 'Total milik Anda',
@@ -840,7 +836,6 @@ export const id = {
       difference: 'Selisih belum terjelaskan',
     },
     netWorth: 'Kekayaan bersih',
-    netWorthSay: 'Kalau semua utang dilunasi hari ini, sebanyak ini yang tersisa jadi milik Anda.',
     checksOut: 'Pembukuan cocok',
     difference: 'Selisih {{amount}}',
     /**
@@ -858,7 +853,7 @@ export const id = {
     unnatural: {
       oneTitle: '{{name}} bernilai minus {{amount}}',
       manyTitle: '{{count}} harta bernilai minus',
-      body: 'Tidak mungkin memiliki sesuatu kurang dari nol. Biasanya ini karena pembelian tercatat sebagai beban dua kali. Periksa akun ini.',
+      body: 'Biasanya karena pembelian tercatat sebagai beban dua kali. Periksa akun ini.',
     },
     /** Kelompok harta, diurut dari yang paling cepat jadi uang — bukan menurut kode akun. */
     groups: {
@@ -882,7 +877,6 @@ export const id = {
     totalLiabilities: 'Total liabilitas',
     totalEquity: 'Total ekuitas',
     unbalancedTitle: 'Neraca tidak seimbang',
-    unbalancedBody: 'Aset berbeda dari liabilitas ditambah ekuitas sebesar selisih berikut.',
     breakdown: 'Rincian',
     topExpenses: 'Beban terbesar',
     topExpensesNote: 'porsi dari total beban',
@@ -916,7 +910,7 @@ export const id = {
       vatInput: 'PPN masukan (dapat dikreditkan)',
       vatCarryforward: 'Lebih bayar PPN dibawa ke depan',
       prepaidExpense: 'Sudah dibayar di muka',
-      fixedAssetsCost: 'Peralatan & kendaraan (harga beli)',
+      fixedAssetsCost: 'Peralatan & kendaraan',
       accumulatedDepreciation: 'Penyusutan sejauh ini',
       cash: 'Kas',
       qrisClearing: 'Dana QRIS belum cair',
