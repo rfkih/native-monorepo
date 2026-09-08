@@ -52,9 +52,13 @@ tender the customer used, and record **one payout as one settlement with several
    The existing unique key `(company_id, channel_code, currency)` is deliberately **left alone**.
    Widening it to include `source_kind` would be the tidier shape, but the previous image upserts
    with `ON CONFLICT` on exactly that key, so dropping it would break a rollback onto the new
-   schema. A QRIS row instead carries its own namespaced `channel_code` (`QRIS:SHOPEE`) and shares
-   the payer through `source_code`. Both columns are added with defaults and no `SET NOT NULL`, so
-   the migration passes `check-migration-safety.sh` and an old image keeps inserting successfully.
+   schema. A QRIS row instead carries a STABLE namespaced `channel_code` (`TENDER:QRIS`) and names
+   the payer through `source_code`. The channel_code is deliberately NOT derived from the payer:
+   deriving it would mean re-pointing QRIS from one acquirer to another created a SECOND row and
+   stranded the balance on the first. One row exists per tender family and its `source_code` moves
+   with the configuration — which is why naming a payer also re-points the existing balance in the
+   same transaction. Both columns are added with defaults and no `SET NOT NULL`, so the migration
+   passes `check-migration-safety.sh` and an old image keeps inserting successfully.
 2. **A payout is a header plus lines.** The header holds the payout date, the source, and the
    **net actually received** (the figure the merchant reads off the bank statement, entered once).
    Each line names one receivable and its **gross**. `fee = Σ gross − net`, and `net > Σ gross`
@@ -67,8 +71,14 @@ tender the customer used, and record **one payout as one settlement with several
    `Dr CASH_CLEARING (net) + Dr <fee account> (allocated fee, per line) / Cr <line's receivable
    account> (gross, per line)`. Zero-amount legs omitted. **Bank reconciliation remains the only
    Dr-BANK writer** — recording a payout does NOT put money in 1000 Bank.
-5. **Overdue is per source, not a daily alarm.** Each source carries an expected cadence in days;
-   a source is *overdue* when its outstanding balance has aged past that cadence. The console
+5. **Overdue is per source, not a daily alarm.** Each source KIND carries an expected cadence in
+   days (marketplace 8, QRIS 3, card 4 — the usual payout cycle plus slack for weekends); a payer
+   spanning several kinds takes the LONGEST of them, because Shopee settles its marketplace and
+   QRIS money in one weekly transfer and the QRIS cadence would nag about money that is not due.
+   A payer is *overdue* when it still owes something and its LAST PAYOUT is older than that cadence,
+   or it has never paid out at all — age is measured from the payout, not from the balance, because
+   `updated_at` moves on every sale and a busy channel would look freshly touched forever. A
+   per-source cadence override is a follow-up; v1 applies these defaults to every merchant. The console
    surfaces this as a card on Beranda that appears **only when something is overdue**, naming the
    source, the amount and a link to the form. There is deliberately **no daily popup**: cycles
    differ per platform (QRIS commonly H+1, GoFood daily, Shopee weekly, all shifting around

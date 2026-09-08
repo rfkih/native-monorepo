@@ -13,6 +13,8 @@ import id.co.nativeapp.finance.platform.domain.SettlementAllocation;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation.AllocatedLine;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation.SourceLine;
 import id.co.nativeapp.finance.platform.domain.SettlementSourceKind;
+import id.co.nativeapp.finance.platform.dto.OverdueSourceResponse;
+import id.co.nativeapp.finance.platform.dto.PayoutSourceResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformOutstandingResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResult;
@@ -24,6 +26,7 @@ import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -340,6 +343,127 @@ public class PlatformSettlementWriter {
         (rs, rowNum) ->
             new PlatformOutstandingResponse(
                 rs.getString(1), rs.getString(2).strip(), rs.getLong(3)));
+  }
+
+  /**
+   * What each PAYER still owes, with the sources making it up (ADR 0076) — the settlement form's
+   * opening question.
+   *
+   * <p>Grouped by payer rather than by channel because that is how the money arrives: Shopee pays
+   * ShopeeFood orders and counter QRIS in one transfer, so they belong in one payout. Rows that net
+   * to zero are omitted (nothing to settle); negative rows are kept, because a clawback that leaves
+   * a payer owing nothing still has to be visible before the next payout nets it.
+   *
+   * <p>RLS-scoped automatically; named columns, never {@code SELECT *}.
+   */
+  @Transactional(readOnly = true)
+  public List<PayoutSourceResponse> payoutSources() {
+    record Row(String sourceCode, String currency, String kind, String channel, long minor) {}
+    List<Row> rows =
+        jdbcTemplate.query(
+            """
+            SELECT source_code, currency, source_kind, channel_code, outstanding_minor
+              FROM platform_receivable
+             WHERE outstanding_minor <> 0
+             ORDER BY source_code, source_kind, channel_code
+            """,
+            (rs, rowNum) ->
+                new Row(
+                    rs.getString(1),
+                    rs.getString(2).strip(),
+                    rs.getString(3),
+                    rs.getString(4),
+                    rs.getLong(5)));
+
+    List<PayoutSourceResponse> grouped = new ArrayList<>();
+    List<PayoutSourceResponse.Line> lines = new ArrayList<>();
+    String currentSource = null;
+    String currentCurrency = null;
+    long total = 0L;
+    for (Row row : rows) {
+      boolean newGroup = currentSource == null || !currentSource.equals(row.sourceCode());
+      if (newGroup && currentSource != null) {
+        grouped.add(
+            new PayoutSourceResponse(currentSource, currentCurrency, total, List.copyOf(lines)));
+        lines.clear();
+        total = 0L;
+      }
+      currentSource = row.sourceCode();
+      currentCurrency = row.currency();
+      total = Math.addExact(total, row.minor());
+      // Card cannot be cleared here until a card fee account is mapped — shown, not selectable, so
+      // the balance is never silently missing from the payer's total.
+      boolean settleable = !SettlementSourceKind.CARD.name().equals(row.kind());
+      lines.add(
+          new PayoutSourceResponse.Line(row.kind(), row.channel(), row.minor(), settleable));
+    }
+    if (currentSource != null) {
+      grouped.add(
+          new PayoutSourceResponse(currentSource, currentCurrency, total, List.copyOf(lines)));
+    }
+    return List.copyOf(grouped);
+  }
+
+  /**
+   * The payers whose money has been sitting too long (ADR 0076 phase 3) — what the Beranda nudge
+   * shows.
+   *
+   * <p>A payer is overdue when it still owes something and its LAST payout is older than its
+   * cadence, or it has never paid out at all. Age is measured from the last payout rather than from
+   * the balance itself: `updated_at` moves on every sale, so a busy channel would look freshly
+   * touched forever even if it had never once been settled.
+   *
+   * <p>A payer spanning several kinds takes the LONGEST cadence among them. Shopee settles its
+   * marketplace and QRIS money in one weekly transfer; using the QRIS cadence there would nag every
+   * three days about money that is not due yet.
+   */
+  @Transactional(readOnly = true)
+  public List<OverdueSourceResponse> overdueSources() {
+    Instant now = clock.instant();
+    List<OverdueSourceResponse> overdue = new ArrayList<>();
+    for (PayoutSourceResponse source : payoutSources()) {
+      if (source.outstandingMinor() <= 0) {
+        continue; // nothing owed, or a clawback the next payout nets — not a nudge.
+      }
+      int cadenceDays =
+          source.lines().stream()
+              .map(l -> SettlementSourceKind.valueOf(l.sourceKind()))
+              .mapToInt(SettlementSourceKind::defaultCadenceDays)
+              .max()
+              .orElse(SettlementSourceKind.MARKETPLACE.defaultCadenceDays());
+
+      Instant lastPaidAt = lastPayoutAt(source.sourceCode());
+      Long daysSince =
+          lastPaidAt == null ? null : Duration.between(lastPaidAt, now).toDays();
+      if (daysSince != null && daysSince < cadenceDays) {
+        continue;
+      }
+      overdue.add(
+          new OverdueSourceResponse(
+              source.sourceCode(),
+              source.currency(),
+              source.outstandingMinor(),
+              daysSince,
+              cadenceDays));
+    }
+    return List.copyOf(overdue);
+  }
+
+  /** When this payer last paid out, or {@code null} if it never has. Named columns, no SELECT *. */
+  private Instant lastPayoutAt(String sourceCode) {
+    List<Instant> found =
+        jdbcTemplate.query(
+            """
+            SELECT MAX(settled_at)
+              FROM platform_settlement
+             WHERE channel_code = ?
+            """,
+            (rs, rowNum) -> {
+              java.sql.Timestamp ts = rs.getTimestamp(1);
+              return ts == null ? null : ts.toInstant();
+            },
+            sourceCode);
+    return found.isEmpty() ? null : found.getFirst();
   }
 
   /** Settlement history, optionally filtered by channel, most recent first (capped at 100). */
