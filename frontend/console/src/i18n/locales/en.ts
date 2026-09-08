@@ -835,7 +835,54 @@ export const en = {
     incomeTitle: 'Income statement',
     incomeSubtitle: 'Revenue, expense and net for the period.',
     balanceTitle: 'Balance sheet',
-    balanceSubtitle: 'Assets, liabilities and equity as of the period end.',
+    balanceSubtitle: 'What you own, what you still owe, and what is left over as yours.',
+    /**
+     * PLAIN wording for the balance sheet's three sections. The formal terms above (assets /
+     * liabilities / equity) are textbook translations most owners never learned; these are the
+     * words they already have. The formal terms stay on the CSV export, which is the accountant's
+     * artefact.
+     */
+    plain: {
+      assets: 'What you own',
+      liabilities: 'What you owe',
+      equity: 'Yours',
+      assetsGloss: 'What the business holds right now',
+      liabilitiesGloss: 'What still has to be paid',
+      equityGloss: "The owner's share of the business",
+      totalAssets: 'Total owned',
+      totalLiabilities: 'Total owed',
+      totalEquity: 'Total yours',
+      /** Only on an unbalanced sheet — the gap that keeps owned − owed = yours arithmetically true. */
+      difference: 'Unexplained difference',
+    },
+    netWorth: 'Net worth',
+    netWorthSay: 'If every debt were settled today, this is what would be left as yours.',
+    checksOut: 'The books tie out',
+    difference: 'Off by {{amount}}',
+    /**
+     * Zero-balance rows are hidden by default; nothing disappears without a way back. Two explicit
+     * keys picked in code rather than i18next plural suffixes — Indonesian has one plural form, so
+     * the suffix machinery would earn nothing here.
+     */
+    zeroHiddenOne: '1 account worth nothing is hidden',
+    zeroHiddenMany: '{{count}} accounts worth nothing are hidden',
+    zeroShownOne: '1 account worth nothing is shown',
+    zeroShownMany: '{{count}} accounts worth nothing are shown',
+    zeroShow: 'Show',
+    zeroHide: 'Hide again',
+    /** An asset that has gone negative — impossible to hold, so it asks the reader to act. */
+    unnatural: {
+      oneTitle: '{{name}} is negative at {{amount}}',
+      manyTitle: '{{count}} things you own show a negative value',
+      body: 'You cannot own less than none of something. This usually means a purchase was recorded as an expense twice. Check this account.',
+    },
+    /** Asset groups, ordered by how quickly each turns into money — not by account code. */
+    groups: {
+      liquid: 'Money, and money on its way',
+      goods: 'Goods & equipment',
+      prepaid: 'Tax & prepayments',
+      other: 'Other',
+    },
     prevPeriod: 'Previous period',
     nextPeriod: 'Next period',
     revenue: 'Revenue',
@@ -850,14 +897,8 @@ export const en = {
     totalAssets: 'Total assets',
     totalLiabilities: 'Total liabilities',
     totalEquity: 'Total equity',
-    retainedEarnings: 'Retained earnings',
-    balanced: 'Balanced',
-    balancedTitle: 'The sheet balances',
-    balancedBody: 'Assets equal liabilities plus equity, with no suspense balance.',
     unbalancedTitle: 'The sheet does not balance',
     unbalancedBody: 'Assets differ from liabilities plus equity by the amount shown.',
-    funding: 'How the balance sheet is funded',
-    fundingSplit: 'Liabilities {{liabilities}} · Equity {{equity}}',
     breakdown: 'Breakdown',
     topExpenses: 'Largest expenses',
     topExpensesNote: 'share of total expense',
@@ -876,6 +917,72 @@ export const en = {
     netDetailTitle: 'Profit & loss recap',
     detailShareNote: 'share of total',
     netDetailHint: 'Revenue minus expense for the period. Tap Revenue or Expense to see each account.',
+    /**
+     * Chart-of-accounts names for the statement line tables. The GL returns only a code, and
+     * `chart_of_account.name` is English-only behind an owner/accountant gate — so the console
+     * carries its own localized name per account. Keyed from features/statements/accountLabels.ts;
+     * that module's test fails the build if a newly seeded account has no entry here.
+     */
+    accounts: {
+      bank: 'Bank',
+      inventory: 'Inventory',
+      accountsReceivable: 'Accounts receivable',
+      platformReceivable: 'Marketplace receivable',
+      vatInput: 'VAT input (recoverable)',
+      vatCarryforward: 'VAT credit carried forward',
+      prepaidExpense: 'Paid in advance',
+      fixedAssetsCost: 'Equipment & vehicles (what they cost)',
+      accumulatedDepreciation: 'Wear and tear so far',
+      cash: 'Cash',
+      qrisClearing: 'QRIS funds not yet settled',
+      cardClearing: 'Card funds not yet settled',
+      accountsPayable: 'Accounts payable',
+      grniClearing: 'Goods received, not yet invoiced',
+      restaurantTaxPayable: 'Restaurant tax payable',
+      serviceChargePayable: 'Service charge payable (tip pool)',
+      vatOutputPayable: 'VAT output payable',
+      vatPayable: 'VAT payable',
+      deferredRevenue: 'Deferred revenue',
+      giftCardLiability: 'Unused gift-card balance',
+      loyaltyLiability: 'Loyalty points liability',
+      employeeExpensePayable: 'Employee reimbursements payable',
+      pph21Payable: 'PPh 21 payable',
+      bpjsHealthPayable: 'BPJS Kesehatan payable',
+      bpjsEmploymentPayable: 'BPJS Ketenagakerjaan payable',
+      netWagesPayable: 'Net wages payable',
+      otherPayrollDeductionsPayable: 'Other payroll deductions payable',
+      otherLiabilities: 'Other liabilities / loans',
+      ownersCapital: "Owner's capital",
+      retainedEarningsPrior: 'Profit kept from earlier years',
+      openingBalanceEquity: 'Starting capital',
+      /** The synthetic row: profit earned since the books began and not yet taken out. */
+      accumulatedProfit: 'Profit built up from trading',
+      salesRevenue: 'Sales revenue',
+      salesDiscount: 'Sales discount',
+      serviceChargeRevenue: 'Service charge revenue',
+      loyaltyRedemption: 'Loyalty redemption (contra-revenue)',
+      interestIncome: 'Interest income',
+      gainOnDisposal: 'Gain on asset disposal',
+      cashOver: 'Cash over',
+      giftCardBreakage: 'Gift-card breakage income',
+      generalExpense: 'General expense',
+      costOfGoodsSold: 'Cost of goods sold',
+      suppliesExpense: 'Supplies expense',
+      utilitiesExpense: 'Utilities expense',
+      bankCharges: 'Bank charges',
+      depreciationExpense: 'Depreciation expense',
+      lossOnDisposal: 'Loss on asset disposal',
+      cashShort: 'Cash short',
+      platformFee: 'Marketplace fee',
+      qrisFee: 'QRIS fee (MDR)',
+      inventoryShrinkage: 'Inventory shrinkage',
+      salariesExpense: 'Salaries',
+      bpjsEmployerExpense: 'BPJS — employer share',
+      overtimeExpense: 'Overtime',
+      commissionExpense: 'Commission',
+      unallocatedLabor: 'Unallocated labour',
+      suspense: 'Suspense — unmapped expense',
+    },
     cashFlow: {
       title: 'Cash flow statement',
       subtitle: 'How cash moved this period — the indirect method.',
