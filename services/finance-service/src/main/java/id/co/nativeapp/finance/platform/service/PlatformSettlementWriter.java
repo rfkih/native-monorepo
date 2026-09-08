@@ -9,6 +9,10 @@ import id.co.nativeapp.finance.platform.domain.PlatformNetExceedsGrossException;
 import id.co.nativeapp.finance.platform.domain.PlatformOverSettlementException;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlement;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlementIdempotencyKeyConflictException;
+import id.co.nativeapp.finance.platform.domain.SettlementAllocation;
+import id.co.nativeapp.finance.platform.domain.SettlementAllocation.AllocatedLine;
+import id.co.nativeapp.finance.platform.domain.SettlementAllocation.SourceLine;
+import id.co.nativeapp.finance.platform.domain.SettlementSourceKind;
 import id.co.nativeapp.finance.platform.dto.PlatformOutstandingResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResult;
@@ -70,7 +74,9 @@ public class PlatformSettlementWriter {
   }
 
   /**
-   * Records one payout of {@code gross} settled / {@code net} received for {@code channelCode}.
+   * Records a single-source payout — the ADR 0036 shape, kept for the existing API. Delegates to
+   * {@link #settleSources} so there is exactly ONE money path: two paths would be free to drift,
+   * and a drift between them would be a silently mis-posted payout.
    *
    * @throws PlatformSettlementIdempotencyKeyConflictException replayed key, different payload (409)
    * @throws PlatformNetExceedsGrossException net &gt; gross — negative commission (422)
@@ -80,28 +86,79 @@ public class PlatformSettlementWriter {
   public PlatformSettlementResult settle(
       String channelCode, long grossMinor, long netMinor, String currency, String idempotencyKey) {
     Objects.requireNonNull(channelCode, "channelCode");
+    String normalized = channelCode.strip().toUpperCase(java.util.Locale.ROOT);
+    return settleSources(
+        normalized,
+        List.of(new SourceLine(SettlementSourceKind.MARKETPLACE, normalized, grossMinor)),
+        netMinor,
+        currency,
+        idempotencyKey);
+  }
+
+  /**
+   * Records ONE payout that cleared one or more sources (ADR 0076 phase 2): a merchant on Shopee's
+   * QRIS receives a single transfer covering both its ShopeeFood orders and its counter QRIS, and
+   * enters the net once — the figure on the bank statement.
+   *
+   * <p>Each line's share of {@code Σgross − net} books to its OWN fee account, so a marketplace
+   * commission and an MDR stay distinguishable. The clearing debit stays CASH_CLEARING: bank
+   * reconciliation remains the only Dr-BANK writer (ADR 0016), so a payout moves money to clearing
+   * and the statement line sweeps it to the bank.
+   *
+   * @throws PlatformSettlementIdempotencyKeyConflictException replayed key, different payload (409)
+   * @throws PlatformNetExceedsGrossException net &gt; total gross — negative commission (422)
+   * @throws PlatformOverSettlementException a source's outstanding does not cover its gross (422)
+   */
+  @Transactional
+  public PlatformSettlementResult settleSources(
+      String sourceCode,
+      List<SourceLine> requestedLines,
+      long netMinor,
+      String currency,
+      String idempotencyKey) {
+    Objects.requireNonNull(sourceCode, "sourceCode");
     Objects.requireNonNull(currency, "currency");
     Objects.requireNonNull(idempotencyKey, "idempotencyKey");
-    // Review S1: restaurant stores channel codes uppercase — normalize so a lowercase request
-    // matches the accumulator row instead of masquerading as an over-settlement.
-    channelCode = channelCode.strip().toUpperCase(java.util.Locale.ROOT);
+    if (requestedLines == null || requestedLines.isEmpty()) {
+      throw new IllegalArgumentException("a payout must clear at least one source");
+    }
+    String payer = sourceCode.strip().toUpperCase(java.util.Locale.ROOT);
+
+    // Normalized ORDER, so the same set of sources always builds the same journal and compares
+    // equal on replay; normalized CASE, because restaurant stores channel codes uppercase and a
+    // lowercase request would otherwise miss its accumulator row and masquerade as an
+    // over-settlement (ADR 0036 review S1).
+    List<SourceLine> lines =
+        SettlementAllocation.normalize(
+            requestedLines.stream()
+                .map(
+                    l ->
+                        new SourceLine(
+                            l.kind(),
+                            l.channelCode().strip().toUpperCase(java.util.Locale.ROOT),
+                            l.grossMinor()))
+                .toList());
+    if (lines.stream().map(l -> l.kind() + "|" + l.channelCode()).distinct().count()
+        != lines.size()) {
+      throw new IllegalArgumentException("a payout may clear each source at most once");
+    }
+    // No CARD_FEE_EXPENSE role exists; routing a card acquirer's fee to PLATFORM_FEE_EXPENSE would
+    // misstate the P&L, so card balances keep settling through bank reconciliation for now.
+    if (lines.stream().anyMatch(l -> l.kind() == SettlementSourceKind.CARD)) {
+      throw new IllegalArgumentException(
+          "card balances are not settleable here yet — no card fee account is mapped");
+    }
+
+    long grossMinor = 0L;
+    for (SourceLine line : lines) {
+      grossMinor = Math.addExact(grossMinor, line.grossMinor());
+    }
 
     // 1) Replay-by-key probe FIRST (PayrollSettlementWriter idiom): a genuine retry never re-runs
-    //    the decrement — the original attempt already moved the money.
+    //    the decrements — the original attempt already moved the money.
     Optional<PlatformSettlement> byKey = settlementRepository.findByIdempotencyKey(idempotencyKey);
     if (byKey.isPresent()) {
-      PlatformSettlement existing = byKey.get();
-      boolean samePayload =
-          existing.getChannelCode().equals(channelCode)
-              && existing.getGrossMinor() == grossMinor
-              && existing.getNetMinor() == netMinor
-              && existing.getCurrency() != null
-              && existing.getCurrency().strip().equals(currency);
-      if (!samePayload) {
-        throw new PlatformSettlementIdempotencyKeyConflictException(
-            "Idempotency-Key was already used for a different settlement");
-      }
-      return new PlatformSettlementResult(existing, false);
+      return replayOrConflict(byKey.get(), payer, grossMinor, netMinor, currency, lines);
     }
 
     // 2) Money validation (rule 8: currency-checked integer minor units) + the v1 subsidy guard.
@@ -114,28 +171,84 @@ public class PlatformSettlementWriter {
     String companyId = TenantContext.require().companyId();
     String actor = TenantContext.require().actor();
 
-    // 3) Advisory lock per (company, channel) — the BillWriter/lockPeriod primitive. Serializes
-    //    concurrent settlements of the SAME channel so the loser re-reads the already-decremented
-    //    balance instead of double-spending the guard window.
+    // 3) Advisory lock per (company, PAYER) — the BillWriter/lockPeriod primitive. Serializes
+    //    concurrent payouts from the same payer so the loser re-reads the already-decremented
+    //    balances instead of double-spending the guard window. Keyed on the payer, not one
+    //    channel, because a payout now touches several of its rows at once.
     jdbcTemplate.queryForList(
         "SELECT pg_advisory_xact_lock(hashtext(?))",
-        "platform_settlement:" + companyId + ":" + channelCode);
+        "platform_settlement:" + companyId + ":" + payer);
 
-    // 3a) Review W2: RE-probe the key now that we hold the lock. Two concurrent same-key POSTs
-    // both miss the top probe; the loser blocks here until the winner COMMITS (xact lock),
-    // so this second probe sees the winner's row and replays 200 — without it the loser
-    // re-decrements and dies on uq_platform_settlement_idem as an opaque 500.
+    // 3a) RE-probe the key now that we hold the lock (ADR 0036 review W2): two concurrent same-key
+    //     POSTs both miss the top probe; the loser blocks here until the winner COMMITS, so this
+    //     second probe replays instead of re-decrementing and dying on the unique index as a 500.
     Optional<PlatformSettlement> afterLock =
         settlementRepository.findByIdempotencyKey(idempotencyKey);
     if (afterLock.isPresent()) {
-      return new PlatformSettlementResult(afterLock.get(), false);
+      return replayOrConflict(afterLock.get(), payer, grossMinor, netMinor, currency, lines);
     }
 
-    // 4) GUARDED single-statement decrement (the OrgUnitRefWriter JdbcTemplate idiom — no entity
-    //    exists for the accumulator row): the outstanding_minor >= gross predicate makes an
-    //    over-settlement lose atomically (0 rows, nothing touched → 422). Settling is the ONLY
-    //    negative-forbidden movement — accrual/clawback upserts tolerate negative balances, but a
-    //    settlement may never take more than is outstanding. RLS scopes the UPDATE (rule 5).
+    // 4) GUARDED decrement PER LINE: the outstanding_minor >= gross predicate makes an
+    //    over-settlement lose atomically (0 rows touched -> 422). Settling is the ONLY
+    //    negative-forbidden movement — accruals and clawbacks tolerate negative balances, but a
+    //    payout may never take more than a source is owed. RLS scopes the UPDATE (rule 5).
+    for (SourceLine line : lines) {
+      decrementOutstanding(line, currency, companyId, actor);
+    }
+
+    Instant now = clock.instant();
+    String period = LedgerPosting.periodOf(now);
+    requireConsistentGlCurrency(period, gross);
+
+    List<AllocatedLine> allocated =
+        SettlementAllocation.allocate(lines, Math.subtractExact(grossMinor, netMinor));
+
+    UUID entryId = UUID.randomUUID();
+    JournalEntry entry = buildSourceSettlementEntry(payer, allocated, net, period, now, entryId);
+    persistEntry(entry, companyId);
+
+    PlatformSettlement settlement =
+        new PlatformSettlement(payer, gross, net, entryId, now, idempotencyKey);
+    settlement.setCompanyId(companyId);
+    // saveAndFlush, not save: the line INSERTs below go through JdbcTemplate and bypass the
+    // persistence context, so a deferred header INSERT would leave their FK unsatisfied (the same
+    // reason GeneralLedgerWriter flushes journal_entry before its journal_line rows).
+    settlementRepository.saveAndFlush(settlement);
+    insertLines(settlement.getId(), allocated, currency, companyId, actor);
+
+    return new PlatformSettlementResult(settlement, true);
+  }
+
+  /**
+   * A replayed key returns the ORIGINAL settlement, but only when it names the same payout. The
+   * comparison includes the whole LINE SET, not just the totals: two payouts of the same net from
+   * the same payer can still clear different sources, and replaying one as the other would leave
+   * the untouched source overstated forever.
+   */
+  private PlatformSettlementResult replayOrConflict(
+      PlatformSettlement existing,
+      String payer,
+      long grossMinor,
+      long netMinor,
+      String currency,
+      List<SourceLine> lines) {
+    boolean samePayload =
+        existing.getChannelCode().equals(payer)
+            && existing.getGrossMinor() == grossMinor
+            && existing.getNetMinor() == netMinor
+            && existing.getCurrency() != null
+            && existing.getCurrency().strip().equals(currency)
+            && readLines(existing.getId()).equals(lines);
+    if (!samePayload) {
+      throw new PlatformSettlementIdempotencyKeyConflictException(
+          "Idempotency-Key was already used for a different settlement");
+    }
+    return new PlatformSettlementResult(existing, false);
+  }
+
+  /** Takes one source's gross off its accumulator, or fails the whole payout (422). */
+  private void decrementOutstanding(
+      SourceLine line, String currency, String companyId, String actor) {
     int updated =
         jdbcTemplate.update(
             """
@@ -147,33 +260,64 @@ public class PlatformSettlementWriter {
              WHERE channel_code = ?
                AND currency = ?
                AND company_id = ?
-               AND source_kind = 'MARKETPLACE'
+               AND source_kind = ?
                AND outstanding_minor >= ?
             """,
-            grossMinor,
+            line.grossMinor(),
             actor,
-            channelCode,
+            line.channelCode(),
             currency,
             companyId,
-            grossMinor);
+            line.kind().name(),
+            line.grossMinor());
     if (updated == 0) {
-      throw new PlatformOverSettlementException(channelCode, grossMinor, currency);
+      throw new PlatformOverSettlementException(line.channelCode(), line.grossMinor(), currency);
     }
+  }
 
-    Instant now = clock.instant();
-    String period = LedgerPosting.periodOf(now);
-    requireConsistentGlCurrency(period, gross);
+  /**
+   * The payout's lines, in the same normalized order {@link #settleSources} builds them, so the
+   * replay comparison is a plain list equality. Named columns, never {@code SELECT *}.
+   */
+  private List<SourceLine> readLines(UUID settlementId) {
+    return jdbcTemplate.query(
+        """
+        SELECT source_kind, channel_code, gross_minor
+          FROM platform_settlement_line
+         WHERE settlement_id = ?
+         ORDER BY source_kind, channel_code
+        """,
+        (rs, rowNum) ->
+            new SourceLine(
+                SettlementSourceKind.valueOf(rs.getString(1)), rs.getString(2), rs.getLong(3)),
+        settlementId);
+  }
 
-    UUID entryId = UUID.randomUUID();
-    JournalEntry entry = buildSettlementEntry(channelCode, gross, net, period, now, entryId);
-    persistEntry(entry, companyId);
-
-    PlatformSettlement settlement =
-        new PlatformSettlement(channelCode, gross, net, entryId, now, idempotencyKey);
-    settlement.setCompanyId(companyId);
-    settlementRepository.save(settlement);
-
-    return new PlatformSettlementResult(settlement, true);
+  private void insertLines(
+      UUID settlementId,
+      List<AllocatedLine> allocated,
+      String currency,
+      String companyId,
+      String actor) {
+    for (AllocatedLine line : allocated) {
+      jdbcTemplate.update(
+          """
+          INSERT INTO platform_settlement_line
+              (id, settlement_id, source_kind, channel_code, gross_minor, fee_minor, currency,
+               created_at, created_by, updated_at, updated_by, version, company_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, now(), ?, now(), ?, 0, ?)
+          """,
+          UUID.randomUUID(),
+          settlementId,
+          line.kind().name(),
+          line.channelCode(),
+          line.grossMinor(),
+          line.feeMinor(),
+          currency,
+          actor,
+          actor,
+          companyId);
+    }
   }
 
   /**
@@ -241,48 +385,107 @@ public class PlatformSettlementWriter {
   }
 
   /**
-   * Builds (but does not persist) the balanced settlement entry — public + pure (no DB beyond the
-   * role resolver lookups) so a unit test can assert the exact legs, mirroring {@code
-   * PayrollSettlementWriter#buildSettlementEntry}. Zero-amount legs are omitted. {@code
-   * source_event_id = entryId} (its own id, UNIQUE backstop).
+   * Builds (but does not persist) the balanced entry for a SINGLE-source payout — the ADR 0036
+   * shape, kept because a unit test asserts its exact legs. Delegates to {@link
+   * #buildSourceSettlementEntry} so the single- and multi-source journals can never diverge.
    */
   public JournalEntry buildSettlementEntry(
       String channelCode, Money gross, Money net, String period, Instant now, UUID entryId) {
-    Money fee =
-        Money.ofMinor(
-            Math.subtractExact(gross.amountMinor(), net.amountMinor()),
-            gross.currency().getCurrencyCode());
+    long feeMinor = Math.subtractExact(gross.amountMinor(), net.amountMinor());
+    return buildSourceSettlementEntry(
+        channelCode,
+        List.of(
+            new AllocatedLine(
+                SettlementSourceKind.MARKETPLACE, channelCode, gross.amountMinor(), feeMinor)),
+        net,
+        period,
+        now,
+        entryId);
+  }
+
+  /**
+   * The balanced entry for one payout, whatever it cleared (ADR 0076 phase 2):
+   *
+   * <pre>Dr CASH_CLEARING (net)
+   * Dr &lt;fee account per line&gt; (that line's share of the deduction)
+   * Cr &lt;receivable account per line&gt; (that line's gross)</pre>
+   *
+   * <p>The credit follows each line's OWN kind, which is the whole point: a Shopee payout credits
+   * 1250 for its ShopeeFood gross and 1901 for its QRIS gross, in one entry. The debit stays
+   * CASH_CLEARING — bank reconciliation remains the only Dr-BANK writer (ADR 0016).
+   *
+   * <p>Public + pure (no DB beyond the role-map lookups) so a unit test can assert the exact legs.
+   * Zero-amount legs are omitted: a fee-free payout posts no fee leg, and a payout whose gross was
+   * entirely eaten by fees posts no clearing leg.
+   */
+  public JournalEntry buildSourceSettlementEntry(
+      String payer,
+      List<AllocatedLine> allocated,
+      Money net,
+      String period,
+      Instant now,
+      UUID entryId) {
+    String currency = net.currency().getCurrencyCode();
     List<JournalLine> lines = new ArrayList<>();
     List<AccountRole> rolesPosted = new ArrayList<>();
     int lineNo = 1;
+
     if (net.amountMinor() > 0) {
       lines.add(
           JournalLine.debit(entryId, lineNo++, requireMapped(AccountRole.CASH_CLEARING, now), net));
       rolesPosted.add(AccountRole.CASH_CLEARING);
     }
-    if (fee.amountMinor() > 0) {
-      lines.add(
-          JournalLine.debit(
-              entryId, lineNo++, requireMapped(AccountRole.PLATFORM_FEE_EXPENSE, now), fee));
-      rolesPosted.add(AccountRole.PLATFORM_FEE_EXPENSE);
+    for (AllocatedLine line : allocated) {
+      if (line.feeMinor() > 0) {
+        AccountRole feeRole = feeRoleFor(line.kind());
+        lines.add(
+            JournalLine.debit(
+                entryId,
+                lineNo++,
+                requireMapped(feeRole, now),
+                Money.ofMinor(line.feeMinor(), currency)));
+        rolesPosted.add(feeRole);
+      }
     }
-    lines.add(
-        JournalLine.credit(
-            entryId, lineNo, requireMapped(AccountRole.PLATFORM_RECEIVABLE, now), gross));
-    rolesPosted.add(AccountRole.PLATFORM_RECEIVABLE);
-    // Derived from the provenance of the roles actually posted above (the conditional
-    // CASH_CLEARING/PLATFORM_FEE_EXPENSE legs only count when present), rather than hardcoded.
+    for (AllocatedLine line : allocated) {
+      AccountRole receivableRole = line.kind().accountRole();
+      lines.add(
+          JournalLine.credit(
+              entryId,
+              lineNo++,
+              requireMapped(receivableRole, now),
+              Money.ofMinor(line.grossMinor(), currency)));
+      rolesPosted.add(receivableRole);
+    }
+
+    // Derived from the provenance of the roles actually posted above (the conditional legs only
+    // count when present), rather than hardcoded.
     boolean usesIllustrative =
         roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
     return JournalEntry.balanced(
         entryId,
         period,
         now,
-        "Platform settlement — " + channelCode,
-        gross.currency().getCurrencyCode(),
+        "Platform settlement — " + payer,
+        currency,
         entryId,
         usesIllustrative,
         lines);
+  }
+
+  /**
+   * The expense account a source's deduction belongs to. Keeping these apart is what stops a Shopee
+   * payout from charging its whole MDR to "marketplace fee" — 5720 would quietly stop meaning
+   * anything, and nothing in the books would look wrong.
+   */
+  private static AccountRole feeRoleFor(SettlementSourceKind kind) {
+    return switch (kind) {
+      case MARKETPLACE -> AccountRole.PLATFORM_FEE_EXPENSE;
+      case QRIS -> AccountRole.QRIS_FEE_EXPENSE;
+      // Unreachable: settleSources rejects card lines because no card fee account is mapped.
+      case CARD ->
+          throw new IllegalStateException("no fee account is mapped for a card settlement");
+    };
   }
 
   private String requireMapped(AccountRole role, Instant occurredAt) {
