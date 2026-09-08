@@ -35,8 +35,7 @@ public record SettlePayoutRequest(
    * the marketplace fee account would misstate the P&amp;L.
    */
   public record PayoutLine(
-      @NotBlank
-          @Pattern(
+      @NotBlank @Pattern(
               regexp = "MARKETPLACE|QRIS|CARD",
               message = "sourceKind must be MARKETPLACE, QRIS or CARD")
           String sourceKind,

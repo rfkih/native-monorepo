@@ -9,7 +9,5 @@ import jakarta.validation.constraints.Size;
  * balance is paid out by its own channel, so configuring it would let the two drift apart.
  */
 public record SetSettlementSourceRequest(
-    @NotBlank
-        @Pattern(regexp = "QRIS|CARD", message = "sourceKind must be QRIS or CARD")
-        String sourceKind,
+    @NotBlank @Pattern(regexp = "QRIS|CARD", message = "sourceKind must be QRIS or CARD") String sourceKind,
     @NotBlank @Size(max = 32) String sourceCode) {}

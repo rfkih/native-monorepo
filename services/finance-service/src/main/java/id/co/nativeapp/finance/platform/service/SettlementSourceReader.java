@@ -31,9 +31,8 @@ public class SettlementSourceReader {
 
   /**
    * The stable channel_code for each tender family. The colon cannot collide with a sales-channel
-   * code (those are platform names) while keeping V61's unique key
-   * {@code (company_id, channel_code, currency)} untouched — which is what makes the whole change
-   * safe to roll back.
+   * code (those are platform names) while keeping V61's unique key {@code (company_id,
+   * channel_code, currency)} untouched — which is what makes the whole change safe to roll back.
    */
   private static final String QRIS_CHANNEL = "TENDER:QRIS";
 
@@ -58,7 +57,8 @@ public class SettlementSourceReader {
    * unknown tender, a legacy null-tender sale — those settle in the drawer, not through a payer).
    *
    * <p>Joins the caller's transaction so the RLS aspect has already bound the tenant GUC; a read
-   * outside one would match zero rows against the FORCE-RLS policy and silently look "unconfigured".
+   * outside one would match zero rows against the FORCE-RLS policy and silently look
+   * "unconfigured".
    */
   @Transactional(readOnly = true)
   public SettlementSourceRef resolve(String companyId, String tenderType, String channel) {

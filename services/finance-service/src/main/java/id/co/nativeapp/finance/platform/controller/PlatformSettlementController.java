@@ -97,7 +97,9 @@ public class PlatformSettlementController {
         : ResponseEntity.ok(body);
   }
 
-  /** A money-posting request without a key could double-book on retry (400, never a silent post). */
+  /**
+   * A money-posting request without a key could double-book on retry (400, never a silent post).
+   */
   private static void requireIdempotencyKey(String idempotencyKey) {
     if (idempotencyKey == null || idempotencyKey.isBlank()) {
       throw new IllegalArgumentException(

@@ -84,10 +84,9 @@ public class PlatformReceivableWriter {
   }
 
   /**
-   * The same atomic accumulate, for a source resolved by {@link SettlementSourceReader} — the
-   * path QRIS and card balances take (ADR 0076). The row's {@code source_kind} decides which GL
-   * account a settlement credits it against; its {@code source_code} decides which payout it groups
-   * into.
+   * The same atomic accumulate, for a source resolved by {@link SettlementSourceReader} — the path
+   * QRIS and card balances take (ADR 0076). The row's {@code source_kind} decides which GL account
+   * a settlement credits it against; its {@code source_code} decides which payout it groups into.
    *
    * <p>The upsert re-states both on every touch, which is also how a row written by an older image
    * during a rollback window heals itself: such a row carries V61's `source_code` default

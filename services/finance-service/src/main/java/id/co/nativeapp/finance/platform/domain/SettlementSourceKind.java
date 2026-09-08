@@ -5,12 +5,12 @@ import id.co.nativeapp.finance.gl.domain.AccountRole;
 /**
  * Which GL account a receivable sub-ledger row's balance lives in (ADR 0076).
  *
- * <p>This is the "how the customer paid" half of the settlement model; the other half —
- * <em>who pays it out</em> — is the row's {@code source_code}, which is what a payout groups by. A
- * merchant on Shopee's QRIS is paid by Shopee in ONE transfer covering both its ShopeeFood orders
- * ({@link #MARKETPLACE}) and its counter QRIS sales ({@link #QRIS}); the two rows share a
- * source_code and differ by this kind, which is exactly what lets one payout credit two different
- * GL accounts correctly.
+ * <p>This is the "how the customer paid" half of the settlement model; the other half — <em>who
+ * pays it out</em> — is the row's {@code source_code}, which is what a payout groups by. A merchant
+ * on Shopee's QRIS is paid by Shopee in ONE transfer covering both its ShopeeFood orders ({@link
+ * #MARKETPLACE}) and its counter QRIS sales ({@link #QRIS}); the two rows share a source_code and
+ * differ by this kind, which is exactly what lets one payout credit two different GL accounts
+ * correctly.
  *
  * <p><strong>The {@link AccountRole} is derived here and nowhere else.</strong> V61 deliberately
  * does not store the role per row: a stored role could drift out of agreement with its own kind,
@@ -35,10 +35,10 @@ public enum SettlementSourceKind {
   }
 
   /**
-   * How long a balance of this kind may sit before it is worth asking about — the platform's
-   * usual payout cycle plus slack for weekends and holidays. QRIS is commonly H+1 and Shopee
-   * weekly, which is exactly why the nudge is driven by this rather than by a daily alarm: a
-   * prompt that fires on days when nothing is due teaches the reader to dismiss it.
+   * How long a balance of this kind may sit before it is worth asking about — the platform's usual
+   * payout cycle plus slack for weekends and holidays. QRIS is commonly H+1 and Shopee weekly,
+   * which is exactly why the nudge is driven by this rather than by a daily alarm: a prompt that
+   * fires on days when nothing is due teaches the reader to dismiss it.
    *
    * <p>v1 has no per-source override (ADR 0076); these defaults apply to every merchant.
    */

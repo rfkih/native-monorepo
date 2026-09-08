@@ -418,8 +418,7 @@ public class PlatformSettlementWriter {
       // Card cannot be cleared here until a card fee account is mapped — shown, not selectable, so
       // the balance is never silently missing from the payer's total.
       boolean settleable = !SettlementSourceKind.CARD.name().equals(row.kind());
-      lines.add(
-          new PayoutSourceResponse.Line(row.kind(), row.channel(), row.minor(), settleable));
+      lines.add(new PayoutSourceResponse.Line(row.kind(), row.channel(), row.minor(), settleable));
     }
     if (currentSource != null) {
       grouped.add(
@@ -468,8 +467,7 @@ public class PlatformSettlementWriter {
       }
 
       Instant lastPaidAt = lastPayoutAt(source);
-      Long daysSince =
-          lastPaidAt == null ? null : Duration.between(lastPaidAt, now).toDays();
+      Long daysSince = lastPaidAt == null ? null : Duration.between(lastPaidAt, now).toDays();
       if (daysSince != null && daysSince < cadenceDays) {
         continue;
       }
@@ -494,7 +492,8 @@ public class PlatformSettlementWriter {
    * stable across that move, so it is the durable link. Named columns, no {@code SELECT *}.
    */
   private Instant lastPayoutAt(PayoutSourceResponse source) {
-    List<String> channels = source.lines().stream().map(PayoutSourceResponse.Line::channelCode).toList();
+    List<String> channels =
+        source.lines().stream().map(PayoutSourceResponse.Line::channelCode).toList();
     if (channels.isEmpty()) {
       return null;
     }

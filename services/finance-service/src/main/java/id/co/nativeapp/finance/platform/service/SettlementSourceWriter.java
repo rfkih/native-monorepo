@@ -79,8 +79,7 @@ public class SettlementSourceWriter {
     String companyId = tenant.companyId();
     String actor = tenant.actor();
 
-    jdbcTemplate.update(
-        UPSERT_SQL, UUID.randomUUID(), kind.name(), code, actor, actor, companyId);
+    jdbcTemplate.update(UPSERT_SQL, UUID.randomUUID(), kind.name(), code, actor, actor, companyId);
     jdbcTemplate.update(REPOINT_SQL, code, actor, companyId, kind.name(), code);
   }
 }
