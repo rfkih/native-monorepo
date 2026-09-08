@@ -100,22 +100,28 @@ export function CashFlow() {
           </h1>
           <p className="mt-1.5 text-[15px] text-ink-3">{t('statements.cashFlow.subtitle')}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5 print:hidden">
-          <PeriodNav
-            period={period}
-            locale={locale}
-            onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
-            onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
-            prevLabel={t('statements.prevPeriod')}
-            nextLabel={t('statements.nextPeriod')}
-          />
-          <Button variant="outline" onClick={() => printCurrentPage('cash-flow')}>
+        <div className="flex flex-wrap items-center gap-2.5 print:hidden max-sm:w-full max-sm:justify-end">
+          <div className="max-sm:w-full">
+            <PeriodNav
+              period={period}
+              locale={locale}
+              onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
+              onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
+              prevLabel={t('statements.prevPeriod')}
+              nextLabel={t('statements.nextPeriod')}
+            />
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => printCurrentPage('cash-flow')}
+            aria-label={t('statements.print')}
+          >
             <Printer className="size-[15px]" aria-hidden />
-            {t('statements.print')}
+            <span className="max-sm:hidden">{t('statements.print')}</span>
           </Button>
-          <Button onClick={exportCsv} disabled={!data}>
+          <Button onClick={exportCsv} disabled={!data} aria-label={t('statements.export')}>
             <Download className="size-[15px]" aria-hidden />
-            {t('statements.export')}
+            <span className="max-sm:hidden">{t('statements.export')}</span>
           </Button>
         </div>
       </div>
@@ -135,7 +141,7 @@ export function CashFlow() {
       ) : query.isLoading && !data ? (
         <>
           <StatCardsSkeleton cards={4} />
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <ListSkeleton rows={5} className="rounded-[20px]" />
             <div className="flex flex-col gap-5">
               <ListSkeleton rows={3} className="rounded-[20px]" />
@@ -170,7 +176,7 @@ export function CashFlow() {
             />
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <Card className="p-6">
               <LineSection
                 heading={t('statements.cashFlow.operating')}

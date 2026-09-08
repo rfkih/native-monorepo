@@ -4,6 +4,7 @@ import {
   IMPOSSIBLY_NEGATIVE_ASSET_CODES,
   OTHER_ASSETS_LABEL_KEY,
   groupAssetLines,
+  netFixedAssetLines,
   splitZeroLines,
   unnaturalAssetLines,
 } from '../balanceSheetView'
@@ -91,6 +92,36 @@ describe('groupAssetLines', () => {
     const grouped = new Set(ASSET_GROUPS.flatMap((g) => g.codes))
     const seededAssets = Object.keys(ACCOUNT_LABEL_KEYS).filter((code) => /^1\d{3}$/.test(code))
     expect(seededAssets.filter((code) => !grouped.has(code))).toEqual([])
+  })
+})
+
+describe('netFixedAssetLines', () => {
+  it('shows equipment at what it is worth — cost less the depreciation booked against it', () => {
+    const netted = netFixedAssetLines([line('1500', 9_000_000), line('1590', -2_150_000)])
+    expect(netted).toHaveLength(1)
+    expect(netted[0]).toMatchObject({ accountCode: '1500', balanceMinor: 6_850_000 })
+  })
+
+  it('does not change what the assets add up to', () => {
+    const raw = [line('1900', 4_517_000), line('1500', 9_000_000), line('1590', -2_150_000)]
+    const sum = (ls: BalanceLine[]) => ls.reduce((t, l) => t + l.balanceMinor, 0)
+    expect(sum(netFixedAssetLines(raw))).toBe(sum(raw))
+  })
+
+  it('leaves depreciation visible when there is no cost line to fold it into', () => {
+    const netted = netFixedAssetLines([line('1590', -500_000)])
+    expect(netted.map((l) => l.accountCode)).toEqual(['1590'])
+  })
+
+  it('leaves a cost line alone when nothing has been depreciated yet', () => {
+    const netted = netFixedAssetLines([line('1500', 9_000_000)])
+    expect(netted).toEqual([line('1500', 9_000_000)])
+  })
+
+  // Netting runs before the flag check, so the warning follows the figure actually on screen.
+  it('flags equipment whose depreciation has eaten past its cost', () => {
+    const netted = netFixedAssetLines([line('1500', 1_000_000), line('1590', -1_200_000)])
+    expect(unnaturalAssetLines(netted).map((l) => l.accountCode)).toEqual(['1500'])
   })
 })
 

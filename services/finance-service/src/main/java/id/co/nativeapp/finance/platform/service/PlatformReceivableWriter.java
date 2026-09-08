@@ -1,5 +1,6 @@
 package id.co.nativeapp.finance.platform.service;
 
+import id.co.nativeapp.finance.platform.domain.SettlementSourceKind;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,11 +34,13 @@ public class PlatformReceivableWriter {
   private static final String UPSERT_SQL =
       """
       INSERT INTO platform_receivable
-          (id, channel_code, currency, outstanding_minor,
+          (id, channel_code, currency, outstanding_minor, source_kind, source_code,
            created_at, created_by, updated_at, updated_by, version, company_id)
-      VALUES (?, ?, ?, ?, now(), ?, now(), ?, 0, ?)
+      VALUES (?, ?, ?, ?, ?, ?, now(), ?, now(), ?, 0, ?)
       ON CONFLICT (company_id, channel_code, currency) DO UPDATE SET
           outstanding_minor = platform_receivable.outstanding_minor + EXCLUDED.outstanding_minor,
+          source_kind       = EXCLUDED.source_kind,
+          source_code       = EXCLUDED.source_code,
           updated_at        = now(),
           updated_by        = EXCLUDED.updated_by,
           version           = platform_receivable.version + 1
@@ -70,12 +73,40 @@ public class PlatformReceivableWriter {
           currency,
           UNKNOWN_CHANNEL);
     }
+    // A marketplace balance is paid out by the channel itself, so the payer is the channel code.
+    accumulate(
+        companyId,
+        new SettlementSourceReader.SettlementSourceRef(
+            SettlementSourceKind.MARKETPLACE, channelCode, channelCode),
+        currency,
+        deltaMinor,
+        actor);
+  }
+
+  /**
+   * The same atomic accumulate, for a source resolved by {@link SettlementSourceReader} — the path
+   * QRIS and card balances take (ADR 0076). The row's {@code source_kind} decides which GL account
+   * a settlement credits it against; its {@code source_code} decides which payout it groups into.
+   *
+   * <p>The upsert re-states both on every touch, which is also how a row written by an older image
+   * during a rollback window heals itself: such a row carries V61's `source_code` default
+   * ('UNKNOWN') and adopts its real payer on the next sale that touches it.
+   */
+  @org.springframework.transaction.annotation.Transactional
+  public void accumulate(
+      String companyId,
+      SettlementSourceReader.SettlementSourceRef source,
+      String currency,
+      long deltaMinor,
+      String actor) {
     jdbcTemplate.update(
         UPSERT_SQL,
         java.util.UUID.randomUUID(),
-        channelCode,
+        source.channelCode(),
         currency,
         deltaMinor,
+        source.kind().name(),
+        source.sourceCode(),
         actor,
         actor,
         companyId);

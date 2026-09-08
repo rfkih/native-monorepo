@@ -109,21 +109,23 @@ export function IncomeStatement() {
           </h1>
           <p className="mt-1.5 text-[15px] text-ink-3">{t('statements.incomeSubtitle')}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5 print:hidden">
-          <PeriodNav
-            period={period}
-            locale={locale}
-            onPrev={() => {
-              setDetail(null)
-              setPeriod((p) => shiftPeriod(p, -1))
-            }}
-            onNext={() => {
-              setDetail(null)
-              setPeriod((p) => shiftPeriod(p, 1))
-            }}
-            prevLabel={t('statements.prevPeriod')}
-            nextLabel={t('statements.nextPeriod')}
-          />
+        <div className="flex flex-wrap items-center gap-2.5 print:hidden max-sm:w-full max-sm:justify-end">
+          <div className="max-sm:w-full">
+            <PeriodNav
+              period={period}
+              locale={locale}
+              onPrev={() => {
+                setDetail(null)
+                setPeriod((p) => shiftPeriod(p, -1))
+              }}
+              onNext={() => {
+                setDetail(null)
+                setPeriod((p) => shiftPeriod(p, 1))
+              }}
+              prevLabel={t('statements.prevPeriod')}
+              nextLabel={t('statements.nextPeriod')}
+            />
+          </div>
           <Button variant="outline" onClick={() => printCurrentPage('income-statement')} aria-label={t('statements.print')}>
             <Printer className="size-[15px]" aria-hidden />
             <span className="max-sm:hidden">{t('statements.print')}</span>
@@ -153,7 +155,7 @@ export function IncomeStatement() {
         <>
           <StatCardsSkeleton cards={3} />
           <ListSkeleton rows={5} className="rounded-[20px]" />
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <ListSkeleton rows={5} className="rounded-[20px]" />
             <ListSkeleton rows={5} className="rounded-[20px]" />
           </div>
@@ -247,7 +249,7 @@ export function IncomeStatement() {
           ) : null}
 
           {/* Account tables */}
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <Card className="p-6">
               <LineSection
                 heading={t('statements.revenueAccounts')}

@@ -835,7 +835,6 @@ export const en = {
     incomeTitle: 'Income statement',
     incomeSubtitle: 'Revenue, expense and net for the period.',
     balanceTitle: 'Balance sheet',
-    balanceSubtitle: 'What you own, what you still owe, and what is left over as yours.',
     /**
      * PLAIN wording for the balance sheet's three sections. The formal terms above (assets /
      * liabilities / equity) are textbook translations most owners never learned; these are the
@@ -846,9 +845,6 @@ export const en = {
       assets: 'What you own',
       liabilities: 'What you owe',
       equity: 'Yours',
-      assetsGloss: 'What the business holds right now',
-      liabilitiesGloss: 'What still has to be paid',
-      equityGloss: "The owner's share of the business",
       totalAssets: 'Total owned',
       totalLiabilities: 'Total owed',
       totalEquity: 'Total yours',
@@ -856,7 +852,6 @@ export const en = {
       difference: 'Unexplained difference',
     },
     netWorth: 'Net worth',
-    netWorthSay: 'If every debt were settled today, this is what would be left as yours.',
     checksOut: 'The books tie out',
     difference: 'Off by {{amount}}',
     /**
@@ -874,7 +869,8 @@ export const en = {
     unnatural: {
       oneTitle: '{{name}} is negative at {{amount}}',
       manyTitle: '{{count}} things you own show a negative value',
-      body: 'You cannot own less than none of something. This usually means a purchase was recorded as an expense twice. Check this account.',
+      body:
+        'Usually a purchase recorded as an expense twice — or, for equipment, depreciation booked past what it cost. Check this account.',
     },
     /** Asset groups, ordered by how quickly each turns into money — not by account code. */
     groups: {
@@ -898,7 +894,6 @@ export const en = {
     totalLiabilities: 'Total liabilities',
     totalEquity: 'Total equity',
     unbalancedTitle: 'The sheet does not balance',
-    unbalancedBody: 'Assets differ from liabilities plus equity by the amount shown.',
     breakdown: 'Breakdown',
     topExpenses: 'Largest expenses',
     topExpensesNote: 'share of total expense',
@@ -931,7 +926,7 @@ export const en = {
       vatInput: 'VAT input (recoverable)',
       vatCarryforward: 'VAT credit carried forward',
       prepaidExpense: 'Paid in advance',
-      fixedAssetsCost: 'Equipment & vehicles (what they cost)',
+      fixedAssetsCost: 'Equipment & vehicles',
       accumulatedDepreciation: 'Wear and tear so far',
       cash: 'Cash',
       qrisClearing: 'QRIS funds not yet settled',
@@ -3972,6 +3967,58 @@ export const en = {
       'Record payouts from delivery and marketplace platforms and track what each channel still owes.',
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to record platform settlements.',
+    /** ADR 0076 — one payout clears everything a payer settled. */
+    payout: {
+      owedHeading: 'Who still owes you',
+      noneTitle: 'Nothing is waiting to be paid out',
+      noneHint:
+        'Balances appear here once a marketplace order or a QRIS sale is rung up.',
+      error: 'Could not load what is owed.',
+      formTitle: 'Record a payout from {{source}}',
+      formHint:
+        'Tick what this transfer covered, then enter the amount that actually reached your bank. The deduction is worked out for you.',
+      settledHeading: 'Settled',
+      grossHeading: 'Gross',
+      totalGross: 'Total settled',
+      netLabel: 'Reached your bank',
+      netHint: 'The figure on the bank statement, before you split anything out.',
+      netPlaceholder: 'e.g. 2216100',
+      feeLabel: 'Deduction',
+      netExceedsGross:
+        'The amount received is more than what was settled. Check the figures — a platform paying more than it owed is not something this can record.',
+      nothingSettleable:
+        'Everything this payer holds is card money, which cannot be recorded here yet — it still settles through bank reconciliation.',
+      reconcileWarning:
+        'When the deposit shows up on your statement, reconcile it as a plain clearing line — not as QRIS. Recording it twice would double the fee.',
+      review: 'Review payout',
+      confirmTitle: 'Record this payout?',
+      confirmBody:
+        'This records the money as settled and books the deduction. It reaches your bank account in the books once you reconcile the statement line.',
+      confirm: 'Record payout',
+      submitFailed: 'Could not record the payout. Check the figures and try again.',
+      kind: {
+        MARKETPLACE: 'Marketplace orders',
+        QRIS: 'QRIS at the counter',
+        CARD: 'Card at the counter',
+      },
+    },
+    sourceConfig: {
+      heading: 'Who pays out your QRIS',
+      hint:
+        'If your QR came from a marketplace, its money arrives in the same transfer as your orders from them. Naming them here puts both in one payout — and moves what has already built up.',
+      qrisLabel: 'QRIS is settled by',
+      placeholder: 'e.g. SHOPEE',
+      save: 'Save',
+      saveFailed: 'Could not save. Try again.',
+    },
+    overdue: {
+      title: 'Money a platform is still holding',
+      body:
+        'These have gone past their usual payout cycle without being recorded as settled.',
+      never: 'never paid out',
+      days: 'last paid out {{count}} days ago',
+      action: 'Record a payout',
+    },
     outstanding: {
       title: 'Outstanding by channel',
       empty: 'No platform channels yet',

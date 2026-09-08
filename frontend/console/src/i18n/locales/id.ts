@@ -820,7 +820,6 @@ export const id = {
     incomeTitle: 'Laporan laba rugi',
     incomeSubtitle: 'Pendapatan, beban, dan laba bersih untuk periode ini.',
     balanceTitle: 'Neraca',
-    balanceSubtitle: 'Apa yang dimiliki, apa yang masih harus dibayar, dan sisanya milik Anda.',
     /**
      * Kata polos untuk tiga bagian neraca. Istilah formal di atas (aset / liabilitas / ekuitas)
      * adalah terjemahan buku teks; Harta / Utang / Milik Anda adalah kata yang sudah dipunyai
@@ -830,9 +829,6 @@ export const id = {
       assets: 'Harta',
       liabilities: 'Utang',
       equity: 'Milik Anda',
-      assetsGloss: 'Apa yang dimiliki bisnis saat ini',
-      liabilitiesGloss: 'Apa yang masih harus dibayar',
-      equityGloss: 'Bagian pemilik atas bisnis ini',
       totalAssets: 'Total harta',
       totalLiabilities: 'Total utang',
       totalEquity: 'Total milik Anda',
@@ -840,7 +836,6 @@ export const id = {
       difference: 'Selisih belum terjelaskan',
     },
     netWorth: 'Kekayaan bersih',
-    netWorthSay: 'Kalau semua utang dilunasi hari ini, sebanyak ini yang tersisa jadi milik Anda.',
     checksOut: 'Pembukuan cocok',
     difference: 'Selisih {{amount}}',
     /**
@@ -858,7 +853,8 @@ export const id = {
     unnatural: {
       oneTitle: '{{name}} bernilai minus {{amount}}',
       manyTitle: '{{count}} harta bernilai minus',
-      body: 'Tidak mungkin memiliki sesuatu kurang dari nol. Biasanya ini karena pembelian tercatat sebagai beban dua kali. Periksa akun ini.',
+      body:
+        'Biasanya karena pembelian tercatat sebagai beban dua kali — atau, untuk peralatan, penyusutan yang sudah melebihi harga belinya. Periksa akun ini.',
     },
     /** Kelompok harta, diurut dari yang paling cepat jadi uang — bukan menurut kode akun. */
     groups: {
@@ -882,7 +878,6 @@ export const id = {
     totalLiabilities: 'Total liabilitas',
     totalEquity: 'Total ekuitas',
     unbalancedTitle: 'Neraca tidak seimbang',
-    unbalancedBody: 'Aset berbeda dari liabilitas ditambah ekuitas sebesar selisih berikut.',
     breakdown: 'Rincian',
     topExpenses: 'Beban terbesar',
     topExpensesNote: 'porsi dari total beban',
@@ -916,7 +911,7 @@ export const id = {
       vatInput: 'PPN masukan (dapat dikreditkan)',
       vatCarryforward: 'Lebih bayar PPN dibawa ke depan',
       prepaidExpense: 'Sudah dibayar di muka',
-      fixedAssetsCost: 'Peralatan & kendaraan (harga beli)',
+      fixedAssetsCost: 'Peralatan & kendaraan',
       accumulatedDepreciation: 'Penyusutan sejauh ini',
       cash: 'Kas',
       qrisClearing: 'Dana QRIS belum cair',
@@ -3897,6 +3892,58 @@ export const id = {
       'Catat pencairan dana dari platform pengantaran dan marketplace, serta pantau saldo yang masih menjadi kewajiban tiap channel.',
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk mencatat settlement platform.',
+    /** ADR 0076 — satu payout melunasi semua yang dibayar satu pihak. */
+    payout: {
+      owedHeading: 'Siapa yang masih berutang ke Anda',
+      noneTitle: 'Tidak ada yang menunggu dicairkan',
+      noneHint:
+        'Saldo muncul di sini setelah ada pesanan marketplace atau penjualan QRIS.',
+      error: 'Gagal memuat tagihan.',
+      formTitle: 'Catat pencairan dari {{source}}',
+      formHint:
+        'Centang apa saja yang tercakup transfer ini, lalu isi jumlah yang benar-benar masuk rekening. Potongannya dihitungkan.',
+      settledHeading: 'Yang dilunasi',
+      grossHeading: 'Bruto',
+      totalGross: 'Total bruto',
+      netLabel: 'Masuk rekening',
+      netHint: 'Angka di mutasi bank, sebelum Anda pecah-pecah.',
+      netPlaceholder: 'mis. 2216100',
+      feeLabel: 'Potongan',
+      netExceedsGross:
+        'Yang diterima lebih besar daripada yang dilunasi. Periksa lagi angkanya — platform membayar lebih dari utangnya bukan hal yang bisa dicatat di sini.',
+      nothingSettleable:
+        'Semua yang ditahan pihak ini adalah uang kartu, yang belum bisa dicatat di sini — pencairannya masih lewat rekonsiliasi bank.',
+      reconcileWarning:
+        'Saat setorannya muncul di mutasi, rekonsiliasikan sebagai baris kliring biasa — bukan sebagai QRIS. Mencatatnya dua kali akan menggandakan biayanya.',
+      review: 'Periksa pencairan',
+      confirmTitle: 'Catat pencairan ini?',
+      confirmBody:
+        'Ini mencatat uangnya sebagai sudah cair dan membukukan potongannya. Di pembukuan, uangnya masuk ke rekening setelah Anda merekonsiliasi baris mutasinya.',
+      confirm: 'Catat pencairan',
+      submitFailed: 'Pencairan gagal dicatat. Periksa angkanya dan coba lagi.',
+      kind: {
+        MARKETPLACE: 'Pesanan marketplace',
+        QRIS: 'QRIS di konter',
+        CARD: 'Kartu di konter',
+      },
+    },
+    sourceConfig: {
+      heading: 'Siapa yang mencairkan QRIS Anda',
+      hint:
+        'Kalau QR Anda berasal dari sebuah marketplace, uangnya datang di transfer yang sama dengan pesanan dari mereka. Menyebutkannya di sini menyatukan keduanya jadi satu pencairan — sekaligus memindahkan saldo yang sudah menumpuk.',
+      qrisLabel: 'QRIS dicairkan oleh',
+      placeholder: 'mis. SHOPEE',
+      save: 'Simpan',
+      saveFailed: 'Gagal menyimpan. Coba lagi.',
+    },
+    overdue: {
+      title: 'Uang yang masih ditahan platform',
+      body:
+        'Ini sudah lewat dari siklus pencairan biasanya dan belum tercatat cair.',
+      never: 'belum pernah cair',
+      days: 'terakhir cair {{count}} hari lalu',
+      action: 'Catat pencairan',
+    },
     outstanding: {
       title: 'Saldo tertunda per channel',
       empty: 'Belum ada channel platform',

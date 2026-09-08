@@ -215,6 +215,89 @@ class Phase4LoyaltyGiftCardIntegrationTest extends PostgresRlsTestBase {
         giftCardRedeemedMinor);
   }
 
+  /**
+   * ADR 0076: the receivable sub-ledger must accrue what the ACQUIRER actually collected, not the
+   * grand total. A QRIS sale part-paid by a gift card is the case that separates the two — the
+   * acquirer holds only the cash residual and will only ever settle that.
+   *
+   * <p>Getting this wrong is invisible in the GL (which already debits NET_TENDER) and only
+   * surfaces later as a payout that drives 1901 negative.
+   */
+  @Test
+  void aQrisSalePartPaidByGiftCardAccruesOnlyWhatTheAcquirerCollected() throws Exception {
+    UUID saleId = UUID.randomUUID();
+    revenuePostingService.handle(
+        saleEventWithSaleId(
+            UUID.randomUUID(),
+            saleId,
+            100_000L, // subtotal
+            0L, // discount
+            0L, // service charge
+            0L, // tax
+            100_000L, // grand total the customer owed
+            "QRIS",
+            null, // no loyalty
+            UUID.randomUUID().toString(),
+            40_000L)); // ...of which a gift card covered 40.000
+
+    assertThat(receivableOutstandingMinor("TENDER:QRIS"))
+        .as("the acquirer collected 60.000, so that — not the 100.000 grand total — is the accrual")
+        .isEqualTo(60_000L);
+  }
+
+  /** The unwind must use the SAME basis, or a void leaves the sub-ledger below the GL. */
+  @Test
+  void voidingThatSaleClawsBackTheSameAmountItAccrued() throws Exception {
+    UUID saleId = UUID.randomUUID();
+    revenuePostingService.handle(
+        saleEventWithSaleId(
+            UUID.randomUUID(),
+            saleId,
+            100_000L,
+            0L,
+            0L,
+            0L,
+            100_000L,
+            "QRIS",
+            null,
+            UUID.randomUUID().toString(),
+            40_000L));
+
+    reversalPostingService.handleVoid(
+        new SaleVoidedEvent(
+            UUID.randomUUID(),
+            TENANT,
+            BUSINESS,
+            saleId,
+            UUID.randomUUID(),
+            Money.ofMinor(100_000L, "IDR"),
+            OCCURRED,
+            "QRIS",
+            null));
+
+    assertThat(receivableOutstandingMinor("TENDER:QRIS"))
+        .as("clawing back the grand total would leave the sub-ledger 40.000 below the GL")
+        .isZero();
+  }
+
+  /** The QRIS sub-ledger row's balance, read over the admin (BYPASSRLS) connection. */
+  private long receivableOutstandingMinor(String channelCode) throws java.sql.SQLException {
+    try (java.sql.Connection c =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        java.sql.PreparedStatement ps =
+            c.prepareStatement(
+                "SELECT COALESCE(SUM(outstanding_minor), 0) FROM platform_receivable"
+                    + " WHERE company_id = ? AND channel_code = ?")) {
+      ps.setString(1, TENANT);
+      ps.setString(2, channelCode);
+      try (java.sql.ResultSet rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getLong(1);
+      }
+    }
+  }
+
   @SuppressWarnings("checkstyle:ParameterNumber")
   private SaleRecordedEvent saleEventWithSaleId(
       UUID eventId,

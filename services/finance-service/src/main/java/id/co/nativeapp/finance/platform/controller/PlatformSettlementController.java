@@ -1,9 +1,14 @@
 package id.co.nativeapp.finance.platform.controller;
 
+import id.co.nativeapp.finance.platform.domain.SettlementAllocation.SourceLine;
+import id.co.nativeapp.finance.platform.domain.SettlementSourceKind;
+import id.co.nativeapp.finance.platform.dto.OverdueSourceResponse;
+import id.co.nativeapp.finance.platform.dto.PayoutSourceResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformOutstandingResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResult;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementSummaryResponse;
+import id.co.nativeapp.finance.platform.dto.SettlePayoutRequest;
 import id.co.nativeapp.finance.platform.dto.SettlePlatformRequest;
 import id.co.nativeapp.finance.platform.service.PlatformSettlementWriter;
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,6 +41,73 @@ public class PlatformSettlementController {
 
   public PlatformSettlementController(PlatformSettlementWriter writer) {
     this.writer = writer;
+  }
+
+  @Operation(
+      summary =
+          "Payers whose money has sat past its usual payout cycle — what the Beranda nudge shows."
+              + " Driven by cadence, not by the calendar: a daily prompt would mostly fire on days"
+              + " nothing is due")
+  @GetMapping("/overdue")
+  public List<OverdueSourceResponse> overdue() {
+    return writer.overdueSources();
+  }
+
+  @Operation(
+      summary =
+          "What each payer still owes, with the sources making it up — grouped by payer because"
+              + " that is how the money arrives (one Shopee transfer covers ShopeeFood and its"
+              + " counter QRIS)")
+  @GetMapping("/sources")
+  public List<PayoutSourceResponse> sources() {
+    return writer.payoutSources();
+  }
+
+  @Operation(
+      summary =
+          "Record ONE payout covering every source the payer settled — enter the net that reached"
+              + " the bank once; the deduction is derived and split across the lines pro-rata, each"
+              + " share booked to its own fee account")
+  @PostMapping("/payouts")
+  public ResponseEntity<PlatformSettlementResponse> settlePayout(
+      @Valid @RequestBody SettlePayoutRequest request,
+      @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+    // The key is REQUIRED (the payroll/AR/assets idiom): a payout posts money, so a keyless
+    // request — which a retry could silently double-book — is rejected with 400.
+    requireIdempotencyKey(idempotencyKey);
+
+    PlatformSettlementResult result =
+        writer.settleSources(
+            request.sourceCode(),
+            request.lines().stream()
+                .map(
+                    l ->
+                        new SourceLine(
+                            SettlementSourceKind.valueOf(l.sourceKind()),
+                            l.channelCode(),
+                            l.grossMinor()))
+                .toList(),
+            request.netMinor(),
+            request.currency(),
+            idempotencyKey);
+
+    PlatformSettlementResponse body = PlatformSettlementResponse.from(result.settlement());
+    return result.created()
+        ? ResponseEntity.created(URI.create("/api/v1/platform-settlements/" + body.id())).body(body)
+        : ResponseEntity.ok(body);
+  }
+
+  /**
+   * A money-posting request without a key could double-book on retry (400, never a silent post).
+   */
+  private static void requireIdempotencyKey(String idempotencyKey) {
+    if (idempotencyKey == null || idempotencyKey.isBlank()) {
+      throw new IllegalArgumentException(
+          "the Idempotency-Key header is required to record a platform settlement");
+    }
+    if (idempotencyKey.length() > 64) {
+      throw new IllegalArgumentException("the Idempotency-Key header must be at most 64 chars");
+    }
   }
 
   @Operation(

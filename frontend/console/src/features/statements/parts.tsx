@@ -156,16 +156,19 @@ function AccountRow({
     <div
       className={cn(
         'flex items-center gap-3 border-b border-ink-50 py-[9px] last:border-0 print:break-inside-avoid',
-        line.flagged && '-mx-2 rounded-lg border-b-transparent bg-tint-loss px-2',
+        line.flagged && 'rounded-lg border-b-transparent bg-tint-loss',
         line.printOnly && 'hidden print:flex',
       )}
     >
-      {/* The code sits next to the name but OUTSIDE the truncating span: inside it, a long name
-          clips away the very thing that makes the row traceable back to the ledger. */}
-      <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-        <span className="truncate text-sm text-ink-2">{name ?? line.accountCode}</span>
+      {/* On a phone the name WRAPS rather than truncating — there is no width to spare, and a
+          clipped "Utang potongan gaji …" hides the one thing the reader came for — and the code
+          rides beside it, dropping to the next line only when it doesn't fit. From `sm` up the row
+          is wide enough for one line: the name truncates, and the code sits OUTSIDE that truncating
+          span so it is never the part that gets clipped. */}
+      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 sm:flex-nowrap">
+        <span className="text-sm text-ink-2 sm:truncate">{name ?? line.accountCode}</span>
         {name && line.accountCode ? (
-          <span className="shrink-0 font-mono text-[11px] text-ink-3">{line.accountCode}</span>
+          <span className="font-mono text-[11px] text-ink-3 sm:shrink-0">{line.accountCode}</span>
         ) : null}
       </span>
       <span
@@ -190,8 +193,6 @@ function AccountRow({
  */
 interface LineSectionBase {
   heading: string
-  /** One plain sentence under the heading saying what this section is, in words, not accounting. */
-  gloss?: string
   totalLabel: string
   totalMinor: number
   currency: string
@@ -216,7 +217,6 @@ export type LineSectionProps = LineSectionBase &
 
 export function LineSection({
   heading,
-  gloss,
   lines,
   groups,
   totalLabel,
@@ -240,7 +240,6 @@ export function LineSection({
       <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 print:break-after-avoid">
         {heading}
       </div>
-      {gloss ? <div className="mt-0.5 text-[12.5px] text-ink-3">{gloss}</div> : null}
       <div className="mt-2.5">
         {isEmpty ? (
           <div className="py-2 text-sm text-ink-3">{emptyLabel}</div>

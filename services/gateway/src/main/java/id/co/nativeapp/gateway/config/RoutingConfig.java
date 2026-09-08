@@ -1580,6 +1580,26 @@ public class RoutingConfig {
   }
 
   /**
+   * Settlement sources (ADR 0076) — who pays out each tender family, e.g. "my QRIS is settled by
+   * Shopee". FINANCE_ROLES like the settlements it feeds: naming a payer re-points an outstanding
+   * receivable balance, which decides which payout clears it and therefore which GL account is
+   * credited. Not a manager surface.
+   */
+  @Bean
+  RouterFunction<ServerResponse> settlementSourcesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-settlement-sources")
+        .route(path("/api/v1/settlement-sources/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * Opening balances & business migration (ADR 0037) — owner/manager only: recording a company's
    * opening balance sheet posts money (Dr assets / Cr liabilities + equity), a back-office finance
    * action with no cashier surface.

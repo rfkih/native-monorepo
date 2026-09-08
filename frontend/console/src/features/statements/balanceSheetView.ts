@@ -57,6 +57,44 @@ export const ASSET_GROUPS: readonly { labelKey: string; codes: readonly string[]
 /** The catch-all group's label — holds any asset account the groups above don't name. */
 export const OTHER_ASSETS_LABEL_KEY = 'statements.groups.other'
 
+/** Equipment at cost, and the depreciation booked against it. */
+export const FIXED_ASSET_COST_CODE = '1500'
+export const ACCUMULATED_DEPRECIATION_CODE = '1590'
+
+/**
+ * Shows equipment at what it is WORTH — cost less the depreciation booked against it — as a single
+ * row. Splitting an asset across a cost line and a negative contra line is an accountant's
+ * convention; an owner asking what their equipment is worth means the net figure, and reading it
+ * off two rows is arithmetic the page can do for them.
+ *
+ * Nothing is lost: the CSV export carries every line straight from the server, cost and
+ * accumulated depreciation included, and the group subtotal is unchanged either way (the netted row
+ * holds exactly what the two rows summed to).
+ *
+ * Only nets when BOTH lines are present — depreciation booked with no cost line stays visible
+ * rather than being silently folded away.
+ */
+export function netFixedAssetLines(lines: readonly BalanceLine[]): BalanceLine[] {
+  const cost = lines.find((l) => l.accountCode === FIXED_ASSET_COST_CODE)
+  const depreciation = lines.find((l) => l.accountCode === ACCUMULATED_DEPRECIATION_CODE)
+  if (!cost || !depreciation) return [...lines]
+
+  // 1590 is credit-normal inside a debit-normal group, so its balance is already negative here.
+  const netBookValue = cost.balanceMinor + depreciation.balanceMinor
+  return lines
+    .filter((l) => l.accountCode !== ACCUMULATED_DEPRECIATION_CODE)
+    .map((l) => (l.accountCode === FIXED_ASSET_COST_CODE ? { ...l, balanceMinor: netBookValue } : l))
+}
+
+/**
+ * A netted equipment row is worth showing even at zero. Fully depreciated does not mean gone: the
+ * business still owns the equipment, and hiding the row as a zero balance would tell an owner they
+ * have no equipment at all.
+ */
+export function isNettedFixedAssetRow(line: BalanceLine): boolean {
+  return line.accountCode === FIXED_ASSET_COST_CODE
+}
+
 /** One asset group ready to render: its heading key, its lines in display order, and its subtotal. */
 export interface AssetGroup {
   labelKey: string

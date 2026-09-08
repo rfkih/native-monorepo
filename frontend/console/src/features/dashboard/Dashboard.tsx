@@ -6,6 +6,9 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Segmented } from '@/components/ui/Segmented'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
+import { OverdueSettlementCard } from '@/features/platform/OverdueSettlementCard'
+import { effectiveRoles, useAuth } from '@/lib/authContext'
+import { canFinance } from '@/lib/rolePreset'
 import { useSession } from '@/lib/session'
 import { useTierAccess } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
@@ -26,6 +29,9 @@ const TREND_MONTHS = 8
 export function Dashboard() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
+  // The overdue read is FINANCE_ROLES-gated at the gateway, so a manager would 403 on it.
+  const auth = useAuth()
+  const canSeeSettlements = canFinance(effectiveRoles(auth.roles, auth.elevatedRoles))
   const tierAccess = useTierAccess()
   const { isExtended } = tierAccess
   const isPhone = useIsPhone()
@@ -138,6 +144,10 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col gap-[18px]">
+      {/* Money a platform is still holding. Renders nothing at all on the ordinary day — see the
+          card's own note on why this is not a daily prompt. */}
+      <OverdueSettlementCard session={company} locale={locale} enabled={canSeeSettlements} />
+
       {/* Header — the ACTIVE business by name, then the scope of every figure below. */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>

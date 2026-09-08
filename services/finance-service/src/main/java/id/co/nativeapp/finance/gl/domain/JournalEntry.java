@@ -125,6 +125,15 @@ public class JournalEntry extends Auditable {
   private Long grandTotalMinor;
 
   /**
+   * The clearing leg's basis — {@code amount − gift_card_redeemed} (V64). What the acquirer or
+   * platform actually collected and will therefore settle, which is what the receivable sub-ledger
+   * accrues. NULL on entries predating V64, where net tender equalled the grand total because only
+   * ONLINE accrued and ONLINE cannot carry a gift-card leg.
+   */
+  @Column(name = "net_tender_minor", nullable = true)
+  private Long netTenderMinor;
+
+  /**
    * The lines validated by {@link #balanced} — transient (not persisted here; the writer saves each
    * line explicitly via the line repository after saving the entry header).
    */
@@ -372,6 +381,14 @@ public class JournalEntry extends Auditable {
    */
   public void setGrandTotalMinor(Long grandTotalMinor) {
     this.grandTotalMinor = grandTotalMinor;
+  }
+
+  public Long getNetTenderMinor() {
+    return netTenderMinor;
+  }
+
+  public void setNetTenderMinor(Long netTenderMinor) {
+    this.netTenderMinor = netTenderMinor;
   }
 
   /** The validated lines (transient — the writer saves them separately after the entry header). */
