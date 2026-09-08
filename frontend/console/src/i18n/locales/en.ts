@@ -1369,8 +1369,7 @@ export const en = {
     tillMenuLabel: 'Stock count',
     /** Shortened: on a phone the old wording ran ~5 lines directly above the counting list, and
      * squeezed it to three visible rows as soon as the keyboard came up. */
-    entryHint:
-      'Counts start pre-filled with the system quantity — only change what differs from your physical count. A costed ingredient’s difference is posted as shrinkage.',
+    entryHint: 'Counts start at the system quantity — change what differs from your physical count.',
     /** Ingredient filter (appears above 12 ingredients) — it narrows the VIEW only; the submission
      * still carries every ingredient, untouched ones at their system quantity. */
     searchLabel: 'Search ingredients',
@@ -1384,8 +1383,11 @@ export const en = {
     partialValueMark: '(partial)',
     soldTodayTitle: 'Items sold today',
     soldTodayEmpty: 'No sales yet today.',
-    systemQty: 'System: {{qty}} {{unit}}',
-    usedToday: 'Used today: {{qty}} {{unit}}',
+    /** Ledger row — lower case, no colon, so it fits one line beside the figure column. "today" is
+     * dropped: the count IS today's, and the panel above already says so. The unit stays on BOTH
+     * figures (the unit-beside-the-number rule). */
+    systemQty: 'system {{qty}} {{unit}}',
+    usedToday: 'used {{qty}} {{unit}}',
     usedThatDay: 'Used that day: {{qty}} {{unit}}',
     historyTitle: 'Opname history',
     historyAction: 'Opname history',

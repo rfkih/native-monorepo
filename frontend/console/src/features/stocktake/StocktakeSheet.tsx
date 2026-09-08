@@ -347,16 +347,11 @@ export function StocktakeSheet({
     </div>
   ) : (
     <>
-      <SoldTodayPanel
-        items={soldTodayQuery.data ?? []}
-        loading={soldTodayQuery.isLoading}
-        currency={currency}
-        locale={locale}
-      />
+      {/* The only fixed chrome besides the footer. Everything explanatory scrolls. */}
       {ingredients.length > SEARCH_THRESHOLD ? (
-        <div className="relative shrink-0 px-5 pt-2">
+        <div className="relative shrink-0 border-b border-line px-5 py-2">
           <Search
-            className="pointer-events-none absolute left-7 top-1/2 size-4 -translate-y-1/2 text-ink-3"
+            className="pointer-events-none absolute left-8 top-1/2 size-4 -translate-y-1/2 text-ink-3"
             aria-hidden="true"
           />
           <input
@@ -365,22 +360,27 @@ export function StocktakeSheet({
             onChange={(e) => setQuery(e.target.value)}
             aria-label={t('stocktake.searchLabel')}
             placeholder={t('stocktake.searchPlaceholder')}
-            className="h-11 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm text-ink placeholder:text-ink-3/70 focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10"
+            className="h-10 w-full rounded-lg bg-ink-50 pl-9 pr-3 text-sm text-ink placeholder:text-ink-3 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-emerald/40"
           />
         </div>
       ) : null}
-      <div
-        ref={listRef}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-3"
-      >
-        {/* Inside the scroller, not pinned above it: as fixed chrome this paragraph cost the list
-            ~54px of a 740px phone forever, and the list is what the operator is here for. It
-            scrolls away after it has been read. */}
-        <p className="mb-3 text-xs leading-relaxed text-ink-3">{t('stocktake.entryHint')}</p>
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="px-5 pb-3 pt-3">
+          <p className="text-xs leading-relaxed text-ink-3">{t('stocktake.entryHint')}</p>
+          <SoldTodayPanel
+            items={soldTodayQuery.data ?? []}
+            loading={soldTodayQuery.isLoading}
+            currency={currency}
+            locale={locale}
+          />
+        </div>
         {visibleIngredients.length === 0 ? (
-          <p className="py-8 text-center text-sm text-ink-3">{t('stocktake.searchEmpty')}</p>
+          <p className="px-5 py-10 text-center text-sm text-ink-3">{t('stocktake.searchEmpty')}</p>
         ) : (
-          <ul className="space-y-2">
+          // One sheet, hairline-ruled — not fifteen cards. A card per row put a bordered box
+          // inside a bordered box thirty times over and gave the number, which is the whole
+          // point of the screen, the least visual weight on it.
+          <ul className="divide-y divide-line border-y border-line bg-surface">
             {visibleIngredients.map((ing) => (
               <StocktakeIngredientRow
                 key={ing.id}
@@ -395,7 +395,7 @@ export function StocktakeSheet({
           </ul>
         )}
       </div>
-      <div className="shrink-0 space-y-2 border-t border-line px-5 py-4">
+      <div className="shrink-0 space-y-2.5 border-t border-line bg-surface px-5 py-4">
         {submit.isError ? (
           <p className="text-xs text-loss" role="alert">
             {submitErrorMessage()}
@@ -602,16 +602,16 @@ function DraftFooterSummary({
 
   return (
     <div
-      className="flex min-h-6 items-baseline justify-between gap-3 text-xs"
+      className="flex min-h-7 items-baseline justify-between gap-3"
       data-testid="stocktake-draft-summary"
     >
-      <span className="text-ink-3">
+      <span className="text-xs text-ink-3">
         {t('stocktake.changedLines', {
           formatted: new Intl.NumberFormat(locale).format(draft.changed),
         })}
       </span>
       {draft.netValueMinor !== 0 ? (
-        <span className={cn('tnum shrink-0 font-mono font-semibold', TONE_TEXT[tone])}>
+        <span className={cn('tnum shrink-0 font-mono text-[15px] font-semibold', TONE_TEXT[tone])}>
           {/* Signed, not colour-only: the direction has to survive a colourblind reading. */}
           {formatMoney(draft.netValueMinor, currency, locale)}
           {draft.partialValue ? ` ${t('stocktake.partialValueMark')}` : ''}
@@ -642,21 +642,23 @@ function SoldTodayPanel({
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="shrink-0 border-b border-line px-5">
+    <div className="mt-2">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex min-h-11 w-full items-center gap-2 rounded-lg py-2 text-left text-[13px] font-semibold text-ink-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        // A reference aid, not chrome: it used to open the screen as a full-width bar with a
+        // divider, above the work. It is a quiet line that scrolls away with the hint now.
+        className="flex min-h-11 w-full items-center gap-1.5 rounded-lg py-2 text-left text-xs font-medium text-emerald-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         <ChevronDown
-          className={cn('size-4 shrink-0 text-ink-3 transition-transform', open && 'rotate-180')}
+          className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')}
           aria-hidden="true"
         />
-        <span className="flex-1">{t('stocktake.soldTodayTitle')}</span>
+        <span>{t('stocktake.soldTodayTitle')}</span>
       </button>
       {open ? (
-        <div className="max-h-44 overflow-y-auto overscroll-contain pb-2">
+        <div className="max-h-44 overflow-y-auto overscroll-contain rounded-lg bg-surface px-3 pb-1">
           {loading ? (
             <p className="py-2 text-center text-xs text-ink-3">…</p>
           ) : items.length === 0 ? (
@@ -713,86 +715,110 @@ function StocktakeIngredientRow({
   const previewCurrency = ingredient.costCurrency ?? currency
   const unit = shownUnit(ingredient)
 
+  const touched = countedQty != null && varianceQty !== 0
+
   return (
     <li
-      // The footer's "show me" jump reads this; it is also what tints the row.
+      // The footer's "show me" jump reads this; it also decides the edge rule.
       data-invalid={countedQty == null ? true : undefined}
       className={cn(
-        'rounded-xl border bg-paper px-3 py-2.5',
-        countedQty == null ? 'border-loss/60' : 'border-line',
+        // The left rule is the whole progress indicator: scanning the sheet shows what you have
+        // already touched without a single extra word on the row.
+        'border-l-[3px] py-3 pl-4 pr-5 transition-colors',
+        countedQty == null
+          ? 'border-l-loss bg-tint-loss/40'
+          : touched
+            ? 'border-l-emerald'
+            : 'border-l-transparent',
       )}
     >
-      {/* The name gets a line of its own. Shared with the field it was ~60px on a 360px phone —
-          seven characters of an ingredient name, on the surface where picking the wrong row
-          MANUFACTURES the variance the leak report later reads as theft. */}
-      <div className="truncate text-sm font-medium text-ink">{ingredient.name}</div>
-      <div className="tnum mt-0.5 text-xs text-ink-3">
-        {t('stocktake.systemQty', {
-          qty: formatShownQty(systemQty, ingredient, locale),
-          unit,
-        })}
-        {usedToday > 0
-          ? ` · ${t('stocktake.usedToday', {
-              qty: formatShownQty(usedToday, ingredient, locale),
-              unit,
-            })}`
-          : ''}
-      </div>
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1 pt-1">
+          {/* The name owns its line. Sharing one with the field left it ~60px on a 360px phone —
+              seven characters — on the surface where picking the wrong row MANUFACTURES the
+              variance the leak report later reads as theft. */}
+          {/* Wraps to a second line rather than truncating: on a 360px phone a long name would
+              lose its tail, and choosing the wrong row is the one mistake this screen must not
+              invite. Two lines is the ceiling. */}
+          <div className="line-clamp-2 text-[15px] font-semibold leading-tight text-ink">
+            {ingredient.name}
+          </div>
+          {/* 11px so "sistem 3,411 kg · terpakai 0,42 kg" holds one line next to the figure
+              column; a wrapped second line made every row with sales today taller than its
+              neighbours and the sheet lost its rhythm. */}
+          <div className="tnum mt-1 text-[11px] leading-snug text-ink-3">
+            {/* Each figure is one unbreakable phrase: a wrap that put "0,42" on one line and "kg"
+                on the next is exactly the unit/number separation this feature keeps paying for. */}
+            <span className="whitespace-nowrap">
+              {t('stocktake.systemQty', {
+                qty: formatShownQty(systemQty, ingredient, locale),
+                unit,
+              })}
+            </span>
+            {usedToday > 0 ? (
+              <>
+                {' · '}
+                <span className="whitespace-nowrap">
+                  {t('stocktake.usedToday', {
+                    qty: formatShownQty(usedToday, ingredient, locale),
+                    unit,
+                  })}
+                </span>
+              </>
+            ) : null}
+          </div>
+        </div>
 
-      <div className="mt-2 flex items-center gap-2">
-        {/* The unit sits beside the field, not only above it. This is the counting surface, and a
-            count entered in the wrong unit does not merely display wrong — it MANUFACTURES the
-            variance that the leak report then reads as theft. Typing 1500 against an item shown as
-            "1,5 kg" would record 1500 kg counted and fabricate a 1498,5 kg overage. */}
-        <input
-          aria-label={t('stocktake.countedForItemWithUnit', { name: ingredient.name, unit })}
-          // Text, not number: a `type=number` silently discards the "," an id-ID keypad offers,
-          // which read as "not counted" with a value still on screen. `inputMode` still brings up
-          // the numeric keypad; sanitizeShownQtyInput does the filtering the number type used to.
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          value={value}
-          onChange={(e) => onChange(sanitizeShownQtyInput(e.target.value))}
-          // Every field arrives pre-filled, so the first tap should mean "replace this", not
-          // "put the caret somewhere and backspace three times".
-          onFocus={(e) => e.currentTarget.select()}
-          placeholder="0"
-          className={cn(
-            'h-11 w-24 shrink-0 rounded-lg border bg-surface px-2 text-right font-mono text-base tnum text-ink placeholder:text-ink-3/50 focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10',
-            countedQty == null ? 'border-loss' : 'border-line',
-          )}
-        />
-        {/* aria-hidden: the label above already carries the unit; announcing it twice is worse. */}
-        <span
-          aria-hidden="true"
-          title={unit}
-          className="min-w-8 max-w-20 shrink-0 truncate font-mono text-xs font-semibold text-ink-3"
-        >
-          {unit}
-        </span>
+        <div className="shrink-0 text-right">
+          <div className="flex items-baseline justify-end gap-1">
+            {/* A writing line, not a box. The number is the largest thing on the row because it
+                is the only thing on the row the operator is here to produce. */}
+            <input
+              aria-label={t('stocktake.countedForItemWithUnit', { name: ingredient.name, unit })}
+              // Text, not number: a `type=number` silently discards the "," an id-ID keypad
+              // offers, which read as "not counted" with a value still on screen. `inputMode`
+              // still raises the numeric keypad; sanitizeShownQtyInput does the filtering.
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={value}
+              onChange={(e) => onChange(sanitizeShownQtyInput(e.target.value))}
+              // Every field arrives pre-filled, so the first tap should mean "replace this", not
+              // "put the caret somewhere and backspace three times".
+              onFocus={(e) => e.currentTarget.select()}
+              placeholder="0"
+              className={cn(
+                'tnum w-[5.25rem] rounded-t border-0 border-b-2 bg-transparent pb-1 pr-1 text-right font-mono text-xl leading-none text-ink placeholder:text-ink-3/50 focus:bg-emerald-tint/60 focus:outline-none',
+                countedQty == null ? 'border-b-loss' : 'border-b-line-strong focus:border-b-emerald',
+              )}
+            />
+            {/* The unit holds a fixed column so every figure on the sheet ends on the same axis.
+                aria-hidden: the field's own label already carries it; twice is worse. */}
+            <span
+              aria-hidden="true"
+              title={unit}
+              className="w-9 shrink-0 truncate text-left text-xs font-medium text-ink-3"
+            >
+              {unit}
+            </span>
+          </div>
 
-        <div className="ml-auto min-w-0 text-right">
           {countedQty == null ? (
-            <span className="text-xs font-medium text-loss">{t('stocktake.notCounted')}</span>
-          ) : varianceQty !== 0 ? (
-            <>
-              <div
-                className={cn(
-                  'tnum font-mono text-sm font-semibold',
-                  tone ? TONE_TEXT[tone] : undefined,
-                )}
-              >
-                {formatSignedShownQty(varianceQty ?? 0, ingredient, locale)} {unit}
-              </div>
-              {valuePreviewMinor != null ? (
-                <div
-                  className={cn('tnum font-mono text-[11px]', tone ? TONE_TEXT[tone] : undefined)}
-                >
-                  {formatMoney(Math.abs(valuePreviewMinor), previewCurrency, locale)}
-                </div>
-              ) : null}
-            </>
+            <div className="mt-1.5 text-[11px] font-semibold text-loss">
+              {t('stocktake.notCounted')}
+            </div>
+          ) : touched ? (
+            <div
+              className={cn(
+                'tnum mt-1.5 font-mono text-[11px] font-semibold',
+                tone ? TONE_TEXT[tone] : undefined,
+              )}
+            >
+              {formatSignedShownQty(varianceQty ?? 0, ingredient, locale)} {unit}
+              {valuePreviewMinor != null
+                ? ` · ${formatMoney(Math.abs(valuePreviewMinor), previewCurrency, locale)}`
+                : ''}
+            </div>
           ) : null}
         </div>
       </div>
@@ -853,11 +879,11 @@ function StocktakeSummary({
         </div>
 
         {variedLines.length > 0 ? (
-          <div className="rounded-xl border border-line bg-paper px-3 py-2">
-            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.05em] text-ink-3">
+          <div>
+            <div className="mb-2 text-xs font-medium text-ink-3">
               {t('stocktake.varianceLinesTitle')}
             </div>
-            <ul className="divide-y divide-line">
+            <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface px-3">
               {variedLines.map((line) => (
                 <StocktakeVarianceLine
                   key={line.ingredientId}
