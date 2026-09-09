@@ -16,7 +16,16 @@
 import { Suspense, lazy, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
-import { CalendarDays, House, ChartNoAxesColumn, Menu, ReceiptText, UsersRound, Wallet } from 'lucide-react'
+import {
+  CalendarDays,
+  FileText,
+  House,
+  ChartNoAxesColumn,
+  Menu,
+  ReceiptText,
+  UsersRound,
+  Wallet,
+} from 'lucide-react'
 import { MobileTabBar, type MobileTab } from '@/components/mobile/MobileTabBar'
 import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
@@ -24,7 +33,7 @@ import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
 import { canFinance, canHr, canOps, canPayroll, canPos, canReports } from '@/lib/rolePreset'
 import { MoreSheet } from './MoreSheet'
-import { shouldMountTabBar } from './tabBarPolicy'
+import { OFFICE_TAB_ROUTES, officeMiddleTabs, shouldMountTabBar, type OfficeTabKey } from './tabBarPolicy'
 
 // Lazy — keeps the stocktake/register + POS API code out of the main chunk until a tile is used.
 const StandaloneStocktake = lazy(() =>
@@ -68,18 +77,30 @@ export function MobileTabBarGate({ home }: { home: string }) {
 
   let tabs: MobileTab[]
   if (officeOk) {
-    const reportsTab =
-      canReports(roles) &&
-      pageAccess.isAllowed('reports') &&
-      tierAccess.allows('statements') &&
-      home !== '/statements/income'
-    const teamTab = opsOk && pageAccess.isAllowed('team') && tierAccess.allows('team') && home !== '/team'
+    // Which of the four candidates this login can actually open — the same role ∧ grant ∧ tier
+    // test each route already enforces. `officeMiddleTabs` owns the ORDER, the two-slot cap and
+    // the "never duplicate the home tab" rule (tabBarPolicy, unit-tested).
+    // Receivables/payables ageing have no PageKey of their own (they are not separately
+    // grantable), so role + tier is their whole gate.
+    const financeTier = canFinance(roles) && tierAccess.allows('accounting')
+    const middle = officeMiddleTabs(
+      {
+        reports: canReports(roles) && pageAccess.isAllowed('reports') && tierAccess.allows('statements'),
+        team: opsOk && pageAccess.isAllowed('team') && tierAccess.allows('team'),
+        ar: financeTier,
+        ap: financeTier,
+      },
+      home,
+    )
+    const MIDDLE_TAB: Record<OfficeTabKey, Omit<MobileTab, 'key'>> = {
+      reports: { label: t('mobile.tabs.reports'), icon: ChartNoAxesColumn, to: OFFICE_TAB_ROUTES.reports },
+      team: { label: t('mobile.tabs.team'), icon: UsersRound, to: OFFICE_TAB_ROUTES.team },
+      ar: { label: t('mobile.tabs.receivables'), icon: ReceiptText, to: OFFICE_TAB_ROUTES.ar },
+      ap: { label: t('mobile.tabs.payables'), icon: FileText, to: OFFICE_TAB_ROUTES.ap },
+    }
     tabs = [
       { key: 'home', label: t('mobile.tabs.home'), icon: House, to: home, end: true },
-      ...(reportsTab
-        ? [{ key: 'reports', label: t('mobile.tabs.reports'), icon: ChartNoAxesColumn, to: '/statements/income' }]
-        : []),
-      ...(teamTab ? [{ key: 'team', label: t('mobile.tabs.team'), icon: UsersRound, to: '/team' }] : []),
+      ...middle.map((key) => ({ key, ...MIDDLE_TAB[key] })),
       {
         key: 'more',
         label: t('mobile.tabs.more'),

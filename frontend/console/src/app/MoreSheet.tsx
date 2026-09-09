@@ -7,6 +7,7 @@
  * Tile visibility mirrors the target ROUTE's gate (App.tsx) AND the Shell nav's tier tag where
  * one exists — a tile never points at a route that would bounce.
  */
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -14,16 +15,23 @@ import {
   CalendarCheck,
   Check,
   ClipboardCheck,
+  Clock,
   CookingPot,
+  FileText,
+  History,
   Inbox,
   Languages,
   LogOut,
   Moon,
   NotebookText,
   Package,
+  Percent,
   Plus,
+  Receipt,
+  Search,
   Store,
   Sun,
+  X,
 } from 'lucide-react'
 import { MobileSheet } from '@/components/mobile/MobileSheet'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
@@ -38,6 +46,7 @@ import { useOfferedLangs } from '@/lib/geo'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
 import { useNavGroups, type Icon } from './navGroups'
+import { OWN_GROUPS, arrangeNavGroups, isOwnGroup, normalizeQuery } from './moreNavPolicy'
 
 function Tile({ to, icon: TileIcon, label, onClose }: { to: string; icon: Icon; label: string; onClose: () => void }) {
   return (
@@ -89,6 +98,7 @@ export function MoreSheet({
   // drop this labeled row entirely rather than leave a "Language" label with no control beside it.
   const hasLanguageChoice = useOfferedLangs().length >= 2
   const navigate = useNavigate()
+  const [query, setQuery] = useState('')
 
   // ADR 0049 P3b — mirrors MobileTabBarGate's per-capability booleans (merged/elevated roles), so
   // this sheet's tiles + "Add business" row don't disappear on an elevated device just because
@@ -105,10 +115,18 @@ export function MoreSheet({
   // for the current outlet only when the tile actually renders (onOpenRegister provided).
   const registerLabelKey = useCurrentOutletRegisterLabelKey(onOpenRegister != null)
 
-  const tiles = [
+  // The tile grid used to be ONE ops-shaped set for everybody. That is the most prominent
+  // treatment on the only navigation a phone login has, and for an accountant it was spent on
+  // things they cannot open: four of the six tiles need POS and the claim inbox needs HR, so a
+  // finance-only login was left with a single tile. The set now follows the persona — an
+  // ops-capable login keeps exactly the grid it had, and a books-only login gets the books.
+  const accountingOk = financeOk && tierAccess.allows('accounting')
+  const closeTile =
     financeOk && pageAccess.isAllowed('close') && tierAccess.allows('orgStructure')
       ? { key: 'close', to: '/close', icon: CalendarCheck, label: t('mobile.more.closeBook') }
-      : null,
+      : null
+  const opsTiles = [
+    closeTile,
     hrOk && pageAccess.isAllowed('expenses') && tierAccess.allows('expenses')
       ? { key: 'inbox', to: '/expenses', icon: Inbox, label: t('mobile.more.claimInbox') }
       : null,
@@ -125,7 +143,25 @@ export function MoreSheet({
     posOk && pageAccess.isAllowed('pos') && tierAccess.allows('pos')
       ? { key: 'pos', to: '/pos', icon: Store, label: t('mobile.more.openPos') }
       : null,
-  ].filter((x) => x != null)
+  ]
+  // Invoices and Bills are the LISTS; AR/AP ageing are the reports. Keeping them distinct matters —
+  // pointing "Invoices" at the ageing report would be a confident wrong answer, worse than a dead
+  // tap because nothing signals it.
+  const financeTiles = [
+    accountingOk ? { key: 'invoices', to: '/invoices', icon: Receipt, label: t('nav.invoices') } : null,
+    accountingOk ? { key: 'bills', to: '/bills', icon: FileText, label: t('nav.bills') } : null,
+    accountingOk ? { key: 'ar', to: '/ar/aging', icon: Clock, label: t('nav.arAging') } : null,
+    accountingOk ? { key: 'ap', to: '/ap/aging', icon: History, label: t('nav.apAging') } : null,
+    accountingOk ? { key: 'tax', to: '/tax', icon: Percent, label: t('nav.tax') } : null,
+    closeTile,
+  ]
+  const tiles = (opsOk ? opsTiles : financeOk ? financeTiles : opsTiles).filter((x) => x != null)
+
+  // Which groups are this persona's daily work — ops wins where a login is both (an owner is
+  // reading the business, not just the books).
+  const ownGroupKeys = opsOk ? OWN_GROUPS.ops : financeOk ? OWN_GROUPS.finance : []
+  const arranged = arrangeNavGroups(pageGroups, query, ownGroupKeys)
+  const filtering = normalizeQuery(query).length > 0
 
   return (
     <MobileSheet onClose={onClose} ariaLabel={t('mobile.more.title')}>
@@ -160,10 +196,49 @@ export function MoreSheet({
           </div>
         ) : null}
 
-        {pageGroups.length > 0 ? <MicroHeading>{t('mobile.more.allPages')}</MicroHeading> : null}
-        {pageGroups.map((group) => (
+        {/* Search over the whole tree. On desktop the sidebar shows all of this at once; here it is
+            33 links in a 390pt column, and this sheet is the only navigation a phone login has. */}
+        {pageGroups.length > 0 ? (
+          <div className="mt-5 flex h-11 items-center gap-2.5 rounded-xl bg-hover px-3.5">
+            <Search className="size-[18px] shrink-0 text-ink-3" strokeWidth={1.9} aria-hidden />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('mobile.more.searchPages')}
+              aria-label={t('mobile.more.searchPages')}
+              className="min-w-0 flex-1 self-stretch border-0 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3"
+            />
+            {filtering ? (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label={t('mobile.more.clearSearch')}
+                className="-mr-2.5 grid size-11 shrink-0 place-items-center rounded-full text-ink-2 transition-colors hover:bg-line-strong"
+              >
+                <X className="size-[15px]" strokeWidth={2.6} aria-hidden />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {filtering && arranged.length === 0 ? (
+          <div className="px-2 py-8 text-center">
+            <div className="text-[15px] font-semibold text-ink">{t('mobile.more.noMatches')}</div>
+            <div className="mt-1 text-[13.5px] text-ink-3">{t('mobile.more.noMatchesHint')}</div>
+          </div>
+        ) : null}
+
+        {arranged.map((group) => (
           <div key={group.key}>
-            <MicroHeading>{group.heading}</MicroHeading>
+            <div className="flex items-baseline gap-2">
+              <MicroHeading>{group.heading}</MicroHeading>
+              {isOwnGroup(group.key, query, ownGroupKeys) ? (
+                <span className="pt-4 text-[11.5px] font-semibold text-profit-ink">
+                  {t('mobile.more.yourWork')}
+                </span>
+              ) : null}
+            </div>
             {group.items.map((item) => {
               const ItemIcon = item.icon
               return (
@@ -178,7 +253,9 @@ export function MoreSheet({
           </div>
         ))}
 
-        {company != null ? (
+        {/* Preferences are navigation furniture, not search results — they drop out while filtering
+            so hits are the only thing on screen. */}
+        {!filtering && company != null ? (
           <>
             <MicroHeading>{t('shell.yourBusinesses')}</MicroHeading>
             {companies.map((c) => (
@@ -213,6 +290,8 @@ export function MoreSheet({
           </>
         ) : null}
 
+        {filtering ? null : (
+          <>
         <div className="my-2 h-px bg-line" />
         {/* Preferences — language + theme moved off the phone top bar (they crowded a 360px header). */}
         {hasLanguageChoice && (
@@ -239,14 +318,16 @@ export function MoreSheet({
               onClose()
               auth.logout()
             }}
-            className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-medium text-loss transition-colors hover:bg-tint-loss"
+            className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-medium text-loss-ink transition-colors hover:bg-tint-loss"
           >
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-tint-loss text-loss">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-tint-loss text-loss-ink">
               <LogOut className="size-[17px]" aria-hidden />
             </span>
             {t('nav.logout')}
           </button>
         ) : null}
+          </>
+        )}
       </div>
     </MobileSheet>
   )
