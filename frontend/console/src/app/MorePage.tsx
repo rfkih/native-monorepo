@@ -1,15 +1,24 @@
 /**
- * MoreSheet — the manager persona's "Lainnya" bottom sheet (Native Console Android design):
- * a tile grid of the everyday phone actions, then the FULL Shell nav (useNavGroups — the same
- * role ∧ grant ∧ tier-filtered tree, so nothing reachable on desktop is unreachable on phone),
- * then the company switcher, theme toggle, and sign-out.
+ * MorePage — the office persona's "/more" SCREEN (Native Console Android design; ADR 0078):
+ * a tile grid of the everyday phone actions, a search field, then the FULL Shell nav
+ * (useNavGroups — the same role ∧ grant ∧ tier-filtered tree, so nothing reachable on desktop is
+ * unreachable on phone), then the company switcher, theme toggle, and sign-out.
+ *
+ * It was a bottom sheet. Below 640px the sidebar and its hamburger are both hidden, so this is the
+ * ONLY navigation an office login has — and a modal self-dismisses on every use, cannot be backed
+ * into, and loses its scroll position between visits. Those are the correct behaviours of a modal
+ * applied to something that is not one. As a route it gets a history entry (N1 gives Back a pop
+ * home) and its scroll offset back (N4), for free.
+ *
+ * Phone-only: at 640px and up the sidebar IS the navigation, so this bounces to `home` — the same
+ * shape /me/payslips and /me/timeoff already use.
  *
  * Tile visibility mirrors the target ROUTE's gate (App.tsx) AND the Shell nav's tier tag where
  * one exists — a tile never points at a route that would bounce.
  */
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import {
   Banknote,
   CalendarCheck,
@@ -33,7 +42,7 @@ import {
   Sun,
   X,
 } from 'lucide-react'
-import { MobileSheet } from '@/components/mobile/MobileSheet'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
@@ -48,15 +57,21 @@ import { cn } from '@/lib/cn'
 import { useNavGroups, type Icon } from './navGroups'
 import { OWN_GROUPS, arrangeNavGroups, isOwnGroup, normalizeQuery } from './moreNavPolicy'
 
-function Tile({ to, icon: TileIcon, label, onClose }: { to: string; icon: Icon; label: string; onClose: () => void }) {
+/** Lazy — keeps the stocktake/register + POS API code out of the main chunk until a tile is used. */
+const StandaloneStocktake = lazy(() =>
+  import('@/features/stocktake/StandaloneStocktake').then((m) => ({ default: m.StandaloneStocktake })),
+)
+const StandaloneRegister = lazy(() =>
+  import('@/features/pos/StandaloneRegister').then((m) => ({ default: m.StandaloneRegister })),
+)
+
+const TILE_CLASS =
+  'flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-[12px] font-semibold text-ink-2 transition-[background-color,border-color,color,transform] duration-150 hover:border-line-strong hover:bg-hover hover:text-ink active:scale-[0.97] motion-reduce:active:scale-100'
+
+function Tile({ to, icon: TileIcon, label }: { to: string; icon: Icon; label: string }) {
   return (
-    <Link
-      to={to}
-      viewTransition
-      onClick={onClose}
-      className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-[12px] font-semibold text-ink-2 transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
-    >
-      <TileIcon className="size-[22px] text-emerald-2" strokeWidth={1.8} aria-hidden />
+    <Link to={to} viewTransition className={TILE_CLASS}>
+      <TileIcon className="size-[22px]" strokeWidth={1.8} aria-hidden />
       {label}
     </Link>
   )
@@ -73,18 +88,9 @@ function MicroHeading({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function MoreSheet({
-  onClose,
-  onOpenStocktake,
-  onOpenRegister,
-}: {
-  onClose: () => void
-  /** When provided (POS-capable login), the Opname stok tile renders and opens the overlay. */
-  onOpenStocktake?: () => void
-  /** When provided (POS-capable login), the register-close (daily close) tile renders. */
-  onOpenRegister?: () => void
-}) {
+export function MorePage({ home }: { home: string }) {
   const { t } = useTranslation()
+  const isPhone = useIsPhone()
   const auth = useAuth()
   const pageAccess = usePageAccess()
   const tierAccess = useTierAccess()
@@ -99,10 +105,12 @@ export function MoreSheet({
   const hasLanguageChoice = useOfferedLangs().length >= 2
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
+  const [stocktakeOpen, setStocktakeOpen] = useState(false)
+  const [registerOpen, setRegisterOpen] = useState(false)
 
   // ADR 0049 P3b — mirrors MobileTabBarGate's per-capability booleans (merged/elevated roles), so
-  // this sheet's tiles + "Add business" row don't disappear on an elevated device just because
-  // MoreSheet itself is only ever reachable once the tab bar already decided some office
+  // this page's tiles + "Add business" row don't disappear on an elevated device just because
+  // MorePage is only ever reachable once the tab bar already decided some office
   // capability was true. Byte-identical for a normal `user` login (elevatedRoles is always `[]`).
   // Preset role-based access model Phase 2 — `close` is FINANCE (owner/accountant), `expenses`
   // (claims) is HR (owner/manager/hr); neither is the wider OPS bundle any more.
@@ -111,9 +119,13 @@ export function MoreSheet({
   const financeOk = canFinance(roles)
   const hrOk = canHr(roles)
   const posOk = canPos(auth.roles)
+  // The stock-opname and register-close overlays are launched from here now rather than handed in
+  // by the tab-bar gate (ADR 0078): they belong to the page that offers them, and closing one
+  // returns you to /more, which is a real place to return to.
+  const posAllowed = posOk && pageAccess.isAllowed('pos') && tierAccess.allows('pos')
   // The register tile toggles Buka/Closing kasir like the POS till menu (owner request) — resolved
-  // for the current outlet only when the tile actually renders (onOpenRegister provided).
-  const registerLabelKey = useCurrentOutletRegisterLabelKey(onOpenRegister != null)
+  // for the current outlet only when the tile actually renders.
+  const registerLabelKey = useCurrentOutletRegisterLabelKey(posAllowed)
 
   // The tile grid used to be ONE ops-shaped set for everybody. That is the most prominent
   // treatment on the only navigation a phone login has, and for an accountant it was spent on
@@ -163,33 +175,31 @@ export function MoreSheet({
   const arranged = arrangeNavGroups(pageGroups, query, ownGroupKeys)
   const filtering = normalizeQuery(query).length > 0
 
-  return (
-    <MobileSheet onClose={onClose} ariaLabel={t('mobile.more.title')}>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-7">
-        <div className="px-1 pb-3 pt-1 text-[17px] font-bold text-ink">{t('mobile.more.title')}</div>
+  // Above the phone cutoff the sidebar IS the navigation — a full-screen link list would be a
+  // worse duplicate of it (same shape as /me/payslips, /me/timeoff).
+  if (!isPhone) return <Navigate to={home} replace />
 
-        {tiles.length > 0 || onOpenStocktake != null || onOpenRegister != null ? (
+  return (
+    <div className="min-h-[100dvh] bg-paper">
+      <div className="px-4 pb-7">
+        <h1 className="px-1 pb-3 pt-4 font-display text-[26px] font-extrabold tracking-[-0.035em] text-ink">
+          {t('mobile.more.title')}
+        </h1>
+
+        {tiles.length > 0 || posAllowed ? (
           <div className="grid grid-cols-3 gap-2">
-            {onOpenRegister != null ? (
-              <button
-                type="button"
-                onClick={onOpenRegister}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-[12px] font-semibold text-ink-2 transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
-              >
-                <Banknote className="size-[22px] text-emerald-2" strokeWidth={1.8} aria-hidden />
+            {posAllowed ? (
+              <button type="button" onClick={() => setRegisterOpen(true)} className={TILE_CLASS}>
+                <Banknote className="size-[22px]" strokeWidth={1.8} aria-hidden />
                 {t(registerLabelKey)}
               </button>
             ) : null}
             {tiles.map((tile) => (
-              <Tile key={tile.key} to={tile.to} icon={tile.icon} label={tile.label} onClose={onClose} />
+              <Tile key={tile.key} to={tile.to} icon={tile.icon} label={tile.label} />
             ))}
-            {onOpenStocktake != null ? (
-              <button
-                type="button"
-                onClick={onOpenStocktake}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-[12px] font-semibold text-ink-2 transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
-              >
-                <ClipboardCheck className="size-[22px] text-emerald-2" strokeWidth={1.8} aria-hidden />
+            {posAllowed ? (
+              <button type="button" onClick={() => setStocktakeOpen(true)} className={TILE_CLASS}>
+                <ClipboardCheck className="size-[22px]" strokeWidth={1.8} aria-hidden />
                 {t('mobile.more.stocktake')}
               </button>
             ) : null}
@@ -242,7 +252,7 @@ export function MoreSheet({
             {group.items.map((item) => {
               const ItemIcon = item.icon
               return (
-                <Link key={item.to} to={item.to} viewTransition onClick={onClose} className={ROW_CLASS}>
+                <Link key={item.to} to={item.to} viewTransition className={ROW_CLASS}>
                   <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
                     <ItemIcon className="size-[17px]" strokeWidth={1.8} aria-hidden />
                   </span>
@@ -263,7 +273,6 @@ export function MoreSheet({
                 key={c.companyId}
                 type="button"
                 onClick={() => {
-                  onClose()
                   if (c.companyId !== company.companyId) setActiveCompany(c.companyId)
                 }}
                 className={cn(ROW_CLASS, 'justify-between font-semibold')}
@@ -275,10 +284,7 @@ export function MoreSheet({
             {opsOk ? (
               <button
                 type="button"
-                onClick={() => {
-                  onClose()
-                  navigate('/onboarding')
-                }}
+                onClick={() => navigate('/onboarding')}
                 className={cn(ROW_CLASS, 'font-semibold text-emerald-2')}
               >
                 <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-emerald-tint text-emerald-2">
@@ -314,10 +320,7 @@ export function MoreSheet({
         {AUTH_MODE === 'oidc' && auth.authenticated ? (
           <button
             type="button"
-            onClick={() => {
-              onClose()
-              auth.logout()
-            }}
+            onClick={() => auth.logout()}
             className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-medium text-loss-ink transition-colors hover:bg-tint-loss"
           >
             <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-tint-loss text-loss-ink">
@@ -329,6 +332,17 @@ export function MoreSheet({
           </>
         )}
       </div>
-    </MobileSheet>
+
+      {stocktakeOpen ? (
+        <Suspense fallback={null}>
+          <StandaloneStocktake onClose={() => setStocktakeOpen(false)} />
+        </Suspense>
+      ) : null}
+      {registerOpen ? (
+        <Suspense fallback={null}>
+          <StandaloneRegister onClose={() => setRegisterOpen(false)} />
+        </Suspense>
+      ) : null}
+    </div>
   )
 }

@@ -5,6 +5,7 @@ import { LogOut } from 'lucide-react'
 import { Shell } from '@/app/Shell'
 import { TransitionedRoutes } from '@/app/TransitionedRoutes'
 import { MobileTabBarGate } from '@/app/MobileTabBarGate'
+import { MorePage } from '@/app/MorePage'
 import { SettingsChrome } from '@/components/SettingsChrome'
 import { Spinner } from '@/components/ui/Spinner'
 import { AppSkeleton, PageSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
@@ -20,6 +21,7 @@ import {
   canFinance,
   canHr,
   canOps,
+  canPayroll,
   canPos as canPosRole,
   canReports,
   ROLE_HOME,
@@ -492,6 +494,9 @@ export function App() {
   const hrOk = canHr(roles)
   const canPos = canPosRole(auth.roles)
   const canEmployee = hasAnyRole(auth.roles, 'employee')
+  // The same union MobileTabBarGate uses to decide the office tab set — it gates /more so a URL
+  // can never reach a navigation surface the bar itself would not offer (ADR 0078).
+  const officeOk = opsOk || reportsOk || financeOk || hrOk || canPayroll(roles)
   // The /settings/features escape hatch (P1 tier-mode) — owner-only, server-enforced too (the
   // org-service PUT independently re-checks the role); a manager token never sees the route mount.
   const isOwner = hasAnyRole(roles, 'owner')
@@ -618,6 +623,10 @@ export function App() {
           {menuAllowed && <Route path="/catalog" element={<CatalogSwitch />} />}
           {kitchenAllowed && <Route path="/kitchen" element={<Kitchen />} />}
   
+          {/* The phone's whole navigation, as a SCREEN (ADR 0078). Phone-only — MorePage itself
+              bounces to `home` above the cutoff, where the sidebar is the navigation. */}
+          {officeOk && <Route path="/more" element={<MorePage home={home} />} />}
+
           {/* The employee self-service surface — full-screen, any business role may open it. */}
           <Route path="/me" element={<Me />} />
           {/* My expenses (ADR 0030, Phase E6) — same gate as /me itself: never page-restricted, so

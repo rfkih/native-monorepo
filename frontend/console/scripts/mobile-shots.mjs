@@ -4,7 +4,7 @@
  * Runs against a LOCAL `npm run dev` server in dev-auth mode with every /api/v1/** call
  * intercepted and answered from fixtures below (no backend needed): seeds a dev company
  * session in localStorage, then walks every phone screen in two passes (light/en and
- * dark/id), including the More sheet and the claim-decision sheet.
+ * dark/id), including the More screen and the claim-decision sheet.
  *
  *   npm run dev        (terminal 1)
  *   node scripts/mobile-shots.mjs [outDir]   (terminal 2)
@@ -289,13 +289,14 @@ for (const pass of [
     console.log(`[${pass.name}] ${name} ok (${page.url().replace(BASE, '') || '/'})`)
   }
 
-  // More sheet (manager persona)
+  // More SCREEN (manager persona) — a route since ADR 0078, not a sheet.
   await page.goto(`${BASE}/`, { waitUntil: 'load' })
   await page.waitForTimeout(1000)
-  await page.getByRole('button', { name: pass.moreLabel, exact: true }).click({ timeout: 8000 })
+  // A LINK now, not a button — More is a routed screen since ADR 0078.
+  await page.getByRole('link', { name: pass.moreLabel, exact: true }).click({ timeout: 8000 })
   await page.waitForTimeout(600)
-  await page.screenshot({ path: `${dir}/more-sheet.png` })
-  console.log(`[${pass.name}] more-sheet ok`)
+  await page.screenshot({ path: `${dir}/more-screen.png` })
+  console.log(`[${pass.name}] more-screen ok`)
 
   // Claim decision sheet
   await page.goto(`${BASE}/expenses`, { waitUntil: 'load' })

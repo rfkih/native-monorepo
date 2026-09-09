@@ -146,15 +146,28 @@ await section('[3] phone + guard — back arrow composes with hardware Back (N1)
   await page.waitForTimeout(1800)
   check('phone home loaded', pathOf(page) === '/', pathOf(page))
 
-  await page.getByRole('button', { name: 'Lainnya', exact: true }).click({ timeout: 8000 })
-  await page.waitForTimeout(700)
+  // More is a routed screen since ADR 0078 — a LINK, and a history entry of its own.
+  await page.getByRole('link', { name: 'Lainnya', exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(900)
   await page.getByRole('link', { name: 'Menu & harga', exact: true }).first().click({ timeout: 8000 })
   await page.waitForTimeout(1400)
-  check('More sheet tile opened /menu', pathOf(page) === '/menu', pathOf(page))
+  check('the More tile opened /menu', pathOf(page) === '/menu', pathOf(page))
 
+  // Back returns to MORE, not home — More is now a place you came from rather than an overlay that
+  // vanished (ADR 0078). This is the documented cost of the change, so the walk asserts it.
   await backArrow(page).click({ timeout: 8000 })
   await page.waitForTimeout(1400)
-  check('back arrow returned home', pathOf(page) === '/', pathOf(page))
+  check('back arrow returned to More', pathOf(page) === '/more', pathOf(page))
+
+  // Inside the shells More is now an ordinary page, so hardware Back offers the leave confirm here
+  // exactly as it does anywhere else — where the sheet used to just vanish. Confirming reaches home.
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('hardware Back on More offers the leave confirm',
+    await visible(page.getByText('Keluar dari halaman ini?', { exact: true })))
+  await page.getByRole('button', { name: 'Keluar', exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(1400)
+  check('confirming leave reaches home', pathOf(page) === '/', pathOf(page))
 
   // Home is the app root, so hardware Back here means "leave the app" — never "forward into /menu".
   await page.goBack()
@@ -375,6 +388,54 @@ await section('[9] desktop — tab state is two-directional (N5)', async () => {
   await page.goto(`${BASE}/people?tab=payroll`, { waitUntil: 'load' })
   await page.waitForTimeout(2000)
   check('a linked tab opens on that tab', await visible(page.getByRole('tab', { name: 'Penggajian', selected: true })))
+  await ctx.close()
+})
+
+// ═══ 10. Phone: "More" is a screen, not a modal (ADR 0078) ══════════════════
+// Below 640px the sidebar and its hamburger are both hidden, so More is the ONLY navigation an
+// office login has. As a sheet it self-dismissed on every use, could not be backed into, and lost
+// its scroll position between visits. Each check below is one of those three defects — and the
+// forward-after-Back check is what proves it PUSHED rather than replaced, the same discriminator
+// section [1] uses for back arrows.
+await section('[10] phone — More is a routed screen (ADR 0078)', async () => {
+  const { ctx, page } = await makeContext({ phone: true, guard: false })
+  await page.goto(`${BASE}/`, { waitUntil: 'load' })
+  await page.waitForTimeout(1500)
+  const homeIdx = await idxOf(page)
+  const homePath = pathOf(page)
+
+  await page.getByRole('link', { name: 'Lainnya', exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(1200)
+  check('the More tab opens a route', pathOf(page) === '/more', pathOf(page))
+  check('opening More PUSHES', (await idxOf(page)) === homeIdx + 1, `${homeIdx} -> ${await idxOf(page)}`)
+  // N2 — one page, one chrome: More is a page of the same app, so the bar stays put.
+  check('the tab bar stays mounted on More', await visible(page.getByRole('navigation').last()))
+
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('Back POPS out of More', pathOf(page) === homePath, pathOf(page))
+  await page.goForward()
+  await page.waitForTimeout(1200)
+  check('More is still there to go forward to', pathOf(page) === '/more', pathOf(page))
+
+  // The defect that motivated the change: a sheet remounted every time, so a persona whose group
+  // sits low in the tree re-scrolled past everything above it on every visit.
+  //
+  // Leave via the bottom-bar tab, NOT a nav link: Playwright scrolls a link into view before
+  // clicking it, so clicking one down the list moves the offset first and the walk then "proves"
+  // a restore to a position the user never parked at. The tab bar is fixed and always in view.
+  await page.evaluate(() => window.scrollTo(0, 600))
+  await page.waitForTimeout(400)
+  const parked = await page.evaluate(() => window.scrollY)
+  check('More scrolls far enough to matter', parked >= 600, String(parked))
+
+  await page.getByRole('link', { name: 'Beranda', exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(1400)
+  check('leaving More lands on another page', pathOf(page) !== '/more', pathOf(page))
+  await page.goBack()
+  await page.waitForTimeout(1600)
+  const restored = await page.evaluate(() => window.scrollY)
+  check('returning to More restores the offset (N4)', Math.abs(restored - parked) <= 4, `${parked} -> ${restored}`)
   await ctx.close()
 })
 
