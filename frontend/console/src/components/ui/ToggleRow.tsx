@@ -42,7 +42,7 @@ export function ToggleRow({
         aria-hidden
         className={cn(
           'relative h-6 w-10 shrink-0 rounded-full transition-colors',
-          checked ? 'bg-brand-500' : 'bg-line',
+          checked ? 'bg-emerald' : 'bg-line',
         )}
       >
         <span

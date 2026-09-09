@@ -64,7 +64,7 @@ export function ChannelListPanelView({
                   'rounded-xl border px-3 py-3 text-left text-sm font-semibold transition-colors',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                   isSelected
-                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                    ? 'border-emerald-line bg-emerald-tint text-emerald-2'
                     : 'border-line bg-surface text-ink-2 hover:bg-hover',
                 )}
               >

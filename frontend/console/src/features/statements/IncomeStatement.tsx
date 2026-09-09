@@ -165,7 +165,7 @@ export function IncomeStatement() {
           {/* Summary cards */}
           <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-3">
             <SummaryCard
-              chipClass="bg-brand-500"
+              chipClass="bg-emerald"
               label={t('statements.revenue')}
               value={formatMoney(totalRevenue, currency, locale)}
               onClick={() => setDetail('revenue')}

@@ -180,7 +180,7 @@ export function ReviewPanel({
                 onClick={() => onEdit(row.step)}
                 className={cn(
                   'rounded p-1 text-ink-3 transition-colors',
-                  'hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-emerald',
+                  'hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald',
                 )}
               >
                 <Pencil className="size-3.5" />

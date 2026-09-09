@@ -52,7 +52,7 @@ export function SummaryCard({
   detailLabel?: string
 }) {
   const padding = emphatic
-    ? 'border-transparent p-5 shadow-md outline outline-2 -outline-offset-2 outline-brand-100 print:outline-0'
+    ? 'border-transparent p-5 shadow-md outline outline-2 -outline-offset-2 outline-ink print:outline-0'
     : 'p-5'
 
   const body = (
@@ -90,7 +90,7 @@ export function SummaryCard({
       >
         {body}
         {detailLabel ? (
-          <span className="mt-2.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-brand-600 print:hidden">
+          <span className="mt-2.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-2 print:hidden">
             {detailLabel}
             <ChevronRight className="size-3.5" aria-hidden />
           </span>

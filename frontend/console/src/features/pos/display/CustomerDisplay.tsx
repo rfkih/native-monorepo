@@ -247,8 +247,8 @@ function PaymentStartedScreen({ due, displayLocale }: { due: DisplayMoney; displ
   return (
     <div className="grid flex-1 place-items-center px-8 text-center">
       <div className="reveal flex flex-col items-center gap-5">
-        <span className="grid size-20 place-items-center rounded-3xl bg-brand-500/20">
-          <Wallet className="size-10 text-brand-300" aria-hidden="true" />
+        <span className="grid size-20 place-items-center rounded-3xl bg-white/10">
+          <Wallet className="size-10 text-white/70" aria-hidden="true" />
         </span>
         <p className="text-lg font-semibold text-white/70">
           {t('posDisplay.payment.dueLabel', { lng: displayLocale })}

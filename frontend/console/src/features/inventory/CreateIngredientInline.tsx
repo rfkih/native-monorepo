@@ -190,7 +190,7 @@ export function CreateIngredientInline({
             <button
               type="button"
               onClick={() => onSelectExisting(matchingExisting)}
-              className="font-semibold text-brand-700 hover:underline"
+              className="font-semibold text-emerald-2 hover:underline"
             >
               {t('inventoryPicker.selectInstead')}
             </button>
@@ -208,7 +208,7 @@ export function CreateIngredientInline({
               <button
                 type="button"
                 onClick={() => onSelectExisting(matchingExisting)}
-                className="font-semibold text-brand-700 hover:underline"
+                className="font-semibold text-emerald-2 hover:underline"
               >
                 {t('inventoryPicker.selectInstead')}
               </button>

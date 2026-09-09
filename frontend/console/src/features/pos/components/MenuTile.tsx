@@ -99,8 +99,8 @@ export function MenuTile({
         </div>
       ) : (
         /* Compact text tile for image-less items (72px) */
-        <div className="relative flex h-[72px] w-full items-center justify-center bg-brand-50">
-          <span aria-hidden="true" className="select-none text-xl font-extrabold tracking-wide text-brand-300">
+        <div className="relative flex h-[72px] w-full items-center justify-center bg-emerald-tint">
+          <span aria-hidden="true" className="select-none text-xl font-extrabold tracking-wide text-ink-3">
             {itemInitials(item.name)}
           </span>
           {isLowStock && !unavailable ? (

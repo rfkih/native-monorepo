@@ -119,7 +119,7 @@ function ParkedEntry({
         onClick={() => onResume(order.orderId)}
         className={cn(
           'w-full rounded-2xl border border-line bg-surface px-4 py-3 text-left transition-all',
-          'hover:border-brand-300 hover:shadow-md',
+          'hover:border-line-strong hover:shadow-md',
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
         )}
       >
@@ -159,7 +159,7 @@ function ParkedEntry({
           <span>{timeStr}</span>
         </div>
 
-        <div className="mt-2 text-xs font-semibold text-brand-700">{t('pos.parked.resume')}</div>
+        <div className="mt-2 text-xs font-semibold text-emerald-2">{t('pos.parked.resume')}</div>
       </button>
     </li>
   )

@@ -132,7 +132,7 @@ export function PeriodClose() {
       </div>
 
       {/* Open period banner */}
-      <Card className="bg-gradient-to-br from-surface to-brand-50 border-brand-100 flex flex-wrap items-center justify-between gap-4 rounded-[20px] border p-7 max-sm:p-5">
+      <Card className="bg-gradient-to-br from-surface to-emerald-tint border-emerald-line flex flex-wrap items-center justify-between gap-4 rounded-[20px] border p-7 max-sm:p-5">
         <div className="space-y-2">
           <span className="inline-flex rounded-full bg-emerald px-2.5 py-1 text-[11px] font-bold text-on-emerald">
             {t('close.openPeriod')}

@@ -68,7 +68,7 @@ export function InvoiceDetail() {
     return (
       <div className="mx-auto max-w-md space-y-4 text-center">
         <EmptyState title={t('ar.detail.notFoundTitle')} hint={t('ar.detail.notFoundHint')} />
-        <Link to="/invoices" className="text-sm font-semibold text-brand-700 hover:underline">
+        <Link to="/invoices" className="text-sm font-semibold text-emerald-2 hover:underline">
           {t('ar.detail.backToInvoices')}
         </Link>
       </div>
@@ -83,7 +83,7 @@ export function InvoiceDetail() {
     <div className="flex flex-col gap-[18px]">
       {/* Breadcrumb trail */}
       <nav aria-label={t('ar.detail.breadcrumbLabel')} className="flex items-center gap-1.5 text-sm">
-        <Link to="/invoices" className="font-medium text-ink-3 transition-colors hover:text-brand-700">
+        <Link to="/invoices" className="font-medium text-ink-3 transition-colors hover:text-emerald-2">
           {t('ar.invoices.title')}
         </Link>
         <ChevronRight className="size-3.5 text-ink-3" aria-hidden="true" />

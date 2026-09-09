@@ -71,7 +71,7 @@ export function KpiTile({
   emphatic?: boolean
 }) {
   return (
-    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-brand-100')}>
+    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')}>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-3 h-7 w-28 animate-pulse rounded bg-ink-100" />

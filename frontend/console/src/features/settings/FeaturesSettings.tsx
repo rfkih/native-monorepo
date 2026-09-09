@@ -109,7 +109,7 @@ export function FeaturesSettings() {
       <main className="mx-auto flex w-full max-w-[980px] flex-col gap-7 px-5 py-8 sm:px-8 sm:py-10">
         {/* Header */}
         <div className="flex items-start gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-brand-50 text-brand-600">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
             <Sparkles className="size-6" strokeWidth={1.8} />
           </span>
           <div>
@@ -123,7 +123,7 @@ export function FeaturesSettings() {
         </div>
 
         {/* Live price panel — the company's ACTUAL quoted month at its current tier + usage. */}
-        <Card className="flex flex-col gap-5 rounded-[28px] border border-brand-200 bg-brand-50/40 p-6 dark:bg-brand-500/10 sm:flex-row sm:items-start sm:justify-between sm:p-7">
+        <Card className="flex flex-col gap-5 rounded-[28px] border border-emerald-line bg-emerald-tint/40 p-6 dark:bg-emerald-tint sm:flex-row sm:items-start sm:justify-between sm:p-7">
           <div className="min-w-0">
             <Badge tone="info">
               {t('settings.tier.currentPlanBadge')} · {planName(tier)}
@@ -305,7 +305,7 @@ function PlanCard({
             <span
               className={cn(
                 'mt-0.5 grid size-5 shrink-0 place-items-center rounded-full',
-                accent ? 'bg-brand-50 text-brand-600' : 'bg-tint-profit text-profit',
+                accent ? 'bg-emerald-tint text-emerald-2' : 'bg-tint-profit text-profit',
               )}
               aria-hidden
             >

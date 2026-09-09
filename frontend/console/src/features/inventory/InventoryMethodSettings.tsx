@@ -87,7 +87,7 @@ export function InventoryMethodSettings() {
 
       <main className="mx-auto flex w-full max-w-[820px] flex-col gap-7 px-5 py-8 sm:px-8 sm:py-10">
         <div className="flex items-start gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-brand-50 text-brand-600">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
             <Boxes className="size-6" strokeWidth={1.8} />
           </span>
           <div>

@@ -81,7 +81,7 @@ export function PosStatusBar({
       {showBack ? (
         <BackButton
           fallback="/"
-          className="grid size-9 shrink-0 place-items-center rounded-xl text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300 dark:text-ink-3 dark:hover:bg-hover dark:hover:text-ink"
+          className="grid size-9 shrink-0 place-items-center rounded-xl text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald dark:text-ink-3 dark:hover:bg-hover dark:hover:text-ink"
         >
           <ArrowLeft className="size-4" />
         </BackButton>
@@ -89,7 +89,7 @@ export function PosStatusBar({
 
       {/* Identity (md+) */}
       <span className="hidden items-center gap-2 md:flex">
-        <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white">
+        <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white/10 text-white">
           <Store className="size-4" />
         </span>
         <span className="hidden max-w-[160px] truncate font-display text-[14px] font-bold leading-tight lg:block">
@@ -113,7 +113,7 @@ export function PosStatusBar({
         aria-label={t('offline.syncCenterButton')}
         className={cn(
           'flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold transition-colors',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
           offline || queuedCount > 0
             ? 'bg-warning/15 text-warning ring-1 ring-inset ring-warning/40'
             : 'text-white/50 ring-1 ring-inset ring-white/15 hover:bg-white/10 hover:text-white/80 dark:text-ink-3 dark:ring-line dark:hover:bg-hover',
@@ -158,7 +158,7 @@ export function PosStatusBar({
           className={cn(
             'flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold transition-colors max-sm:px-2',
             'bg-warning/15 text-warning ring-1 ring-inset ring-warning/40 hover:bg-warning/25',
-            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
           )}
         >
           <KeyRound className="size-3.5 shrink-0" aria-hidden="true" />
@@ -179,7 +179,7 @@ export function PosStatusBar({
           className={cn(
             'relative grid size-10 shrink-0 place-items-center rounded-xl transition-colors',
             'text-white/60 hover:bg-white/10 hover:text-white dark:text-ink-3 dark:hover:bg-hover dark:hover:text-ink',
-            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             'disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent',
           )}
         >
@@ -188,7 +188,7 @@ export function PosStatusBar({
             <span
               className={cn(
                 'absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold',
-                a.badge.tone === 'warning' ? 'bg-warning text-ink' : 'bg-brand-500 text-white',
+                a.badge.tone === 'warning' ? 'bg-warning text-ink' : 'bg-emerald text-white',
               )}
             >
               {a.badge.count}
@@ -207,7 +207,7 @@ export function PosStatusBar({
         className={cn(
           'grid size-10 shrink-0 place-items-center rounded-xl transition-colors',
           'text-white/60 hover:bg-white/10 hover:text-white dark:text-ink-3 dark:hover:bg-hover dark:hover:text-ink',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
           overflowOpen && 'bg-white/10 text-white dark:bg-hover dark:text-ink',
         )}
       >

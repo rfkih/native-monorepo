@@ -288,7 +288,7 @@ function RunCloseDialog({
           <p className="text-sm text-loss">{t('groups.closeDialog.errorTitle')}</p>
         ) : null}
         {mutation.data ? (
-          <p className="text-sm text-brand-700">
+          <p className="text-sm text-emerald-2">
             {t('groups.closeDialog.result', {
               state: mutation.data.state,
               seq: String(mutation.data.closeRunSeq),
@@ -426,7 +426,7 @@ function GroupDetail({
             </p>
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-emerald rounded-lg px-2 py-1"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-2 hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald rounded-lg px-2 py-1"
               onClick={() => onDialog({ kind: 'addMember', groupId: group.id })}
             >
               <Plus className="size-3.5" /> {t('groups.addMember')}
@@ -546,13 +546,13 @@ function GroupDetail({
                 </div>
               </div>
               {/* Net box */}
-              <div className="mt-4 rounded-[12px] bg-brand-50 px-4 py-3.5">
+              <div className="mt-4 rounded-[12px] bg-emerald-tint px-4 py-3.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-brand-800">{t('groups.net')}</span>
+                  <span className="text-sm font-semibold text-emerald-2">{t('groups.net')}</span>
                   <span
                     className={cn(
                       'tnum font-mono text-lg font-extrabold',
-                      data.groupNetMinor >= 0 ? 'text-brand-700' : 'text-loss',
+                      data.groupNetMinor >= 0 ? 'text-emerald-2' : 'text-loss',
                     )}
                   >
                     {formatMoney(data.groupNetMinor, currency, locale)}
@@ -579,7 +579,7 @@ function GroupDetail({
                     className={cn(
                       'tnum mt-1 font-mono text-2xl font-bold',
                       data.eliminations.unreconciledReferences === 0
-                        ? 'text-brand-700'
+                        ? 'text-emerald-2'
                         : 'text-ink',
                     )}
                   >
@@ -706,7 +706,7 @@ export function GroupConsolidation() {
                 className={cn(
                   'flex w-full flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left transition-colors',
                   g.id === selectedGroupId
-                    ? 'bg-brand-50 text-brand-700'
+                    ? 'bg-emerald-tint text-emerald-2'
                     : 'text-ink hover:bg-hover',
                 )}
                 onClick={() => setSelectedGroupId(g.id === selectedGroupId ? null : g.id)}
@@ -718,7 +718,7 @@ export function GroupConsolidation() {
             <div className="mt-2 border-t border-line pt-2">
               <button
                 type="button"
-                className="flex w-full items-center gap-1.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-brand-700 hover:bg-hover transition-colors focus-visible:outline-2 focus-visible:outline-emerald"
+                className="flex w-full items-center gap-1.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-emerald-2 hover:bg-hover transition-colors focus-visible:outline-2 focus-visible:outline-emerald"
                 onClick={() => setDialog({ kind: 'defineGroup' })}
               >
                 <Plus className="size-3.5" /> {t('groups.defineGroup')}

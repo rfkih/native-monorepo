@@ -584,7 +584,7 @@ function IngredientLineRows({
                 type="button"
                 onClick={() => setCreatingForKey(line.key)}
                 disabled={!createSession.businessId}
-                className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline disabled:cursor-not-allowed disabled:text-ink-3 disabled:no-underline disabled:hover:no-underline"
+                className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-emerald-2 hover:underline disabled:cursor-not-allowed disabled:text-ink-3 disabled:no-underline disabled:hover:no-underline"
               >
                 <Plus className="size-3.5" aria-hidden="true" />
                 {t('inventoryPicker.addNew')}

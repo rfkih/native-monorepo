@@ -316,7 +316,7 @@ const OpeningBalances = lazy(() =>
 
 function CenteredSpinner() {
   return (
-    <div className="grid place-items-center py-24 text-brand-600">
+    <div className="grid place-items-center py-24 text-emerald-2">
       <Spinner />
     </div>
   )
@@ -336,8 +336,8 @@ function LoginLauncher() {
   return (
     <div className="grid min-h-screen place-items-center bg-paper">
       <div className="flex flex-col items-center gap-4">
-        <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-md">
-          <BrandMark size={28} stroke="white" strokeWidth={2.4} />
+        <span className="grid size-14 place-items-center rounded-2xl bg-emerald text-on-emerald shadow-md">
+          <BrandMark size={28} stroke="currentColor" strokeWidth={2.4} />
         </span>
         <span className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">
           {t('app.name')}

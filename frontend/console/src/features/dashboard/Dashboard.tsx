@@ -276,7 +276,7 @@ export function Dashboard() {
 
             {trendEmpty ? (
               <div className="flex h-[232px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-line text-center">
-                <span className="grid size-11 place-items-center rounded-full bg-brand-50 text-brand-700">
+                <span className="grid size-11 place-items-center rounded-full bg-emerald-tint text-emerald-2">
                   <Store className="size-5" aria-hidden="true" />
                 </span>
                 <div>
@@ -294,7 +294,7 @@ export function Dashboard() {
                 {showOpeningShortcut ? (
                   <Link
                     to="/opening-balances"
-                    className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-700 hover:underline"
+                    className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-2 hover:underline"
                   >
                     <BookOpen className="size-4" aria-hidden="true" />
                     {t('dashboard.openingShortcut')}

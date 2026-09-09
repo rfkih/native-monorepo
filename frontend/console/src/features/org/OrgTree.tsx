@@ -81,7 +81,7 @@ function NodeActions({
           type="button"
           aria-label={t('org.reactivate')}
           title={t('org.reactivate')}
-          className="rounded-md px-2 py-1 text-xs text-brand-600/80 hover:bg-emerald-tint hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-emerald"
+          className="rounded-md px-2 py-1 text-xs text-emerald-2/80 hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald"
           onClick={() => onReactivate(unit)}
         >
           {t('org.reactivate')}
@@ -159,7 +159,7 @@ function OrgNode({
           to={`/org/${unit.id}`}
           className={cn(
             'min-w-0 flex-1 truncate text-[14.5px] font-semibold transition-colors',
-            'hover:text-brand-700 hover:underline',
+            'hover:text-emerald-2 hover:underline',
             unit.active ? 'text-ink' : 'text-ink-3',
           )}
         >

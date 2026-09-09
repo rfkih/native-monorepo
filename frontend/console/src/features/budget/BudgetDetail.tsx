@@ -138,7 +138,7 @@ export function BudgetDetail() {
               value={formatMoney(data.totalPlannedMinor, currency, locale)}
             />
             <SummaryCard
-              chipClass="bg-brand-500"
+              chipClass="bg-emerald"
               label={t('budget.totalActual')}
               value={formatMoney(data.totalActualMinor, currency, locale)}
             />

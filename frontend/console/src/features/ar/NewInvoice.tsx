@@ -125,7 +125,7 @@ export function NewInvoice() {
             {customers.length === 0 && !customersQuery.isLoading ? (
               <p className="rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm text-ink-3">
                 {t('ar.newInvoice.noCustomers')}{' '}
-                <Link to="/customers" className="font-semibold text-brand-700 hover:underline">
+                <Link to="/customers" className="font-semibold text-emerald-2 hover:underline">
                   {t('ar.newInvoice.addCustomerLink')}
                 </Link>
               </p>

@@ -218,7 +218,7 @@ export function PrinterSettings() {
                     }}
                     className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
                       (printer.config?.paper ?? paper) === w
-                        ? 'border-brand-500 bg-brand-50 text-brand-700'
+                        ? 'border-emerald-line bg-emerald-tint text-emerald-2'
                         : 'border-line text-ink-2 hover:bg-hover'
                     }`}
                   >
@@ -254,7 +254,7 @@ export function PrinterSettings() {
                 onClick={() => setPaper(w)}
                 className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
                   paper === w
-                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                    ? 'border-emerald-line bg-emerald-tint text-emerald-2'
                     : 'border-line text-ink-2 hover:bg-hover'
                 }`}
               >
@@ -272,7 +272,7 @@ export function PrinterSettings() {
             return (
               <Card key={kind} className="flex flex-col gap-3 p-5">
                 <div className="flex items-center gap-2.5">
-                  <span className="grid size-9 place-items-center rounded-xl bg-brand-50 text-brand-700">
+                  <span className="grid size-9 place-items-center rounded-xl bg-emerald-tint text-emerald-2">
                     <Icon className="size-4" />
                   </span>
                   <span className="font-semibold text-ink">{t(labelKey)}</span>
@@ -318,9 +318,9 @@ export function PrinterSettings() {
                 >
                   <span className="flex items-center gap-2.5">
                     {device.kind === 'usb' ? (
-                      <Usb className="size-4 text-brand-700" />
+                      <Usb className="size-4 text-emerald-2" />
                     ) : (
-                      <Bluetooth className="size-4 text-brand-700" />
+                      <Bluetooth className="size-4 text-emerald-2" />
                     )}
                     <span className="text-sm font-semibold text-ink">{device.name}</span>
                   </span>
