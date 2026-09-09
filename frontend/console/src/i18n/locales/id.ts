@@ -3932,7 +3932,9 @@ export const id = {
       hint:
         'Kalau QR Anda berasal dari sebuah marketplace, uangnya datang di transfer yang sama dengan pesanan dari mereka. Menyebutkannya di sini menyatukan keduanya jadi satu pencairan — sekaligus memindahkan saldo yang sudah menumpuk.',
       qrisLabel: 'QRIS dicairkan oleh',
-      placeholder: 'mis. SHOPEE',
+      standalone: 'Cair sendiri',
+      noPayers:
+        'Belum ada marketplace yang membayar Anda, jadi belum ada yang bisa disatukan dengan QRIS. Begitu ada, pilihannya muncul di sini.',
       save: 'Simpan',
       saveFailed: 'Gagal menyimpan. Coba lagi.',
     },
