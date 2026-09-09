@@ -10,11 +10,17 @@
 #   - Branch protection should require exactly TWO status checks: `gate` (this file) and
 #     `ai-gate` (ai-gates.yml — the Claude review/QA/security gates, ADR 0057 §4). Each
 #     always runs and fails if any upstream job failed; path-skipped jobs count as success.
-#   - Release tags (`v*`) also trigger a full run here (no path scoping — `base` is a
-#     branch concept and doesn't exist for a tag; reuses the same FORCE_FULL escalation
-#     as workflow_dispatch(full)/schedule). This is the gate deploy-prod.yml's `verify-ci`
-#     job polls for before the production approval prompt fires — a prod tag can no longer
-#     deploy without a green build for that exact commit. A tag run is cheap (a few/week).
+#   - Release tags (`v*`) do NOT trigger a run — ONE push, ONE build. deploy-prod.yml's
+#     `verify-ci` gate matches on head_sha alone, so the run this workflow already did on
+#     master IS that commit's green build; tagging it re-built an identical tree and left
+#     three runs of the same commit message in the Actions list. Per ADR 0053 a tag is only
+#     ever cut from master, so that run always exists — and a tag pushed from anywhere else
+#     now finds none and `verify-ci` blocks the deploy, which is the behaviour we want.
+#     Cost: tagging a commit whose master run has aged out of Actions retention needs a
+#     manual `workflow_dispatch` here first. The `refs/tags/` branches further down are
+#     kept deliberately — inert now, but they are what keeps restoring the trigger a
+#     one-line change (a tag can't be path-filtered: `base` is a branch concept, so it has
+#     to take the FORCE_FULL escalation instead).
 #
 # Testcontainers spins up real Postgres / Kafka / Redis / Keycloak containers; the
 # GitHub-hosted `ubuntu-latest` runner ships a working Docker daemon.
@@ -23,7 +29,6 @@ name: ci
 on:
   push:
     branches: [master]
-    tags: ["v*"]
   pull_request:
     branches: [master]
   workflow_dispatch:

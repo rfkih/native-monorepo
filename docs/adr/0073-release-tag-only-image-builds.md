@@ -58,3 +58,22 @@ Two further facts settled the shape of this change:
   release; nothing in the repo did (only `compose.prod.yml`'s fallback references it).
 - ADR 0053 §2's "UAT auto-deployed on every merge" is formally retired; UAT is refreshed on demand.
   If a future UAT does want GHCR images, re-add the trigger deliberately rather than assuming it.
+
+## Follow-up — 2026-09-09: `ci.yml` no longer listens for tags
+
+The "tagging a side branch fails closed" consequence above was **not actually in force** when it was
+written. `ci.yml` still carried `tags: ["v*"]` from the change that introduced `verify-ci`, so a tag
+cut anywhere produced its own green `ci` run at that SHA, and `verify-ci` — which matches on
+`head_sha` alone — accepted it. The gate would have passed for a side-branch tag; it never got the
+chance to fail closed.
+
+Removing that trigger is what makes the property real, and it also removes the duplicate build this
+ADR's own reasoning had already made pointless: after a squash-merge the master-push run carries the
+tag's SHA, and the tree at the tag is byte-identical to it. One push, one build — a release now
+produces `images` + `deploy-prod` on the tag and nothing else, instead of a third `ci` run of the
+same commit rebuilding the same tree.
+
+The `refs/tags/` conditionals inside `ci.yml` are kept, inert, so restoring the trigger stays a
+one-line change. The one cost: tagging a commit whose master `ci` run has aged out of Actions
+retention now needs a manual `workflow_dispatch` of `ci.yml` on that SHA before the deploy will
+pass — correct behaviour, since the evidence it gates on really is gone.
