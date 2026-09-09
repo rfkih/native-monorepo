@@ -15,6 +15,7 @@ import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.GeneralLedgerWriter;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.platform.repository.PlatformSettlementRepository;
+import id.co.nativeapp.finance.platform.service.PlatformReceivableWriter;
 import id.co.nativeapp.finance.platform.service.PlatformSettlementWriter;
 import id.co.nativeapp.money.Money;
 import java.time.Clock;
@@ -51,6 +52,7 @@ class PlatformSettlementPostingTest {
     writer =
         new PlatformSettlementWriter(
             mock(PlatformSettlementRepository.class),
+            mock(PlatformReceivableWriter.class),
             new GeneralLedgerWriter(
                 mock(JournalEntryRepository.class),
                 mock(JournalLineRepository.class),

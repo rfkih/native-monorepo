@@ -8,7 +8,9 @@ import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.platform.domain.PlatformNetExceedsGrossException;
 import id.co.nativeapp.finance.platform.domain.PlatformOverSettlementException;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlement;
+import id.co.nativeapp.finance.platform.domain.PlatformSettlementAlreadyVoidedException;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlementIdempotencyKeyConflictException;
+import id.co.nativeapp.finance.platform.domain.PlatformSettlementNotFoundException;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation.AllocatedLine;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation.SourceLine;
@@ -58,6 +60,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PlatformSettlementWriter {
 
   private final PlatformSettlementRepository settlementRepository;
+  private final PlatformReceivableWriter platformReceivable;
   private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final JdbcTemplate jdbcTemplate;
@@ -65,11 +68,13 @@ public class PlatformSettlementWriter {
 
   public PlatformSettlementWriter(
       PlatformSettlementRepository settlementRepository,
+      PlatformReceivableWriter platformReceivable,
       GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.settlementRepository = settlementRepository;
+    this.platformReceivable = platformReceivable;
     this.generalLedgerWriter = generalLedgerWriter;
     this.roleAccountResolver = roleAccountResolver;
     this.jdbcTemplate = jdbcTemplate;
@@ -213,6 +218,152 @@ public class PlatformSettlementWriter {
     insertLines(settlement.getId(), allocated, currency, companyId, actor);
 
     return new PlatformSettlementResult(settlement, true);
+  }
+
+  /**
+   * Takes a recorded payout back (ADR 0076): posts a CONTRA entry negating its legs and hands each
+   * line's gross back to the sub-ledger it came out of.
+   *
+   * <p>Append-only is preserved — the settlement is stamped, never deleted or edited, so the ledger
+   * keeps both the mistake and its correction. That is the same shape a sale's void takes.
+   *
+   * <p>Once-only is claimed by a GUARDED update (`WHERE voided_at IS NULL`) rather than a
+   * read-then-write: two concurrent voids would otherwise both pass an application check and hand
+   * the balance back twice, leaving the sub-ledger permanently above the GL.
+   *
+   * @throws PlatformSettlementNotFoundException no such payout for this tenant
+   * @throws PlatformSettlementAlreadyVoidedException it has already been taken back (409)
+   */
+  @Transactional
+  public PlatformSettlementResult voidSettlement(UUID settlementId) {
+    Objects.requireNonNull(settlementId, "settlementId");
+    String companyId = TenantContext.require().companyId();
+    String actor = TenantContext.require().actor();
+
+    PlatformSettlement settlement =
+        settlementRepository
+            .findById(settlementId)
+            .orElseThrow(() -> new PlatformSettlementNotFoundException(settlementId));
+
+    // Serialize against a concurrent payout FROM THE SAME PAYER, so a void and a settle cannot
+    // interleave between the guard and the restore.
+    jdbcTemplate.queryForList(
+        "SELECT pg_advisory_xact_lock(hashtext(?))",
+        "platform_settlement:" + companyId + ":" + settlement.getChannelCode());
+
+    Instant now = clock.instant();
+    UUID voidEntryId = UUID.randomUUID();
+
+    // Claim it. Zero rows means someone else already did — never a second contra entry.
+    int claimed =
+        jdbcTemplate.update(
+            """
+            UPDATE platform_settlement
+               SET voided_at     = ?,
+                   void_entry_id = ?,
+                   updated_at    = now(),
+                   updated_by    = ?,
+                   version       = version + 1
+             WHERE id = ?
+               AND company_id = ?
+               AND voided_at IS NULL
+            """,
+            java.sql.Timestamp.from(now),
+            voidEntryId,
+            actor,
+            settlementId,
+            companyId);
+    if (claimed == 0) {
+      throw new PlatformSettlementAlreadyVoidedException(settlementId);
+    }
+
+    String currency = settlement.getCurrency() == null ? null : settlement.getCurrency().strip();
+    List<SourceLine> lines = readLinesNormalized(settlementId);
+    List<AllocatedLine> allocated = SettlementAllocation.allocate(lines, settlement.getFeeMinor());
+
+    // Hand each line's gross back to the row it was taken from. Restoring is an ADD, mirroring the
+    // accrual, so a balance that moved on in the meantime is not overwritten.
+    for (AllocatedLine line : allocated) {
+      platformReceivable.accumulate(
+          companyId,
+          new SettlementSourceReader.SettlementSourceRef(
+              line.kind(), line.channelCode(), settlement.getChannelCode()),
+          currency,
+          line.grossMinor(),
+          actor);
+    }
+
+    String period = LedgerPosting.periodOf(now);
+    JournalEntry contra =
+        buildVoidEntry(
+            settlement.getChannelCode(),
+            allocated,
+            Money.ofMinor(settlement.getNetMinor(), currency),
+            period,
+            now,
+            voidEntryId);
+    persistEntry(contra, companyId);
+
+    settlementRepository.flush();
+    return new PlatformSettlementResult(settlement, false);
+  }
+
+  /**
+   * The contra of {@link #buildSourceSettlementEntry} — every leg with its side flipped, so the two
+   * entries sum to nothing on every account they touched.
+   */
+  public JournalEntry buildVoidEntry(
+      String payer,
+      List<AllocatedLine> allocated,
+      Money net,
+      String period,
+      Instant now,
+      UUID entryId) {
+    String currency = net.currency().getCurrencyCode();
+    List<JournalLine> lines = new ArrayList<>();
+    List<AccountRole> rolesPosted = new ArrayList<>();
+    int lineNo = 1;
+
+    for (AllocatedLine line : allocated) {
+      AccountRole receivableRole = line.kind().accountRole();
+      lines.add(
+          JournalLine.debit(
+              entryId,
+              lineNo++,
+              requireMapped(receivableRole, now),
+              Money.ofMinor(line.grossMinor(), currency)));
+      rolesPosted.add(receivableRole);
+    }
+    if (net.amountMinor() > 0) {
+      lines.add(
+          JournalLine.credit(
+              entryId, lineNo++, requireMapped(AccountRole.CASH_CLEARING, now), net));
+      rolesPosted.add(AccountRole.CASH_CLEARING);
+    }
+    for (AllocatedLine line : allocated) {
+      if (line.feeMinor() > 0) {
+        AccountRole feeRole = feeRoleFor(line.kind());
+        lines.add(
+            JournalLine.credit(
+                entryId,
+                lineNo++,
+                requireMapped(feeRole, now),
+                Money.ofMinor(line.feeMinor(), currency)));
+        rolesPosted.add(feeRole);
+      }
+    }
+
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
+    return JournalEntry.balanced(
+        entryId,
+        period,
+        now,
+        "Platform settlement VOID — " + payer,
+        currency,
+        entryId,
+        usesIllustrative,
+        lines);
   }
 
   /**

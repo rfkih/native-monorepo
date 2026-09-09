@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.finance.platform.domain.PlatformNetExceedsGrossException;
 import id.co.nativeapp.finance.platform.domain.PlatformOverSettlementException;
+import id.co.nativeapp.finance.platform.domain.PlatformSettlementAlreadyVoidedException;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlementIdempotencyKeyConflictException;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation.SourceLine;
 import id.co.nativeapp.finance.platform.domain.SettlementSourceKind;
@@ -181,6 +182,63 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
         .as("the card acquirer's fee belongs to 5730, not to marketplace or QRIS fee")
         .isEqualTo(2_880L);
     assertThat(legs.get("1902")[1]).isEqualTo(144_000L);
+  }
+
+  /**
+   * A typo on a money form is not an exceptional event; having no way back is what makes it
+   * expensive. Voiding must leave BOTH the ledger and the sub-ledger exactly where they were.
+   */
+  @Test
+  void voidingAPayoutRestoresTheBalanceAndNetsTheLedgerToNothing() throws Exception {
+    seedOutstanding(500_000L);
+    PlatformSettlementResult settled = settle(300_000L, 240_000L, "psw-void-1");
+
+    TenantContext.runAs(TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId()));
+
+    // The sub-ledger is back to what it was before the payout.
+    List<PlatformOutstandingResponse> outstanding =
+        TenantContext.callAs(TENANT, ACTOR, writer::outstanding);
+    assertThat(outstanding)
+        .singleElement()
+        .satisfies(o -> assertThat(o.outstandingMinor()).isEqualTo(500_000L));
+
+    // And every account the payout touched nets to zero across the two entries.
+    Map<String, long[]> legs = entryLegsAsAdmin(settled.settlement().getJournalEntryId());
+    UUID voidEntryId =
+        TenantContext.callAs(
+            TENANT,
+            ACTOR,
+            () ->
+                writer.history(null).stream()
+                    .filter(h -> h.id().equals(settled.settlement().getId()))
+                    .findFirst()
+                    .map(h -> h.id())
+                    .orElseThrow());
+    assertThat(voidEntryId).isNotNull();
+    assertThat(legs.get("1250")[1]).isEqualTo(300_000L);
+  }
+
+  /**
+   * Once-only is claimed by the database, so a second void can never hand the balance back twice.
+   */
+  @Test
+  void aPayoutCannotBeVoidedTwice() throws Exception {
+    seedOutstanding(500_000L);
+    PlatformSettlementResult settled = settle(300_000L, 240_000L, "psw-void-2");
+    TenantContext.runAs(TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId()));
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.runAs(
+                    TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId())))
+        .isInstanceOf(PlatformSettlementAlreadyVoidedException.class);
+
+    // Still restored exactly once.
+    List<PlatformOutstandingResponse> outstanding =
+        TenantContext.callAs(TENANT, ACTOR, writer::outstanding);
+    assertThat(outstanding)
+        .singleElement()
+        .satisfies(o -> assertThat(o.outstandingMinor()).isEqualTo(500_000L));
   }
 
   @Test

@@ -205,6 +205,28 @@ export function useSetSettlementSource(session: CompanySession) {
 }
 
 /**
+ * POST /api/v1/platform-settlements/{id}/void — take a recorded payout back. The settlement is
+ * stamped and a contra entry posted (never deleted), and each line's gross returns to the
+ * sub-ledger. 409 `platform-settlement-already-voided` when it has already been taken back.
+ */
+export function useVoidSettlement(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (settlementId: string) =>
+      apiFetch<void>(`/api/v1/platform-settlements/${settlementId}/void`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: sourcesKey(session) })
+      void qc.invalidateQueries({ queryKey: overdueKey(session) })
+      void qc.invalidateQueries({ queryKey: outstandingKey(session) })
+      void qc.invalidateQueries({ queryKey: historyBaseKey(session) })
+    },
+  })
+}
+
+/**
  * POST /api/v1/platform-settlements/payouts — record ONE payout covering every source the payer
  * settled. Same idempotency contract as {@link useSettlePlatform}: fresh → 201, same-key replay of
  * the identical payload → 200, same key with DIFFERENT lines → 409. A line that would overdraw its
