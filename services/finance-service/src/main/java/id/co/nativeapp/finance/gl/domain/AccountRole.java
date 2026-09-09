@@ -315,6 +315,18 @@ public enum AccountRole {
   QRIS_FEE_EXPENSE,
 
   /**
+   * Card payments (ADR 0076, ILLUSTRATIVE — SME-gated): the card acquirer's MDR share of a payout's
+   * deduction — the debit leg beside {@link #CASH_CLEARING} when a payout clears a CARD source
+   * ({@code PlatformSettlementWriter}): {@code Dr CASH_CLEARING (net) + Dr this (allocated fee) /
+   * Cr CARD_CLEARING (gross)}. Omitted entirely when the fee is zero.
+   *
+   * <p>Before this role existed, {@link #CARD_CLEARING} was a ONE-WAY account: every card sale
+   * debited it and nothing in the fleet ever credited it, so card money accrued and stayed. Maps to
+   * account 5730 (ILLUSTRATIVE — SME-gated, V66).
+   */
+  CARD_FEE_EXPENSE,
+
+  /**
    * Perpetual inventory (ADR 0067 phase 0, ILLUSTRATIVE — SME-gated): the goods-received-not-
    * invoiced clearing account — the 3-way GRNI idiom that avoids per-line receipt/bill matching
    * (rule 1). Credited by a priced goods receipt (Dr {@link #INVENTORY} / Cr this — the {@code

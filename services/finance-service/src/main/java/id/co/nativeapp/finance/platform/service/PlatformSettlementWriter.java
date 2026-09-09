@@ -145,13 +145,6 @@ public class PlatformSettlementWriter {
         != lines.size()) {
       throw new IllegalArgumentException("a payout may clear each source at most once");
     }
-    // No CARD_FEE_EXPENSE role exists; routing a card acquirer's fee to PLATFORM_FEE_EXPENSE would
-    // misstate the P&L, so card balances keep settling through bank reconciliation for now.
-    if (lines.stream().anyMatch(l -> l.kind() == SettlementSourceKind.CARD)) {
-      throw new IllegalArgumentException(
-          "card balances are not settleable here yet — no card fee account is mapped");
-    }
-
     long grossMinor = 0L;
     for (SourceLine line : lines) {
       grossMinor = Math.addExact(grossMinor, line.grossMinor());
@@ -415,10 +408,9 @@ public class PlatformSettlementWriter {
       currentSource = row.sourceCode();
       currentCurrency = row.currency();
       total = Math.addExact(total, row.minor());
-      // Card cannot be cleared here until a card fee account is mapped — shown, not selectable, so
-      // the balance is never silently missing from the payer's total.
-      boolean settleable = !SettlementSourceKind.CARD.name().equals(row.kind());
-      lines.add(new PayoutSourceResponse.Line(row.kind(), row.channel(), row.minor(), settleable));
+      // Every kind the sub-ledger carries can be cleared here now that card has a fee account
+      // (V66). The flag stays on the wire so a future kind can be shown without being selectable.
+      lines.add(new PayoutSourceResponse.Line(row.kind(), row.channel(), row.minor(), true));
     }
     if (currentSource != null) {
       grouped.add(
@@ -655,9 +647,7 @@ public class PlatformSettlementWriter {
     return switch (kind) {
       case MARKETPLACE -> AccountRole.PLATFORM_FEE_EXPENSE;
       case QRIS -> AccountRole.QRIS_FEE_EXPENSE;
-      // Unreachable: settleSources rejects card lines because no card fee account is mapped.
-      case CARD ->
-          throw new IllegalStateException("no fee account is mapped for a card settlement");
+      case CARD -> AccountRole.CARD_FEE_EXPENSE;
     };
   }
 

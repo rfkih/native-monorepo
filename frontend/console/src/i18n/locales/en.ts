@@ -970,6 +970,7 @@ export const en = {
       cashShort: 'Cash short',
       platformFee: 'Marketplace fee',
       qrisFee: 'QRIS fee (MDR)',
+      cardFee: 'Card fee (MDR)',
       inventoryShrinkage: 'Inventory shrinkage',
       salariesExpense: 'Salaries',
       bpjsEmployerExpense: 'BPJS — employer share',
@@ -4007,6 +4008,7 @@ export const en = {
       hint:
         'If your QR came from a marketplace, its money arrives in the same transfer as your orders from them. Naming them here puts both in one payout — and moves what has already built up.',
       qrisLabel: 'QRIS is settled by',
+      cardLabel: 'Card is settled by',
       standalone: 'Settles on its own',
       noPayers:
         'No marketplace has paid you yet, so there is nothing to merge QRIS into. Once one appears here it can be chosen.',

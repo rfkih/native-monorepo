@@ -64,9 +64,10 @@ tender the customer used, and record **one payout as one settlement with several
    Each line names one receivable and its **gross**. `fee = Σ gross − net`, and `net > Σ gross`
    stays a 422 as in 0036 §5.
 3. **Fee is allocated pro-rata by line gross** to that line's fee account —
-   `PLATFORM_FEE_EXPENSE` (5710) for marketplace lines, `QRIS_FEE_EXPENSE` (5720) for QRIS lines —
-   so "QRIS fee" keeps meaning something instead of being absorbed into "marketplace fee". Rounding
-   remainder goes to the largest line, so the legs stay exact (rule 8: integer minor units).
+   `PLATFORM_FEE_EXPENSE` (5710) for marketplace lines, `QRIS_FEE_EXPENSE` (5720) for QRIS,
+   `CARD_FEE_EXPENSE` (5730, V66) for card — so each keeps meaning something instead of being
+   absorbed into "marketplace fee". Rounding remainder goes to the largest line, so the legs stay
+   exact (rule 8: integer minor units).
 4. **The journal keeps 0036's shape and 0016's invariant**:
    `Dr CASH_CLEARING (net) + Dr <fee account> (allocated fee, per line) / Cr <line's receivable
    account> (gross, per line)`. Zero-amount legs omitted. **Bank reconciliation remains the only
@@ -86,6 +87,15 @@ tender the customer used, and record **one payout as one settlement with several
    reader to dismiss it.
 6. The card's wording says the payout is **recorded as settled**, never "in the bank" — that only
    becomes true after reconciliation (see 4).
+
+**CORRECTION (v0.1.50).** The first version of this ADR said card balances "settle through bank
+reconciliation as they do today". That was wrong, and it was repeated into the V63/V65 migration
+comments and told to the owner twice. `CARD_CLEARING` (1902) was a ONE-WAY account: every card sale
+debited it and NOTHING in the fleet ever credited it — bank reconciliation offers only CLEARING /
+BANK_FEE / INTEREST / QRIS_CLEARING, because ADR 0045 gave QRIS a settlement path and card never got
+one. The claim came from seeing QRIS handled and assuming card was too. V66 adds the missing fee
+account and card settles through THIS payout flow — and deliberately not also as a reconciliation
+category, because two crediting paths is exactly the defect already recorded below for 1901.
 
 **Out of scope.** Splitting the fee into commission / transaction fee / merchant-funded promo stays
 deferred, exactly as 0036 §5 deferred platform subsidies: `gross − net` is derived from a figure the

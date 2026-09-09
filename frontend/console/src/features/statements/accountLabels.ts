@@ -79,6 +79,7 @@ export const ACCOUNT_LABEL_KEYS: Readonly<Record<string, string>> = {
   '5700': 'statements.accounts.cashShort',
   '5710': 'statements.accounts.platformFee',
   '5720': 'statements.accounts.qrisFee',
+  '5730': 'statements.accounts.cardFee',
   '5800': 'statements.accounts.inventoryShrinkage',
   '6000': 'statements.accounts.salariesExpense',
   '6100': 'statements.accounts.bpjsEmployerExpense',

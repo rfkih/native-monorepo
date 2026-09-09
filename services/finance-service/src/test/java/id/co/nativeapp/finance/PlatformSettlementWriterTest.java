@@ -150,24 +150,37 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
         .satisfies(o -> assertThat(o.outstandingMinor()).isEqualTo(1_000_000L));
   }
 
-  /** Card has no mapped fee account, so it must be refused rather than booked to the wrong one. */
+  /**
+   * CARD_CLEARING (1902) was a ONE-WAY account until V66: every card sale debited it and nothing in
+   * the fleet ever credited it, so card money accrued and stayed — Rp 144.000 stuck on the first
+   * tenant to look. A payout must now clear it, booking the acquirer's share of the deduction to
+   * its OWN fee account rather than to marketplace or QRIS fee.
+   */
   @Test
-  void aCardLineIsRefusedUntilItsFeeAccountExists() {
-    assertThatThrownBy(
+  void aCardPayoutClearsTheAccountThatHadNoWayOut() throws Exception {
+    seedOutstanding("TENDER:CARD", SettlementSourceKind.CARD, "BCA", 144_000L);
+
+    PlatformSettlementResult result =
+        TenantContext.callAs(
+            TENANT,
+            ACTOR,
             () ->
-                TenantContext.callAs(
-                    TENANT,
-                    ACTOR,
-                    () ->
-                        writer.settleSources(
-                            "BCA",
-                            List.of(
-                                new SourceLine(SettlementSourceKind.CARD, "TENDER:CARD", 1_000L)),
-                            900L,
-                            "IDR",
-                            "psw-card-1")))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("card");
+                writer.settleSources(
+                    "BCA",
+                    List.of(new SourceLine(SettlementSourceKind.CARD, "TENDER:CARD", 144_000L)),
+                    141_120L,
+                    "IDR",
+                    "psw-card-1"));
+
+    assertThat(result.created()).isTrue();
+    assertThat(result.settlement().getFeeMinor()).isEqualTo(2_880L);
+
+    Map<String, long[]> legs = entryLegsAsAdmin(result.settlement().getJournalEntryId());
+    assertThat(legs.get("1900")[0]).isEqualTo(141_120L);
+    assertThat(legs.get("5730")[0])
+        .as("the card acquirer's fee belongs to 5730, not to marketplace or QRIS fee")
+        .isEqualTo(2_880L);
+    assertThat(legs.get("1902")[1]).isEqualTo(144_000L);
   }
 
   @Test
