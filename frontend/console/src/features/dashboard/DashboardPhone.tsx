@@ -155,10 +155,13 @@ export function DashboardPhone() {
               {profit ? t('dashboard.netProfit') : t('dashboard.netLoss')} ·{' '}
               {formatPeriod(period, locale)}
             </div>
+            {/* Figures split by role (ADR 0077): the ONE figure a screen is about is set in the
+                display face at 800, and mono is kept for anything that lines up in a column —
+                the sub-stats below, and every table. */}
             {query.isLoading ? (
               <div className="mt-2 h-9 w-52 max-w-full animate-pulse rounded-lg bg-paper/20" />
             ) : (
-              <div className="tnum mt-2 font-mono text-[30px] font-bold leading-none tracking-[-0.025em] text-paper">
+              <div className="tnum mt-2 font-display text-[32px] font-extrabold leading-none tracking-[-0.035em] text-paper">
                 {formatMoney(figures.net, company.baseCurrency, locale)}
               </div>
             )}

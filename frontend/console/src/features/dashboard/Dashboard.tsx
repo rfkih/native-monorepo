@@ -686,12 +686,13 @@ function Kpi({
   loading: boolean
 }) {
   return (
-    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-brand-200')}>
+    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-line-strong')}>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-2 h-7 w-28 animate-pulse rounded bg-ink-100" />
       ) : (
-        <div className={cn('tnum mt-2 font-mono text-[25px] font-semibold', valueClass ?? 'text-ink')}>
+        // A summary figure, not a column — display face at 800 (ADR 0077).
+        <div className={cn('tnum mt-2 font-display text-[25px] font-extrabold tracking-[-0.035em]', valueClass ?? 'text-ink')}>
           {value}
         </div>
       )}
