@@ -16,6 +16,8 @@
 
 export interface NavLike {
   key: string
+  /** The group's own translated title — searchable, because it is on screen. */
+  heading: string
   items: readonly { label: string }[]
 }
 
@@ -43,8 +45,16 @@ export function arrangeNavGroups<G extends NavLike>(
   const q = normalizeQuery(query)
 
   if (q.length > 0) {
+    // A group HEADING is on screen, so it has to be searchable: typing "Piutang" — the word sitting
+    // above the receivables links, next to the "your work" marker — used to return "no matches",
+    // because only item labels were matched. A heading hit keeps the group whole; otherwise the
+    // group narrows to the items that matched, and empties out.
     return groups
-      .map((g) => ({ ...g, items: g.items.filter((it) => it.label.toLowerCase().includes(q)) }))
+      .map((g) =>
+        g.heading.toLowerCase().includes(q)
+          ? g
+          : { ...g, items: g.items.filter((it) => it.label.toLowerCase().includes(q)) },
+      )
       .filter((g) => g.items.length > 0)
   }
 

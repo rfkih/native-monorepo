@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { OWN_GROUPS, arrangeNavGroups, isOwnGroup, normalizeQuery } from '../moreNavPolicy'
 
+// Headings are REAL here: the fixture used to omit them, which is exactly why the search bug
+// (typing a group name returned nothing) slipped through a green suite.
 const GROUPS = [
-  { key: 'summary', items: [{ label: 'Dashboard' }] },
-  { key: 'reports', items: [{ label: 'Income statement' }, { label: 'Balance sheet' }] },
-  { key: 'receivables', items: [{ label: 'Invoices' }, { label: 'Customers' }, { label: 'AR ageing' }] },
-  { key: 'payables', items: [{ label: 'Bills' }, { label: 'Vendors' }] },
-  { key: 'cashTax', items: [{ label: 'Bank' }, { label: 'Tax' }] },
-  { key: 'people', items: [{ label: 'Employees' }, { label: 'Payroll' }] },
+  { key: 'summary', heading: 'Overview', items: [{ label: 'Dashboard' }] },
+  { key: 'reports', heading: 'Reports', items: [{ label: 'Income statement' }, { label: 'Balance sheet' }] },
+  { key: 'receivables', heading: 'Piutang', items: [{ label: 'Invoices' }, { label: 'Customers' }, { label: 'AR ageing' }] },
+  { key: 'payables', heading: 'Utang', items: [{ label: 'Bills' }, { label: 'Vendors' }] },
+  { key: 'cashTax', heading: 'Kas & pajak', items: [{ label: 'Bank' }, { label: 'Tax' }] },
+  { key: 'people', heading: 'Orang', items: [{ label: 'Employees' }, { label: 'Payroll' }] },
 ]
 
 const keys = (gs: { key: string }[]) => gs.map((g) => g.key)
@@ -103,5 +105,29 @@ describe('isOwnGroup', () => {
 describe('normalizeQuery', () => {
   it('trims and lowercases', () => {
     expect(normalizeQuery('  Bank  ')).toBe('bank')
+  })
+})
+
+describe('arrangeNavGroups — heading matches', () => {
+  it('finds a group by its own heading, and keeps all of its items', () => {
+    const out = arrangeNavGroups(GROUPS, 'Piutang', OWN_GROUPS.finance)
+    expect(keys(out)).toEqual(['receivables'])
+    expect(out[0].items).toHaveLength(3)
+  })
+
+  it('matches a heading case-insensitively and on a partial word', () => {
+    expect(keys(arrangeNavGroups(GROUPS, 'pajak', OWN_GROUPS.finance))).toEqual(['cashTax'])
+    expect(keys(arrangeNavGroups(GROUPS, 'ORANG', OWN_GROUPS.ops))).toEqual(['people'])
+  })
+
+  it('still narrows a group to matching items when the heading does not match', () => {
+    const out = arrangeNavGroups(GROUPS, 'bank', OWN_GROUPS.finance)
+    expect(keys(out)).toEqual(['cashTax'])
+    expect(out[0].items).toEqual([{ label: 'Bank' }])
+  })
+
+  it('returns every group a query reaches, by heading or by item', () => {
+    // "or" hits the Reports and Orang headings, and the Vendors item under Utang.
+    expect(keys(arrangeNavGroups(GROUPS, 'or', []))).toEqual(['reports', 'payables', 'people'])
   })
 })

@@ -83,7 +83,7 @@ export function SummaryCard({
         onClick={onClick}
         className={cn(
           'rounded-card border border-line bg-surface text-left shadow-sm transition-shadow',
-          'w-full hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+          'w-full hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
           'print:break-inside-avoid print:shadow-none',
           padding,
         )}

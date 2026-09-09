@@ -57,7 +57,7 @@ export function ParkedTray({ session, locale, onResume, onClose }: Props) {
             type="button"
             onClick={onClose}
             aria-label={t('common.cancel')}
-            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <X className="size-4" />
           </button>
@@ -120,7 +120,7 @@ function ParkedEntry({
         className={cn(
           'w-full rounded-2xl border border-line bg-surface px-4 py-3 text-left transition-all',
           'hover:border-brand-300 hover:shadow-md',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
         )}
       >
         {/* Top row: type badge + table + total */}

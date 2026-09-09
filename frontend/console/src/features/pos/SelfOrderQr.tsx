@@ -64,7 +64,7 @@ export function SelfOrderQr({ session, outletId }: Props) {
               onClick={() => printCurrentPage('self-order-qr')}
               aria-label={t('pos.selfOrderQr.print')}
               title={t('pos.selfOrderQr.print')}
-              className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+              className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
               <Printer className="size-4" aria-hidden="true" />
             </button>
@@ -73,7 +73,7 @@ export function SelfOrderQr({ session, outletId }: Props) {
               onClick={() => setShowRotateConfirm(true)}
               aria-label={t('pos.selfOrderQr.rotate')}
               title={t('pos.selfOrderQr.rotate')}
-              className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+              className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
               <RefreshCw className="size-4" aria-hidden="true" />
             </button>

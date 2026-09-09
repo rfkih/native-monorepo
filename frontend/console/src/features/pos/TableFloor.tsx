@@ -145,7 +145,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
               onClick={() => setShowTableMgmt(true)}
               aria-label={t('pos.table.management')}
               title={t('pos.table.management')}
-              className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+              className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
               <Settings className="size-4" aria-hidden="true" />
             </button>
@@ -153,7 +153,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
               type="button"
               onClick={onClose}
               aria-label={t('common.close')}
-              className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+              className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
               <X className="size-4" />
             </button>
@@ -200,7 +200,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
                 <button
                   type="button"
                   onClick={() => setShowTableMgmt(true)}
-                  className="mt-2 text-xs text-brand-600 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                  className="mt-2 text-xs text-brand-600 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
                 >
                   {t('pos.table.addTable')}
                 </button>
@@ -277,7 +277,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
                 className={cn(
                   'flex w-full items-center gap-3 rounded-2xl border border-dashed border-line px-4 py-3 text-left transition-colors',
                   'hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700',
-                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                   openBill.isPending && 'cursor-not-allowed opacity-60',
                 )}
                 aria-label={t('bills.newTakeaway')}
@@ -349,7 +349,7 @@ function TableCard({
       }
       className={cn(
         'relative flex flex-col items-center rounded-2xl border-[1.5px] px-3 py-4 text-center transition-all',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
         occupied
           ? [
               'border-emerald bg-emerald-tint shadow-sm',
@@ -426,7 +426,7 @@ function TakeawayBillRow({
       className={cn(
         'flex w-full items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-left transition-all',
         'hover:border-brand-300 hover:shadow-md',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
       )}
       aria-label={t('bills.openExistingBill', { label: bill.guestLabel })}
     >

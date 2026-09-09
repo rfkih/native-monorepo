@@ -1,5 +1,62 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-09 — the brand was cyan in one file and gone in three designs
+
+Three redesigns landed together — Console Android, Console Web, Till Android — and the thing to
+notice was not any screen. It was a colour count: Console Web uses **zero** cyan values, Till
+Android one, Console Android three, against 153 uses of ink. The deep cyan was gone from all of
+them. So this was never a phone re-skin; it was a fleet-wide de-brand, and it needed the ADR that
+had never been written — the cyan lived as prose in `index.css` and in a design file, nowhere else.
+[ADR 0077](adr/0077-neutral-ink-brand-replaces-deep-cyan.md).
+
+**The rule, not the value.** Primary is *maximum contrast against the page*, and it inverts: ink on
+light, near-white on dark. That matters because the new primary `#0E1116` **is** the dark surface
+colour — the old palette flipped the brand to bright cyan on dark precisely so a button stayed
+visible, and with an ink brand there is no darker shade left to fall back on. Both directions are
+~18:1, which retires the old "600 fills / 700 speaks / 500 never text" three-shade rule outright.
+The cost: primary and body text are now the same colour, so the lifted shadow and the press-scale
+are load-bearing affordance rather than polish.
+
+**Fourteen values, ~930 call sites, one file.** The legacy aliases were already repointed through
+`var()`, so most of the app recoloured without being touched. That is also the trap, and code
+review found where it bit: `--color-paper` had been set to `#ffffff`, the same as `--color-surface`
+— but `bg-paper` is used 98:43 as a *recessed well inside a card* (table headers, totals rows,
+read-only field wells), not as the page ground the change was reasoning about. Every one of those
+went white-on-white. Same shape of error with `--color-emerald-tint`, which briefly equalled
+`--color-hover`: fine on the tab bar, where the active tab also gets an ink icon and a bold label,
+but it flattened the sidebar, where that fill is the *only* signal of which page you are on. Both
+are one-line fixes; neither was visible in a screenshot of the phone, which is what the shot
+harness covers.
+
+**What the phone bar was actually doing.** `rolePreset` makes `/statements/income` an accountant's
+home, so the Reports tab fails its own "not the page you are already on" test, and Team needs ops.
+The gate only ever computed what to *hide*, and nothing backfilled — so an accountant got **two
+tabs in a four-column grid** while receivables and payables sat two taps deep, and a tile grid
+where four of six tiles need POS. Both now follow the persona. The decisions are pure functions
+with tests (`tabBarPolicy`, `moreNavPolicy`) because dev auth grants every role, so no screenshot
+can ever show the accountant case.
+
+**"More" was a modal doing a destination's job.** Below 640px it is the *only* navigation an office
+login has, and as a sheet it self-dismissed on every use, could not be backed into, and lost its
+scroll position. Those are the correct behaviours of a modal applied to something that is not one.
+It became a route — [ADR 0078](adr/0078-the-phone-more-surface-is-a-screen.md), which amends 0075 —
+and the three defects are then answered by rules the console already had. Review caught that the
+route had been mounted *outside* the Shell layout, which swapped the topbar on every visit: the
+exact N2 compliance the ADR claims. Two behaviour changes worth knowing: Back from the first page
+opened out of More returns to More, and inside the Android shells hardware Back on More now raises
+the ordinary "leave this page?" confirm.
+
+Verified in a detached worktree at the branch tip rather than the working tree, which also carried
+unrelated in-flight settlement work: `tsc -b` clean, lint clean, `nav-smoke` 10/10, 30 phone shots
+across light-en and dark-id. Two pre-existing harness faults surfaced on the way and are fixed:
+`mobile-shots` had no fixture for the ADR 0076 overdue-payout endpoint, so the dashboard was
+rendering its error boundary behind a green "ok" for every shot; and its payslip step still matched
+a raw `2026-07` after that label was localised.
+
+Still cyan, deliberately: the kitchen's live-status dot and empty-state icon (the one accent the
+designs keep), and the binary marks — launcher icons, favicon, OG image, Play Store assets — which
+are generated artwork, not CSS.
+
 ## 2026-09-06 — the migration gate caught what I did not think about
 
 V47 originally renamed `ingredient_usage_day` to `ingredient_stock_day`, because the name no longer

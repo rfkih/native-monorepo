@@ -686,7 +686,10 @@ function Kpi({
   loading: boolean
 }) {
   return (
-    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-line-strong')}>
+    // `emphatic` singles ONE kpi out of a row. A #DEDEDE ring inside a #E4E4E4 border was a ~2%
+    // step — technically neutral, but it stopped saying anything. Ink is the emphasis colour now,
+    // so the ring uses it, the same way the hero figure does.
+    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')}>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-2 h-7 w-28 animate-pulse rounded bg-ink-100" />

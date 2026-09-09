@@ -66,7 +66,7 @@ export function PayoutSection({
               aria-pressed={s.sourceCode === selected}
               className={cn(
                 'flex items-center gap-3 rounded-lg border-b border-ink-50 px-2 py-3 text-left last:border-0',
-                'hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+                'hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                 s.sourceCode === selected && 'bg-emerald-tint',
               )}
             >
@@ -201,7 +201,7 @@ function PayoutForm({
                   value={gross[key] ?? ''}
                   onChange={(e) => setGross((g) => ({ ...g, [key]: e.target.value }))}
                   aria-label={t('platform.payout.grossHeading')}
-                  className="tnum w-32 shrink-0 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-right font-mono text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                  className="tnum w-32 shrink-0 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-right font-mono text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
                 />
               </label>
             )

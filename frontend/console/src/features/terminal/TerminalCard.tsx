@@ -156,7 +156,7 @@ function DeviceLoginCard({
           <button
             type="button"
             onClick={handleHide}
-            className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500"
+            className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald"
           >
             {t('terminal.device.hide')}
           </button>
@@ -216,7 +216,7 @@ function DeviceLoginCard({
                   }
                   aria-pressed={showPassword}
                   onClick={() => setShowPassword((s) => !s)}
-                  className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500"
+                  className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald"
                 >
                   {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
@@ -316,7 +316,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       aria-label={label}
       title={label}
       onClick={handleCopy}
-      className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500"
+      className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald"
     >
       {copied ? <Check className="size-4 text-emerald-2" /> : <Copy className="size-4" />}
     </button>

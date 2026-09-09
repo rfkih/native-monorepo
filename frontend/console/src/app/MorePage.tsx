@@ -167,7 +167,8 @@ export function MorePage({ home }: { home: string }) {
     accountingOk ? { key: 'tax', to: '/tax', icon: Percent, label: t('nav.tax') } : null,
     closeTile,
   ]
-  const tiles = (opsOk ? opsTiles : financeOk ? financeTiles : opsTiles).filter((x) => x != null)
+  // Books-only logins get the books; everyone else keeps the ops grid they already had.
+  const tiles = (financeOk && !opsOk ? financeTiles : opsTiles).filter((x) => x != null)
 
   // Which groups are this persona's daily work — ops wins where a login is both (an owner is
   // reading the business, not just the books).
@@ -180,9 +181,12 @@ export function MorePage({ home }: { home: string }) {
   if (!isPhone) return <Navigate to={home} replace />
 
   return (
-    <div className="min-h-[100dvh] bg-paper">
-      <div className="px-4 pb-7">
-        <h1 className="px-1 pb-3 pt-4 font-display text-[26px] font-extrabold tracking-[-0.035em] text-ink">
+    // No page chrome of its own: this renders inside the Shell layout route, which already supplies
+    // the ground, the topbar and the content padding (ADR 0078 N2). The slight negative inset pulls
+    // the tile grid back to the phone gutter Shell's `px-5` would otherwise double.
+    <div className="-mx-1">
+      <div className="pb-2">
+        <h1 className="px-1 pb-3 font-display text-[26px] font-extrabold tracking-[-0.035em] text-ink">
           {t('mobile.more.title')}
         </h1>
 

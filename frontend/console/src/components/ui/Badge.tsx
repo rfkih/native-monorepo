@@ -22,7 +22,8 @@ const solid: Record<Tone, string> = {
   emerald: 'bg-emerald-tint text-ink',
   profit: 'bg-tint-profit text-profit-ink',
   info: 'bg-tint-info text-info',
-  loss: 'bg-tint-loss text-loss',
+  // `loss-ink`, not `loss`: #E5484D is the FIGURE red and is thin on its own pale tint at this size.
+  loss: 'bg-tint-loss text-loss-ink',
 }
 
 const outline: Record<Tone, string> = {
@@ -48,7 +49,10 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
+        'inline-flex items-center gap-1.5 rounded-full text-xs font-semibold',
+        // The outline variant adds a 1px border, so it takes 1px less padding on each axis —
+        // otherwise a row mixing the two families is 2px taller on its outline badges.
+        variant === 'solid' ? 'px-2.5 py-1' : 'px-[9px] py-[3px]',
         variant === 'solid' ? solid[tone] : outline[tone],
         className,
       )}

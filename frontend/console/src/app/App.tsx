@@ -391,7 +391,7 @@ function OnboardingStandalone() {
           onClick={auth.logout}
           className={
             'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-ink-3 ' +
-            'transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500'
+            'transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald'
           }
         >
           <LogOut className="size-4" />
@@ -623,10 +623,6 @@ export function App() {
           {menuAllowed && <Route path="/catalog" element={<CatalogSwitch />} />}
           {kitchenAllowed && <Route path="/kitchen" element={<Kitchen />} />}
   
-          {/* The phone's whole navigation, as a SCREEN (ADR 0078). Phone-only — MorePage itself
-              bounces to `home` above the cutoff, where the sidebar is the navigation. */}
-          {officeOk && <Route path="/more" element={<MorePage home={home} />} />}
-
           {/* The employee self-service surface — full-screen, any business role may open it. */}
           <Route path="/me" element={<Me />} />
           {/* My expenses (ADR 0030, Phase E6) — same gate as /me itself: never page-restricted, so
@@ -691,6 +687,12 @@ export function App() {
               </Shell>
             }
           >
+            {/* The phone's whole navigation, as a SCREEN (ADR 0078). It belongs INSIDE the shell
+                layout: the topbar is not phone-hidden, so mounting /more outside it swapped the
+                chrome on every visit — the opposite of the N2 compliance the ADR claims. MorePage
+                itself bounces to `home` above the phone cutoff, where the sidebar IS the
+                navigation. */}
+            {officeOk && <Route path="/more" element={<MorePage home={home} />} />}
             {dashboardAllowed && (
               <Route
                 path="/"

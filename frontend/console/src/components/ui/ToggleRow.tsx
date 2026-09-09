@@ -30,7 +30,7 @@ export function ToggleRow({
       onClick={onToggle}
       className={cn(
         'flex items-center justify-between gap-3 rounded-lg text-left',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
         disabled && 'cursor-not-allowed opacity-60',
       )}
     >

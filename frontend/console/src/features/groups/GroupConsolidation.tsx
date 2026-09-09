@@ -426,7 +426,7 @@ function GroupDetail({
             </p>
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-brand-500 rounded-lg px-2 py-1"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-emerald rounded-lg px-2 py-1"
               onClick={() => onDialog({ kind: 'addMember', groupId: group.id })}
             >
               <Plus className="size-3.5" /> {t('groups.addMember')}
@@ -718,7 +718,7 @@ export function GroupConsolidation() {
             <div className="mt-2 border-t border-line pt-2">
               <button
                 type="button"
-                className="flex w-full items-center gap-1.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-brand-700 hover:bg-hover transition-colors focus-visible:outline-2 focus-visible:outline-brand-500"
+                className="flex w-full items-center gap-1.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-brand-700 hover:bg-hover transition-colors focus-visible:outline-2 focus-visible:outline-emerald"
                 onClick={() => setDialog({ kind: 'defineGroup' })}
               >
                 <Plus className="size-3.5" /> {t('groups.defineGroup')}

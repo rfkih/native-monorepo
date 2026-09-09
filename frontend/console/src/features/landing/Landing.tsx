@@ -133,7 +133,7 @@ function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label={t('a11y.toggleTheme')}
-      className="grid size-9 place-items-center rounded-lg border border-line bg-surface text-ink-2 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+      className="grid size-9 place-items-center rounded-lg border border-line bg-surface text-ink-2 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
     >
       {theme === 'dark' ? <Sun className="size-4.5" /> : <Moon className="size-4.5" />}
     </button>
@@ -563,7 +563,7 @@ function PricingSection() {
               {tier === 'FREE' ? (
                 <Link
                   to="/signup"
-                  className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-line bg-surface text-sm font-bold text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                  className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-line bg-surface text-sm font-bold text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
                 >
                   {t('landing.pricing.ctaFree')}
                 </Link>

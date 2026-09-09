@@ -79,7 +79,7 @@ export function EmptyCategory({ name, canManage }: { name: string; canManage: bo
           className={cn(
             'mt-5 inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2',
             'text-sm font-semibold text-emerald-2 transition-colors hover:border-emerald-line',
-            'focus-visible:outline-2 focus-visible:outline-brand-500',
+            'focus-visible:outline-2 focus-visible:outline-emerald',
           )}
         >
           {t('pos.category.emptyCta')} <ArrowRight className="size-4" aria-hidden="true" />

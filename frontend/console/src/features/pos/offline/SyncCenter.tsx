@@ -64,7 +64,7 @@ export function SyncCenter({ locale, onClose }: Props) {
             type="button"
             onClick={onClose}
             aria-label={t('common.cancel')}
-            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <X className="size-4" />
           </button>

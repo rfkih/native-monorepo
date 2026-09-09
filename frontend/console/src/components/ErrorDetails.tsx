@@ -76,7 +76,7 @@ export function ErrorDetails({ error, className }: { error: unknown; className?:
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1',
             'text-[11px] font-semibold text-ink-2 transition-colors hover:text-ink',
-            'focus-visible:outline-2 focus-visible:outline-brand-500',
+            'focus-visible:outline-2 focus-visible:outline-emerald',
           )}
         >
           {copied ? <Check className="size-3 text-profit" /> : <Copy className="size-3" />}

@@ -82,7 +82,7 @@ export function OrgUnitExpensesTab({
         />
         <Link
           to="/expenses"
-          className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500"
+          className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
         >
           {t('orgHub.expensesTab.viewAll')}
           <ArrowUpRight className="size-4" aria-hidden="true" />

@@ -73,7 +73,7 @@ export function ChannelDialog({ session, channel, onClose }: Props) {
             type="button"
             aria-label={t('common.close')}
             onClick={onClose}
-            className="text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <X className="size-5" />
           </button>

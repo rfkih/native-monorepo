@@ -62,7 +62,7 @@ export function ChannelListPanelView({
                 onClick={() => setSelected(c.code)}
                 className={cn(
                   'rounded-xl border px-3 py-3 text-left text-sm font-semibold transition-colors',
-                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                   isSelected
                     ? 'border-brand-500 bg-brand-50 text-brand-700'
                     : 'border-line bg-surface text-ink-2 hover:bg-hover',

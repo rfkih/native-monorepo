@@ -3,12 +3,13 @@
 - **Status:** Proposed
 - **Date:** 2026-09-09
 - **Deciders:** owner + Claude (frontend)
-- **Related:** `CLAUDE.md` (§Stack, §Conventions — the brand rules this changes),
-  `frontend/console/src/index.css` (`@theme`, the single token source),
+- **Related:** `frontend/console/src/index.css` (`@theme`, the single token source — and, until
+  now, the only written statement of the brand rules; `CLAUDE.md` never carried them),
   [ADR 0034](0034-pos-shell-verticals-are-adapters.md) (the POS shell that inherits these tokens),
   [ADR 0049](0049-business-and-employee-apps-outlet-terminal-auth.md) (the two Android shells),
-  [ADR 0075](0075-navigation-and-overlay-contract.md) (untouched here; the phone "Lainnya"
-  surface it governs is deliberately deferred — see Consequences).
+  [ADR 0075](0075-navigation-and-overlay-contract.md) (untouched here — this is a brand change, not
+  a navigation one), [ADR 0078](0078-the-phone-more-surface-is-a-screen.md) (the phone "Lainnya"
+  surface, which this ADR leaves alone and 0078 then takes up).
   Source designs: `Native Console Android.dc.html`, `Native Console Web.dc.html`,
   `Native Till Android.dc.html`.
 

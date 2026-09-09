@@ -152,7 +152,7 @@ function SuggestedPlatforms({
               disabled={createChannel.isPending}
               aria-label={t('channels.suggestions.addAria', { name: platform.name })}
               onClick={() => void addSuggestion(platform)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isPending ? <Spinner /> : <Plus className="size-3.5" />}
               {platform.name}
@@ -204,7 +204,7 @@ function ChannelRow({
           <button
             type="button"
             onClick={onEdit}
-            className="rounded px-2 py-1 text-xs font-semibold text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="rounded px-2 py-1 text-xs font-semibold text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {t('channels.edit')}
           </button>
@@ -215,7 +215,7 @@ function ChannelRow({
               type="button"
               onClick={toggleActive}
               className={cn(
-                'rounded px-2 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+                'rounded px-2 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                 channel.active ? 'text-ink-3 hover:text-loss' : 'text-brand-700 hover:text-brand-600',
               )}
             >

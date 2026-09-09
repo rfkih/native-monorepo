@@ -331,9 +331,11 @@ export function StocktakeSheet({
   ) : ingredients.length === 0 ? (
     <div className="px-5 py-10 text-center">
       <p className="text-sm text-ink-3">{t('stocktake.emptyHint')}</p>
-      {/* The hint names the ingredient screen — this button actually goes there. Close
-          FIRST: the standalone hosts (MobileTabBarGate) stay mounted across route
-          changes, and a lingering fixed overlay would cover the destination page. */}
+      {/* The hint names the ingredient screen — this button actually goes there. Close FIRST, and
+          explicitly: the host is MorePage now (ADR 0078 moved it off MobileTabBarGate), which
+          unmounts on navigation, so an unclosed overlay would be torn down mid-flow rather than
+          left covering the destination. Either way the close has to precede the navigate — do not
+          "simplify" this to a bare navigate on the assumption the unmount handles it. */}
       <Button
         variant="secondary"
         className="mt-4"

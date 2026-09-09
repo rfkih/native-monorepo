@@ -123,7 +123,7 @@ function IngredientManagementInner({
             fallback only — see MenuManagement's twin. */}
         <BackButton
           fallback="/pos"
-          className="grid size-[38px] shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          className="grid size-[38px] shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           <ArrowLeft className="size-[18px]" />
         </BackButton>
@@ -162,7 +162,7 @@ function IngredientManagementInner({
           onClick={toggle}
           aria-label={t('a11y.toggleTheme')}
           title={t('a11y.toggleTheme')}
-          className="grid size-[38px] shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          className="grid size-[38px] shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
         </button>
@@ -314,7 +314,7 @@ function IngredientRow({
           <button
             type="button"
             onClick={onConvert}
-            className="mt-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-500/20 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 dark:text-amber-400"
+            className="mt-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-500/20 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald dark:text-amber-400"
           >
             {t('inventory.convertUnit.badge', { unit: ingredient.unit })}
           </button>
@@ -324,7 +324,7 @@ function IngredientRow({
       <div
         className={cn(
           'tnum shrink-0 rounded-xl border px-2.5 py-1.5 font-mono text-xs font-semibold',
-          low ? 'border-loss/30 bg-tint-loss text-loss' : 'border-line bg-paper text-ink-2',
+          low ? 'border-loss/30 bg-tint-loss text-loss-ink' : 'border-line bg-paper text-ink-2',
         )}
       >
         {formatShownQty(ingredient.stockQty, ingredient, locale)} {shownUnit(ingredient)}
@@ -336,21 +336,21 @@ function IngredientRow({
         <button
           type="button"
           onClick={onReceive}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 max-sm:py-2.5"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald max-sm:py-2.5"
         >
           {t('inventory.receiveAction')}
         </button>
         <button
           type="button"
           onClick={onSet}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 max-sm:py-2.5"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald max-sm:py-2.5"
         >
           {t('inventory.setAction')}
         </button>
         <button
           type="button"
           onClick={onEdit}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 max-sm:py-2.5"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald max-sm:py-2.5"
         >
           {t('inventory.editAction')}
         </button>
