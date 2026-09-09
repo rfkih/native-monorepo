@@ -1,6 +1,6 @@
 # 0078. The phone's "More" surface is a screen, not a modal
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-09
 - **Deciders:** owner + Claude (frontend)
 - **Amends:** [ADR 0075](0075-navigation-and-overlay-contract.md) — rule N3 keeps its force; this

@@ -1,6 +1,6 @@
 # 0077. Neutral ink replaces the deep-cyan brand, fleet-wide
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-09
 - **Deciders:** owner + Claude (frontend)
 - **Related:** `frontend/console/src/index.css` (`@theme`, the single token source — and, until
