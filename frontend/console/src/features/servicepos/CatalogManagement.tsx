@@ -357,7 +357,7 @@ function CatalogItemRow({
         type="button"
         onClick={onToggleActive}
         disabled={togglePending}
-        className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-ink-3 transition-colors hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+        className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-ink-3 transition-colors hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-50"
       >
         {togglePending ? <Spinner /> : item.active ? t('serviceCatalog.deactivate') : t('serviceCatalog.activate')}
       </button>
@@ -365,7 +365,7 @@ function CatalogItemRow({
         type="button"
         onClick={onEdit}
         aria-label={t('serviceCatalog.editAction', { name: item.name })}
-        className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+        className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         <Pencil className="size-3.5" aria-hidden="true" />
       </button>
@@ -668,7 +668,7 @@ function WashersSection({
                 type="button"
                 onClick={() => updateMutation.mutate({ id: s.id, active: !s.active })}
                 disabled={updateMutation.isPending}
-                className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-ink-3 transition-colors hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-ink-3 transition-colors hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {updateMutation.isPending ? (
                   <Spinner />
@@ -682,7 +682,7 @@ function WashersSection({
                 type="button"
                 onClick={() => setDialog(s)}
                 aria-label={t('serviceCatalog.editAction', { name: s.displayLabel })}
-                className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
               >
                 <Pencil className="size-3.5" aria-hidden="true" />
               </button>

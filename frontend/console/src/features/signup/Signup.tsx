@@ -279,7 +279,7 @@ function PasswordInput({
         onClick={() => setVisible((v) => !v)}
         className={cn(
           'absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-ink-3',
-          'hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500',
+          'hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald',
         )}
       >
         {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}

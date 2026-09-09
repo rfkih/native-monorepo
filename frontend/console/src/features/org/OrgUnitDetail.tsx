@@ -814,7 +814,7 @@ function PeopleTab({
                 <button
                   type="button"
                   onClick={() => setEditingPages(member)}
-                  className="rounded-md px-2 py-1 text-xs text-ink-3 hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500"
+                  className="rounded-md px-2 py-1 text-xs text-ink-3 hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald"
                 >
                   {t('orgHub.people.editAccess')}
                 </button>

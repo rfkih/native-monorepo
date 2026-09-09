@@ -309,7 +309,7 @@ function BucketStrip({
           className={cn(
             'min-w-0 flex-1 px-4 py-3.5 max-sm:min-w-[104px] max-sm:flex-none',
             i < 4 && 'border-r border-line',
-            i === 4 ? 'bg-tint-loss text-loss' : 'text-ink',
+            i === 4 ? 'bg-tint-loss text-loss-ink' : 'text-ink',
           )}
         >
           <div className="truncate text-[10.5px] font-semibold uppercase tracking-[0.06em] opacity-70">

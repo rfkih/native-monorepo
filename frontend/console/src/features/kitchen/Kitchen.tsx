@@ -114,14 +114,14 @@ function KitchenInner({ session }: { session: CompanySession }) {
               fallback only — see MenuManagement's twin. */}
           <BackButton
             fallback="/pos"
-            className="grid size-9 shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="grid size-9 shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-all hover:border-line-strong hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <ArrowLeft className="size-4" />
           </BackButton>
 
           {/* Identity */}
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-sm">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald text-on-emerald">
               <ChefHat className="size-[18px]" />
             </span>
             <div className="min-w-0">
@@ -172,7 +172,7 @@ function KitchenInner({ session }: { session: CompanySession }) {
             onClick={toggle}
             aria-label={t('a11y.toggleTheme')}
             title={t('a11y.toggleTheme')}
-            className="grid size-9 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="grid size-9 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-all hover:border-line-strong hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </button>
@@ -256,7 +256,7 @@ function TicketCard({ bill, tables, session, onBump }: TicketCardProps) {
       className={cn(
         'flex flex-col rounded-2xl border-2 border-line bg-surface shadow-md',
         'transition-shadow duration-200 hover:shadow-lg',
-        'focus-within:ring-2 focus-within:ring-brand-500/40',
+        'focus-within:ring-2 focus-within:ring-emerald/40',
       )}
       aria-label={t('kitchen.ticketAriaLabel', { label: tableLabel })}
     >
@@ -292,7 +292,7 @@ function TicketCard({ bill, tables, session, onBump }: TicketCardProps) {
             <div key={line.id}>
               {/* qty × name — large, readable at distance */}
               <p className="font-display text-lg font-bold leading-snug text-ink">
-                <span className="mr-2 font-mono text-brand-600">{line.qty}&times;</span>
+                <span className="mr-2 font-mono text-ink">{line.qty}&times;</span>
                 {line.nameSnapshot}
               </p>
               {/* Modifier list — muted, one per line */}
@@ -340,7 +340,7 @@ function AllCaughtUp() {
   const { t } = useTranslation()
   return (
     <div className="flex flex-col items-center justify-center px-6 py-28 text-center">
-      <div className="mb-5 grid size-20 place-items-center rounded-3xl bg-brand-50 text-brand-500">
+      <div className="mb-5 grid size-20 place-items-center rounded-3xl bg-hover text-brand-500">
         <ChefHat className="size-9" aria-hidden="true" />
       </div>
       <h2 className="font-display text-2xl font-bold text-ink">{t('kitchen.emptyTitle')}</h2>
@@ -358,7 +358,7 @@ function NoCompany() {
   return (
     <div className="grid min-h-screen place-items-center bg-paper px-5">
       <div className="w-full max-w-md rounded-card border border-line bg-surface p-10 text-center shadow-sm">
-        <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-brand-50 text-brand-500">
+        <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-hover text-brand-500">
           <Utensils className="size-6" aria-hidden="true" />
         </div>
         <h2 className="font-display text-xl font-bold text-ink">{t('dashboard.noCompany')}</h2>

@@ -388,7 +388,7 @@ function EmployeeRow({
             type="button"
             onClick={onManage}
             className={cn(
-              'rounded text-left text-[14.5px] font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-brand-500',
+              'rounded text-left text-[14.5px] font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-emerald',
               active ? 'text-ink' : 'text-ink-3',
             )}
           >
@@ -412,7 +412,7 @@ function EmployeeRow({
               }}
               aria-label={t('hr.list.copyUsername', { username })}
               title={t('hr.list.copyUsername', { username })}
-              className="inline-flex items-center gap-1 rounded-full bg-emerald-tint py-0.5 pl-2 pr-1.5 font-mono text-[11px] font-semibold text-emerald-2 transition-colors hover:bg-brand-100/60 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-tint py-0.5 pl-2 pr-1.5 font-mono text-[11px] font-semibold text-emerald-2 transition-colors hover:bg-line-strong focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
             >
               {username}
               {copied ? (
@@ -466,7 +466,7 @@ function EmployeeRow({
           <button
             type="button"
             onClick={onCreateLogin}
-            className="h-[34px] rounded-[10px] border border-emerald-line bg-emerald-tint px-3 text-[12.5px] font-semibold text-emerald-2 transition-colors hover:bg-brand-100/60 focus-visible:outline-2 focus-visible:outline-brand-500"
+            className="h-[34px] rounded-[10px] border border-emerald-line bg-emerald-tint px-3 text-[12.5px] font-semibold text-emerald-2 transition-colors hover:bg-line-strong focus-visible:outline-2 focus-visible:outline-emerald"
           >
             {t('hr.list.actionCreateLogin')}
           </button>
@@ -474,7 +474,7 @@ function EmployeeRow({
         <button
           type="button"
           onClick={onManage}
-          className="h-[34px] rounded-[10px] border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:border-brand-300 hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-brand-500"
+          className="h-[34px] rounded-[10px] border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:border-brand-300 hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald"
         >
           {t('hr.list.manage')}
         </button>

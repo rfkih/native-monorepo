@@ -213,7 +213,7 @@ function Sidebar({
               aria-expanded={open}
               onClick={() => setOpenKey(open ? null : group.key)}
               className={cn(
-                'flex h-[38px] w-full items-center gap-2.5 rounded-[11px] px-3 text-left text-[13px] font-semibold text-ink transition-colors focus-visible:outline-2 focus-visible:outline-brand-500',
+                'flex h-[38px] w-full items-center gap-2.5 rounded-[11px] px-3 text-left text-[13px] font-semibold text-ink transition-colors focus-visible:outline-2 focus-visible:outline-emerald',
                 open ? 'bg-paper' : 'hover:bg-hover',
               )}
             >
@@ -250,7 +250,7 @@ function Sidebar({
                       onClick={onNavigate}
                       aria-current={activeItem ? 'page' : undefined}
                       className={cn(
-                        'flex h-[34px] items-center rounded-[10px] pl-[38px] pr-3 text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-brand-500',
+                        'flex h-[34px] items-center rounded-[10px] pl-[38px] pr-3 text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-emerald',
                         activeItem
                           ? 'bg-emerald-tint font-bold text-emerald-2'
                           : 'font-medium text-ink-3 hover:bg-hover hover:text-ink',
@@ -271,7 +271,7 @@ function Sidebar({
             to="/pos"
             viewTransition
             onClick={onNavigate}
-            className="flex h-14 items-center gap-[11px] rounded-[20px] border border-emerald-line bg-emerald-tint px-3.5 text-sm font-bold text-emerald-2 transition-colors hover:bg-brand-100/60"
+            className="flex h-14 items-center gap-[11px] rounded-[20px] border border-emerald-line bg-emerald-tint px-3.5 text-sm font-bold text-emerald-2 transition-colors hover:bg-line-strong"
           >
             <Store className="size-[18px] shrink-0" strokeWidth={1.9} />
             {openPosLabel}

@@ -147,7 +147,7 @@ export function BalanceSheet() {
         <button
           type="button"
           onClick={() => setShowZeros((v) => !v)}
-          className="font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          className="font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           {showZeros ? t('statements.zeroHide') : t('statements.zeroShow')}
         </button>

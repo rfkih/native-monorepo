@@ -65,7 +65,7 @@ export function OverdueSettlementCard({
 
           <Link
             to="/platform-settlements"
-            className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {t('platform.overdue.action')}
             <ArrowRight className="size-3.5" aria-hidden />

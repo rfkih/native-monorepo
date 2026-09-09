@@ -208,7 +208,7 @@ function ImagePicker({
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={processing}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-50"
             >
               {processing ? <Spinner /> : <ImageIcon className="size-3.5" aria-hidden="true" />}
               {t('menu.image.changeButton')}
@@ -232,7 +232,7 @@ function ImagePicker({
             'flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line',
             'px-4 py-6 text-sm text-ink-3 transition-colors',
             'hover:border-brand-400 hover:bg-brand-50/40 hover:text-brand-700',
-            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
@@ -1738,7 +1738,7 @@ function StockControl({
               <button
                 type="button"
                 onClick={() => setDialog('add')}
-                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
                 aria-label={t('menu.stock.addStock')}
               >
                 {t('menu.stock.addStock')}
@@ -1746,7 +1746,7 @@ function StockControl({
               <button
                 type="button"
                 onClick={() => setDialog('set')}
-                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
                 aria-label={t('menu.stock.setStock')}
               >
                 {t('menu.stock.setStock')}
@@ -1757,7 +1757,7 @@ function StockControl({
                   setStock.mutate({ itemId: item.id, quantity: null })
                 }
                 disabled={setStock.isPending}
-                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label={t('menu.stock.makeInfinite')}
               >
                 {setStock.isPending ? <Spinner /> : t('menu.stock.makeInfinite')}
@@ -1767,7 +1767,7 @@ function StockControl({
             <button
               type="button"
               onClick={() => setDialog('set')}
-              className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+              className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
               aria-label={t('menu.stock.trackAction')}
             >
               {t('menu.stock.trackAction')}
@@ -1857,7 +1857,7 @@ function OptionRow({
           }
           className={cn(
             'shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors',
-            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             'disabled:cursor-not-allowed disabled:opacity-50',
             option.available
               ? 'text-ink-3 hover:bg-paper hover:text-ink'
@@ -1881,7 +1881,7 @@ function OptionRow({
           className={cn(
             'grid size-6 shrink-0 place-items-center rounded-md transition-colors',
             'text-ink-3 hover:bg-hover hover:text-ink',
-            'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500',
+            'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald',
           )}
         >
           <Pencil className="size-3" aria-hidden="true" />
@@ -1974,7 +1974,7 @@ function ModifierGroupsPanel({
             type="button"
             onClick={onClose}
             aria-label={t('common.close')}
-            className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <X className="size-4" />
           </button>
@@ -2082,7 +2082,7 @@ function GroupBlock({
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="flex flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+            className="flex flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
             aria-expanded={expanded}
           >
             {expanded ? (
@@ -2105,7 +2105,7 @@ function GroupBlock({
             className={cn(
               'grid size-7 shrink-0 place-items-center rounded-lg transition-colors',
               'text-ink-3 hover:bg-hover hover:text-ink',
-              'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500',
+              'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald',
             )}
           >
             <Pencil className="size-3.5" aria-hidden="true" />
@@ -2152,7 +2152,7 @@ function GroupBlock({
               <button
                 type="button"
                 onClick={onAddOption}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
               >
                 <Plus className="size-3.5" aria-hidden="true" />
                 {t('menu.group.addOption')}
@@ -2279,7 +2279,7 @@ function ItemRow({
             type="button"
             onClick={onManageOptions}
             aria-label={t('menu.item.manageOptions', { name: item.name })}
-            className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <BookOpen className="size-3.5" aria-hidden="true" />
             {t('menu.item.options')}
@@ -2295,7 +2295,7 @@ function ItemRow({
             type="button"
             onClick={onManageRecipe}
             aria-label={t('recipe.manageAction', { name: item.name })}
-            className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <ChefHat className="size-3.5" aria-hidden="true" />
             {t('recipe.action')}
@@ -2309,7 +2309,7 @@ function ItemRow({
             className={cn(
               'grid size-[30px] shrink-0 place-items-center rounded-lg transition-colors max-sm:size-11',
               'text-ink-3 hover:bg-hover hover:text-ink',
-              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             )}
           >
             <Pencil className="size-3.5" aria-hidden="true" />
@@ -2327,7 +2327,7 @@ function ItemRow({
             }
             className={cn(
               'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
-              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
               'disabled:cursor-not-allowed disabled:opacity-50',
               item.available
                 ? 'text-ink-2 hover:bg-tint-loss/60 hover:text-loss'
@@ -2434,7 +2434,7 @@ function CategorySection({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1 text-[11px] font-bold uppercase tracking-[0.05em] text-ink-3 transition-colors hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+        className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1 text-[11px] font-bold uppercase tracking-[0.05em] text-ink-3 transition-colors hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         aria-expanded={expanded}
       >
         {expanded ? (
@@ -2515,7 +2515,7 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
             straight into the cashier till. */}
         <BackButton
           fallback="/pos"
-          className="grid size-[38px] shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          className="grid size-[38px] shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           <ArrowLeft className="size-[18px]" />
         </BackButton>
@@ -2569,7 +2569,7 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
           onClick={toggle}
           aria-label={t('a11y.toggleTheme')}
           title={t('a11y.toggleTheme')}
-          className="grid size-[38px] shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          className="grid size-[38px] shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
         </button>

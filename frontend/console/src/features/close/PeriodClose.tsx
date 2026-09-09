@@ -163,7 +163,7 @@ export function PeriodClose() {
           <button
             type="button"
             aria-label={t('common.cancel')}
-            className="ml-auto text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="ml-auto text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             onClick={() => setLastResult(null)}
           >
             <X className="size-4" />

@@ -31,14 +31,22 @@ export function BrandMark({
 }
 
 /**
- * Brand lockup: a gradient mark with an upward trend line, beside the stacked "Native / CONSOLE"
+ * Brand lockup: a solid ink mark with an upward trend line, beside the stacked "Native / CONSOLE"
  * wordmark. Used in the sidebar header (and anywhere the product needs to identify itself).
+ *
+ * The mark was a cyan gradient. Once the brand went ink (ADR 0077) it was the only cyan left on
+ * any screen, which reads as a leftover rather than as a logo — so it takes the primary fill and
+ * inverts with it, exactly like every other brand surface. The BINARY marks (Android launcher
+ * icons, favicon, OG image, Play Store assets) are still the old cyan and are tracked separately;
+ * they are generated artwork, not CSS.
  */
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={cn('flex items-center gap-[11px]', className)}>
-      <span className="grid size-[34px] place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 shadow-sm">
-        <BrandMark />
+      <span className="grid size-[34px] place-items-center rounded-xl bg-emerald text-on-emerald">
+        {/* currentColor, not the #fff default: on dark the tile is near-white, and a white glyph
+            on it would be invisible. Other callers keep the default deliberately. */}
+        <BrandMark stroke="currentColor" />
       </span>
       <span className="leading-none">
         <span className="block font-display text-[17px] font-extrabold leading-none tracking-[-0.02em] text-ink">

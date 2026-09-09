@@ -24,7 +24,7 @@ export function SettingsChrome({ children }: { children: ReactNode }) {
         <div className="flex-1" />
         <Link
           to="/"
-          className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           {t('me.toDashboard')}
         </Link>

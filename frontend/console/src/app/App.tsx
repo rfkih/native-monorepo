@@ -5,6 +5,7 @@ import { LogOut } from 'lucide-react'
 import { Shell } from '@/app/Shell'
 import { TransitionedRoutes } from '@/app/TransitionedRoutes'
 import { MobileTabBarGate } from '@/app/MobileTabBarGate'
+import { MorePage } from '@/app/MorePage'
 import { SettingsChrome } from '@/components/SettingsChrome'
 import { Spinner } from '@/components/ui/Spinner'
 import { AppSkeleton, PageSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
@@ -20,6 +21,7 @@ import {
   canFinance,
   canHr,
   canOps,
+  canPayroll,
   canPos as canPosRole,
   canReports,
   ROLE_HOME,
@@ -389,7 +391,7 @@ function OnboardingStandalone() {
           onClick={auth.logout}
           className={
             'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-ink-3 ' +
-            'transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500'
+            'transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald'
           }
         >
           <LogOut className="size-4" />
@@ -492,6 +494,9 @@ export function App() {
   const hrOk = canHr(roles)
   const canPos = canPosRole(auth.roles)
   const canEmployee = hasAnyRole(auth.roles, 'employee')
+  // The same union MobileTabBarGate uses to decide the office tab set — it gates /more so a URL
+  // can never reach a navigation surface the bar itself would not offer (ADR 0078).
+  const officeOk = opsOk || reportsOk || financeOk || hrOk || canPayroll(roles)
   // The /settings/features escape hatch (P1 tier-mode) — owner-only, server-enforced too (the
   // org-service PUT independently re-checks the role); a manager token never sees the route mount.
   const isOwner = hasAnyRole(roles, 'owner')
@@ -682,6 +687,12 @@ export function App() {
               </Shell>
             }
           >
+            {/* The phone's whole navigation, as a SCREEN (ADR 0078). It belongs INSIDE the shell
+                layout: the topbar is not phone-hidden, so mounting /more outside it swapped the
+                chrome on every visit — the opposite of the N2 compliance the ADR claims. MorePage
+                itself bounces to `home` above the phone cutoff, where the sidebar IS the
+                navigation. */}
+            {officeOk && <Route path="/more" element={<MorePage home={home} />} />}
             {dashboardAllowed && (
               <Route
                 path="/"

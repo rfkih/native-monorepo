@@ -60,7 +60,7 @@ export function TableManagement({ session, onClose }: Props) {
             type="button"
             onClick={onClose}
             aria-label={t('common.cancel')}
-            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <X className="size-4" />
           </button>
@@ -156,7 +156,7 @@ function TableRow({
           type="button"
           onClick={() => deactivate.mutate(table.tableId)}
           className={cn(
-            'text-xs text-ink-3 hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+            'text-xs text-ink-3 hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             'rounded px-2 py-1',
           )}
         >
@@ -167,7 +167,7 @@ function TableRow({
           type="button"
           onClick={() => activate.mutate(table.tableId)}
           className={cn(
-            'text-xs text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+            'text-xs text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             'rounded px-2 py-1',
           )}
         >

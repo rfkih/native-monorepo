@@ -312,7 +312,7 @@ function SuccessPanel({
             </p>
             <Link
               to="/opening-balances"
-              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
               {t('onboarding.openingBalancesCta.action')} <ArrowRight className="size-3.5" />
             </Link>

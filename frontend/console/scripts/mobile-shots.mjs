@@ -4,7 +4,7 @@
  * Runs against a LOCAL `npm run dev` server in dev-auth mode with every /api/v1/** call
  * intercepted and answered from fixtures below (no backend needed): seeds a dev company
  * session in localStorage, then walks every phone screen in two passes (light/en and
- * dark/id), including the More sheet and the claim-decision sheet.
+ * dark/id), including the More screen and the claim-decision sheet.
  *
  *   npm run dev        (terminal 1)
  *   node scripts/mobile-shots.mjs [outDir]   (terminal 2)
@@ -220,6 +220,10 @@ const ROUTES = [
   ['/api/v1/users', () => TEAM],
   ['/api/v1/org-units', () => []],
   ['/api/v1/outlets', () => []],
+  // ADR 0076 — the home page's overdue-payout nudge. It renders nothing when the list is empty,
+  // which is what we want in a shot; without a fixture it fell through to the `{}` default and
+  // `overdue.map` threw, taking the whole dashboard down behind the error boundary.
+  ['/api/v1/platform-settlements/overdue', () => []],
 ]
 
 function resolveFixture(url) {
@@ -285,13 +289,14 @@ for (const pass of [
     console.log(`[${pass.name}] ${name} ok (${page.url().replace(BASE, '') || '/'})`)
   }
 
-  // More sheet (manager persona)
+  // More SCREEN (manager persona) — a route since ADR 0078, not a sheet.
   await page.goto(`${BASE}/`, { waitUntil: 'load' })
   await page.waitForTimeout(1000)
-  await page.getByRole('button', { name: pass.moreLabel, exact: true }).click({ timeout: 8000 })
+  // A LINK now, not a button — More is a routed screen since ADR 0078.
+  await page.getByRole('link', { name: pass.moreLabel, exact: true }).click({ timeout: 8000 })
   await page.waitForTimeout(600)
-  await page.screenshot({ path: `${dir}/more-sheet.png` })
-  console.log(`[${pass.name}] more-sheet ok`)
+  await page.screenshot({ path: `${dir}/more-screen.png` })
+  console.log(`[${pass.name}] more-screen ok`)
 
   // Claim decision sheet
   await page.goto(`${BASE}/expenses`, { waitUntil: 'load' })
@@ -304,7 +309,10 @@ for (const pass of [
   // Expanded payslip (sign-flip lines + Cetak)
   await page.goto(`${BASE}/me/payslips`, { waitUntil: 'load' })
   await page.waitForTimeout(1200)
-  await page.getByText('2026-07', { exact: true }).first().click({ timeout: 8000 })
+  // The row label is `periodLabel(period, locale)` ("July 2026" / "Juli 2026"), not the raw
+  // `2026-07` this used to match — so it broke in BOTH passes the moment the label was localised.
+  // Click the first payslip row instead: locale-agnostic, and it is the row we want either way.
+  await page.locator('button:has-text("2026")').first().click({ timeout: 8000 })
   await page.waitForTimeout(900)
   await page.screenshot({ path: `${dir}/payslip-open.png`, fullPage: true })
   console.log(`[${pass.name}] payslip-open ok`)

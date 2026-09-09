@@ -89,7 +89,7 @@ export function PaymentSettings() {
         <div className="flex-1" />
         <Link
           to="/"
-          className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           {t('me.toDashboard')}
         </Link>
@@ -288,7 +288,7 @@ function OutletRow({
         aria-expanded={expanded}
         aria-controls={panelId}
         onClick={onToggle}
-        className="flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl p-4 text-left transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+        className="flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl p-4 text-left transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         <span className="flex min-w-0 items-center gap-2.5">
           {expanded ? (

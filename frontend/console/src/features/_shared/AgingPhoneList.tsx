@@ -17,7 +17,9 @@ export interface AgingPhoneRow {
 }
 
 function chipClass(bucketIndex: number): string {
-  if (bucketIndex === 4) return 'bg-tint-loss text-loss'
+  // `loss-ink` rather than `loss` on the tint: #E5484D is the FIGURE colour and is thin against a
+  // pale ground at 11.5px (ADR 0077).
+  if (bucketIndex === 4) return 'bg-tint-loss text-loss-ink'
   if (bucketIndex >= 2) return 'bg-amber-tint text-amber-2'
   return 'bg-ink-50 text-ink-2'
 }

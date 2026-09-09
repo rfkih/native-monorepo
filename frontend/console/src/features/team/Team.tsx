@@ -236,7 +236,7 @@ function CopyButton({ text }: { text: string }) {
       className={cn(
         'grid size-8 place-items-center rounded-lg transition-colors',
         'text-ink-3 hover:bg-emerald-tint/60 hover:text-brand-600',
-        'focus-visible:outline-2 focus-visible:outline-brand-500',
+        'focus-visible:outline-2 focus-visible:outline-emerald',
       )}
     >
       {copied ? <Check className="size-4 text-profit" /> : <Copy className="size-4" />}

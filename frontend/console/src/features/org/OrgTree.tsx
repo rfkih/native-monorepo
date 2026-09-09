@@ -61,7 +61,7 @@ function NodeActions({
         type="button"
         aria-label={t('org.rename')}
         title={t('org.rename')}
-        className="rounded-md px-2 py-1 text-xs text-ink-3 hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500"
+        className="rounded-md px-2 py-1 text-xs text-ink-3 hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald"
         onClick={() => onRename(unit)}
       >
         {t('org.rename')}
@@ -81,7 +81,7 @@ function NodeActions({
           type="button"
           aria-label={t('org.reactivate')}
           title={t('org.reactivate')}
-          className="rounded-md px-2 py-1 text-xs text-brand-600/80 hover:bg-emerald-tint hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-brand-500"
+          className="rounded-md px-2 py-1 text-xs text-brand-600/80 hover:bg-emerald-tint hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-emerald"
           onClick={() => onReactivate(unit)}
         >
           {t('org.reactivate')}

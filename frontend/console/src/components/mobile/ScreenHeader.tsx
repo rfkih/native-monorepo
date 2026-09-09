@@ -37,7 +37,11 @@ export function ScreenHeader({
   return (
     <header
       className={cn(
-        'sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-paper/90 px-2 backdrop-blur',
+        // Solid, not translucent — the blur cost a compositing layer on every scroll for very
+        // little separation. It stays `bg-paper`, NOT `bg-surface`: PhoneScreen renders on paper,
+        // and on dark those differ (#101010 vs #181818), so surface would paint the sticky header
+        // as a lighter block floating above its own page.
+        'sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-paper px-2',
         className,
       )}
     >
