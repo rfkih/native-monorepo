@@ -2,7 +2,9 @@ package id.co.nativeapp.finance.platform.controller;
 
 import id.co.nativeapp.finance.platform.domain.PlatformNetExceedsGrossException;
 import id.co.nativeapp.finance.platform.domain.PlatformOverSettlementException;
+import id.co.nativeapp.finance.platform.domain.PlatformSettlementAlreadyVoidedException;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlementIdempotencyKeyConflictException;
+import id.co.nativeapp.finance.platform.domain.PlatformSettlementNotFoundException;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -38,6 +40,26 @@ public class PlatformSettlementAdvice {
       PlatformSettlementIdempotencyKeyConflictException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
     problem.setType(URI.create(TYPE_BASE + "platform-settlement-idempotency-key-conflict"));
+    problem.setTitle("Conflict");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler(PlatformSettlementNotFoundException.class)
+  public ProblemDetail handleNotFound(
+      PlatformSettlementNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+    problem.setType(URI.create(TYPE_BASE + "platform-settlement-not-found"));
+    problem.setTitle("Not found");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler(PlatformSettlementAlreadyVoidedException.class)
+  public ProblemDetail handleAlreadyVoided(
+      PlatformSettlementAlreadyVoidedException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+    problem.setType(URI.create(TYPE_BASE + "platform-settlement-already-voided"));
     problem.setTitle("Conflict");
     problem.setDetail(ex.getMessage());
     return decorate(problem, request);

@@ -21,7 +21,12 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
-import { usePayoutSources, useSettlementHistory, type PlatformSettlementRecord } from './platformApi'
+import {
+  usePayoutSources,
+  useSettlementHistory,
+  useVoidSettlement,
+  type PlatformSettlementRecord,
+} from './platformApi'
 import { PayoutSection } from './PayoutSection'
 import { SettlementSourceSettings } from './SettlementSourceSettings'
 
@@ -59,6 +64,7 @@ function PlatformSettlementsInner({ company }: { company: CompanySession }) {
       <SettlementSourceSettings session={company} />
 
       <HistorySection
+        session={company}
         query={historyQuery}
         rows={history}
         // Union with the codes the history itself carries: `sources` only lists payers that
@@ -76,6 +82,7 @@ function PlatformSettlementsInner({ company }: { company: CompanySession }) {
 }
 
 function HistorySection({
+  session,
   query,
   rows,
   channelCodes,
@@ -83,6 +90,7 @@ function HistorySection({
   onChannelChange,
   locale,
 }: {
+  session: CompanySession
   query: ReturnType<typeof useSettlementHistory>
   rows: PlatformSettlementRecord[]
   channelCodes: string[]
@@ -130,6 +138,7 @@ function HistorySection({
                 <th className="px-4 py-3 text-right">{t('platform.history.colGross')}</th>
                 <th className="px-4 py-3 text-right">{t('platform.history.colNet')}</th>
                 <th className="px-4 py-3 text-right">{t('platform.history.colFee')}</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -146,6 +155,9 @@ function HistorySection({
                   <td className="tnum px-4 py-3 text-right font-mono text-ink">
                     {formatMoney(row.feeMinor, row.currency, locale)}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <VoidButton session={session} row={row} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -161,4 +173,55 @@ function formatSettledAt(iso: string, locale: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(d)
+}
+
+/**
+ * Takes one recorded payout back. Asks first — this posts a contra entry and hands the balance back
+ * to the sub-ledger, which is a money movement, not an undo of a typo in a text field.
+ *
+ * <p>The row stays in the history afterwards: voiding stamps the settlement and posts a correction
+ * rather than deleting it, so the books keep both.
+ */
+function VoidButton({
+  session,
+  row,
+}: {
+  session: CompanySession
+  row: PlatformSettlementRecord
+}) {
+  const { t } = useTranslation()
+  const [asking, setAsking] = useState(false)
+  const voidIt = useVoidSettlement(session)
+
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAsking(true)}
+        className="text-[13px] font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+      >
+        {t('platform.history.void')}
+      </button>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-2 whitespace-nowrap">
+      <span className="text-[12.5px] text-ink-3">{t('platform.history.voidConfirm')}</span>
+      <button
+        type="button"
+        disabled={voidIt.isPending}
+        onClick={() => voidIt.mutate(row.id, { onSuccess: () => setAsking(false) })}
+        className="text-[13px] font-semibold text-loss underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+      >
+        {t('platform.history.voidYes')}
+      </button>
+      <button
+        type="button"
+        onClick={() => setAsking(false)}
+        className="text-[13px] text-ink-3 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+      >
+        {t('common.cancel')}
+      </button>
+    </span>
+  )
 }

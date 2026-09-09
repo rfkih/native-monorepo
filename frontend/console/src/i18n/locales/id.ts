@@ -913,7 +913,7 @@ export const id = {
       prepaidExpense: 'Sudah dibayar di muka',
       fixedAssetsCost: 'Peralatan & kendaraan',
       accumulatedDepreciation: 'Penyusutan sejauh ini',
-      cash: 'Kas',
+      cash: 'Kas & dana belum masuk bank',
       qrisClearing: 'Dana QRIS belum cair',
       cardClearing: 'Dana kartu belum cair',
       accountsPayable: 'Utang usaha',
@@ -3906,8 +3906,13 @@ export const id = {
       settledHeading: 'Yang dilunasi',
       grossHeading: 'Bruto',
       totalGross: 'Total bruto',
-      netLabel: 'Masuk rekening',
-      netHint: 'Angka di mutasi bank, sebelum Anda pecah-pecah.',
+      netLabel: 'Jumlah yang diterima',
+      netHint:
+        'Angka di mutasi bank. Kalau uangnya belum masuk, jangan dicatat dulu — tunggu sampai cair.',
+      nothingReceived:
+        'Tidak menerima apa-apa bukan pencairan. Kalau uangnya belum masuk, catat nanti setelah cair.',
+      feeLooksHigh:
+        'Berarti {{pct}} dari bruto jadi potongan. Mungkin saja, tapi sebaiknya dicek dulu sebelum dicatat.',
       netPlaceholder: 'mis. 2216100',
       feeLabel: 'Potongan',
       netExceedsGross:
@@ -3991,6 +3996,9 @@ export const id = {
       colSettledAt: 'Waktu settle',
       colGross: 'Kotor',
       colNet: 'Bersih',
+      void: 'Batalkan',
+      voidConfirm: 'Batalkan pencairan ini?',
+      voidYes: 'Ya, batalkan',
       colFee: 'Komisi',
     },
   },
