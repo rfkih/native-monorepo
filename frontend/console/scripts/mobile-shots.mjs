@@ -220,6 +220,10 @@ const ROUTES = [
   ['/api/v1/users', () => TEAM],
   ['/api/v1/org-units', () => []],
   ['/api/v1/outlets', () => []],
+  // ADR 0076 — the home page's overdue-payout nudge. It renders nothing when the list is empty,
+  // which is what we want in a shot; without a fixture it fell through to the `{}` default and
+  // `overdue.map` threw, taking the whole dashboard down behind the error boundary.
+  ['/api/v1/platform-settlements/overdue', () => []],
 ]
 
 function resolveFixture(url) {
@@ -304,7 +308,10 @@ for (const pass of [
   // Expanded payslip (sign-flip lines + Cetak)
   await page.goto(`${BASE}/me/payslips`, { waitUntil: 'load' })
   await page.waitForTimeout(1200)
-  await page.getByText('2026-07', { exact: true }).first().click({ timeout: 8000 })
+  // The row label is `periodLabel(period, locale)` ("July 2026" / "Juli 2026"), not the raw
+  // `2026-07` this used to match — so it broke in BOTH passes the moment the label was localised.
+  // Click the first payslip row instead: locale-agnostic, and it is the row we want either way.
+  await page.locator('button:has-text("2026")').first().click({ timeout: 8000 })
   await page.waitForTimeout(900)
   await page.screenshot({ path: `${dir}/payslip-open.png`, fullPage: true })
   console.log(`[${pass.name}] payslip-open ok`)
