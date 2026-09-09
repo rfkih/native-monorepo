@@ -70,8 +70,35 @@ tender the customer used, and record **one payout as one settlement with several
    exact (rule 8: integer minor units).
 4. **The journal keeps 0036's shape and 0016's invariant**:
    `Dr CASH_CLEARING (net) + Dr <fee account> (allocated fee, per line) / Cr <line's receivable
-   account> (gross, per line)`. Zero-amount legs omitted. **Bank reconciliation remains the only
-   Dr-BANK writer** — recording a payout does NOT put money in 1000 Bank.
+   account> (gross, per line)`. Zero-amount legs omitted.
+5. **The payout finishes the journey into the BANK** (V68). QRIS and marketplace money never touches
+   the till: the acquirer or platform transfers it to the merchant's bank account. Leaving the net in
+   CASH_CLEARING — the same account that holds physical drawer cash — made the owner's "cash" figure
+   neither the drawer nor the bank, and left 1000 Bank at zero forever because nothing ever swept it.
+
+   So the payout now also writes the bank statement line for its own deposit and reconciles it:
+
+   ```
+   settlement entry      Dr CASH_CLEARING (net) + Dr fee / Cr receivable (gross)
+   reconciliation entry  Dr BANK (net)                   / Cr CASH_CLEARING (net)
+   ```
+
+   CASH_CLEARING nets to ZERO across the two — a genuine pass-through, which is what a clearing
+   account is for. **Bank reconciliation remains the only Dr-BANK writer**: the payout calls the same
+   `ReconciliationWriter` a manual reconcile goes through, so nothing new debits BANK and the line
+   cannot be reconciled twice. That also CLOSES the double-credit risk recorded below, where a payout
+   and a manual reconcile of the same transfer could both clear 1901.
+
+   An earlier draft had the settlement debit BANK directly and skip reconciliation, reasoning that a
+   reconciliation cannot be undone so a void would be stuck. **That requirement was wrong**: a
+   reconciliation is CORRECTED, not undone — by a contra entry, as every other correction in this
+   ledger works. Voiding a payout therefore posts contras for both entries and removes the statement
+   line it fabricated (that line is this system's artefact, not a record from the bank).
+
+   Deposits only where the destination is unambiguous: with no bank account configured, or with more
+   than one, the payout still posts and its net waits in CASH_CLEARING to be swept manually. Booking
+   money is never blocked on a missing setting, and which account received a transfer is a fact only
+   the merchant knows.
 5. **Overdue is per source, not a daily alarm.** Each source KIND carries an expected cadence in
    days (marketplace 8, QRIS 3, card 4 — the usual payout cycle plus slack for weekends); a payer
    spanning several kinds takes the LONGEST of them, because Shopee settles its marketplace and

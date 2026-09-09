@@ -53,6 +53,9 @@ class PlatformSettlementPostingTest {
         new PlatformSettlementWriter(
             mock(PlatformSettlementRepository.class),
             mock(PlatformReceivableWriter.class),
+            mock(id.co.nativeapp.finance.bank.repository.BankAccountRepository.class),
+            mock(id.co.nativeapp.finance.bank.service.StatementLineWriter.class),
+            mock(id.co.nativeapp.finance.bank.service.ReconciliationWriter.class),
             new GeneralLedgerWriter(
                 mock(JournalEntryRepository.class),
                 mock(JournalLineRepository.class),
