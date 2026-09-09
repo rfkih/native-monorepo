@@ -140,7 +140,9 @@ export function DialogOverlay({
         aria-modal="true"
         aria-label={ariaLabel}
         className={cn(
-          'relative w-full p-6 outline-none',
+          // Card is border-only since ADR 0077, so the modal layer carries its own elevation —
+          // matching Drawer and MobileSheet, which already did.
+          'relative w-full p-6 shadow-lg outline-none',
           size === 'lg' ? 'max-w-2xl' : 'max-w-md',
           // Phone: a bottom sheet flush to the edge. Tablet+: a centred card.
           'max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]',

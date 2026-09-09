@@ -37,7 +37,9 @@ export function ScreenHeader({
   return (
     <header
       className={cn(
-        'sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-paper/90 px-2 backdrop-blur',
+        // Solid, not translucent: with a white page ground the blur had nothing to separate and
+        // only cost a compositing layer on every scroll (ADR 0077).
+        'sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface px-2',
         className,
       )}
     >

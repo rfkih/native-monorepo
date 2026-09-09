@@ -238,9 +238,11 @@ export function DashboardPhone() {
                         {formatMoney(o.revenueMinor, outletCurrency, locale)}
                       </span>
                     </div>
-                    <div className="h-[7px] overflow-hidden rounded-full bg-ink-50">
+                    {/* Ink, not the brand ramp (ADR 0077): this is a magnitude bar in a list, not a
+                        chart — the design draws it in the same ink as the figure beside it. */}
+                    <div className="h-[7px] overflow-hidden rounded-full bg-hover">
                       <div
-                        className="h-full rounded-full bg-brand-500"
+                        className="h-full rounded-full bg-emerald"
                         style={{ width: maxOutlet > 0 ? `${(o.revenueMinor / maxOutlet) * 100}%` : '0%' }}
                       />
                     </div>
