@@ -8,9 +8,9 @@ import type { CompanySession } from '@/lib/session'
 import { usePayoutSources, useSetSettlementSource, useSettlementSources } from './platformApi'
 
 /**
- * Who pays out the QRIS balance (ADR 0076). A merchant using Shopee's QR is paid by Shopee together
- * with its ShopeeFood orders; a Xendit QR settles on its own. Naming a payer here is what MERGES
- * the QRIS balance into that payer's payout — and moves what has already built up.
+ * Who pays out the QRIS and card balances (ADR 0076). A merchant using Shopee's QR is paid by Shopee
+ * together with its ShopeeFood orders; a Xendit QR settles on its own. Naming a payer here is what
+ * MERGES that balance into the payer's payout — and moves what has already built up.
  *
  * <p><strong>A dropdown, never free text.</strong> The value has to match an existing payer exactly
  * to merge with it, so a typo would not fail — it would silently open a SECOND payout group that
@@ -25,14 +25,40 @@ import { usePayoutSources, useSetSettlementSource, useSettlementSources } from '
  */
 export function SettlementSourceSettings({ session }: { session: CompanySession }) {
   const { t } = useTranslation()
+  const sourcesQuery = usePayoutSources(session)
+
+  return (
+    <Card className="p-6">
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+        {t('platform.sourceConfig.heading')}
+      </h2>
+      <p className="mt-1.5 max-w-[62ch] text-[13px] text-ink-3">
+        {t('platform.sourceConfig.hint')}
+      </p>
+
+      <div className="mt-4 flex flex-col gap-4">
+        <PayerPicker session={session} kind="QRIS" />
+        <PayerPicker session={session} kind="CARD" />
+      </div>
+
+      {(sourcesQuery.data ?? []).every((s) => !s.lines.some((l) => l.sourceKind === 'MARKETPLACE')) ? (
+        <p className="mt-3 text-[13px] text-ink-3">{t('platform.sourceConfig.noPayers')}</p>
+      ) : null}
+    </Card>
+  )
+}
+
+/** One tender family's payer. Card and QRIS differ only in which family they name. */
+function PayerPicker({ session, kind }: { session: CompanySession; kind: 'QRIS' | 'CARD' }) {
+  const { t } = useTranslation()
   const configQuery = useSettlementSources(session)
   const sourcesQuery = usePayoutSources(session)
   const save = useSetSettlementSource(session)
 
-  /** The unset state: the QRIS balance settles under its own name, not merged into anyone. */
-  const STANDALONE = 'QRIS'
+  /** The unset state: the balance settles under its own name, not merged into anyone. */
+  const STANDALONE = kind
 
-  const configured = (configQuery.data ?? []).find((c) => c.sourceKind === 'QRIS')
+  const configured = (configQuery.data ?? []).find((c) => c.sourceKind === kind)
   const [choice, setChoice] = useState<string | null>(null)
   const current = choice ?? configured?.sourceCode ?? STANDALONE
 
@@ -51,17 +77,9 @@ export function SettlementSourceSettings({ session }: { session: CompanySession 
   const dirty = current !== (configured?.sourceCode ?? STANDALONE)
 
   return (
-    <Card className="p-6">
-      <h2 className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
-        {t('platform.sourceConfig.heading')}
-      </h2>
-      <p className="mt-1.5 max-w-[62ch] text-[13px] text-ink-3">
-        {t('platform.sourceConfig.hint')}
-      </p>
-
-      <div className="mt-4 flex flex-wrap items-end gap-3">
+    <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[220px] flex-1">
-          <Field label={t('platform.sourceConfig.qrisLabel')}>
+          <Field label={t(`platform.sourceConfig.${kind === 'QRIS' ? 'qrisLabel' : 'cardLabel'}`)}>
             <Select value={current} onChange={(e) => setChoice(e.target.value)}>
               <option value={STANDALONE}>{t('platform.sourceConfig.standalone')}</option>
               {options.map((code) => (
@@ -74,23 +92,15 @@ export function SettlementSourceSettings({ session }: { session: CompanySession 
         </div>
         <Button
           onClick={() =>
-            save.mutate(
-              { sourceKind: 'QRIS', sourceCode: current },
-              { onSuccess: () => setChoice(null) },
-            )
+            save.mutate({ sourceKind: kind, sourceCode: current }, { onSuccess: () => setChoice(null) })
           }
           disabled={save.isPending || !dirty}
         >
           {t('platform.sourceConfig.save')}
         </Button>
-      </div>
-
-      {options.length === 0 ? (
-        <p className="mt-2 text-[13px] text-ink-3">{t('platform.sourceConfig.noPayers')}</p>
-      ) : null}
       {save.isError ? (
-        <p className="mt-2 text-[13px] text-loss">{t('platform.sourceConfig.saveFailed')}</p>
+        <p className="mt-2 w-full text-[13px] text-loss">{t('platform.sourceConfig.saveFailed')}</p>
       ) : null}
-    </Card>
+    </div>
   )
 }

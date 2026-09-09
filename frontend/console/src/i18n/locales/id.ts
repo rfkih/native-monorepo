@@ -955,6 +955,7 @@ export const id = {
       cashShort: 'Selisih kas kurang',
       platformFee: 'Biaya marketplace',
       qrisFee: 'Biaya QRIS (MDR)',
+      cardFee: 'Biaya kartu (MDR)',
       inventoryShrinkage: 'Selisih stok (susut)',
       salariesExpense: 'Beban gaji',
       bpjsEmployerExpense: 'Beban BPJS — bagian perusahaan',
@@ -3932,6 +3933,7 @@ export const id = {
       hint:
         'Kalau QR Anda berasal dari sebuah marketplace, uangnya datang di transfer yang sama dengan pesanan dari mereka. Menyebutkannya di sini menyatukan keduanya jadi satu pencairan — sekaligus memindahkan saldo yang sudah menumpuk.',
       qrisLabel: 'QRIS dicairkan oleh',
+      cardLabel: 'Kartu dicairkan oleh',
       standalone: 'Cair sendiri',
       noPayers:
         'Belum ada marketplace yang membayar Anda, jadi belum ada yang bisa disatukan dengan QRIS. Begitu ada, pilihannya muncul di sini.',
