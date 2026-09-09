@@ -1,5 +1,12 @@
 package id.co.nativeapp.finance.platform.service;
 
+import id.co.nativeapp.finance.bank.domain.ReconciliationCategory;
+import id.co.nativeapp.finance.bank.dto.StatementLineResponse;
+import id.co.nativeapp.finance.bank.projection.BankAccountView;
+import id.co.nativeapp.finance.bank.repository.BankAccountRepository;
+import id.co.nativeapp.finance.bank.service.ReconciliationWriter;
+import id.co.nativeapp.finance.bank.service.StatementLineInput;
+import id.co.nativeapp.finance.bank.service.StatementLineWriter;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
@@ -8,7 +15,9 @@ import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.platform.domain.PlatformNetExceedsGrossException;
 import id.co.nativeapp.finance.platform.domain.PlatformOverSettlementException;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlement;
+import id.co.nativeapp.finance.platform.domain.PlatformSettlementAlreadyVoidedException;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlementIdempotencyKeyConflictException;
+import id.co.nativeapp.finance.platform.domain.PlatformSettlementNotFoundException;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation.AllocatedLine;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation.SourceLine;
@@ -28,6 +37,8 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -57,7 +68,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class PlatformSettlementWriter {
 
+  private static final org.slf4j.Logger log =
+      org.slf4j.LoggerFactory.getLogger(PlatformSettlementWriter.class);
+
   private final PlatformSettlementRepository settlementRepository;
+  private final PlatformReceivableWriter platformReceivable;
+  private final BankAccountRepository bankAccountRepository;
+  private final StatementLineWriter statementLineWriter;
+  private final ReconciliationWriter reconciliationWriter;
   private final GeneralLedgerWriter generalLedgerWriter;
   private final RoleAccountResolver roleAccountResolver;
   private final JdbcTemplate jdbcTemplate;
@@ -65,11 +83,19 @@ public class PlatformSettlementWriter {
 
   public PlatformSettlementWriter(
       PlatformSettlementRepository settlementRepository,
+      PlatformReceivableWriter platformReceivable,
+      BankAccountRepository bankAccountRepository,
+      StatementLineWriter statementLineWriter,
+      ReconciliationWriter reconciliationWriter,
       GeneralLedgerWriter generalLedgerWriter,
       RoleAccountResolver roleAccountResolver,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.settlementRepository = settlementRepository;
+    this.platformReceivable = platformReceivable;
+    this.bankAccountRepository = bankAccountRepository;
+    this.statementLineWriter = statementLineWriter;
+    this.reconciliationWriter = reconciliationWriter;
     this.generalLedgerWriter = generalLedgerWriter;
     this.roleAccountResolver = roleAccountResolver;
     this.jdbcTemplate = jdbcTemplate;
@@ -211,8 +237,215 @@ public class PlatformSettlementWriter {
     // reason GeneralLedgerWriter flushes journal_entry before its journal_line rows).
     settlementRepository.saveAndFlush(settlement);
     insertLines(settlement.getId(), allocated, currency, companyId, actor);
+    depositIntoBank(settlement, net, now);
 
     return new PlatformSettlementResult(settlement, true);
+  }
+
+  /**
+   * Takes a recorded payout back (ADR 0076): posts a CONTRA entry negating its legs and hands each
+   * line's gross back to the sub-ledger it came out of.
+   *
+   * <p>Append-only is preserved — the settlement is stamped, never deleted or edited, so the ledger
+   * keeps both the mistake and its correction. That is the same shape a sale's void takes.
+   *
+   * <p>Once-only is claimed by a GUARDED update (`WHERE voided_at IS NULL`) rather than a
+   * read-then-write: two concurrent voids would otherwise both pass an application check and hand
+   * the balance back twice, leaving the sub-ledger permanently above the GL.
+   *
+   * @throws PlatformSettlementNotFoundException no such payout for this tenant
+   * @throws PlatformSettlementAlreadyVoidedException it has already been taken back (409)
+   */
+  @Transactional
+  public PlatformSettlementResult voidSettlement(UUID settlementId) {
+    Objects.requireNonNull(settlementId, "settlementId");
+    String companyId = TenantContext.require().companyId();
+    String actor = TenantContext.require().actor();
+
+    PlatformSettlement settlement =
+        settlementRepository
+            .findById(settlementId)
+            .orElseThrow(() -> new PlatformSettlementNotFoundException(settlementId));
+
+    // Serialize against a concurrent payout FROM THE SAME PAYER, so a void and a settle cannot
+    // interleave between the guard and the restore.
+    jdbcTemplate.queryForList(
+        "SELECT pg_advisory_xact_lock(hashtext(?))",
+        "platform_settlement:" + companyId + ":" + settlement.getChannelCode());
+
+    Instant now = clock.instant();
+    UUID voidEntryId = UUID.randomUUID();
+    // Read before the claim: the guarded UPDATE below bumps `version` behind the managed entity's
+    // back, so anything this method still needs from it must be taken first — and the entity must
+    // NOT be mutated afterwards or the flush fails an optimistic-lock check it cannot win.
+    UUID bankLineId = settlement.getBankLineId();
+
+    // Claim it. Zero rows means someone else already did — never a second contra entry.
+    int claimed =
+        jdbcTemplate.update(
+            """
+            UPDATE platform_settlement
+               SET voided_at     = ?,
+                   void_entry_id = ?,
+                   bank_line_id  = NULL,
+                   updated_at    = now(),
+                   updated_by    = ?,
+                   version       = version + 1
+             WHERE id = ?
+               AND company_id = ?
+               AND voided_at IS NULL
+            """,
+            java.sql.Timestamp.from(now),
+            voidEntryId,
+            actor,
+            settlementId,
+            companyId);
+    if (claimed == 0) {
+      throw new PlatformSettlementAlreadyVoidedException(settlementId);
+    }
+
+    String currency = settlement.getCurrency() == null ? null : settlement.getCurrency().strip();
+    List<SourceLine> lines = readLinesNormalized(settlementId);
+    List<AllocatedLine> allocated = SettlementAllocation.allocate(lines, settlement.getFeeMinor());
+
+    // Hand each line's gross back to the row it was taken from. Restoring is an ADD, mirroring the
+    // accrual, so a balance that moved on in the meantime is not overwritten.
+    for (AllocatedLine line : allocated) {
+      platformReceivable.accumulate(
+          companyId,
+          new SettlementSourceReader.SettlementSourceRef(
+              line.kind(), line.channelCode(), settlement.getChannelCode()),
+          currency,
+          line.grossMinor(),
+          actor);
+    }
+
+    String period = LedgerPosting.periodOf(now);
+    JournalEntry contra =
+        buildVoidEntry(
+            settlement.getChannelCode(),
+            allocated,
+            Money.ofMinor(settlement.getNetMinor(), currency),
+            period,
+            now,
+            voidEntryId);
+    persistEntry(contra, companyId);
+    reverseBankDeposit(
+        bankLineId,
+        settlement.getChannelCode(),
+        Money.ofMinor(settlement.getNetMinor(), currency),
+        period,
+        now);
+
+    return new PlatformSettlementResult(settlement, false);
+  }
+
+  /**
+   * The contra of {@link #buildSourceSettlementEntry} — every leg with its side flipped, so the two
+   * entries sum to nothing on every account they touched.
+   */
+  public JournalEntry buildVoidEntry(
+      String payer,
+      List<AllocatedLine> allocated,
+      Money net,
+      String period,
+      Instant now,
+      UUID entryId) {
+    String currency = net.currency().getCurrencyCode();
+    List<JournalLine> lines = new ArrayList<>();
+    List<AccountRole> rolesPosted = new ArrayList<>();
+    int lineNo = 1;
+
+    for (AllocatedLine line : allocated) {
+      AccountRole receivableRole = line.kind().accountRole();
+      lines.add(
+          JournalLine.debit(
+              entryId,
+              lineNo++,
+              requireMapped(receivableRole, now),
+              Money.ofMinor(line.grossMinor(), currency)));
+      rolesPosted.add(receivableRole);
+    }
+    if (net.amountMinor() > 0) {
+      lines.add(
+          JournalLine.credit(
+              entryId, lineNo++, requireMapped(AccountRole.CASH_CLEARING, now), net));
+      rolesPosted.add(AccountRole.CASH_CLEARING);
+    }
+    for (AllocatedLine line : allocated) {
+      if (line.feeMinor() > 0) {
+        AccountRole feeRole = feeRoleFor(line.kind());
+        lines.add(
+            JournalLine.credit(
+                entryId,
+                lineNo++,
+                requireMapped(feeRole, now),
+                Money.ofMinor(line.feeMinor(), currency)));
+        rolesPosted.add(feeRole);
+      }
+    }
+
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
+    return JournalEntry.balanced(
+        entryId,
+        period,
+        now,
+        "Platform settlement VOID — " + payer,
+        currency,
+        entryId,
+        usesIllustrative,
+        lines);
+  }
+
+  /**
+   * Finishes the money's journey: writes the bank statement line for THIS payout's deposit and
+   * reconciles it, so the net lands in BANK instead of sitting in the drawer's account.
+   *
+   * <p>QRIS and marketplace money never touches the till — the acquirer or platform transfers it to
+   * the bank — so leaving the net in CASH_CLEARING made the owner's "cash" figure neither the
+   * drawer nor the bank, and left 1000 Bank at zero forever.
+   *
+   * <p>Reconciliation stays the only writer that debits BANK (ADR 0016): this calls the same {@link
+   * ReconciliationWriter} a manual reconcile goes through. The line it creates cannot be reconciled
+   * twice, which also closes the double-credit risk of a payout and a manual reconcile both
+   * clearing the same transfer.
+   *
+   * <p>Silently does nothing when the company has no bank account yet — the payout still posts, its
+   * net simply waits in CASH_CLEARING to be swept the manual way, exactly as before V68. Booking
+   * money is never blocked on a missing setting.
+   */
+  private void depositIntoBank(PlatformSettlement settlement, Money net, Instant now) {
+    if (net.amountMinor() <= 0) {
+      return;
+    }
+    List<BankAccountView> accounts = bankAccountRepository.findAllView();
+    if (accounts.size() != 1) {
+      // Zero: nothing to deposit into. More than one: which account received it is a fact only the
+      // merchant knows, and guessing would put money in the wrong place — the request carries it
+      // once the console asks (deliberately not inferred here).
+      log.warn(
+          "platform settlement {} not auto-deposited: {} bank accounts configured",
+          settlement.getId(),
+          accounts.size());
+      return;
+    }
+
+    UUID bankAccountId = accounts.getFirst().getId();
+    List<StatementLineResponse> imported =
+        statementLineWriter.importLines(
+            bankAccountId,
+            List.of(
+                new StatementLineInput(
+                    LocalDate.ofInstant(now, ZoneOffset.UTC),
+                    net.amountMinor(),
+                    "Pencairan " + settlement.getChannelCode(),
+                    settlement.getIdempotencyKey())));
+
+    UUID lineId = imported.getFirst().id();
+    reconciliationWriter.reconcile(lineId, ReconciliationCategory.CLEARING);
+    settlement.setBankLineId(lineId);
+    settlementRepository.saveAndFlush(settlement);
   }
 
   /**
@@ -240,6 +473,42 @@ public class PlatformSettlementWriter {
           "Idempotency-Key was already used for a different settlement");
     }
     return new PlatformSettlementResult(existing, false);
+  }
+
+  /**
+   * Undoes the bank leg of a voided payout — a CONTRA entry ({@code Dr CASH_CLEARING / Cr BANK}),
+   * never an un-reconcile. A reconciliation is CORRECTED, not undone: the ledger keeps the deposit
+   * and its reversal, which is where the audit trail belongs.
+   *
+   * <p>The fabricated statement line goes with it. It is not a record from the bank — it is an
+   * artefact this payout created — so leaving it behind would show a deposit that, per the void,
+   * did not happen, and would sit in the reconciliation report forever.
+   */
+  private void reverseBankDeposit(
+      UUID lineId, String payer, Money net, String period, Instant now) {
+    if (lineId == null || net.amountMinor() <= 0) {
+      return;
+    }
+    UUID contraId = UUID.randomUUID();
+    List<JournalLine> lines =
+        List.of(
+            JournalLine.debit(contraId, 1, requireMapped(AccountRole.CASH_CLEARING, now), net),
+            JournalLine.credit(contraId, 2, requireMapped(AccountRole.BANK, now), net));
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, AccountRole.CASH_CLEARING, AccountRole.BANK);
+    persistEntry(
+        JournalEntry.balanced(
+            contraId,
+            period,
+            now,
+            "Platform settlement VOID (bank) — " + payer,
+            net.currency().getCurrencyCode(),
+            contraId,
+            usesIllustrative,
+            lines),
+        TenantContext.require().companyId());
+
+    jdbcTemplate.update("DELETE FROM bank_statement_line WHERE id = ?", lineId);
   }
 
   /**

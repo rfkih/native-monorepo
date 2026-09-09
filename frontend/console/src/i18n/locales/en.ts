@@ -934,7 +934,7 @@ export const en = {
       prepaidExpense: 'Paid in advance',
       fixedAssetsCost: 'Equipment & vehicles',
       accumulatedDepreciation: 'Wear and tear so far',
-      cash: 'Cash',
+      cash: 'Cash & money not yet in the bank',
       qrisClearing: 'QRIS funds not yet settled',
       cardClearing: 'Card funds not yet settled',
       accountsPayable: 'Accounts payable',
@@ -3987,8 +3987,13 @@ export const en = {
       settledHeading: 'Settled',
       grossHeading: 'Gross',
       totalGross: 'Total settled',
-      netLabel: 'Reached your bank',
-      netHint: 'The figure on the bank statement, before you split anything out.',
+      netLabel: 'Amount received',
+      netHint:
+        'The figure on the bank statement. If the money has not arrived yet, do not record the payout — wait until it has.',
+      nothingReceived:
+        'Nothing received is not a payout. If the money has not arrived yet, record it once it has.',
+      feeLooksHigh:
+        'That leaves {{pct}} of the gross as a deduction. Possible, but worth checking the figures before recording it.',
       netPlaceholder: 'e.g. 2216100',
       feeLabel: 'Deduction',
       netExceedsGross:
@@ -4072,6 +4077,9 @@ export const en = {
       colSettledAt: 'Settled',
       colGross: 'Gross',
       colNet: 'Net',
+      void: 'Take back',
+      voidConfirm: 'Take this payout back?',
+      voidYes: 'Yes, take it back',
       colFee: 'Fee',
     },
   },

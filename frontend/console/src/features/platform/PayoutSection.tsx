@@ -145,8 +145,22 @@ function PayoutForm({
   const netMinor = parsePlatformAmountInput(netMajor, source.currency, { allowZero: true })
   const feeMinor = netMinor == null ? null : totalGross - netMinor
 
+  // A payout of NOTHING is not a payout. The field asks what reached the bank, and "0" is what a
+  // reader types when the answer is "it hasn't yet" — which booked an entire card balance as fee on
+  // the first real use. Recording nothing received is never the right entry; waiting is.
+  const nothingReceived = netMinor === 0 && totalGross > 0
+  // A deduction over this share is possible but rare enough to be worth a second look before it
+  // becomes an expense that quietly eats the month's profit.
+  const feeShare = feeMinor != null && totalGross > 0 ? feeMinor / totalGross : 0
+  const feeLooksWrong = !nothingReceived && feeShare > 0.3
+
   const blocked =
-    chosen.length === 0 || anyGrossInvalid || netMinor == null || feeMinor == null || feeMinor < 0
+    chosen.length === 0 ||
+    anyGrossInvalid ||
+    netMinor == null ||
+    feeMinor == null ||
+    feeMinor < 0 ||
+    nothingReceived
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -244,6 +258,20 @@ function PayoutForm({
           <p className="flex items-start gap-2 text-[13px] text-loss">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
             {t('platform.payout.netExceedsGross')}
+          </p>
+        ) : null}
+        {nothingReceived ? (
+          <p className="flex items-start gap-2 text-[13px] text-loss">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            {t('platform.payout.nothingReceived')}
+          </p>
+        ) : null}
+        {feeLooksWrong ? (
+          <p className="flex items-start gap-2 text-[13px] text-amber-2">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            {t('platform.payout.feeLooksHigh', {
+              pct: `${Math.round(feeShare * 100)}%`,
+            })}
           </p>
         ) : null}
 
