@@ -7,14 +7,18 @@
 #   - FAIL-CLOSED: a missing/invalid verdict file, a CLI error, or a blown budget fails the check.
 #     The verdict is enforced deterministically here (jq), not by trusting the model's prose:
 #     the check fails if verdict != PASS OR any CRITICAL/HIGH finding exists.
-#   - ONE deliberate exception to fail-closed: with no ANTHROPIC_API_KEY secret the gates SKIP
-#     with a PR warning instead of failing. Reason: the secret has never been set, so every gate
-#     died on "Not logged in" and every PR in this repo carried three red X's that reviewed
-#     nothing — a permanently-red advisory check teaches you to ignore red, which costs more
-#     than it catches. Skipping is not a coverage regression (an unconfigured gate reviews
-#     nothing either way) and it is LOUD: a ::warning on the PR plus a SKIPPED job summary.
+#   - STATUS 2026-09-09: these gates are OFF BY DECISION, not by oversight. No ANTHROPIC_API_KEY
+#     secret is set and none is wanted for now (cost: --max-budget-usd 8 x 3 gates = up to ~$24
+#     per PR). Don't "fix" this by adding the secret — that is a spending decision, not a repair.
+#   - ONE deliberate exception to fail-closed: with no key the gates SKIP rather than fail. Until
+#     today they died on "Not logged in" instead, so every PR carried three red X's that reviewed
+#     nothing — and PR #32 was merged straight past all four of them, which is what a permanently
+#     red advisory check trains you to do. Skipping is not a coverage regression (an unconfigured
+#     gate reviews nothing either way). It reports as SKIPPED, never PASS, and emits a ::notice
+#     — deliberately NOT a ::warning, because warning about a settled decision on every single PR
+#     recreates the same ignore-the-signal problem in a different colour.
 #     ⚠ If `ai-gate` is ever made a REQUIRED check, revisit this: deleting the secret would then
-#     be a silent way to bypass review. Turn the gates on with:  gh secret set ANTHROPIC_API_KEY
+#     be a silent way to bypass review. To turn the gates on:  gh secret set ANTHROPIC_API_KEY
 #   - Model: claude-opus-5. Cost: bounded by --max-budget-usd per gate (3 gates per PR);
 #     docs-only PRs skip the model call entirely (empty code diff -> synthetic PASS).
 #   - NOTE: on a public repo, PRs from forks don't receive secrets — the gates only work for
@@ -95,7 +99,7 @@ jobs:
           if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
             # Without a key the CLI exits "Not logged in" — a red X that reviewed nothing and
             # says nothing useful. Skip loudly instead, so the PR shows what is actually missing.
-            echo "::warning title=AI gates are not configured::No ANTHROPIC_API_KEY secret, so the ${{ matrix.gate }} gate reviewed nothing. Enable it with: gh secret set ANTHROPIC_API_KEY"
+            echo "::notice title=AI gates are off::The ${{ matrix.gate }} gate is switched off (no ANTHROPIC_API_KEY) and reviewed nothing. This is deliberate — see the header of ai-gates.yml."
             printf '{"gate":"%s","verdict":"SKIPPED","summary":"no ANTHROPIC_API_KEY secret - the gate did not run and reviewed nothing","findings":[]}\n' \
               "${{ matrix.gate }}" > ai-verdict.json
             exit 0
@@ -171,7 +175,7 @@ jobs:
           # Green-because-nothing-ran and green-because-three-reviewers-approved are different
           # facts, and the check name alone can't tell them apart. Say which one this is.
           if [ "$VERDICT" = "SKIPPED" ]; then
-            echo "::warning title=AI gates are not configured::ai-gate is green because the AI reviewers never ran — no AI review was performed on this PR. Enable them with: gh secret set ANTHROPIC_API_KEY"
+            echo "::notice title=AI gates are off::ai-gate is green because the AI reviewers are switched off, not because they approved anything. No AI review was performed on this PR."
             echo "ai-gate green — but NOTHING WAS REVIEWED (no ANTHROPIC_API_KEY)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
