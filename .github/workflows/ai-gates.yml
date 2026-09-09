@@ -2,14 +2,27 @@
 # reviewers: code-review, QA, and security. Layered ON TOP of the deterministic ci.yml gates; the
 # backstop for what still slips through is the health-gated auto-rollback deploy (ADR 0057 §3).
 #
-#   - Branch protection should require BOTH `gate` (ci.yml) and `ai-gate` (this file).
+#   - Branch protection should require BOTH `gate` (ci.yml) and `ai-gate` (this file). TODAY IT
+#     REQUIRES ONLY `gate` — see the unconfigured-skip note below before changing that.
 #   - FAIL-CLOSED: a missing/invalid verdict file, a CLI error, or a blown budget fails the check.
 #     The verdict is enforced deterministically here (jq), not by trusting the model's prose:
 #     the check fails if verdict != PASS OR any CRITICAL/HIGH finding exists.
-#   - Model: claude-opus-4-8. Cost: bounded by --max-budget-usd per gate (3 gates per PR);
+#   - STATUS 2026-09-09: these gates are OFF BY DECISION, not by oversight. No ANTHROPIC_API_KEY
+#     secret is set and none is wanted for now (cost: --max-budget-usd 8 x 3 gates = up to ~$24
+#     per PR). Don't "fix" this by adding the secret — that is a spending decision, not a repair.
+#   - ONE deliberate exception to fail-closed: with no key the gates SKIP rather than fail. Until
+#     today they died on "Not logged in" instead, so every PR carried three red X's that reviewed
+#     nothing — and PR #32 was merged straight past all four of them, which is what a permanently
+#     red advisory check trains you to do. Skipping is not a coverage regression (an unconfigured
+#     gate reviews nothing either way). It reports as SKIPPED, never PASS, and emits a ::notice
+#     — deliberately NOT a ::warning, because warning about a settled decision on every single PR
+#     recreates the same ignore-the-signal problem in a different colour.
+#     ⚠ If `ai-gate` is ever made a REQUIRED check, revisit this: deleting the secret would then
+#     be a silent way to bypass review. To turn the gates on:  gh secret set ANTHROPIC_API_KEY
+#   - Model: claude-opus-5. Cost: bounded by --max-budget-usd per gate (3 gates per PR);
 #     docs-only PRs skip the model call entirely (empty code diff -> synthetic PASS).
-#   - Requires the ANTHROPIC_API_KEY repository secret. NOTE: on a public repo, PRs from forks
-#     don't receive secrets — the gates only work for same-repo branches (the solo workflow here).
+#   - NOTE: on a public repo, PRs from forks don't receive secrets — the gates only work for
+#     same-repo branches (the solo workflow here).
 name: ai-gates
 
 on:
@@ -30,25 +43,47 @@ jobs:
     name: ai ${{ matrix.gate }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Every leg reaches the same verdict about CONFIGURATION (the key is there or it isn't), so
+    # matrix last-writer-wins is harmless here — this output only ever says "did the gates run".
+    outputs:
+      verdict: ${{ steps.enforce.outputs.verdict }}
     strategy:
       fail-fast: false # one gate failing must not cancel the other two verdicts
       matrix:
         gate: [code-review, qa, security]
     steps:
+      # FIRST, before anything expensive: with no key every step below is wasted work. Checking
+      # here rather than at the model call saves a full-history checkout and a global npm install
+      # per leg (3 legs, every PR) — an unconfigured run costs seconds instead of minutes.
+      - name: Are the gates configured?
+        id: cfg
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout (full history for the merge-base diff)
+        if: steps.cfg.outputs.configured == 'true'
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Node 22
+        if: steps.cfg.outputs.configured == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install Claude Code
+        if: steps.cfg.outputs.configured == 'true'
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Materialize the PR diff
+        if: steps.cfg.outputs.configured == 'true'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || 'origin/master' }}
         run: |
@@ -61,6 +96,14 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            # Without a key the CLI exits "Not logged in" — a red X that reviewed nothing and
+            # says nothing useful. Skip loudly instead, so the PR shows what is actually missing.
+            echo "::notice title=AI gates are off::The ${{ matrix.gate }} gate is switched off (no ANTHROPIC_API_KEY) and reviewed nothing. This is deliberate — see the header of ai-gates.yml."
+            printf '{"gate":"%s","verdict":"SKIPPED","summary":"no ANTHROPIC_API_KEY secret - the gate did not run and reviewed nothing","findings":[]}\n' \
+              "${{ matrix.gate }}" > ai-verdict.json
+            exit 0
+          fi
           if [ ! -s ai-gate.diff ]; then
             echo "empty code diff — synthetic PASS, no model call"
             printf '{"gate":"%s","verdict":"PASS","summary":"empty code diff (docs-only change) - nothing to review","findings":[]}\n' \
@@ -69,17 +112,32 @@ jobs:
           fi
           # Read-only repo access + Write (for the verdict file) + read-only git. The agent's
           # chat output is irrelevant; only ai-verdict.json is enforced, in the next step.
+          # The "workspace has not been trusted" line in the log is EXPECTED and wanted: it means
+          # .claude/settings.json's allow-list is ignored and the flags below are the whole
+          # permission set. Don't "fix" it by trusting the workspace — that widens what the CI
+          # agent may run.
           claude -p "$(cat .github/ai-gates/${{ matrix.gate }}.md)" \
-            --model claude-opus-4-8 \
+            --model claude-opus-5 \
             --max-budget-usd 8 \
             --allowedTools "Read" "Grep" "Glob" "Write" \
               "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)"
 
       - name: Enforce the verdict (fail closed)
+        id: enforce
         run: |
           test -s ai-verdict.json || { echo "::error::${{ matrix.gate }}: no verdict file produced — failing closed"; exit 1; }
           jq . ai-verdict.json > /dev/null || { echo "::error::${{ matrix.gate }}: verdict is not valid JSON — failing closed"; exit 1; }
           VERDICT=$(jq -r '.verdict // "FAIL"' ai-verdict.json)
+          if [ "$VERDICT" = "SKIPPED" ]; then
+            # Reported as SKIPPED, never as PASS: the summary must not claim a review happened.
+            {
+              echo "## AI ${{ matrix.gate }}: SKIPPED — gates not configured"
+              jq -r '.summary' ai-verdict.json
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "verdict=SKIPPED" >> "$GITHUB_OUTPUT"
+            echo "AI ${{ matrix.gate }}: SKIPPED — no ANTHROPIC_API_KEY"
+            exit 0
+          fi
           BLOCKING=$(jq '[.findings[]? | select(.severity == "CRITICAL" or .severity == "HIGH")] | length' ai-verdict.json)
           echo "## AI ${{ matrix.gate }}: $VERDICT ($BLOCKING blocking finding(s))" >> "$GITHUB_STEP_SUMMARY"
           jq -r '.summary' ai-verdict.json >> "$GITHUB_STEP_SUMMARY"
@@ -111,4 +169,14 @@ jobs:
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
       - name: All AI gates passed
-        run: echo "ai-gate green"
+        env:
+          VERDICT: ${{ needs.ai.outputs.verdict }}
+        run: |
+          # Green-because-nothing-ran and green-because-three-reviewers-approved are different
+          # facts, and the check name alone can't tell them apart. Say which one this is.
+          if [ "$VERDICT" = "SKIPPED" ]; then
+            echo "::notice title=AI gates are off::ai-gate is green because the AI reviewers are switched off, not because they approved anything. No AI review was performed on this PR."
+            echo "ai-gate green — but NOTHING WAS REVIEWED (no ANTHROPIC_API_KEY)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "ai-gate green"

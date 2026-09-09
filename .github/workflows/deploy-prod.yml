@@ -5,15 +5,19 @@
 #                   for the images by resolving their digests (retry loop), pins them into a
 #                   release manifest, and runs the health-gated deploy on the VPS.
 #
-# CI gate (closes the "prod releases are CI-ungated" gap): ci.yml now also runs on every `v*`
-# tag push (a full build — no path scoping on a tag). The `verify-ci` job below polls the GitHub
-# Actions API for a workflow run of ci.yml at this exact commit SHA and fails/blocks the deploy
-# job (and therefore the production approval prompt) until one is found with conclusion=success.
-# It accepts EITHER the tag-triggered ci run OR an earlier branch/PR run that happened to land on
-# this same SHA (head_sha match is all that's checked) — belt and braces, no double build forced.
-# A re-tag of an already-green commit therefore passes immediately; a genuinely new commit waits
-# for its own ci run. This job has no `environment:`, so it runs (and can fail fast) BEFORE the
-# reviewer is asked to approve — nobody approves a deploy whose CI hasn't even started.
+# CI gate (closes the "prod releases are CI-ungated" gap): the `verify-ci` job below polls the
+# GitHub Actions API for a run of ci.yml at this exact commit SHA and fails/blocks the deploy job
+# (and therefore the production approval prompt) until one is found with conclusion=success.
+# The match is on head_sha ALONE — not on the trigger — so the run that ci.yml already did when
+# this commit landed on master is the run that satisfies the gate. That is why ci.yml deliberately
+# does NOT listen for tags: the tree at a tag is byte-identical to the tree at the master commit it
+# points at, so a tag-triggered run rebuilt the same thing and produced a third run of the same
+# commit message. Per ADR 0053 a tag is only ever cut from master, so the run always exists — and
+# a tag cut from anywhere else finds none and is BLOCKED here, which is the point. (Tagging a
+# commit whose run has aged out of Actions retention needs a manual ci.yml workflow_dispatch on
+# that SHA first.) A re-tag of an already-green commit passes on the first poll. This job has no
+# `environment:`, so it runs (and can fail fast) BEFORE the reviewer is asked to approve — nobody
+# approves a deploy whose CI hasn't even started.
 #
 # The deploy itself is scripts/prod-deploy.sh ON the VPS: flock → DB snapshot (disaster net) →
 # pull → rolling up → health gate → smoke → LAST_GOOD | AUTO-ROLLBACK. Exit codes: 0 deployed,
@@ -82,11 +86,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ steps.rel.outputs.sha }}
         run: |
-          # Poll instead of a fixed sleep: the tag push above also triggers ci.yml (it now
-          # listens for `v*` tags too), so normally we're just waiting out its run time. We
-          # match on head_sha only (not on trigger/event), so a same-SHA branch/PR ci run
-          # that already succeeded counts too — belt and braces, and it means a re-tag of an
-          # already-green commit passes on the very first check below.
+          # We match on head_sha only (not on trigger/event): the ci run from when this commit
+          # landed on master counts, which is why ci.yml doesn't listen for tags at all. So the
+          # usual path exits on attempt 1. The poll is for the case where the tag is pushed
+          # while master's own run is still going — and it fails loudly rather than deploying
+          # if no run for this SHA ever appears.
           for attempt in $(seq 1 50); do
             RUNS=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=20" --jq '.workflow_runs')
             COUNT=$(echo "$RUNS" | jq 'length')
