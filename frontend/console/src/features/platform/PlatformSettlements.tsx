@@ -198,7 +198,7 @@ function VoidButton({
       <button
         type="button"
         onClick={() => setAsking(true)}
-        className="text-[13px] font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+        className="text-[13px] font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         {t('platform.history.void')}
       </button>
@@ -211,14 +211,14 @@ function VoidButton({
         type="button"
         disabled={voidIt.isPending}
         onClick={() => voidIt.mutate(row.id, { onSuccess: () => setAsking(false) })}
-        className="text-[13px] font-semibold text-loss underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+        className="text-[13px] font-semibold text-loss underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         {t('platform.history.voidYes')}
       </button>
       <button
         type="button"
         onClick={() => setAsking(false)}
-        className="text-[13px] text-ink-3 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+        className="text-[13px] text-ink-3 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         {t('common.cancel')}
       </button>

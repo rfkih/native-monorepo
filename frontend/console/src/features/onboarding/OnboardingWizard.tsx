@@ -275,7 +275,7 @@ function SuccessPanel({
     <div className="reveal mx-auto max-w-[680px]">
       <Card className="rounded-[24px] p-12 text-center">
         {/* Check circle */}
-        <div className="mx-auto grid size-16 place-items-center rounded-full bg-brand-50 text-brand-600">
+        <div className="mx-auto grid size-16 place-items-center rounded-full bg-emerald-tint text-emerald-2">
           <Check className="size-7" />
         </div>
 
@@ -302,7 +302,7 @@ function SuccessPanel({
         {/* Non-blocking prompt (ADR 0037): a suggestion, never a gate — "Go to dashboard" above
             already completes the wizard regardless of whether this is followed. */}
         <div className="mx-auto mt-6 flex max-w-xs items-start gap-3 rounded-xl border border-line bg-paper p-4 text-left">
-          <BookOpen className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />
+          <BookOpen className="mt-0.5 size-4 shrink-0 text-emerald-2" aria-hidden />
           <div>
             <p className="text-sm font-semibold text-ink">
               {t('onboarding.openingBalancesCta.title')}
@@ -312,7 +312,7 @@ function SuccessPanel({
             </p>
             <Link
               to="/opening-balances"
-              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-emerald-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
               {t('onboarding.openingBalancesCta.action')} <ArrowRight className="size-3.5" />
             </Link>

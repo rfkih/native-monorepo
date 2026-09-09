@@ -194,7 +194,7 @@ export function DashboardPhone() {
           {/* Brand-new company — first-sale prompt instead of empty figures (UX audit parity). */}
           {trendEmpty ? (
             <Card className="flex flex-col items-center gap-3 p-6 text-center">
-              <span className="grid size-11 place-items-center rounded-full bg-brand-50 text-brand-700">
+              <span className="grid size-11 place-items-center rounded-full bg-emerald-tint text-emerald-2">
                 <Store className="size-5" aria-hidden="true" />
               </span>
               <div>
@@ -212,7 +212,7 @@ export function DashboardPhone() {
                 <Link
                   to="/opening-balances"
                   viewTransition
-                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-700 hover:underline"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-2 hover:underline"
                 >
                   <BookOpen className="size-4" aria-hidden="true" />
                   {t('dashboard.openingShortcut')}

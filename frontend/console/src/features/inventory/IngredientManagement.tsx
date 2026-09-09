@@ -180,7 +180,7 @@ function IngredientManagementInner({
             </Card>
           ) : ingredients.length === 0 ? (
             <Card className="mx-auto max-w-md p-10 text-center">
-              <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand-50 text-brand-600">
+              <div className="mx-auto grid size-12 place-items-center rounded-full bg-emerald-tint text-emerald-2">
                 <Package className="size-5" aria-hidden="true" />
               </div>
               <h2 className="mt-3 font-display text-lg font-semibold text-ink">
@@ -336,7 +336,7 @@ function IngredientRow({
         <button
           type="button"
           onClick={onReceive}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald max-sm:py-2.5"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald max-sm:py-2.5"
         >
           {t('inventory.receiveAction')}
         </button>
@@ -435,7 +435,7 @@ function ConvertUnitDialog({
                   className={cn(
                     'rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors',
                     unitChoice === u
-                      ? 'border-brand-500 bg-emerald-tint text-brand-600'
+                      ? 'border-emerald-line bg-emerald-tint text-emerald-2'
                       : 'border-line bg-surface text-ink-2 hover:bg-hover',
                   )}
                 >
@@ -1008,7 +1008,7 @@ function ReceiveDialog({
         {isReceive && financeOk ? (
           <p className="rounded-xl bg-tint-info px-3.5 py-3 text-xs leading-relaxed text-ink-2">
             {t('inventory.receivePricedHint')}{' '}
-            <Link to="/expenses/record" className="font-semibold text-brand-700 hover:underline">
+            <Link to="/expenses/record" className="font-semibold text-emerald-2 hover:underline">
               {t('inventory.receivePricedHintLink')}
             </Link>
           </p>

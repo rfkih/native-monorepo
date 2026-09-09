@@ -387,7 +387,7 @@ function RecipeEditor({
           <button
             type="button"
             onClick={() => setLines((prev) => [...prev, newLine(null)])}
-            className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-[12.5px] font-semibold text-emerald-2 transition-colors hover:border-brand-300 hover:bg-emerald-tint"
+            className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-[12.5px] font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
           >
             <Plus className="size-3.5" />
             {t('recipe.addLine')}
@@ -428,7 +428,7 @@ function RecipeEditor({
                               onClick={() =>
                                 setLines((prev) => [...prev, newLine(option.id)])
                               }
-                              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-line-strong text-[12px] font-semibold text-emerald-2 transition-colors hover:border-brand-300 hover:bg-emerald-tint"
+                              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-line-strong text-[12px] font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
                             >
                               <Plus className="size-3" />
                               {t('recipe.addDelta')}

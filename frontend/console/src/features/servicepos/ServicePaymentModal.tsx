@@ -465,7 +465,7 @@ function ServiceDigitalAttempt({
       />
     ) : staticQr.status === 'loading' ? (
       <div className="flex justify-center py-4">
-        <Spinner className="text-brand-600" />
+        <Spinner className="text-emerald-2" />
       </div>
     ) : (
       <p className="text-center text-xs text-loss">{t('pos.payment.qris.imageError')}</p>

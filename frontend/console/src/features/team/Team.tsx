@@ -235,7 +235,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={handleCopy}
       className={cn(
         'grid size-8 place-items-center rounded-lg transition-colors',
-        'text-ink-3 hover:bg-emerald-tint/60 hover:text-brand-600',
+        'text-ink-3 hover:bg-emerald-tint/60 hover:text-emerald-2',
         'focus-visible:outline-2 focus-visible:outline-emerald',
       )}
     >

@@ -93,7 +93,7 @@ export function BankReconcile() {
           title={t('bank.reconcile.notFoundTitle')}
           hint={t('bank.reconcile.notFoundHint')}
         />
-        <Link to="/bank" className="text-sm font-semibold text-brand-700 hover:underline">
+        <Link to="/bank" className="text-sm font-semibold text-emerald-2 hover:underline">
           {t('bank.reconcile.backToAccounts')}
         </Link>
       </div>
@@ -117,7 +117,7 @@ export function BankReconcile() {
         aria-label={t('bank.reconcile.breadcrumbLabel')}
         className="flex items-center gap-1.5 text-sm"
       >
-        <Link to="/bank" className="font-medium text-ink-3 transition-colors hover:text-brand-700">
+        <Link to="/bank" className="font-medium text-ink-3 transition-colors hover:text-emerald-2">
           {t('bank.accounts.title')}
         </Link>
         <ChevronRight className="size-3.5 text-ink-3" aria-hidden="true" />

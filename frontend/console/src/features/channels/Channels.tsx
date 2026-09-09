@@ -204,7 +204,7 @@ function ChannelRow({
           <button
             type="button"
             onClick={onEdit}
-            className="rounded px-2 py-1 text-xs font-semibold text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="rounded px-2 py-1 text-xs font-semibold text-emerald-2 hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {t('channels.edit')}
           </button>
@@ -216,7 +216,7 @@ function ChannelRow({
               onClick={toggleActive}
               className={cn(
                 'rounded px-2 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
-                channel.active ? 'text-ink-3 hover:text-loss' : 'text-brand-700 hover:text-brand-600',
+                channel.active ? 'text-ink-3 hover:text-loss' : 'text-emerald-2 hover:text-emerald-2',
               )}
             >
               {channel.active ? t('channels.deactivate') : t('channels.activate')}

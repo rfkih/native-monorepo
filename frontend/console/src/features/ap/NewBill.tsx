@@ -342,7 +342,7 @@ export function NewBill() {
             {vendors.length === 0 && !vendorsQuery.isLoading ? (
               <p className="rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm text-ink-3">
                 {t('ap.newBill.noVendors')}{' '}
-                <Link to="/vendors" className="font-semibold text-brand-700 hover:underline">
+                <Link to="/vendors" className="font-semibold text-emerald-2 hover:underline">
                   {t('ap.newBill.addVendorLink')}
                 </Link>
               </p>
@@ -920,7 +920,7 @@ function IngredientComboboxField({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onCreateNew(value.trim())}
-                className="flex w-full items-center gap-1.5 px-3.5 py-2.5 text-left text-sm font-semibold text-brand-700 transition-colors hover:bg-hover"
+                className="flex w-full items-center gap-1.5 px-3.5 py-2.5 text-left text-sm font-semibold text-emerald-2 transition-colors hover:bg-hover"
               >
                 <Plus className="size-3.5 shrink-0" aria-hidden="true" />
                 {t('ap.newBill.ingredientCreateHint', { name: value.trim() })}

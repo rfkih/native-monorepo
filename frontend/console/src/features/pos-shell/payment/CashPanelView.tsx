@@ -80,7 +80,7 @@ export function CashPanelView({
               className={[
                 'rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors',
                 tenderedMinor === chip
-                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                  ? 'border-emerald-line bg-emerald-tint text-emerald-2'
                   : 'border-line bg-surface text-ink-2 hover:bg-hover',
               ].join(' ')}
             >
@@ -110,8 +110,8 @@ export function CashPanelView({
 
       {/* Change line */}
       <div className="mb-4 flex items-baseline justify-between rounded-xl bg-tint-profit px-4 py-2.5">
-        <span className="text-sm font-semibold text-brand-700">{t('pos.payment.change')}</span>
-        <span className="tnum font-mono text-lg font-bold text-brand-700">
+        <span className="text-sm font-semibold text-emerald-2">{t('pos.payment.change')}</span>
+        <span className="tnum font-mono text-lg font-bold text-emerald-2">
           {changeMinor >= 0 ? formatMoney(changeMinor, currency, locale) : '—'}
         </span>
       </div>

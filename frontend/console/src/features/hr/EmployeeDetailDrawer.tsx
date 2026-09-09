@@ -309,7 +309,7 @@ export function EmployeeDetailDrawer({
             <button
               type="button"
               onClick={onAssign}
-              className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-[12.5px] font-semibold text-emerald-2 transition-colors hover:border-brand-300 hover:bg-emerald-tint"
+              className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-[12.5px] font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
             >
               <Plus className="size-3.5" />
               {t('hr.detail.assignAnother')}

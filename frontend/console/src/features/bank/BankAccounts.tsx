@@ -79,7 +79,7 @@ export function BankAccounts() {
                     <td className="px-4 py-3">
                       <Link
                         to={`/bank/${a.id}`}
-                        className="font-semibold text-ink hover:text-brand-700 hover:underline"
+                        className="font-semibold text-ink hover:text-emerald-2 hover:underline"
                       >
                         {a.name}
                       </Link>

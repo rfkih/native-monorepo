@@ -474,7 +474,7 @@ function EmployeeRow({
         <button
           type="button"
           onClick={onManage}
-          className="h-[34px] rounded-[10px] border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:border-brand-300 hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald"
+          className="h-[34px] rounded-[10px] border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:border-line-strong hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald"
         >
           {t('hr.list.manage')}
         </button>

@@ -304,7 +304,7 @@ function SingleGroup({
         <span
           className={cn(
             'tnum font-mono text-xs',
-            opt.priceDeltaMinor > 0 ? 'text-ink-2' : 'text-brand-700',
+            opt.priceDeltaMinor > 0 ? 'text-ink-2' : 'text-emerald-2',
           )}
         >
           {opt.priceDeltaMinor > 0 ? '+' : ''}
@@ -352,7 +352,7 @@ function MultiGroup({
             className={cn(
               'relative flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all',
               checked
-                ? 'border-brand-500 bg-brand-50 ring-4 ring-brand-500/12'
+                ? 'border-emerald-line bg-emerald-tint ring-4 ring-emerald/12'
                 : 'border-line bg-surface hover:border-ink-3',
             )}
           >
@@ -367,7 +367,7 @@ function MultiGroup({
             <span
               className={cn(
                 'mt-0.5 grid size-4 shrink-0 place-items-center rounded border',
-                checked ? 'border-brand-500 bg-brand-500' : 'border-line-strong',
+                checked ? 'border-emerald-line bg-emerald' : 'border-line-strong',
               )}
               aria-hidden="true"
             >

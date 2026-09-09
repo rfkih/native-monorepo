@@ -231,7 +231,7 @@ function ImagePicker({
           className={cn(
             'flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line',
             'px-4 py-6 text-sm text-ink-3 transition-colors',
-            'hover:border-brand-400 hover:bg-brand-50/40 hover:text-brand-700',
+            'hover:border-line-strong hover:bg-emerald-tint/40 hover:text-emerald-2',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             'disabled:cursor-not-allowed disabled:opacity-50',
           )}
@@ -1738,7 +1738,7 @@ function StockControl({
               <button
                 type="button"
                 onClick={() => setDialog('add')}
-                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
+                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
                 aria-label={t('menu.stock.addStock')}
               >
                 {t('menu.stock.addStock')}
@@ -1767,7 +1767,7 @@ function StockControl({
             <button
               type="button"
               onClick={() => setDialog('set')}
-              className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
+              className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
               aria-label={t('menu.stock.trackAction')}
             >
               {t('menu.stock.trackAction')}
@@ -1837,7 +1837,7 @@ function OptionRow({
             <span
               className={cn(
                 'tnum ml-2 font-mono text-xs',
-                option.priceDeltaMinor > 0 ? 'text-ink-2' : 'text-brand-700',
+                option.priceDeltaMinor > 0 ? 'text-ink-2' : 'text-emerald-2',
               )}
             >
               {deltaLabel}
@@ -1861,7 +1861,7 @@ function OptionRow({
             'disabled:cursor-not-allowed disabled:opacity-50',
             option.available
               ? 'text-ink-3 hover:bg-paper hover:text-ink'
-              : 'text-brand-600 hover:bg-emerald-tint hover:text-brand-700',
+              : 'text-emerald-2 hover:bg-emerald-tint hover:text-emerald-2',
           )}
         >
           {isPending ? (
@@ -2152,7 +2152,7 @@ function GroupBlock({
               <button
                 type="button"
                 onClick={onAddOption}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
               >
                 <Plus className="size-3.5" aria-hidden="true" />
                 {t('menu.group.addOption')}
@@ -2252,7 +2252,7 @@ function ItemRow({
               </Badge>
             ) : null}
           </div>
-          <div className="tnum mt-0.5 font-mono text-xs text-brand-700">
+          <div className="tnum mt-0.5 font-mono text-xs text-emerald-2">
             {formatMoney(item.priceMinor, item.currency, locale)}
             {item.unitCostMinor != null ? (
               <span className="ml-2 text-ink-3">
@@ -2331,7 +2331,7 @@ function ItemRow({
               'disabled:cursor-not-allowed disabled:opacity-50',
               item.available
                 ? 'text-ink-2 hover:bg-tint-loss/60 hover:text-loss'
-                : 'text-brand-600 hover:bg-emerald-tint hover:text-brand-700',
+                : 'text-emerald-2 hover:bg-emerald-tint hover:text-emerald-2',
             )}
           >
             {isPending ? (
@@ -2587,7 +2587,7 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
             </Card>
           ) : items.length === 0 ? (
             <Card className="mx-auto max-w-md p-10 text-center">
-              <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand-50 text-brand-600">
+              <div className="mx-auto grid size-12 place-items-center rounded-full bg-emerald-tint text-emerald-2">
                 <BookOpen className="size-6" />
               </div>
               <h2 className="mt-4 font-display text-xl font-semibold text-ink">

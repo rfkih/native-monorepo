@@ -176,7 +176,7 @@ function CompanyExpenseRow({
         <button
           type="button"
           onClick={onOpen}
-          className="font-mono text-xs font-semibold text-ink hover:text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
+          className="font-mono text-xs font-semibold text-ink hover:text-emerald-2 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
         >
           {expense.expenseNo}
         </button>
@@ -424,7 +424,7 @@ function VoidCompanyExpenseDialog({
             <Info className="mt-0.5 size-4 shrink-0 text-amber-2" aria-hidden="true" />
             <div>
               <p>{t('expenses.company.voidDialog.stockGuidance')}</p>
-              <Link to="/inventory" className="mt-1 inline-block font-semibold text-brand-700 hover:underline">
+              <Link to="/inventory" className="mt-1 inline-block font-semibold text-emerald-2 hover:underline">
                 {t('expenses.company.voidDialog.stockGuidanceLink')}
               </Link>
             </div>

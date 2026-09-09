@@ -371,7 +371,7 @@ export function DeletePermanentlyDialog({
 
         {checking ? (
           <div className="flex items-center gap-3 py-2 text-sm text-ink-3">
-            <Spinner className="text-brand-500" />
+            <Spinner className="text-emerald-2" />
             {t('org.deleteDialog.checking')}
           </div>
         ) : cannotVerify ? (

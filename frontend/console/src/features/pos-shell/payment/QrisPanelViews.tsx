@@ -93,7 +93,7 @@ export function GatewayQrisPendingView({
     return (
       <div className="px-5 pb-5">
         <div className="flex flex-col items-center gap-3 py-8">
-          <Spinner className="text-brand-600" />
+          <Spinner className="text-emerald-2" />
           <p className="text-sm text-ink-3">{t('pos.payment.qris.gatewayWaiting')}</p>
         </div>
       </div>
