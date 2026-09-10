@@ -512,7 +512,6 @@ export const id = {
       clearSearch: 'Hapus pencarian',
       noMatches: 'Tidak ada halaman cocok',
       noMatchesHint: 'Coba kata lain, atau pakai tile di atas.',
-      yourWork: 'Pekerjaan Anda',
     },
   },
   settings: {
