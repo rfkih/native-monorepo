@@ -1,5 +1,51 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-10 — the inventory reads in days, not quantities (ADR 0081)
+
+The "Native Persediaan" design started from one observation: *jumlah tidak bisa menjawab apa pun
+sendirian*. The ingredient catalog was a flat, name-ordered list — name, cost per unit, one quantity
+chip, three buttons — and its only status was `stockQty === 0`, lit only after it was too late. Three
+kilograms is a lot of turmeric and nothing of flour; an owner scrolling sixteen rows every morning
+was guessing.
+
+**Days left leads every row.** Stock ÷ what a day consumes, coloured by class, the per-day rate under
+it. The rate is the V47 movement ledger's seven-day roll-up (`/ingredients/stock-history`, which
+the console had never consumed) divided by the most days any ingredient moved in the window — per
+*open* day, so a sporadic item is not read as burning daily and a three-day-old ledger is not
+diluted to a seventh. The design had assumed only today's usage existed; the average was chosen with
+the owner because one day is noise. The rules are one pure module (`inventory/lib/catalogView.ts`):
+the class ladder `zero → low (≤ 3 days) → unit → nocost → ok`, the action ranking, four chips that
+count independently, and totals that never sum two currencies. "Terpakai hari ini" (today, in money)
+stays its own figure from the single-day endpoint.
+
+**A value hero, and one action per row.** The per-row stock value had been on screen for months and
+never added up; its sum is exactly what account 1100 holds once perpetual inventory is on, and only
+if every item carries a cost — so the hero names how many are uncosted instead of hiding them, and for
+the owner it is the door to `/settings/inventory`, handing the catalog value over as the suggested
+opening figure. Terima stays on the row (deliveries come daily); set-quantity, edit and the unit
+fix-up live on the ingredient's own screen.
+
+**Screens are routes** (ADR 0075/0078): `/inventory/:id`, `/new`, `/:id/edit`, `/:id/convert`,
+`/history[/:stocktakeId]`. Back pops to the list with `?filter=` and `?sort=` intact; below `lg`
+each is a `ScreenHeader` screen, from `lg` the catalog is a two-pane page whose rail follows the
+route and whose row clicks *replace*. The pages scroll the document, not an inner container — the
+old `h-[100dvh] overflow-hidden` frame had quietly defeated N4's scroll restore. The one modal is
+the quantity keypad, a `DialogOverlay` sharing the opname's pad (`countKeypad.ts` moved to
+`inventory/lib`, the grid extracted as `QtyKeypad`). `useBackNavigation` is BackButton's decision
+as a callable, for a form that finishes on its own.
+
+**Found in the code while reading it.** `StocktakeHistorySheet` printed `line.systemQty` raw with
+`line.unit` — the same item read `8.400 g` in the history and `8,4 kg` in the catalog. The history
+bodies now format through the catalog's ingredient (falling back to the base unit only for a removed
+item) and are shared by the `/inventory/history` screens and the overlay the standalone opname opens,
+which also stops hand-rolling its scrim. The `isIngredientInRecipe` doc claimed the console showed the
+server's item names; it maps to a generic key (the `detail` string is diagnostics) — the form now says
+so and points at Menu & prices. A comma in a money field is accepted (`parseDiscountInput` wanted a
+dot). `/settings/inventory` became inline steps instead of a modal, with the same safety framing.
+
+**Harness.** `mobile-shots.mjs` gains `SHOT_ONLY=inventory` (fixtures for the roll-up, two past
+counts, the inactive method) and asserts the chip lands in the URL and the detail is a route.
+
 ## 2026-09-10 — filled in is not checked: the stock opname gets a "checked" status
 
 The "Native Opname Stok" design put one sentence on trial: *terisi bukan berarti terperiksa*. Every
