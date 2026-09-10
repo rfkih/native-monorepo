@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.sale.service;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.config.OutletZone;
 import id.co.nativeapp.restaurant.metric.domain.RestaurantMetricContract;
 import id.co.nativeapp.restaurant.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
@@ -12,12 +13,14 @@ import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.domain.OperatorMismatchException;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.ChannelSalesSummaryResponse;
+import id.co.nativeapp.restaurant.sale.dto.DailySalesResponse;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
 import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema;
 import id.co.nativeapp.restaurant.sale.projection.ChannelSalesSummaryView;
+import id.co.nativeapp.restaurant.sale.projection.DailySalesView;
 import id.co.nativeapp.restaurant.sale.projection.SaleHistoryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
@@ -26,6 +29,7 @@ import id.co.nativeapp.security.OperatorPrincipal;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -584,6 +588,37 @@ public class SaleWriter {
     return repository.findChannelSummary(period).stream()
         .map(SaleWriter::toChannelSummaryResponse)
         .toList();
+  }
+
+  /**
+   * The per-day sales summary for an outlet over an INCLUSIVE outlet-local day window ({@code GET
+   * /api/v1/sales/daily}, ADR 0082). The day bounds are resolved here in {@link OutletZone#ZONE} —
+   * {@code from} at its local midnight, {@code to} at the NEXT local midnight — so the caller
+   * speaks in calendar days and the query in instants, and both mean the same Asia/Jakarta day the
+   * SQL attributes rows to. Outlet-gated like {@link #findHistory}: the same {@link
+   * OutletAccessGuard} policy (owner/manager pass, everyone else needs the outlet). Read path:
+   * native-query projection.
+   */
+  @Transactional(readOnly = true)
+  public List<DailySalesResponse> dailySummary(UUID businessId, LocalDate from, LocalDate to) {
+    outletAccessGuard.enforce(businessId);
+    Instant fromAt = from.atStartOfDay(OutletZone.ZONE).toInstant();
+    Instant toAt = to.plusDays(1).atStartOfDay(OutletZone.ZONE).toInstant();
+    return repository.findDailySummary(businessId, fromAt, toAt).stream()
+        .map(SaleWriter::toDailyResponse)
+        .toList();
+  }
+
+  /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
+  private static DailySalesResponse toDailyResponse(DailySalesView view) {
+    return new DailySalesResponse(
+        view.getBusinessDate(),
+        view.getTransactionCount(),
+        view.getNetSalesMinor(),
+        view.getCogsMinor(),
+        view.getCostedTransactionCount(),
+        view.getCurrency().strip(),
+        view.getUsesIllustrativeRules());
   }
 
   /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */

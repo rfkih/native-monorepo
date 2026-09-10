@@ -1,12 +1,14 @@
 package id.co.nativeapp.restaurant.sale.service;
 
 import id.co.nativeapp.restaurant.sale.dto.ChannelSalesSummaryResponse;
+import id.co.nativeapp.restaurant.sale.dto.DailySalesResponse;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
 import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -96,5 +98,13 @@ public class SaleService {
    */
   public List<ChannelSalesSummaryResponse> channelSalesSummary(String period) {
     return writer.channelSalesSummary(period);
+  }
+
+  /**
+   * The per-day sales summary for an outlet over an inclusive outlet-local day window ({@code GET
+   * /api/v1/sales/daily}, ADR 0082) — one row per day that had a tendered sale or a refund.
+   */
+  public List<DailySalesResponse> dailySummary(UUID businessId, LocalDate from, LocalDate to) {
+    return writer.dailySummary(businessId, from, to);
   }
 }

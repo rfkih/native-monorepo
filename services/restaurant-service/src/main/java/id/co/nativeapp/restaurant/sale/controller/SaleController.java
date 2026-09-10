@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.sale.controller;
 
 import id.co.nativeapp.restaurant.config.DevTenantFilter;
 import id.co.nativeapp.restaurant.sale.dto.ChannelSalesSummaryResponse;
+import id.co.nativeapp.restaurant.sale.dto.DailySalesResponse;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
@@ -14,8 +15,11 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import java.net.URI;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +34,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <ul>
  *   <li>{@code POST /api/v1/sales} — record a sale
+ *   <li>{@code GET /api/v1/sales/daily?businessId=...&from=...&to=...} — the phone home's per-day
+ *       net sales over an inclusive outlet-local day window (ADR 0082)
  *   <li>{@code GET /api/v1/sales?businessId=...&from=...&to=...} — the cashier's "today's
  *       transactions" list
  * </ul>
@@ -52,6 +58,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/sales")
 @Validated
 public class SaleController {
+
+  /** The widest {@code /daily} window served — a quarter's worth, plenty for a week of bars. */
+  private static final int MAX_DAILY_WINDOW_DAYS = 92;
 
   private final SaleService saleService;
 
@@ -126,5 +135,46 @@ public class SaleController {
               message = "period must be a valid YYYY-MM month")
           String period) {
     return ResponseEntity.ok(saleService.channelSalesSummary(period));
+  }
+
+  /**
+   * An outlet's per-day sales over an INCLUSIVE outlet-local day window — one row per day that had
+   * a tendered sale or a refund: net (total − refunds), transaction count, the sale-time COGS fold
+   * and how many sales it covers. Days with neither are ABSENT (the client zero-fills). READ-ONLY,
+   * tenant-scoped via RLS (rule 5) and outlet-gated like the history read. The literal {@code
+   * /daily} segment cannot collide with an id path (this controller maps no {@code GET /{id}}).
+   */
+  @Operation(
+      summary = "Per-day net sales for an outlet",
+      description =
+          "One row per outlet-local (Asia/Jakarta) calendar day in the inclusive [from, to] window"
+              + " that had a tendered sale or a refund: net sales (total minus refunds attributed"
+              + " to the day they were refunded on), transaction count, the summed sale-time COGS"
+              + " (null when no sale carried one) and how many sales it covers, the currency, and"
+              + " whether any sale used illustrative tax rules. Days with no activity are absent."
+              + " The window may span at most "
+              + MAX_DAILY_WINDOW_DAYS
+              + " days.")
+  @GetMapping("/daily")
+  public ResponseEntity<List<DailySalesResponse>> dailySales(
+      @RequestParam UUID businessId,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+    requireOrderedWindow(from, to);
+    return ResponseEntity.ok(saleService.dailySummary(businessId, from, to));
+  }
+
+  /**
+   * Rejects an inverted or oversized window with a 400 rather than silently returning an empty list
+   * — an empty result would read as "no sales", which is a different and misleading answer.
+   */
+  private static void requireOrderedWindow(LocalDate from, LocalDate to) {
+    if (to.isBefore(from)) {
+      throw new IllegalArgumentException("'to' must not be before 'from'");
+    }
+    if (ChronoUnit.DAYS.between(from, to) >= MAX_DAILY_WINDOW_DAYS) {
+      throw new IllegalArgumentException(
+          "the window may span at most " + MAX_DAILY_WINDOW_DAYS + " days");
+    }
   }
 }
