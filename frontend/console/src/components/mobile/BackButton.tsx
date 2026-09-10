@@ -9,7 +9,8 @@
  *
  * `fallback` is used ONLY when there is nothing to pop — a deep link, a shared URL, an app cold-
  * started on a sub-page. `backIntentFor` (backGuardProtocol, unit-tested) owns that decision and
- * the sentinel arithmetic; nothing here re-derives it. The fallback navigation REPLACES rather than
+ * the sentinel arithmetic; nothing here re-derives it (`useBackNavigation` is the same decision as
+ * a callable, for a screen that finishes on its own). The fallback navigation REPLACES rather than
  * pushes: a back press must never grow the stack, whichever branch it takes.
  *
  * The caller supplies `className` and optionally the icon, because the surrounding headers legit-
@@ -19,8 +20,7 @@
 import type { ReactNode } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { backIntentFor } from './backGuardProtocol'
+import { useBackNavigation } from './useBackNavigation'
 
 export function BackButton({
   fallback,
@@ -38,17 +38,13 @@ export function BackButton({
   children?: ReactNode
 }) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const goBack = useBackNavigation()
   const name = label ?? t('common.back')
 
   return (
     <button
       type="button"
-      onClick={() => {
-        const intent = backIntentFor(window.history.state)
-        if (intent.kind === 'pop') navigate(intent.delta)
-        else navigate(fallback, { replace: true })
-      }}
+      onClick={() => goBack(fallback)}
       aria-label={name}
       title={name}
       className={className}

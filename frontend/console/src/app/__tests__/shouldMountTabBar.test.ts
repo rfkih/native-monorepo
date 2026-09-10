@@ -9,6 +9,9 @@ describe('shouldMountTabBar', () => {
     expect(shouldMountTabBar('/catalog')).toBe(false)
     expect(shouldMountTabBar('/kitchen')).toBe(false)
     expect(shouldMountTabBar('/inventory')).toBe(false)
+    // The inventory's sub-screens (detail, form, history) are routes under it — same chrome.
+    expect(shouldMountTabBar('/inventory/history')).toBe(false)
+    expect(shouldMountTabBar('/inventory/5f1c/edit')).toBe(false)
   })
 
   it('never mounts inside the onboarding wizard', () => {
