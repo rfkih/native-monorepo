@@ -25,8 +25,10 @@ export function ScreenHeader({
 }: {
   /** Already-translated title. */
   title: string
-  /** Optional second line under the title (e.g. "company · outlet"); the title tightens to fit. */
-  subtitle?: string
+  /** Optional second line under the title (e.g. "company · outlet"); the title tightens to fit.
+   *  A string truncates; a node (e.g. an OutletPicker whose dropdown must not be clipped) lays
+   *  out as an inline row instead. */
+  subtitle?: React.ReactNode
   /** Route to land on when history has nothing to pop (deep link / cold open). */
   backFallback?: string
   /** …or take the back press entirely (overlays close themselves). Wins over `backFallback`. */
@@ -58,7 +60,13 @@ export function ScreenHeader({
       {subtitle != null ? (
         <div className="flex min-w-0 flex-1 flex-col pl-1">
           <h1 className="truncate text-[16px] font-bold leading-tight text-ink">{title}</h1>
-          <p className="truncate text-xs font-medium leading-tight text-ink-3">{subtitle}</p>
+          {typeof subtitle === 'string' ? (
+            <p className="truncate text-xs font-medium leading-tight text-ink-3">{subtitle}</p>
+          ) : (
+            <div className="flex min-w-0 items-center gap-1 text-xs font-medium leading-tight text-ink-3">
+              {subtitle}
+            </div>
+          )}
         </div>
       ) : (
         <h1 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-bold text-ink">{title}</h1>

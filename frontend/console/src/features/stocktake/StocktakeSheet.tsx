@@ -25,9 +25,10 @@
  * a 412px phone covers ~40% of the screen INCLUDING the row being edited. The row still shows its
  * figure as a writing line, but tapping it opens a sheet of its own: the item's name, its system
  * reference, a live variance preview, and a keypad that knows whether the item admits fractions
- * (./lib/countKeypad). A physical keyboard still types straight into the figure (`inputMode=none`
- * keeps the on-screen one down), and the first key REPLACES the seeded figure, as the old
- * select-on-focus field did.
+ * (the reducer is `inventory/lib/countKeypad`, beside the unit rules it enforces; the pad itself
+ * is `inventory/QtyKeypad`, shared with the inventory receive/set sheet). A physical keyboard
+ * still types straight into the figure (`inputMode=none` keeps the on-screen one down), and the
+ * first key REPLACES the seeded figure, as the old select-on-focus field did.
  *
  * Money rule (rule 8): unit cost / variance value render via formatMoney; quantities via the
  * Intl-backed helpers in ../inventory/lib/units (never a raw toString). Strings rule (rule 9):
@@ -51,7 +52,6 @@ import {
   Check,
   ChevronDown,
   ClipboardCheck,
-  Delete,
   History,
   Search,
   TriangleAlert,
@@ -97,7 +97,8 @@ import {
   countDraftWithinCap,
   decimalSeparatorOf,
   type CountKey,
-} from './lib/countKeypad'
+} from '@/features/inventory/lib/countKeypad'
+import { QtyKeypad } from '@/features/inventory/QtyKeypad'
 import { summarizeStocktakeDraft, type StocktakeDraftSummary } from './lib/stocktakeDraft'
 import {
   EMPTY_MARKS,
@@ -1175,23 +1176,6 @@ function CountSheet({
       ? t('stocktake.sheetInvalidFraction')
       : t('stocktake.sheetInvalidWhole', { unit })
 
-  // The decimal key only exists when a decimal can be saved: a base-unit item (pcs/pack) has no
-  // half, so the pad simply has a hole where the key would be.
-  const keys: Array<CountKey | null> = [
-    '7',
-    '8',
-    '9',
-    '4',
-    '5',
-    '6',
-    '1',
-    '2',
-    '3',
-    fraction ? separator : null,
-    '0',
-    'backspace',
-  ]
-
   return (
     <DialogOverlay onClose={onClose} ariaLabel={ingredient.name} className="p-0">
       {(requestClose) => {
@@ -1289,36 +1273,7 @@ function CountSheet({
               </div>
             </div>
 
-            <div className="grid shrink-0 grid-cols-3 gap-[7px] px-4">
-              {keys.map((key, i) =>
-                key == null ? (
-                  <span key={`hole-${i}`} aria-hidden="true" />
-                ) : (
-                  <button
-                    key={key}
-                    type="button"
-                    // Keep the physical-keyboard focus on the figure: a tap on a pad key must not
-                    // move it (mousedown is where focus would change; click still fires).
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => press(key)}
-                    aria-label={
-                      key === 'backspace'
-                        ? t('stocktake.keyBackspace')
-                        : key === separator
-                          ? t('stocktake.keyDecimal')
-                          : t('stocktake.keyDigit', { digit: key })
-                    }
-                    className="tnum grid min-h-14 place-items-center rounded-2xl font-mono text-xl font-semibold text-ink transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[.96] active:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald motion-reduce:active:scale-100"
-                  >
-                    {key === 'backspace' ? (
-                      <Delete className="size-5" strokeWidth={1.9} aria-hidden="true" />
-                    ) : (
-                      key
-                    )}
-                  </button>
-                ),
-              )}
-            </div>
+            <QtyKeypad fraction={fraction} separator={separator} onKey={press} />
 
             <div className="flex shrink-0 gap-2 px-4 pt-3" style={SAFE_BOTTOM(22)}>
               <Button

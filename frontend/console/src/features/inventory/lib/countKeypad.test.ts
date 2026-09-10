@@ -4,7 +4,7 @@ import {
   COUNT_MAX_BASE_DIGITS,
   countDraftWithinCap,
   decimalSeparatorOf,
-} from '../countKeypad'
+} from './countKeypad'
 
 describe('decimalSeparatorOf', () => {
   it('writes a comma under id-ID and a dot under en-US', () => {

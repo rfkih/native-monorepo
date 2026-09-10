@@ -1,12 +1,14 @@
 /**
- * countKeypad.ts — the count sheet's own keypad, as a pure reducer.
+ * countKeypad.ts — the quantity keypad, as a pure reducer. Shared by the stock-opname count sheet
+ * and the inventory receive / set-quantity sheet (`QtyKeypadSheet`); the pad that renders it is
+ * `../QtyKeypad.tsx`.
  *
- * The count used to be typed into an inline text field with the system keyboard, which on a 412px
- * phone covers ~40% of the screen INCLUDING the row being edited. The count sheet draws a 3×4 pad
- * of its own instead: it knows whether the ingredient admits fractions (kg/liter do, pcs/pack do
- * not), so the decimal key only exists when a decimal can be saved, and a base-unit count can never
- * be typed into an unusable state by the pad alone. (A physical keyboard is routed through the same
- * reducer; paste is checked against the same cap with `countDraftWithinCap`.)
+ * A quantity used to be typed into an inline text field with the system keyboard, which on a 412px
+ * phone covers ~40% of the screen INCLUDING the row being edited. The sheets draw a 3×4 pad of
+ * their own instead: it knows whether the ingredient admits fractions (kg/liter do, pcs/pack do
+ * not), so the decimal key only exists when a decimal can be saved, and a base-unit quantity can
+ * never be typed into an unusable state by the pad alone. (A physical keyboard is routed through
+ * the same reducer; paste is checked against the same cap with `countDraftWithinCap`.)
  *
  * The draft is the SHOWN-unit string exactly as it will be parsed by `parseShownQtyInput` — either
  * separator is accepted there, so the pad offers the operator's locale separator and stores it as

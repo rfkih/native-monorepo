@@ -9,7 +9,7 @@
  *   npm run dev        (terminal 1)
  *   node scripts/mobile-shots.mjs [outDir]   (terminal 2)
  *
- * SHOT_ONLY=screens,more,pos,stocktake,laporan (comma list) restricts the walk to those sections — the
+ * SHOT_ONLY=screens,more,pos,stocktake,laporan,inventory (comma list) restricts the walk to those sections — the
  * whole pass is a couple of minutes, and a redesign of one screen only needs its own section.
  *
  * Dev-auth grants all four roles, so the MANAGER tab bar renders everywhere; the
@@ -170,6 +170,8 @@ const INGREDIENTS = [
   ingredient('saus-pouch', 'Saus Sambal Pouch', 'pack', null, 48, 12500),
   ingredient('es-kristal', 'Es Batu Kristal', 'g', 'kg', 30000, null),
   ingredient('truffle-paste', 'Truffle Paste (impor)', 'g', 'kg', 900, 85, 'USD'),
+  // Out of stock — the catalog's "Stok nol" chip and the top of its action ranking.
+  ingredient('tomat', 'Tomat Merah', 'g', 'kg', 0, 18),
 ]
 
 const INGREDIENT_USAGE = [
@@ -178,6 +180,46 @@ const INGREDIENT_USAGE = [
   ['keju-mozarella', 240], ['bawang-merah', 560], ['daun-selada', 320], ['telur-ayam', 36],
   ['box-medium', 73], ['saus-pouch', 4], ['es-kristal', 5200],
 ].map(([ingredientId, qtyUsed]) => ({ ingredientId, qtyUsed }))
+
+// The seven-day movement roll-up (V47) behind the catalog's usage rate / days left (ADR 0081):
+// totals over the window, so a per-open-day rate is total ÷ the most days anything moved. Two
+// items burn fast enough to read "hampir habis" (≤ 3 days); the pack item and the uncosted ice
+// keep their own chips; tomat used up 640 g a day before running out.
+const INGREDIENT_STOCK_SUMMARY = [
+  ['daging-kebab', 2940, 7], ['ayam-fillet', 21000, 7], ['tepung-cakra', 8400, 7], ['beras-pandan', 23800, 7],
+  ['minyak-sania', 6300, 7], ['susu-uht', 18200, 7], ['gula-aren', 8120, 7], ['kopi-robusta', 2660, 7],
+  ['keju-mozarella', 1680, 7], ['bawang-merah', 3920, 7], ['daun-selada', 4900, 7], ['telur-ayam', 252, 7],
+  ['box-medium', 511, 6], ['saus-pouch', 28, 5], ['es-kristal', 36400, 7], ['tomat', 4480, 6],
+].map(([ingredientId, totalUsedQty, daysWithMovement]) => ({
+  ingredientId, name: ingredientId, unit: 'g', totalUsedQty, totalReceivedQty: 0, netAdjustmentQty: 0,
+  totalWasteQty: 0, receiptCount: 1, adjustmentCount: 0, daysWithMovement, daysWithUsage: daysWithMovement,
+  latestClosingQty: null,
+}))
+
+// Two past counts for the history screens and the detail's "Opname terakhir" — one with a real
+// shrinkage, one that balanced. Lines carry BASE units (g) so the display-unit fix shows.
+const stocktakeLine = (id, systemQty, countedQty) => {
+  const ing = INGREDIENTS.find((i) => i.id === id)
+  const varianceQty = countedQty - systemQty
+  return {
+    ingredientId: id, name: ing.name, unit: ing.unit, systemQty, countedQty, varianceQty,
+    unitCostMinor: ing.unitCostMinor, varianceValueMinor: ing.unitCostMinor == null ? 0 : varianceQty * ing.unitCostMinor,
+  }
+}
+const STOCKTAKE_HISTORY = [
+  {
+    id: 'st-h1', businessId: COMPANY.businessId, currency: 'IDR', countedAt: '2026-09-09T11:40:00Z',
+    shrinkageMinor: 61 * 1400 + 118 * 300 + 28 * 200, lines: [
+      stocktakeLine('daging-kebab', 4811, 3411), stocktakeLine('keju-mozarella', 2700, 2400),
+      stocktakeLine('daun-selada', 2000, 1800), stocktakeLine('telur-ayam', 180, 180),
+      stocktakeLine('es-kristal', 30000, 30000),
+    ],
+  },
+  {
+    id: 'st-h2', businessId: COMPANY.businessId, currency: 'IDR', countedAt: '2026-09-02T12:05:00Z',
+    shrinkageMinor: 0, lines: [stocktakeLine('daging-kebab', 6200, 6200), stocktakeLine('telur-ayam', 240, 240)],
+  },
+]
 
 const ITEM_SALES = [
   { menuItemId: 'm1', name: 'Kebab Jumbo Daging', soldQty: 42, revenueMinor: 1470000 },
@@ -445,8 +487,11 @@ const ROUTES = [
   // Stock opname. `/ingredients/usage` must precede `/ingredients`; the stocktake route answers a
   // GET (history) with nothing and a POST (submit) with the echoed result.
   ['/api/v1/ingredients/usage', () => INGREDIENT_USAGE],
+  ['/api/v1/ingredients/stock-history', () => INGREDIENT_STOCK_SUMMARY],
   ['/api/v1/ingredients', () => INGREDIENTS],
-  ['/api/v1/ingredient-stocktakes', (u, m, req) => (req?.method() === 'POST' ? stocktakeResult(req) : [])],
+  ['/api/v1/ingredient-stocktakes', (u, m, req) => (req?.method() === 'POST' ? stocktakeResult(req) : STOCKTAKE_HISTORY)],
+  // Owner-only inventory-method page: inactive, so the activation steps can be walked.
+  ['/api/v1/inventory-method', () => ({ active: false, method: null, cutoverPeriod: null, activatedAt: null, inventoryAssetMinor: 0, inventoryAssetNegative: false, currency: null })],
   ['/api/v1/orders', () => []],
   ['/api/v1/register-sessions/current', () => REGISTER_SESSION],
   [/\/api\/v1\/bills\/[^/]+\/attachments$/, () => []],
@@ -697,6 +742,83 @@ for (const pass of [
     console.log(`[${pass.name}] laporan-export-sheet ok`)
     await page.goBack()
     await page.waitForTimeout(400)
+  }
+
+  // ── Inventory (Native Persediaan, ADR 0081) ────────────────────────────────
+  // The catalog reads in days: the shots have to show the value hero, the chips with counts, a
+  // row's days-left figure in its class colour, the Terima keypad sheet from a row, the item's
+  // own screen, the form as a screen, the history and its lines (8,4 kg — not 8.400 g), and the
+  // owner's inventory-method page with the catalog value handed over.
+  if (want('inventory')) {
+    const shot = async (name) => {
+      await page.screenshot({ path: `${dir}/${name}.png` })
+      console.log(`[${pass.name}] ${name} ok`)
+    }
+    await page.goto(`${BASE}/inventory`, { waitUntil: 'load' })
+    await page.waitForTimeout(1400)
+    await shot('inventory-catalog')
+    await page.getByRole('button', { name: /^(Hampir habis|Running low)/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    await shot('inventory-catalog-low')
+    if (!page.url().includes('filter=low')) throw new Error('the filter chip must live in the URL (N5)')
+    await page.getByRole('button', { name: /^(Hampir habis|Running low)/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(300)
+
+    // Terima from the row — the one action that stays on the list.
+    await page.getByRole('button', { name: /^(Terima|Receive) Daging Kebab/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(700)
+    for (const d of ['4', ',', '5']) {
+      await page.getByRole('button', { name: d === ',' ? /^(Pemisah desimal|Decimal separator)$/ : new RegExp(`^(Angka|Digit) ${d}$`) }).click({ timeout: 8000 })
+      await page.waitForTimeout(120)
+    }
+    await page.waitForTimeout(300)
+    await shot('inventory-receive')
+    await page.getByRole('button', { name: /^(Batal|Cancel)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+
+    // The item's screen — a route: Back must pop to the list, filter and all.
+    await page.getByRole('button', { name: /^Daging Kebab/ }).first().click({ timeout: 8000 })
+    await page.waitForTimeout(900)
+    if (!/\/inventory\/daging-kebab$/.test(page.url())) throw new Error(`detail is a route, got ${page.url()}`)
+    await shot('inventory-detail')
+    await page.getByRole('button', { name: /^(Atur jumlah|Set quantity)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(700)
+    await shot('inventory-set')
+    await page.getByRole('button', { name: /^(Batal|Cancel)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(400)
+    await page.getByRole('button', { name: /^(Ubah barang|Edit item)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(900)
+    await shot('inventory-edit')
+
+    await page.goto(`${BASE}/inventory/saus-pouch`, { waitUntil: 'load' })
+    await page.waitForTimeout(1200)
+    await shot('inventory-detail-pack')
+    await page.getByRole('button', { name: /(Ubah satuannya|Change the unit)/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(900)
+    await page.getByRole('textbox').first().fill('1000')
+    await page.waitForTimeout(300)
+    await shot('inventory-convert')
+
+    await page.goto(`${BASE}/inventory/new`, { waitUntil: 'load' })
+    await page.waitForTimeout(1200)
+    await shot('inventory-new')
+
+    await page.goto(`${BASE}/inventory/history`, { waitUntil: 'load' })
+    await page.waitForTimeout(1200)
+    await shot('inventory-history')
+    await page.getByRole('button', { name: /2026/ }).first().click({ timeout: 8000 })
+    await page.waitForTimeout(900)
+    await shot('inventory-history-lines')
+
+    // The owner's door: the value hero hands the catalog figure to the method page.
+    await page.goto(`${BASE}/inventory`, { waitUntil: 'load' })
+    await page.waitForTimeout(1400)
+    await page.getByRole('button', { name: /(belum berbiaya|no cost — counted)/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(900)
+    await shot('inventory-method')
+    await page.getByRole('button', { name: /^(Aktifkan persediaan perpetual|Activate perpetual inventory)/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    await shot('inventory-method-form')
   }
 
   if (want('pos')) {

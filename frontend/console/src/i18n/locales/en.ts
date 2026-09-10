@@ -688,11 +688,20 @@ export const en = {
        * OWNER-ONLY: activation books a real opening GL entry and is effectively irreversible
        * (no deactivate/amend flow), so this is never framed as a casual toggle. */
       title: 'Inventory accounting',
+      phoneSubtitle: 'Owner only',
       subtitle:
         'Perpetual inventory accounting capitalizes purchases to the Inventory asset and expenses them as Cost of Goods Sold only when sold — instead of expensing every purchase immediately.',
       loadError: 'Could not load the inventory accounting status. Try again.',
       status: {
         activeBadge: 'Perpetual inventory active',
+        assetHero: 'Inventory asset on the books',
+        assetNote:
+          'What the ledger holds in account 1100 — every receipt debits it, every sale credits it through cost of sales.',
+        matchesCatalog:
+          'Matches {{outlet}}’s catalog total — every costed item is on the books; uncosted items never post anything.',
+        negativeNote: 'An impossible balance. Account 1100 cannot be negative if every movement is booked once.',
+        factsLabel: 'Activation',
+        ownerFootnote: 'Only the owner can see this page, and nothing here can be changed once active.',
         cutoverLabel: 'Cutover month',
         activatedLabel: 'Activated',
         assetLabel: 'Inventory asset (1100)',
@@ -701,13 +710,16 @@ export const en = {
           'The inventory asset account has gone negative — check recent stock receipts and cost of goods sold for an unflagged purchase or an oversell.',
       },
       inactive: {
-        heading: 'Not yet activated',
+        heading: 'Inventory is not on the books yet',
         body: "Today, every purchase is expensed immediately and the inventory asset account isn't tracked. Activating perpetual inventory changes how purchases and sales post to the books going forward: it books a one-time opening entry for what you have on hand today, then capitalizes future inventory purchases and expenses them as Cost of Goods Sold only once they're sold.",
         bullet1: 'A deliberate, owner-only accounting change — not a casual toggle.',
         bullet2:
           'Applies going forward from the cutover month you choose; already-sealed periods keep their existing entries.',
         bullet3: 'Cannot be turned off once activated.',
-        action: 'Activate perpetual inventory',
+        // Native Persediaan — the catalog hands its value over when it opens this page.
+        catalogValue:
+          '{{outlet}}’s catalog is worth {{value}} right now. That figure can be used as the opening value in the next step.',
+        action: 'Activate perpetual inventory…',
       },
       activate: {
         formTitle: 'Activate perpetual inventory',
@@ -725,6 +737,8 @@ export const en = {
         confirmOpeningValue: 'Opening inventory value',
         confirmNote:
           'Purchases you flag as inventory (or record as a stock receive) will be capitalized to the books from {{period}} onward, and cost of goods sold will post automatically when items are sold.',
+        useCatalogValue: 'Use catalog value {{value}}',
+        zeroOk: 'Zero is fine too — a company with no counted stock can still activate, just without an opening entry.',
         acknowledge: 'I understand this change is permanent and affects the company books.',
         confirmAction: 'Activate perpetual inventory',
       },
@@ -1578,9 +1592,6 @@ export const en = {
     sheetHintWhole: 'Whole numbers only.',
     sheetInvalidFraction: 'This is not a valid number. One decimal separator only, comma or dot.',
     sheetInvalidWhole: '{{unit}} takes no fractions — enter a whole number.',
-    keyDigit: 'Digit {{digit}}',
-    keyDecimal: 'Decimal separator',
-    keyBackspace: 'Delete one digit',
     sheetReset: 'Same as system',
     sheetSave: 'Save count',
     submitAction: 'Send count',
@@ -1652,12 +1663,7 @@ export const en = {
     emptyTitle: 'No inventory items yet',
     emptyHint:
       'Add what this outlet buys and counts — ingredients (bread, patty, sauce) and supplies (cups, paper plates, straws). The stock opname counts these, not menu items.',
-    costPerUnit: '{{cost}} / {{unit}}',
-    stockValue: 'Stock value {{value}}',
-    noCost: 'No cost set — counted, never posted to the books',
     receiveAction: 'Receive',
-    setAction: 'Set quantity',
-    editAction: 'Edit',
     addTitle: 'Add item',
     editTitle: 'Edit item',
     nameLabel: 'Name',
@@ -1666,15 +1672,13 @@ export const en = {
     unitLabel: 'Unit',
     unitHint: 'Counted in whole numbers — use g or ml for anything you weigh or measure to a fraction.',
     convertUnit: {
-      badge: 'Cannot be used in a recipe ({{unit}}) — fix',
       title: 'Change the unit of {{name}}',
       intro:
         'One {{unit}} is the smallest amount a recipe can ask for, which is why this ingredient cannot be added to one. Say what a {{unit}} contains and it will be re-counted in that smaller unit — you keep buying it exactly as you do now.',
       toUnitLabel: 'Count it in',
       factorLabel: '1 {{from}} contains how many {{to}}?',
-      preview: 'Stock becomes {{after}} (was {{before}}). Nothing is bought or lost.',
-      note: 'Recipes and past stock history are re-counted in the new unit at the same time, so nothing shifts. The total value of your stock does not change.',
       submit: 'Change unit',
+      screenTitle: 'Change unit',
       errors: {
         factor: 'Enter a whole number greater than 0.',
         overflow: 'That would make the stock number too large. Choose a larger unit.',
@@ -1682,18 +1686,12 @@ export const en = {
       },
     },
     unitGroup: { weight: 'Weight', volume: 'Volume', count: 'Count' },
-    costLabel: 'Cost per unit ({{currency}}, optional)',
-    costHint:
-      'Used to value the stock-count difference in the books. Leave empty to count without posting anything.',
     costPlaceholder: 'Optional',
-    initialQtyLabel: 'Starting quantity',
     // How to enter cost when adding an item: the vendor TOTAL (per-unit derived from the quantity)
     // or the per-unit cost directly.
     costModeLabel: 'How to enter cost',
     costModeTotal: 'Total price',
     costModeUnit: 'Per unit',
-    qtyBoughtLabel: 'Quantity bought ({{unit}})',
-    totalCostLabel: 'Total purchase price ({{currency}}, optional)',
     totalCostHint: 'The total you paid the supplier — the per-unit cost is worked out from the quantity.',
     totalNeedsQty: 'Enter the quantity bought above to work out the per-unit cost.',
     // V46 — the remembered pack-size DEFAULT (optional): purchase lines pre-fill "Isi per
@@ -1703,36 +1701,163 @@ export const en = {
     packSizePlaceholder: 'Optional',
     packSizeInvalid: 'Enter a number greater than zero (or leave it blank).',
     removeAction: 'Remove item',
-    removeConfirm: 'Tap again to remove — it disappears from lists and future counts.',
-    receiveTitle: 'Receive — {{name}}',
-    receiveHint: 'Current stock: {{qty}} {{unit}}. Enter what you received (or a negative correction).',
-    receiveAmountLabel: 'Amount ({{unit}})',
-    receiveUnitPriceHint: '≈ {{price}} / {{unit}}',
-    // ADR 0072 §5 — points a priced purchase at the company-expense form instead (the Terima
-    // dialog's price inputs are gone; only the costless quantity adjust remains here).
-    receivePricedHint: 'Bought this with a payment to record?',
-    receivePricedHintLink: 'Record it as an expense',
-    receiveSubmit: 'Add to stock',
-    setTitle: 'Set quantity — {{name}}',
-    setHint: 'Current stock: {{qty}} {{unit}}. Enter the new absolute quantity.',
-    setQtyLabel: 'New quantity ({{unit}})',
-    setSubmit: 'Set quantity',
     errorGeneric: 'Could not save. Please try again.',
     nameTaken: 'An item with this name already exists at this outlet.',
-    // V46 — 409 ingredient-unit-change-blocked: the BASE unit would change while stock/value
-    // remains (no ratio relates pcs to grams, so rewriting it would silently reinterpret the
-    // stock). Code review F2 — this is rendered instead of the server's own English `detail`
-    // string; the specifics (item name, stock qty, from/to unit) are interpolated from data the
-    // dialog already holds. This hint adds the fix-forward steps — exactly what an owner hits
-    // fixing an item mis-created as pcs that should be kg.
-    unitChangeBlockedGeneric:
-      '“{{name}}” still holds {{qty}} {{fromUnit}} of stock — the unit cannot change from {{fromUnit}} to {{toUnit}} until it’s zero.',
-    unitChangeBlockedHint: 'Set the stock to zero via a stock opname first, then change the unit and re-enter the quantity in the new unit.',
-    // F3 — a base-unit change (not a display-only relabel like g -> kg) clears the pack-size
-    // default and per-unit cost below: neither has a ratio to the new base, and the backend
-    // itself resets both on a genuine base swap.
-    baseUnitChangedNote:
-      'Changing the unit cleared the pack size and cost below — they don’t carry over and need to be entered again.',
+    /**
+     * Native Persediaan (ADR 0081) — the catalog reads in DAYS: a value hero, today's usage in
+     * money, a stock-forecast toggle, filter chips, and one row per item whose figure is days
+     * left. The item's own screen, the receive/set keypad sheet, the form and the opname
+     * history screens live under their own sub-namespaces below.
+     */
+    keypad: {
+      digit: 'Digit {{digit}}',
+      decimal: 'Decimal separator',
+      backspace: 'Delete one digit',
+    },
+    catalog: {
+      subtitle_one: '{{company}} · {{count}} active item',
+      subtitle_other: '{{company}} · {{count}} active items',
+      searchPlaceholder: 'Search items',
+      heroLabel_one: 'Stock value · {{count}} item',
+      heroLabel_other: 'Stock value · {{count}} items',
+      heroUncosted_one: '{{count}} item has no cost — counted, never booked',
+      heroUncosted_other: '{{count}} items have no cost — counted, never booked',
+      heroAllCosted: 'Every item carries a cost — the books can hold this figure',
+      heroOpenMethod: 'Inventory accounting',
+      usedToday: 'Used today',
+      shelf: 'Shelf',
+      shelfDays: '≈ {{days}} days of stock',
+      shelfDaysUnknown: 'No usage yet',
+      predictionLabel: 'Stock forecast',
+      predictionHint: 'Days left = stock ÷ average use per open day over the last {{days}} days.',
+      chips: { zero: 'Out of stock', low: 'Running low', unit: 'Unit problem', nocost: 'No cost' },
+      rowChip: { zero: 'Out of stock', unit: 'Unit {{unit}}', nocost: 'No cost' },
+      sort: { action: 'Needs action', value: 'Stock value', name: 'Name' },
+      sortAria: 'Sorted by {{sort}} — tap to change',
+      caption_one: '{{count}} item',
+      caption_other: '{{count}} items',
+      captionFiltered_one: 'Filter on · {{count}} item',
+      captionFiltered_other: 'Filter on · {{count}} items',
+      noHitsTitle: 'No items match this filter',
+      noHitsHint: 'Tap the chip again to see everything.',
+      qtyValue: '{{qty}} {{unit}} · {{value}}',
+      daysShort: '{{days}} d',
+      daysNone: '—',
+      rateLine: '{{qty}} {{unit}}/day',
+      rateNone: 'not used',
+      receiveAria: 'Receive {{name}}',
+      columns: { name: 'Item', stock: 'Stock', value: 'Value', rate: 'Used/day', days: 'Left' },
+      packLine: 'pack of {{qty}} {{unit}}',
+      valueUncosted: 'no cost',
+      emptyFirst: 'Add the first item',
+      retry: 'Try again',
+    },
+    detail: {
+      subtitle: 'Base unit {{unit}}',
+      subtitleShown: 'Base unit {{unit}} · shown as {{shown}}',
+      stockNow: 'Stock now',
+      noteZero: 'Out of stock — used {{qty}} {{unit}} a day before it ran out',
+      noteZeroNoRate: 'Out of stock',
+      noteDays: '≈ {{days}} days left · {{qty}} {{unit}}/day',
+      noteNoUsage: 'No usage recorded yet',
+      noteUnitUnused: 'Not used — this item is in no recipe',
+      convTitle: 'Base unit {{unit}} is too coarse to cook with',
+      convBody:
+        'Nothing sits below one {{unit}}, so this item cannot go into a recipe — invisible to cost of sales and to shortfall detection.',
+      convAction: 'Change the unit →',
+      receive: 'Receive stock',
+      set: 'Set quantity',
+      edit: 'Edit item',
+      facts: 'This item’s numbers',
+      factValue: 'Stock value',
+      factValueNone: 'not valued',
+      factCost: 'Cost per {{unit}}',
+      factCostNone: 'not set',
+      factUsedToday: 'Used today',
+      factUsedTodayNone: 'no sales',
+      factRate: 'Average per day',
+      factRateNone: 'no usage',
+      factPack: 'Units per pack',
+      factPackNone: 'not remembered',
+      factBase: 'Base unit · stored',
+      factShown: 'Shown as',
+      factShownSame: 'same as the base',
+      lastCounts: 'Last counts',
+      allHistory: 'All history',
+      noCounts: 'Not counted yet',
+      countLine: 'system {{system}} → counted {{counted}} {{unit}}',
+    },
+    keypadSheet: {
+      receiveTitle: 'Receive stock',
+      correctTitle: 'Reduce (correction)',
+      setTitle: 'Set quantity',
+      current: 'now {{qty}} {{unit}}',
+      signAdd: 'Add',
+      signRemove: 'Reduce',
+      typeAmount: 'Type the amount',
+      receivePreview: '{{before}} → {{after}} {{unit}}',
+      receiveClipped: '{{before}} → 0 {{unit}} — stock cannot go below zero',
+      setPreview: 'difference {{diff}} {{unit}} from the system',
+      setSame: 'same as the system',
+      // ADR 0072 §5 — points a priced purchase at the company-expense form (the only priced
+      // entry surface); shown to finance logins only.
+      financeHint: 'If this purchase was paid for, record it once under',
+      financeLink: 'Company expenses',
+      financeHintTail: '— the money and the stock land together.',
+      submitReceive: 'Receive',
+      submitCorrect: 'Record correction',
+      submitSet: 'Save quantity',
+      figureAria: '{{name}} — amount in {{unit}}',
+    },
+    form: {
+      unitNote:
+        'pack is no longer offered. Pick the fine unit and fill in the pack size below — buying by the pack still works.',
+      // F3 — a base-unit change (not a display-only relabel like g -> kg) clears the pack-size
+      // default and per-unit cost: neither has a ratio to the new base, and the backend itself
+      // resets both on a genuine base swap.
+      baseChangedNote:
+        'The base unit changed from {{from}} to {{to}}, so the cost and pack size were cleared — no ratio links the two. Enter both again in the new unit.',
+      qtyBought: 'Quantity bought',
+      startingQty: 'Starting quantity',
+      costTotalLabel: 'Total paid to the vendor',
+      costUnitLabel: 'Cost per {{unit}}',
+      costDerived: '{{price}} per {{unit}} — this is what gets booked',
+      costCleared: 'Cleared because the base unit changed',
+      costInvalid: 'Enter the cost as a plain number, or leave it blank.',
+      costOptional: 'Optional. An item with no cost is still counted at the opname but never enters the books.',
+      packLabel: 'Units per pack · optional',
+      packHint: 'Only a remembered default. Purchase lines pre-fill from it but stay editable per line.',
+      errNameHint: 'Names are unique per outlet — open the existing item instead, or pick another name.',
+      // The 409 ingredient-in-recipe refusal: the console shows this generic message and points at
+      // Menu & prices (the server's `detail` names the items, but that string is diagnostics).
+      errRecipeTitle: 'This item is still used by an active recipe',
+      errRecipeHint: 'The server refuses to remove it while a menu item uses it. Find the recipe under Menu & prices.',
+      errRecipeAction: 'Open Menu & prices',
+      // V46 — 409 ingredient-unit-change-blocked, with the fix-forward as an action.
+      errUnitTitle: 'The unit of {{name}} cannot change from {{from}} to {{to}}',
+      errUnitHint:
+        'It still holds {{qty}} {{from}}. No ratio links {{from}} to {{to}}, so rewriting it would read the stock as a different number and poison the moving-average cost. Empty the stock with Set quantity, change the unit, then receive it back.',
+      errUnitAction: 'Set quantity to 0',
+      removeTwice: 'Tap again to remove {{name}}',
+    },
+    convert: {
+      result: 'Result',
+      invalid: 'invalid factor',
+      resultNote:
+        'Stock value does not change — nothing was bought, sold or lost. The server rescales stock, cost, recipe lines and this item’s whole daily ledger in one transaction.',
+    },
+    history: {
+      subtitleList: '{{company}} · last 50',
+      subtitleDetail: 'Count details',
+      intro: 'The server returns the last 50 counts. The figure on the right is the shrinkage — red means lost, green means found more.',
+      varied_one: '{{count}} item with variance',
+      varied_other: '{{count}} items with variance',
+      allMatch: 'Everything matched the system',
+      shrinkBooked: 'shrinkage booked',
+      foundMore: 'more found than the system',
+      balanced: 'balanced · no shrinkage',
+      usedThatDay: 'used that day {{qty}} {{unit}}',
+    },
   },
   /**
    * Owner request — the "+ Tambah bahan baru" inline ingredient picker/create mini-form shared by
