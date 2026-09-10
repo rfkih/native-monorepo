@@ -86,10 +86,16 @@ export function useOutletRevenue(params: {
   })
 }
 
-/** One point in the trailing-window trend: the period it covers and its (nullable) P&L. */
+/**
+ * One point in the trailing-window trend: the period it covers and its (nullable) P&L. `failed`
+ * separates a month that could not be loaded from a month with nothing in it (the phone reports
+ * draw them differently); `retry` re-issues that one month.
+ */
 export interface PnlTrendPoint {
   period: string
   data: PnlResponse | null
+  failed: boolean
+  retry: () => void
 }
 
 /**
@@ -120,5 +126,10 @@ export function usePnlTrend(params: {
         }),
     })),
   })
-  return periods.map((p, i) => ({ period: p, data: results[i]?.data ?? null }))
+  return periods.map((p, i) => ({
+    period: p,
+    data: results[i]?.data ?? null,
+    failed: results[i]?.isError ?? false,
+    retry: () => void results[i]?.refetch(),
+  }))
 }

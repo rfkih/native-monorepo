@@ -15,9 +15,14 @@
  * only the marks wear the series colour. Each column is a ≥24px hit target with a title tooltip —
  * the tooltip enhances, never gates: the selected value is the hero above, every value is in the
  * ledger below.
+ *
+ * Two kinds of nothing: an EMPTY month (204) is a gap with "no data" in its tooltip; a FAILED month
+ * (the request errored) is a gap wearing a warning mark on the baseline — status colour with an icon
+ * and a label, never colour alone — and tapping it retries that month as well as selecting it.
  */
 import { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import {
   centreScroll,
@@ -43,8 +48,10 @@ const TONE_SVG: Record<Tone, string> = {
 export function PeriodChart({
   periods,
   values,
+  failed,
   selected,
   onSelect,
+  onRetry,
   type,
   tone,
   formatValue,
@@ -53,10 +60,14 @@ export function PeriodChart({
 }: {
   /** `YYYY-MM`, oldest first. */
   periods: string[]
-  /** One per period; null draws as a gap (a 204 month). */
+  /** One per period; null draws as a gap (a 204 month — or a failed one, see `failed`). */
   values: Point[]
+  /** One per period; a failed month wears a warning mark instead of reading as empty. */
+  failed?: boolean[]
   selected: string
   onSelect: (period: string) => void
+  /** Called (before `onSelect`) when a failed column is tapped, so the caller can re-issue it. */
+  onRetry?: (period: string) => void
   type: 'bar' | 'line'
   tone: (v: number) => Tone
   /** For the column tooltip — already locale-aware (formatMoney). */
@@ -171,18 +182,37 @@ export function PeriodChart({
             {periods.map((p, i) => {
               const v = values[i]
               const sel = p === selected
+              const isFailed = failed?.[i] === true
               const geo = v == null ? null : columnGeometry(v, scale)
+              const title = isFailed
+                ? t('statements.phone.monthFailed', { month: label(p) })
+                : v == null
+                  ? `${label(p)} · ${t('statements.phone.noData')}`
+                  : `${label(p)} · ${formatValue(v)}`
               return (
                 <button
                   key={p}
                   type="button"
-                  onClick={() => onSelect(p)}
+                  onClick={() => {
+                    if (isFailed) onRetry?.(p)
+                    onSelect(p)
+                  }}
                   aria-pressed={sel}
-                  aria-label={t('statements.phone.selectMonth', { month: label(p) })}
-                  title={v == null ? label(p) : `${label(p)} · ${formatValue(v)}`}
+                  aria-label={isFailed ? title : t('statements.phone.selectMonth', { month: label(p) })}
+                  title={title}
+                  data-failed={isFailed || undefined}
                   className="relative h-full shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald"
                   style={{ width: track.colW }}
                 >
+                  {isFailed ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-1/2 grid size-5 -translate-x-1/2 place-items-center rounded-full border border-warning-line bg-surface text-amber"
+                      style={{ bottom: height - scale.upperH + 2 }}
+                    >
+                      <TriangleAlert className="size-3" />
+                    </span>
+                  ) : null}
                   {!isLine && geo ? (
                     <span
                       aria-hidden="true"
