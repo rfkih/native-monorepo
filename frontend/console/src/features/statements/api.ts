@@ -1,5 +1,6 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
 import { apiFetch as apiFetchBase, type RequestOptions } from '@/lib/api'
+import { trailingPeriods } from './periodChartMath'
 
 /**
  * ADR 0049 P3b — every call in this module targets a DASHBOARD_ROLES-gated back-office route
@@ -144,4 +145,78 @@ export function useBalanceSheet(params: {
         query: { asOf },
       }),
   })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Trends (Native Laporan — the phone chart that is also the period control)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Closed months do not change, and the chart asks for twelve of them at once. Five minutes keeps a
+ * tab switch or a back-and-forth between months from re-issuing the whole window; the single-period
+ * hooks above keep their own defaults, so the month on screen still refreshes as it always did.
+ */
+const TREND_STALE_MS = 5 * 60_000
+
+/** One point in a statement's trailing window: the period and its statement, or null for a 204. */
+export interface TrendPoint<T> {
+  period: string
+  data: T | null
+}
+
+/**
+ * The trailing `months` balance sheets ending at (and including) `asOf`, oldest first — the net-worth
+ * series behind the phone Neraca chart. There is no trend endpoint, so this is `months` independent
+ * queries (the mockup's twelve-calls budget), each keyed IDENTICALLY to {@link useBalanceSheet} so
+ * the month on screen shares its cache entry (and any in-flight request) with its column — the
+ * single-period hook keeps its own `staleTime`, so a tapped month may still refresh on mount. A 204
+ * month stays `null` and draws as a gap. Mirrors `dashboard/api.ts usePnlTrend`.
+ */
+export function useBalanceSheetTrend(params: {
+  companyId: string
+  actor: string
+  asOf: string
+  months: number
+  enabled: boolean
+}): TrendPoint<BalanceSheetResponse>[] {
+  const { companyId, actor, asOf, months, enabled } = params
+  const periods = trailingPeriods(asOf, months)
+  const results = useQueries({
+    queries: periods.map((p) => ({
+      enabled,
+      staleTime: TREND_STALE_MS,
+      queryKey: ['balanceSheet', companyId, p],
+      queryFn: () =>
+        apiFetch<BalanceSheetResponse>('/api/v1/statements/balance-sheet', {
+          tenant: { companyId, actor },
+          query: { asOf: p },
+        }),
+    })),
+  })
+  return periods.map((p, i) => ({ period: p, data: results[i]?.data ?? null }))
+}
+
+/** The trailing `months` cash-flow statements ending at `period` — see {@link useBalanceSheetTrend}. */
+export function useCashFlowTrend(params: {
+  companyId: string
+  actor: string
+  period: string
+  months: number
+  enabled: boolean
+}): TrendPoint<CashFlowResponse>[] {
+  const { companyId, actor, period, months, enabled } = params
+  const periods = trailingPeriods(period, months)
+  const results = useQueries({
+    queries: periods.map((p) => ({
+      enabled,
+      staleTime: TREND_STALE_MS,
+      queryKey: ['cashFlow', companyId, p],
+      queryFn: () =>
+        apiFetch<CashFlowResponse>('/api/v1/statements/cash-flow', {
+          tenant: { companyId, actor },
+          query: { period: p },
+        }),
+    })),
+  })
+  return periods.map((p, i) => ({ period: p, data: results[i]?.data ?? null }))
 }
