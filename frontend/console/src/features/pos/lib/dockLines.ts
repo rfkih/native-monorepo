@@ -16,7 +16,7 @@
  */
 
 /** The dock's action chips, in the order the expanded dock renders them. */
-export type DockActionKey = 'split' | 'discount' | 'member' | 'attachments'
+export type DockActionKey = 'switch' | 'split' | 'discount' | 'member' | 'attachments'
 
 /** Anything the dock can list — the walk-in cart's local lines and a bill's server lines both
  *  satisfy it, which is why the dock takes one shape from two very different callers. */
@@ -55,6 +55,10 @@ export function dueLabelKey({
 /**
  * Which action chips the expanded dock offers.
  *
+ * - `switch` — bills only, and first: the order switcher (walk-in / other bills / floor / parked).
+ *   On a phone it is the only way BACK to the walk-in cart from an open bill, so it must be one
+ *   tap from the ticket, not two taps into the till menu (where it also lives). The walk-in cart
+ *   does not get it: the header's Tables and Incoming buttons are its doors into a bill.
  * - `split` — bills only, and only with two unpaid lines to split. A split check charges an
  *   explicit subset of bill LINE IDS; the walk-in cart has no server-side lines to name, so the
  *   chip would be an affordance for something that cannot happen. (The phone sheet it replaces was
@@ -79,6 +83,7 @@ export function dockActions({
   canManualDiscount: boolean
 }): DockActionKey[] {
   const keys: DockActionKey[] = []
+  if (isBill) keys.push('switch')
   if (isBill && unpaidCount >= 2) keys.push('split')
   if (!isBill && canManualDiscount) keys.push('discount')
   if (!isBill) keys.push('member')

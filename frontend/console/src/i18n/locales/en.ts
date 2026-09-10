@@ -1714,6 +1714,7 @@ export const en = {
         'Tick the lines being paid now. They are charged as one check; the rest stay open on this bill.',
       action: {
         split: 'Split',
+        switch: 'Other orders',
         discount: 'Discount',
         member: 'Member',
         park: 'Park',

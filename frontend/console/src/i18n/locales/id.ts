@@ -1673,6 +1673,7 @@ export const id = {
         'Centang baris yang dibayar sekarang. Baris terpilih ditagih sebagai satu cek; sisanya tetap terbuka di bill ini.',
       action: {
         split: 'Pisah',
+        switch: 'Pesanan lain',
         discount: 'Diskon',
         member: 'Member',
         park: 'Parkir',

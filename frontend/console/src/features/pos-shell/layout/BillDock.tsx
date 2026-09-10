@@ -20,7 +20,7 @@
  */
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, ChevronsUpDown, Minus, Plus, Send } from 'lucide-react'
+import { Check, Minus, Plus, Send } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import { AppliedPromotionChips, type AppliedPromotionEntry } from '@/components/AppliedPromotionChips'
@@ -81,7 +81,6 @@ export function BillDock({
   title,
   meta,
   hasPaidLines = false,
-  onSwitchOrder,
   expanded,
   onExpandedChange,
   lines,
@@ -110,12 +109,6 @@ export function BillDock({
   /** "#A-1182 · 5 items". */
   meta: string
   hasPaidLines?: boolean
-  /**
-   * Opens the order switcher (BillSelectorOverlay). Rendered as its OWN 44px button at the right
-   * edge of the handle, never as the title: the title is where a thumb lands to open the ticket,
-   * and a switcher there sent cashiers to a different screen when they wanted to see their order.
-   */
-  onSwitchOrder?: () => void
   expanded: boolean
   onExpandedChange: (next: boolean) => void
   /** Collapsed: the newest unpaid lines (lib/dockLines.peekLines). Expanded: the whole ticket. */
@@ -198,12 +191,12 @@ export function BillDock({
         )}
       >
         {/* Handle. The WHOLE row is the toggle — grip, title and meta together, ≥44px — exactly
-            as the mockup draws it. It shipped as a 16px grip strip above a title that opened the
-            order switcher, so the obvious tap ("Walk-in sale ⇕") left the till for another screen
-            and the actual way into your ticket was a sliver. The switcher is now a separate,
-            bordered 44px button at the right edge: still one tap away (it is bill mode's only
-            door out on a phone), but no longer where a thumb lands by default. */}
-        <div className="flex shrink-0 items-stretch pr-1.5">
+            as the mockup draws it, and nothing else lives on it. The order switcher used to sit
+            here (first as the title itself, then as a button beside it); both competed with the
+            ticket's name for a tap that almost always means "show me my order". Switching lives
+            in the till menu now, and — in bill mode, where it is the only way back to the
+            walk-in cart — as the first chip of the expanded action rail. */}
+        <div className="flex shrink-0 items-stretch">
           <button
             type="button"
             data-testid="pos-dock-toggle"
@@ -224,18 +217,6 @@ export function BillDock({
               ) : null}
             </span>
           </button>
-          {onSwitchOrder ? (
-            <button
-              type="button"
-              data-testid="pos-dock-switch"
-              onClick={onSwitchOrder}
-              aria-label={t('posShell.currentOrder')}
-              title={t('posShell.currentOrder')}
-              className="grid size-11 shrink-0 place-items-center self-center rounded-xl border border-line text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-            >
-              <ChevronsUpDown className="size-4" aria-hidden="true" />
-            </button>
-          ) : null}
         </div>
 
         {/* Action rail — expanded only. */}

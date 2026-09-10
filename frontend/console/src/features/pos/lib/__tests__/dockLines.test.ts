@@ -83,16 +83,24 @@ describe('dockActions — which chips the expanded dock offers', () => {
     )
   })
 
-  it('a bill offers attachments, never the cart-scoped discount/member chips', () => {
+  it('a bill offers the switcher first, then split and attachments — never the cart-scoped chips', () => {
     expect(dockActions({ isBill: true, unpaidCount: 3, canManualDiscount: true })).toEqual([
+      'switch',
       'split',
       'attachments',
     ])
   })
 
-  it('an empty bill still offers its attachments', () => {
+  it('an empty bill still offers the switcher and its attachments', () => {
     expect(dockActions({ isBill: true, unpaidCount: 0, canManualDiscount: false })).toEqual([
+      'switch',
       'attachments',
     ])
+  })
+
+  it('the walk-in cart never offers the switcher — the header is its door into a bill', () => {
+    expect(dockActions({ isBill: false, unpaidCount: 3, canManualDiscount: true })).not.toContain(
+      'switch',
+    )
   })
 })
