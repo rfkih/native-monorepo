@@ -481,25 +481,29 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
     assertThat(bankBalanceAsAdmin("1900")).as("matching a ledger that nets to zero").isZero();
   }
 
-  /** History has to SAY a row was taken back, or the console offers Take-back on it a second time. */
+  /**
+   * History has to SAY a row was taken back, or the console offers Take-back on it a second time.
+   */
   @Test
   void historyMarksATakenBackPayout() throws Exception {
     seedOutstanding(500_000L);
     PlatformSettlementResult settled = settle(300_000L, 240_000L, "psw-history-void");
-    assertThat(TenantContext.callAs(TENANT, ACTOR, () -> writer.history(CHANNEL)).getFirst().voided())
+    assertThat(
+            TenantContext.callAs(TENANT, ACTOR, () -> writer.history(CHANNEL)).getFirst().voided())
         .isFalse();
 
     TenantContext.runAs(TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId()));
 
-    assertThat(TenantContext.callAs(TENANT, ACTOR, () -> writer.history(CHANNEL)).getFirst().voided())
+    assertThat(
+            TenantContext.callAs(TENANT, ACTOR, () -> writer.history(CHANNEL)).getFirst().voided())
         .isTrue();
   }
 
   /**
-   * The deposit is a convenience; the payout is the money. A bank account the deposit cannot legally
-   * use must make the deposit step stand down, NOT take the payout with it — importLines stamps the
-   * line with the ACCOUNT's currency, and the resulting mismatch used to roll back the whole
-   * transaction.
+   * The deposit is a convenience; the payout is the money. A bank account the deposit cannot
+   * legally use must make the deposit step stand down, NOT take the payout with it — importLines
+   * stamps the line with the ACCOUNT's currency, and the resulting mismatch used to roll back the
+   * whole transaction.
    */
   @Test
   void aBankAccountInAnotherCurrencyIsSkippedRatherThanFailingThePayout() throws Exception {

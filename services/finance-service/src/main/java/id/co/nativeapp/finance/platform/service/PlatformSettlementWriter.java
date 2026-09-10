@@ -73,8 +73,8 @@ public class PlatformSettlementWriter {
 
   /**
    * The fleet business date (Asia/Jakarta — the same zone {@code findSummary} shifts {@code
-   * settled_at} into). Used for the statement line a payout deposits, so its date matches the
-   * date the bank will show.
+   * settled_at} into). Used for the statement line a payout deposits, so its date matches the date
+   * the bank will show.
    */
   private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Jakarta");
 
@@ -330,7 +330,8 @@ public class PlatformSettlementWriter {
     }
 
     String period = LedgerPosting.periodOf(now);
-    // Every other posting path in this service guards this (settle above, AR/AP, ReconciliationWriter)
+    // Every other posting path in this service guards this (settle above, AR/AP,
+    // ReconciliationWriter)
     // and a contra is a posting like any other: voiding an old IDR payout into a period that has
     // since taken USD entries is exactly the divergence the guard exists to stop.
     requireConsistentGlCurrency(period, Money.ofMinor(settlement.getNetMinor(), currency));
@@ -431,9 +432,8 @@ public class PlatformSettlementWriter {
    *
    * <ul>
    *   <li><b>Active only.</b> {@code findAllView} returns archived accounts too. One stale account
-   *       beside the current one made {@code size() != 1} true and skipped the deposit silently;
-   *       a company whose only row is deactivated would have had money booked into a closed
-   *       account.
+   *       beside the current one made {@code size() != 1} true and skipped the deposit silently; a
+   *       company whose only row is deactivated would have had money booked into a closed account.
    *   <li><b>Matching currency.</b> {@link StatementLineWriter#importLines} stamps the line with
    *       the ACCOUNT's currency and {@link ReconciliationWriter#reconcile} then posts in it. The
    *       settlement entry was already flushed in this same transaction in the payout's currency,

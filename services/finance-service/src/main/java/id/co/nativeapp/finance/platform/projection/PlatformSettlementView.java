@@ -20,7 +20,9 @@ public interface PlatformSettlementView {
 
   Instant getSettledAt();
 
-  /** Non-null once the payout has been taken back (V67). Kept as the timestamp, not a boolean, so
-   *  the projection stays a straight column read. */
+  /**
+   * Non-null once the payout has been taken back (V67). Kept as the timestamp, not a boolean, so
+   * the projection stays a straight column read.
+   */
   Instant getVoidedAt();
 }
