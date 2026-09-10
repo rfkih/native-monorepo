@@ -1,5 +1,15 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-10 — a month that failed to load is not a month with nothing in it
+
+Follow-up to the phone reports: a trend month whose request errored drew the same gap as a 204
+month, so a flaky network read as "no entries". The trend points now carry `failed` + `retry`
+(statements and dashboard alike); the chart draws a failed month as a warning mark on the baseline
+with its own tooltip and aria text (status colour with an icon and a label — never colour alone),
+and tapping it re-issues that month as well as selecting it. A caption under the chart counts the
+failed months with a "Try again" that re-issues them all. An empty month's tooltip now says so. The
+harness fails March of the cash-flow window on purpose and asserts the mark appears.
+
 ## 2026-09-10 — the phone reports become one screen, and the chart picks the month
 
 The three statements had one layout — desktop — that the phone merely compressed: title, three

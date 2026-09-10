@@ -126,3 +126,12 @@ export function centreScroll(index: number, track: ChartTrack, viewportW: number
 export function seriesValues<T>(points: readonly { data: T | null }[], pick: (d: T) => number): Point[] {
   return points.map((p) => (p.data == null ? null : pick(p.data)))
 }
+
+/**
+ * Which months of a window could not be loaded — drawn as a warning mark, not a gap, because a
+ * network failure and "no entries" must never read the same. A failed month has no value either,
+ * so this mask is read beside {@link seriesValues}, never instead of it.
+ */
+export function seriesFailures(points: readonly { failed?: boolean }[]): boolean[] {
+  return points.map((p) => p.failed === true)
+}

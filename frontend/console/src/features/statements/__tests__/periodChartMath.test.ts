@@ -5,6 +5,7 @@ import {
   chartTrack,
   columnCentre,
   columnGeometry,
+  seriesFailures,
   seriesTone,
   seriesValues,
   trailingPeriods,
@@ -145,5 +146,20 @@ describe('seriesValues — gaps stay gaps', () => {
   it('maps present months through the picker and leaves 204 months null', () => {
     const points = [{ data: { netMinor: 5 } }, { data: null }, { data: { netMinor: -2 } }]
     expect(seriesValues(points, (d) => d.netMinor)).toEqual([5, null, -2])
+  })
+})
+
+describe('seriesFailures — a failed month is not an empty month', () => {
+  it('masks exactly the points that failed, and nothing that merely has no data', () => {
+    const points = [
+      { data: { netMinor: 5 }, failed: false },
+      { data: null, failed: true },
+      { data: null, failed: false },
+      { data: null },
+    ]
+    expect(seriesFailures(points)).toEqual([false, true, false, false])
+    // Both the failed and the empty month are gaps in the value series — the mask is the only
+    // thing telling them apart.
+    expect(seriesValues(points, (d) => d.netMinor)).toEqual([5, null, null, null])
   })
 })

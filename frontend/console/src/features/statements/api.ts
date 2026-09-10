@@ -158,10 +158,16 @@ export function useBalanceSheet(params: {
  */
 const TREND_STALE_MS = 5 * 60_000
 
-/** One point in a statement's trailing window: the period and its statement, or null for a 204. */
+/**
+ * One point in a statement's trailing window: the period and its statement — null for a 204 (no
+ * entries) AND for a request that failed, which is why `failed` exists: a month that could not be
+ * loaded must never look like a month with nothing in it. `retry` re-issues that one month.
+ */
 export interface TrendPoint<T> {
   period: string
   data: T | null
+  failed: boolean
+  retry: () => void
 }
 
 /**
@@ -193,7 +199,12 @@ export function useBalanceSheetTrend(params: {
         }),
     })),
   })
-  return periods.map((p, i) => ({ period: p, data: results[i]?.data ?? null }))
+  return periods.map((p, i) => ({
+    period: p,
+    data: results[i]?.data ?? null,
+    failed: results[i]?.isError ?? false,
+    retry: () => void results[i]?.refetch(),
+  }))
 }
 
 /** The trailing `months` cash-flow statements ending at `period` — see {@link useBalanceSheetTrend}. */
@@ -218,5 +229,10 @@ export function useCashFlowTrend(params: {
         }),
     })),
   })
-  return periods.map((p, i) => ({ period: p, data: results[i]?.data ?? null }))
+  return periods.map((p, i) => ({
+    period: p,
+    data: results[i]?.data ?? null,
+    failed: results[i]?.isError ?? false,
+    retry: () => void results[i]?.refetch(),
+  }))
 }

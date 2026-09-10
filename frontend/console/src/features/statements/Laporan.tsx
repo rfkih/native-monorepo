@@ -55,7 +55,7 @@ import { PeriodChart } from './PeriodChart'
 import { ShareBars } from './ShareBars'
 import { incomeDetailTitle, type IncomeDetailKind } from './incomeDetail'
 import { IncomeDetailBody } from './IncomeDetailBody'
-import { seriesTone, seriesValues, trailingPeriods, type TrendKey } from './periodChartMath'
+import { seriesFailures, seriesTone, seriesValues, trailingPeriods, type TrendKey } from './periodChartMath'
 import { DISPOSAL_PROCEEDS, balanceSheetCsv, cashFlowCsv, incomeCsv } from './statementsCsv'
 
 export type ReportTab = 'pnl' | 'bs' | 'cf' | 'exp'
@@ -143,6 +143,13 @@ export function Laporan({ tab }: { tab: ReportTab }) {
     : tab === 'bs'
       ? seriesValues(bsTrend, (d) => d.totalEquityMinor)
       : seriesValues(cfTrend, (d) => d.netChangeInCashMinor)
+  // A month that could not be loaded is a warning mark, not a gap — and it can be retried, one
+  // column at a time (tap it) or all at once (the caption under the chart).
+  const points: { period: string; failed: boolean; retry: () => void }[] = usesPnl ? pnlTrend : tab === 'bs' ? bsTrend : cfTrend
+  const failed = seriesFailures(points)
+  const failedCount = failed.filter(Boolean).length
+  const retryMonth = (p: string) => points.find((x) => x.period === p)?.retry()
+  const retryFailed = () => points.forEach((x) => x.failed && x.retry())
 
   const money = (minor: number) => formatMoney(minor, currency, locale)
   const amount = (minor: number) => formatAmount(minor, currency, locale)
@@ -209,14 +216,33 @@ export function Laporan({ tab }: { tab: ReportTab }) {
         <PeriodChart
           periods={periods}
           values={values}
+          failed={failed}
           selected={period}
           onSelect={selectMonth}
+          onRetry={retryMonth}
           type={chartType}
           tone={(v) => seriesTone(trendKey, v)}
           formatValue={money}
           locale={locale}
         />
       </div>
+      {failedCount > 0 ? (
+        <div className="flex items-center gap-2 pt-2 text-[11.5px] font-medium text-amber">
+          <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            {failedCount === 1
+              ? t('statements.phone.trendFailedOne')
+              : t('statements.phone.trendFailedMany', { count: failedCount })}
+          </span>
+          <button
+            type="button"
+            onClick={retryFailed}
+            className="min-h-11 shrink-0 px-1 font-bold text-ink underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          >
+            {t('statements.phone.retry')}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 

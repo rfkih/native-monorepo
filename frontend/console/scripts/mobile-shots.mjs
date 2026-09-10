@@ -229,9 +229,12 @@ const BALANCE = (asOf) => {
 }
 
 // Arus kas (indirect): profit + working-capital lines, an equipment purchase every third month,
-// a steady loan repayment; the movement always reconciles to the ledger here.
+// a steady loan repayment; the movement always reconciles to the ledger here. One month (March)
+// answers 500 on purpose: the chart must show a FAILED month as a warning mark with a retry, never
+// as the same gap an empty month leaves.
 const CASHFLOW = (period) => {
   const m = Number(period.slice(5, 7)) || 1
+  if (m === 3) return { status: 500 }
   const net = pnlFor(period).netMinor
   const line = (accountCode, accountType, amountMinor) => ({ accountCode, accountType, amountMinor })
   const sum = (lines) => lines.reduce((t, x) => t + x.amountMinor, 0)
@@ -434,7 +437,8 @@ for (const pass of [
   )
   await ctx.route('**/api/v1/**', async (route) => {
     const fx = resolveFixture(route.request().url(), route.request())
-    if (fx && fx.status === 404) return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' })
+    // A NUMERIC status is an HTTP answer (404, 500); domain rows carry string statuses ('ACTIVE').
+    if (fx && typeof fx.status === 'number') return route.fulfill({ status: fx.status, contentType: 'application/json', body: '{}' })
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fx) })
   })
   const page = await ctx.newPage()
@@ -503,7 +507,9 @@ for (const pass of [
   // each tab must show the SAME earlier month, or a tab switch has silently reset the reader.
   for (const [key, label] of Object.entries(pass.tabs)) {
     await page.getByRole('tab', { name: label, exact: true }).click({ timeout: 8000 })
-    await page.waitForTimeout(1800)
+    // The failed month (cash flow, March) settles after the query client's one retry.
+    await page.waitForTimeout(key === 'cf' ? 3200 : 1800)
+    if (key === 'cf' && (await page.locator('button[data-failed]').count()) !== 1) throw new Error('cash-flow March should show as a failed month')
     const url = page.url().replace(BASE, '')
     if (!/period=\d{4}-\d{2}/.test(url) || !url.includes('chart=line')) throw new Error(`tab ${key} lost the selection: ${url}`)
     await page.screenshot({ path: `${dir}/laporan-${key}.png`, fullPage: true })
