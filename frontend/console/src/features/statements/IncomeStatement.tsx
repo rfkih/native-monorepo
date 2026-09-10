@@ -10,8 +10,12 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
 import { printCurrentPage } from '@/lib/nativeShell'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
-import { useIncomeStatement, type IncomeLine } from './api'
+import { useIncomeStatement } from './api'
 import { downloadCsv } from '@/lib/csv'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
+import { Laporan } from './Laporan'
+import { useSearchParams } from 'react-router-dom'
+import { incomeCsv } from './statementsCsv'
 import { accountLabel, accountLabelMap } from './accountLabels'
 import { IncomeDetailDrawer, type IncomeDetailKind } from './IncomeDetailDrawer'
 import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
@@ -27,6 +31,12 @@ export function IncomeStatement() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
   const locale = localeOf(i18n.language)
+  // Native Laporan: below 640px the three statements are one screen with tabs; this route carries
+  // both the Income tab and (via ?tab=expense) the Expenses tab. Every hook below still runs first —
+  // a hook count that changed with viewport width would crash the page at the breakpoint.
+  const isPhone = useIsPhone()
+  const [searchParams] = useSearchParams()
+  const phoneTab = searchParams.get('tab') === 'expense' ? 'exp' : 'pnl'
 
   const [period, setPeriod] = useState(currentPeriod())
   // Which summary card's drill-down drawer is open (null = none). Cleared on close / period change.
@@ -44,6 +54,8 @@ export function IncomeStatement() {
   // endpoint that used to back this: that endpoint is FINANCE_ROLES-gated, so a manager — who may
   // read this page — saw bare codes here, and the names it serves are English-only regardless.
   const accountNames = useMemo(() => accountLabelMap(t), [t])
+
+  if (isPhone) return <Laporan tab={phoneTab} />
 
   if (!company) {
     return (
@@ -71,31 +83,12 @@ export function IncomeStatement() {
     .sort((a, b) => b.netMinor - a.netMinor)
     .slice(0, 5)
 
-  // Each exported line carries the account NAME beside its code — the spreadsheet is read by the
-  // same people as the page, and a bare code is just as opaque there.
-  //
-  // COLUMN CONTRACT: code | name | amount. A total row leaves the code cell empty and puts its
-  // label in the NAME cell, so every figure in the file lands in column C and `SUM(C:C)` reaches
-  // the totals too.
-  const csvLine = (l: IncomeLine) => [l.accountCode, accountLabel(t, l.accountCode) ?? '', l.netMinor]
-  const csvTotal = (label: string, amountMinor: number) => ['', label, amountMinor]
-
+  // Built by the shared, tested builder (statementsCsv.ts) — one source for this button and the
+  // phone Export sheet, so the column contract can never drift between them.
   const exportCsv = () => {
     if (!data) return
-    downloadCsv(`income-statement-${period}.csv`, [
-      [company.name, t('statements.scopeAllUnits')],
-      [t('statements.incomeTitle'), period, currency],
-      [],
-      [t('statements.revenue')],
-      ...data.revenueLines.map(csvLine),
-      csvTotal(t('statements.totalRevenue'), data.totalRevenueMinor),
-      [],
-      [t('statements.expense')],
-      ...data.expenseLines.map(csvLine),
-      csvTotal(t('statements.totalExpense'), data.totalExpenseMinor),
-      [],
-      csvTotal(profit ? t('statements.netProfit') : t('statements.netLoss'), data.netMinor),
-    ])
+    const file = incomeCsv({ translate: t, companyName: company.name }, data)
+    downloadCsv(file.filename, file.rows)
   }
 
   return (

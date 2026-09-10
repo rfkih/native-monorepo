@@ -825,6 +825,28 @@ export const id = {
     noCompanyHint: 'Buat perusahaan untuk melihat posisi terkonsolidasinya.',
   },
   statements: {
+    /** Native Laporan — layar laporan telepon (tab, grafik yang jadi pemilih periode, sheet). */
+    phone: {
+      title: 'Laporan',
+      tab: { pnl: 'Laba rugi', bs: 'Neraca', cf: 'Arus kas', exp: 'Biaya' },
+      trendCaption: '{{n}} bulan terakhir',
+      chart: { bar: 'Grafik batang', line: 'Grafik garis' },
+      selectMonth: 'Pilih {{month}}',
+      emptyFor: 'Belum ada data untuk {{period}}',
+      emptyTap: 'Ketuk bulan lain di grafik.',
+      retry: 'Coba lagi',
+      whereFrom: 'Dari mana asalnya',
+      netWorthNote: 'Aset dikurangi liabilitas',
+      cashNote: 'Metode tidak langsung',
+      expenseTab: { title: 'Setiap akun biaya', note: 'porsi dari total biaya' },
+      export: {
+        title: 'Ekspor {{report}}',
+        csv: 'Unduh CSV',
+        print: 'Cetak',
+        printNote: 'Termasuk akun bersaldo nol yang disembunyikan di layar',
+        close: 'Tutup',
+      },
+    },
     scopeAllUnits: 'semua gerai',
     incomeTitle: 'Laporan laba rugi',
     incomeSubtitle: 'Pendapatan, beban, dan laba bersih untuk periode ini.',
