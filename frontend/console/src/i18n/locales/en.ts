@@ -1504,69 +1504,142 @@ export const en = {
     summaryError: 'Could not load the summary. Please try again.',
   },
   stocktake: {
-    /** ADR 0038 phase 3 + ADR 0046 — the stock opname now counts INGREDIENTS (bahan), not
-     * menu items. Menu-item stock stays on /menu as the sold-out gate. */
+    /** ADR 0038 phase 3 + ADR 0046 — the stock opname counts INVENTORY ITEMS (ingredients and
+     * supplies), not menu items; menu-item stock stays on /menu as the sold-out gate. The screen
+     * follows the "Native Opname Stok" design (2026-09-10): a row has a "checked" status of its
+     * own, and counts are typed on a count sheet with its own keypad, not in an inline field. */
     title: 'Stock count',
     tillMenuLabel: 'Stock count',
-    /** Shortened: on a phone the old wording ran ~5 lines directly above the counting list, and
-     * squeezed it to three visible rows as soon as the keyboard came up. */
-    entryHint: 'Counts start at the system quantity — change what differs from your physical count.',
-    /** Ingredient filter (appears above 12 ingredients) — it narrows the VIEW only; the submission
-     * still carries every ingredient, untouched ones at their system quantity. */
-    searchLabel: 'Search ingredients',
-    searchPlaceholder: 'Search ingredients…',
-    searchEmpty: 'No ingredient matches that.',
-    /** The pre-submit footer — the figures that used to appear only AFTER the posting had run. */
-    changedLines: 'With a variance: {{formatted}}',
-    invalidLines: 'Not counted yet: {{formatted}}',
-    showInvalid: 'Show me',
-    /** Appended to the value when a costed line priced in another currency was left out of it. */
-    partialValueMark: '(partial)',
-    soldTodayTitle: 'Items sold today',
-    soldTodayEmpty: 'No sales yet today.',
-    /** Ledger row — lower case, no colon, so it fits one line beside the figure column. "today" is
-     * dropped: the count IS today's, and the panel above already says so. The unit stays on BOTH
-     * figures (the unit-beside-the-number rule). */
+    /** Screen-header second line: company · outlet. */
+    headerSubtitle: '{{company}} · {{outlet}}',
+    entryHint:
+      'System quantities are filled in. Tap the check when your physical count matches, or tap the figure to enter a different count.',
+    /** The header progress strip — "checked" = confirmed equal to the system OR given a different
+     * count. Untouched rows still go out at their system quantity (see listFootnote). */
+    progress: '{{resolved}} of {{total}} checked',
+    progressRemaining: '{{formatted}} left',
+    progressComplete: 'all checked',
+    /** Accessible name of the progress bar itself (its value is announced separately). */
+    progressLabel: 'Lines checked',
+    /** Item filter (appears above 12 items) — narrows the VIEW only; the submission still carries
+     * every item. */
+    searchLabel: 'Search items',
+    searchPlaceholder: 'Search by item name',
+    searchClear: 'Clear search',
+    searchEmpty: 'No item matches this search.',
+    /** The check mark on the left of a row — three meanings, by the row's state. */
+    markPending: 'Mark {{name}} as matching the system',
+    markReset: 'Reset {{name}} to the system quantity',
+    markUnverify: 'Unmark {{name}} as checked',
+    /** Ledger row — lower case, no colon, ONE line with an ellipsis. The unit rides the system
+     * figure only: repeating it on "used" is what pushed litre rows onto two lines. */
     systemQty: 'system {{qty}} {{unit}}',
-    usedToday: 'used {{qty}} {{unit}}',
+    usedTodayShort: 'used {{qty}}',
+    usedTodayLong: 'used today {{qty}} {{unit}}',
+    unitCost: '{{money}}/{{unit}}',
+    noCost: 'no cost',
     usedThatDay: 'Used that day: {{qty}} {{unit}}',
+    /** The pre-submit footer — the figures that used to appear only AFTER the posting had run.
+     * i18next plural forms (`count` is passed alongside the Intl-formatted `formatted`); Indonesian
+     * does not inflect, so id.ts carries the base key only. */
+    changedLines_one: '{{formatted}} line changed',
+    changedLines_other: '{{formatted}} lines changed',
+    changedNone: 'No lines changed',
+    invalidLines_one: '{{formatted}} line cannot be sent yet',
+    invalidLines_other: '{{formatted}} lines cannot be sent yet',
+    showInvalid: 'Show me',
+    /** The figure is single-currency by design; the server also refuses a count whose costed lines
+     * span two currencies (422), so this is a warning of what Submit will run into, not a footnote
+     * on a figure that would otherwise be fine. */
+    partialValueNote:
+      'A costed line is priced in another currency — the figure above leaves it out rather than forcing two currencies into one total.',
+    unverifiedNote_one: '{{formatted}} unchecked line will be sent at its system quantity.',
+    unverifiedNote_other: '{{formatted}} unchecked lines will be sent at their system quantity.',
+    listFootnote:
+      'Unchecked lines are sent at their system quantity. The server recomputes system, count and variance, then posts valued shrinkage for items that carry a cost.',
+    soldTodayTitle: 'Sold today',
+    soldTodayEmpty: 'No sales yet today.',
+    /** "42×" — the multiplication sign rides the Intl-formatted count. */
+    soldTimes: '{{formatted}}×',
+    soldTodayNote:
+      'Read-only reference, per menu item. The count itself is keyed to inventory items, so this list never feeds it.',
     historyTitle: 'Opname history',
     historyAction: 'Opname history',
     historyError: 'Could not load the opname history.',
     historyEmpty: 'No stock opnames recorded yet.',
     historyVariedCount: '{{formatted}} items with variance',
-    countedForItem: 'Counted quantity for {{name}}',
+    /** The row's figure button: the count IS the label, or a reader never hears it. */
+    rowFigureLabel: '{{name}}: {{value}} {{unit}}, tap to change',
+    /** The count sheet's own field (the value is announced separately there). */
     countedForItemWithUnit: 'Counted for {{name}}, in {{unit}}',
-    notCounted: 'Not counted',
-    submitAction: 'Submit stock count',
+    notCounted: 'not counted',
+    /** The count sheet — its own keypad, not the system keyboard covering 40% of the screen. */
+    sheetHintFraction: 'A comma or a dot both work as the decimal separator.',
+    sheetHintWhole: 'Whole numbers only.',
+    sheetInvalidFraction: 'This is not a valid number. One decimal separator only, comma or dot.',
+    sheetInvalidWhole: '{{unit}} takes no fractions — enter a whole number.',
+    keyDigit: 'Digit {{digit}}',
+    keyDecimal: 'Decimal separator',
+    keyBackspace: 'Delete one digit',
+    sheetReset: 'Same as system',
+    sheetSave: 'Save count',
+    submitAction: 'Send count',
     errorGeneric: 'Could not submit the stock count. Please try again.',
-    loadError: 'Could not load the inventory list.',
+    loadError: 'The inventory list could not be loaded',
+    loadErrorBody:
+      'A count needs the outlet online — stock is keyed to a real outlet, so there is no offline mode here.',
+    retry: 'Try again',
+    emptyTitle: 'No inventory items at this outlet yet',
     emptyHint:
-      'No inventory items at this outlet yet — add what you buy and count (bread, sauce, cups, straws…) to start the stock count.',
-    emptyCta: 'Open inventory',
+      'The count is of inventory items, not menu items. Register them in Inventory first, with their unit and cost.',
+    emptyCta: 'Open Inventory',
     /** Shown on the summary when no counted line carried a cost — nothing was posted. */
-    noValuedLines: 'Counted — no costed items, so nothing was posted to the books.',
+    noValuedLines:
+      'No costed line in this count, so nothing was posted to the books. Stock was still adjusted.',
     countedAt: 'Counted',
-    resultBalanced: 'Balanced — no shrinkage',
-    resultLoss: 'Net shrinkage (loss)',
-    resultGain: 'Net gain',
+    resultBalanced: 'Balanced',
+    resultLoss: 'Net shrinkage',
+    resultGain: 'Net overage',
     done: 'Done',
-    varianceLinesTitle: 'Items with a variance',
+    varianceLinesTitle: 'Lines with a variance',
+    noVariedLines: 'No line has a variance — every count equals the system quantity.',
     lineCounts: 'System {{system}} → counted {{counted}}',
-    /** ADR 0068 part 3 — the pre-submit variance-confirmation guard (stocktakeVarianceGuard.ts):
-     * one or more counted quantities look implausible (a ×1000 g/kg slip, an extra zero…). A
-     * fat-finger safety net, not a hard block — the operator can always "Save anyway". */
-    varianceGuardTitle: 'Double-check this count',
-    varianceGuardBody:
-      'One or more counts look far outside the expected range — a common cause is a kg/g mix-up or an extra zero. Check the amounts below before saving:',
-    varianceGuardRecount: 'Check again',
-    varianceGuardProceed: 'Save anyway',
-    /** Leaving with counts typed but not submitted — they used to be dropped without a word, and
-     * the hardware Back button is the most common way to lose them. */
-    discardTitle: 'Discard this count?',
-    discardBody: 'The counts you typed have not been submitted. Leaving now loses all of them.',
+    /** The compact form for the result summary: "3.411 → 3.32 kg". */
+    lineArrow: '{{system}} → {{counted}} {{unit}}',
+    /** ADR 0068 part 3 — the pre-submit variance-confirmation guard (stocktakeVarianceGuard.ts).
+     * The reasons are WRITTEN OUT — "774× the system quantity" is what makes someone recount, not
+     * the word "implausible". A safety net, not a hard block. */
+    varianceGuardTitle: 'Check this count first',
+    varianceGuardIntroOne:
+      'One line makes no sense against its system quantity. A count posts valued shrinkage to the ledger, so one wrong figure here becomes a false profit or loss in the reports.',
+    varianceGuardIntroMany:
+      'Some lines make no sense against their system quantity. A count posts valued shrinkage to the ledger, so a wrong figure here becomes a false profit or loss in the reports.',
+    guardSystem: 'System quantity',
+    guardCounted: 'Your count',
+    guardReasonRatioAbove: 'This count is {{ratio}}× the system quantity.',
+    guardReasonRatioBelow: 'This count is {{ratio}}× smaller than the system quantity.',
+    /** The slip is directional: too big = a {{from}} figure typed into the {{to}} field. */
+    guardReasonSlipAbove:
+      'A gap that size is usually a unit slip — a {{from}} figure typed as {{to}} — or an extra zero.',
+    guardReasonSlipBelow:
+      'A gap that size is usually a unit slip — a {{from}} figure typed as {{to}} — or a missing zero.',
+    guardReasonZerosAbove: 'A gap that size is usually an extra zero.',
+    guardReasonZerosBelow: 'A gap that size is usually a missing zero.',
+    guardReasonValue:
+      'The variance is worth {{value}}, far above the {{threshold}} threshold for one line.',
+    varianceGuardNote:
+      'This is a safety net, not a barrier. The server records and values whatever is sent — if the count is right, go ahead.',
+    varianceGuardRecount: 'Recount',
+    varianceGuardProceed: 'Send anyway',
+    /** Leaving with lines worked on but not sent — they used to be dropped without a word, and the
+     * hardware Back button is the most common way to lose them. */
+    discardTitle: 'Leave this count?',
+    discardBody_one:
+      'You have worked on {{formatted}} line that has not been sent. A count lives only on this screen until it is sent — leaving now discards it.',
+    discardBody_other:
+      'You have worked on {{formatted}} lines that have not been sent. A count lives only on this screen until it is sent — leaving now discards it.',
     discardKeep: 'Keep counting',
-    discardLeave: 'Discard count',
+    discardLeave: 'Discard',
   },
   inventory: {
     /** ADR 0046 phase 1 — the per-outlet stock-item catalog behind the stock opname. Owner

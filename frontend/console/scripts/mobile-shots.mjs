@@ -9,6 +9,9 @@
  *   npm run dev        (terminal 1)
  *   node scripts/mobile-shots.mjs [outDir]   (terminal 2)
  *
+ * SHOT_ONLY=screens,more,pos,stocktake,laporan (comma list) restricts the walk to those sections — the
+ * whole pass is a couple of minutes, and a redesign of one screen only needs its own section.
+ *
  * Dev-auth grants all four roles, so the MANAGER tab bar renders everywhere; the
  * employee-only tab set differs only in tab items (same component) and is covered by the
  * shouldMountTabBar/persona unit + manual matrix instead.
@@ -18,6 +21,8 @@ import { chromium } from 'playwright-core'
 
 const BASE = process.env.SHOT_BASE ?? 'http://localhost:5173'
 const OUT = process.argv[2] ?? 'shots-mobile'
+const ONLY = (process.env.SHOT_ONLY ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+const want = (section) => ONLY.length === 0 || ONLY.includes(section)
 
 // ── Fixtures (IDR, minor units = whole rupiah) ────────────────────────────────
 
@@ -136,6 +141,76 @@ const BILL_SUMMARIES = [
     runningTotalMinor: BILL_UNPAID, lineCount: BILL_LINES.length,
   },
 ]
+
+// ── Stock opname fixtures (Native Opname Stok) ───────────────────────────────
+// The design's own catalog: sixteen items so the search field appears (threshold 12), kg/liter
+// items with a display unit over an integer base, whole-unit items (pcs/pack), one uncosted item
+// and one priced in USD so the "partial value" note has something to say. Stock is BASE units.
+
+const ingredient = (id, name, unit, displayUnit, stockQty, unitCostMinor, costCurrency = 'IDR') => ({
+  id, businessId: COMPANY.businessId, name, unit, displayUnit, stockQty,
+  unitCostMinor, costCurrency: unitCostMinor == null ? null : costCurrency,
+  stockValueMinor: unitCostMinor == null ? 0 : stockQty * unitCostMinor, active: true, packSize: null,
+})
+
+const INGREDIENTS = [
+  ingredient('daging-kebab', 'Daging Kebab TIS FOOD', 'g', 'kg', 3411, 61),
+  ingredient('ayam-fillet', 'Ayam Fillet Dada', 'g', 'kg', 8500, 38),
+  ingredient('tepung-cakra', 'Tepung Terigu Cakra Kembar', 'g', 'kg', 24000, 14),
+  ingredient('beras-pandan', 'Beras Pandan Wangi', 'g', 'kg', 50000, 13),
+  ingredient('minyak-sania', 'Minyak Goreng Sania', 'ml', 'liter', 18000, 18),
+  ingredient('susu-uht', 'Susu UHT Full Cream', 'ml', 'liter', 12000, 16),
+  ingredient('gula-aren', 'Gula Aren Cair', 'ml', 'liter', 5000, 42),
+  ingredient('kopi-robusta', 'Kopi Robusta Sangrai', 'g', 'kg', 6000, 95),
+  ingredient('keju-mozarella', 'Keju Mozarella Block', 'g', 'kg', 2400, 118),
+  ingredient('bawang-merah', 'Bawang Merah Brebes', 'g', 'kg', 4200, 32),
+  ingredient('daun-selada', 'Daun Selada Keriting', 'g', 'kg', 1800, 28),
+  ingredient('telur-ayam', 'Telur Ayam Negeri', 'pcs', null, 180, 2600),
+  ingredient('box-medium', 'Kemasan Box Medium', 'pcs', null, 340, 1150),
+  ingredient('saus-pouch', 'Saus Sambal Pouch', 'pack', null, 48, 12500),
+  ingredient('es-kristal', 'Es Batu Kristal', 'g', 'kg', 30000, null),
+  ingredient('truffle-paste', 'Truffle Paste (impor)', 'g', 'kg', 900, 85, 'USD'),
+]
+
+const INGREDIENT_USAGE = [
+  ['daging-kebab', 420], ['ayam-fillet', 2100], ['tepung-cakra', 1200], ['beras-pandan', 3400],
+  ['minyak-sania', 900], ['susu-uht', 2600], ['gula-aren', 1160], ['kopi-robusta', 380],
+  ['keju-mozarella', 240], ['bawang-merah', 560], ['daun-selada', 320], ['telur-ayam', 36],
+  ['box-medium', 73], ['saus-pouch', 4], ['es-kristal', 5200],
+].map(([ingredientId, qtyUsed]) => ({ ingredientId, qtyUsed }))
+
+const ITEM_SALES = [
+  { menuItemId: 'm1', name: 'Kebab Jumbo Daging', soldQty: 42, revenueMinor: 1470000 },
+  { menuItemId: 'm8', name: 'Kopi Susu Gula Aren', soldQty: 58, revenueMinor: 1450000 },
+  { menuItemId: 'm2', name: 'Nasi Ayam Geprek', soldQty: 31, revenueMinor: 1085000 },
+  { menuItemId: 'm7', name: 'Es Teh Manis', soldQty: 74, revenueMinor: 888000 },
+  { menuItemId: 'm11', name: 'Roti Bakar Keju', soldQty: 19, revenueMinor: 475000 },
+]
+
+// The POST echoes the submitted lines back the way the server would: variance = counted − system,
+// a line's value carries the raw variance sign, and the parent shrinkage is the NEGATED sum of the
+// base-currency lines (positive = net loss) — see ingredientStocktakeApi.ts.
+const stocktakeResult = (req) => {
+  const lines = (req?.postDataJSON?.()?.lines ?? []).map((l) => {
+    const ing = INGREDIENTS.find((i) => i.id === l.ingredientId)
+    const systemQty = ing?.stockQty ?? 0
+    const varianceQty = l.countedQty - systemQty
+    const unitCostMinor = ing?.unitCostMinor ?? null
+    return {
+      ingredientId: l.ingredientId, name: ing?.name ?? l.ingredientId, unit: ing?.unit ?? 'pcs',
+      systemQty, countedQty: l.countedQty, varianceQty, unitCostMinor,
+      varianceValueMinor: unitCostMinor == null ? 0 : varianceQty * unitCostMinor,
+    }
+  })
+  const idrLines = lines.filter(
+    (l) => l.unitCostMinor != null && INGREDIENTS.find((i) => i.id === l.ingredientId)?.costCurrency === 'IDR',
+  )
+  return {
+    id: 'st1', businessId: COMPANY.businessId, currency: idrLines.length ? 'IDR' : null,
+    countedAt: '2026-09-10T12:42:00Z',
+    shrinkageMinor: -idrLines.reduce((sum, l) => sum + l.varianceValueMinor, 0), lines,
+  }
+}
 
 const REGISTER_SESSION = {
   id: 'rs1', businessId: COMPANY.businessId, status: 'OPEN', businessDate: '2026-08-07',
@@ -366,7 +441,12 @@ const ROUTES = [
     return breakdownOf(subtotal)
   }],
   ['/api/v1/orders/item-popularity', () => []],
-  ['/api/v1/orders/item-sales', () => []],
+  ['/api/v1/orders/item-sales', () => ITEM_SALES],
+  // Stock opname. `/ingredients/usage` must precede `/ingredients`; the stocktake route answers a
+  // GET (history) with nothing and a POST (submit) with the echoed result.
+  ['/api/v1/ingredients/usage', () => INGREDIENT_USAGE],
+  ['/api/v1/ingredients', () => INGREDIENTS],
+  ['/api/v1/ingredient-stocktakes', (u, m, req) => (req?.method() === 'POST' ? stocktakeResult(req) : [])],
   ['/api/v1/orders', () => []],
   ['/api/v1/register-sessions/current', () => REGISTER_SESSION],
   [/\/api\/v1\/bills\/[^/]+\/attachments$/, () => []],
@@ -429,6 +509,9 @@ for (const pass of [
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
   await ctx.addInitScript(
     ([company, theme, lang]) => {
+      // Runtime config beats import.meta.env (lib/config.ts), so an untracked
+      // .env.development.local that forces oidc cannot land the walk on the marketing page.
+      window.__NATIVE_CONFIG__ = { authMode: 'dev' }
       localStorage.setItem('native.console.sessions', JSON.stringify([company]))
       localStorage.setItem('native.console.theme', theme)
       localStorage.setItem('native.console.lang', lang)
@@ -444,13 +527,14 @@ for (const pass of [
   const page = await ctx.newPage()
   page.on('pageerror', (e) => console.log(`[${pass.name}] PAGEERROR`, String(e.message).slice(0, 160)))
 
-  for (const [name, path] of SCREENS) {
+  if (want('screens')) for (const [name, path] of SCREENS) {
     await page.goto(`${BASE}${path}`, { waitUntil: 'load' })
     await page.waitForTimeout(1200)
     await page.screenshot({ path: `${dir}/${name}.png`, fullPage: false })
     console.log(`[${pass.name}] ${name} ok (${page.url().replace(BASE, '') || '/'})`)
   }
 
+  if (want('more')) {
   // More SCREEN (manager persona) — a route since ADR 0078, not a sheet.
   await page.goto(`${BASE}/`, { waitUntil: 'load' })
   await page.waitForTimeout(1000)
@@ -478,51 +562,144 @@ for (const pass of [
   await page.waitForTimeout(900)
   await page.screenshot({ path: `${dir}/payslip-open.png`, fullPage: true })
   console.log(`[${pass.name}] payslip-open ok`)
-
-
-  // ── Laporan: the three statements as one phone screen (Native Laporan) ─────
-  // The chart IS the period control — a tapped column moves the whole report — so the shots pair
-  // the first tab with a month change and the line variant, then the two sheets, then each tab.
-  await page.goto(`${BASE}/statements/income`, { waitUntil: 'load' })
-  await page.waitForTimeout(1800)
-  await page.screenshot({ path: `${dir}/laporan-pnl.png`, fullPage: true })
-  console.log(`[${pass.name}] laporan-pnl ok`)
-  // Chart columns are the only pressed-state buttons that carry a title (month · value).
-  await page.locator('button[title][aria-pressed="false"]').nth(2).click({ timeout: 8000 })
-  await page.waitForTimeout(1200)
-  await page.screenshot({ path: `${dir}/laporan-pnl-month.png` })
-  console.log(`[${pass.name}] laporan-pnl-month ok`)
-  await page.getByRole('button', { name: pass.lineChart, exact: true }).click({ timeout: 8000 })
-  await page.waitForTimeout(500)
-  await page.screenshot({ path: `${dir}/laporan-pnl-line.png` })
-  console.log(`[${pass.name}] laporan-pnl-line ok`)
-  // Drill-down sheet from the hero figure; BACK closes it (ADR 0075), not a tap on the scrim.
-  await page.getByTestId('laporan-hero').click({ timeout: 8000 })
-  await page.waitForTimeout(800)
-  await page.screenshot({ path: `${dir}/laporan-detail-sheet.png` })
-  console.log(`[${pass.name}] laporan-detail-sheet ok`)
-  await page.goBack()
-  await page.waitForTimeout(600)
-  // The tapped month and the line chart travel with the tab (they live in the URL) — the shot of
-  // each tab must show the SAME earlier month, or a tab switch has silently reset the reader.
-  for (const [key, label] of Object.entries(pass.tabs)) {
-    await page.getByRole('tab', { name: label, exact: true }).click({ timeout: 8000 })
-    // The failed month (cash flow, March) settles after the query client's one retry.
-    await page.waitForTimeout(key === 'cf' ? 3200 : 1800)
-    if (key === 'cf' && (await page.locator('button[data-failed]').count()) !== 1) throw new Error('cash-flow March should show as a failed month')
-    const url = page.url().replace(BASE, '')
-    if (!/period=\d{4}-\d{2}/.test(url) || !url.includes('chart=line')) throw new Error(`tab ${key} lost the selection: ${url}`)
-    await page.screenshot({ path: `${dir}/laporan-${key}.png`, fullPage: true })
-    console.log(`[${pass.name}] laporan-${key} ok (${url})`)
   }
-  // Export sheet — the title row's action.
-  await page.getByTestId('laporan-export').click({ timeout: 8000 })
-  await page.waitForTimeout(800)
-  await page.screenshot({ path: `${dir}/laporan-export-sheet.png` })
-  console.log(`[${pass.name}] laporan-export-sheet ok`)
-  await page.goBack()
-  await page.waitForTimeout(400)
 
+  // ── Stock opname (Native Opname Stok) ──────────────────────────────────────
+  // "Filled in is not checked": the shots have to show a row LEAVING pending both ways — the check
+  // mark and a typed count — the count sheet with its own keypad, the summary the POST comes back
+  // as, the variance guard writing out its reasons on the ADR 0068 incident figure, and the
+  // discard confirm naming how many rows would be lost. Labels match either language.
+  if (want('stocktake')) {
+    const digit = (d) => page.getByRole('button', { name: new RegExp(`^(Angka|Digit) ${d}$`) })
+    const decimal = () => page.getByRole('button', { name: /^(Pemisah desimal|Decimal separator)$/ })
+    const typeCount = async (keys) => {
+      for (const k of keys) {
+        await (k === ',' ? decimal() : digit(k)).click({ timeout: 8000 })
+        await page.waitForTimeout(120)
+      }
+    }
+    const openOpname = async () => {
+      await page.getByRole('button', { name: /^(Opname stok|Stocktake)$/ }).click({ timeout: 8000 })
+      await page.waitForTimeout(1400)
+    }
+    // The row's figure button is named "<item>: <value> <unit>, …" (the count is IN the label).
+    const openSheetFor = async (name) => {
+      await page.getByRole('button', { name: new RegExp(`^${name}.*: `) }).click({ timeout: 8000 })
+      await page.waitForTimeout(700)
+    }
+
+    await page.goto(`${BASE}/`, { waitUntil: 'load' })
+    await page.waitForTimeout(1000)
+    await page.getByRole('link', { name: pass.moreLabel, exact: true }).click({ timeout: 8000 })
+    await page.waitForTimeout(600)
+    await openOpname()
+    await page.screenshot({ path: `${dir}/opname-count.png` })
+    console.log(`[${pass.name}] opname-count ok`)
+
+    // Three rows checked by the mark alone — the progress strip is the point of this shot.
+    const marks = page.getByRole('button', { name: /^(Tandai|Mark) / })
+    for (const i of [1, 2, 3]) {
+      await marks.nth(i).click({ timeout: 8000 })
+      await page.waitForTimeout(150)
+    }
+    await page.waitForTimeout(500)
+    await page.screenshot({ path: `${dir}/opname-progress.png` })
+    console.log(`[${pass.name}] opname-progress ok`)
+
+    await openSheetFor('Daging Kebab')
+    await page.screenshot({ path: `${dir}/opname-sheet.png` })
+    console.log(`[${pass.name}] opname-sheet ok`)
+    await typeCount(['3', ',', '3', '2'])
+    await page.waitForTimeout(400)
+    await page.screenshot({ path: `${dir}/opname-sheet-typed.png` })
+    console.log(`[${pass.name}] opname-sheet-typed ok`)
+    await page.getByTestId('stocktake-count-save').click({ timeout: 8000 })
+    await page.waitForTimeout(600)
+
+    await openSheetFor('Keju Mozarella')
+    await typeCount(['2', ',', '2', '8'])
+    await page.getByTestId('stocktake-count-save').click({ timeout: 8000 })
+    await page.waitForTimeout(600)
+    await page.screenshot({ path: `${dir}/opname-changed.png` })
+    console.log(`[${pass.name}] opname-changed ok`)
+
+    await page.getByTestId('stocktake-submit').click({ timeout: 8000 })
+    await page.waitForTimeout(1200)
+    await page.screenshot({ path: `${dir}/opname-summary.png` })
+    console.log(`[${pass.name}] opname-summary ok`)
+    await page.getByRole('button', { name: /^(Selesai|Done)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(600)
+
+    // The ADR 0068 incident, typed as it happened: 2 640 (kg field) against 3,411 kg in the system.
+    await openOpname()
+    await openSheetFor('Daging Kebab')
+    await typeCount(['2', '6', '4', '0'])
+    await page.getByTestId('stocktake-count-save').click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    await page.getByTestId('stocktake-submit').click({ timeout: 8000 })
+    await page.waitForTimeout(800)
+    await page.screenshot({ path: `${dir}/opname-guard.png` })
+    console.log(`[${pass.name}] opname-guard ok`)
+    await page.getByTestId('stocktake-variance-recount').click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+
+    // Header Back with a worked row — the confirm, not a silent discard. `.last()`: the More
+    // screen underneath has a Back of its own, and the opname host renders after it.
+    await page.getByRole('button', { name: /^(Kembali|Back)$/ }).last().click({ timeout: 8000 })
+    await page.waitForTimeout(600)
+    await page.screenshot({ path: `${dir}/opname-discard.png` })
+    console.log(`[${pass.name}] opname-discard ok`)
+    await page.getByTestId('stocktake-discard-leave').click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+  }
+
+  // Laporan (Native Laporan, ADR 0080) — gated like every other section since the opname walk.
+  if (want('laporan')) {
+    // ── Laporan: the three statements as one phone screen (Native Laporan) ─────
+    // The chart IS the period control — a tapped column moves the whole report — so the shots pair
+    // the first tab with a month change and the line variant, then the two sheets, then each tab.
+    await page.goto(`${BASE}/statements/income`, { waitUntil: 'load' })
+    await page.waitForTimeout(1800)
+    await page.screenshot({ path: `${dir}/laporan-pnl.png`, fullPage: true })
+    console.log(`[${pass.name}] laporan-pnl ok`)
+    // Chart columns are the only pressed-state buttons that carry a title (month · value).
+    await page.locator('button[title][aria-pressed="false"]').nth(2).click({ timeout: 8000 })
+    await page.waitForTimeout(1200)
+    await page.screenshot({ path: `${dir}/laporan-pnl-month.png` })
+    console.log(`[${pass.name}] laporan-pnl-month ok`)
+    await page.getByRole('button', { name: pass.lineChart, exact: true }).click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    await page.screenshot({ path: `${dir}/laporan-pnl-line.png` })
+    console.log(`[${pass.name}] laporan-pnl-line ok`)
+    // Drill-down sheet from the hero figure; BACK closes it (ADR 0075), not a tap on the scrim.
+    await page.getByTestId('laporan-hero').click({ timeout: 8000 })
+    await page.waitForTimeout(800)
+    await page.screenshot({ path: `${dir}/laporan-detail-sheet.png` })
+    console.log(`[${pass.name}] laporan-detail-sheet ok`)
+    await page.goBack()
+    await page.waitForTimeout(600)
+    // The tapped month and the line chart travel with the tab (they live in the URL) — the shot of
+    // each tab must show the SAME earlier month, or a tab switch has silently reset the reader.
+    for (const [key, label] of Object.entries(pass.tabs)) {
+      await page.getByRole('tab', { name: label, exact: true }).click({ timeout: 8000 })
+      // The failed month (cash flow, March) settles after the query client's one retry.
+      await page.waitForTimeout(key === 'cf' ? 3200 : 1800)
+      if (key === 'cf' && (await page.locator('button[data-failed]').count()) !== 1) throw new Error('cash-flow March should show as a failed month')
+      const url = page.url().replace(BASE, '')
+      if (!/period=\d{4}-\d{2}/.test(url) || !url.includes('chart=line')) throw new Error(`tab ${key} lost the selection: ${url}`)
+      await page.screenshot({ path: `${dir}/laporan-${key}.png`, fullPage: true })
+      console.log(`[${pass.name}] laporan-${key} ok (${url})`)
+    }
+    // Export sheet — the title row's action.
+    await page.getByTestId('laporan-export').click({ timeout: 8000 })
+    await page.waitForTimeout(800)
+    await page.screenshot({ path: `${dir}/laporan-export-sheet.png` })
+    console.log(`[${pass.name}] laporan-export-sheet ok`)
+    await page.goBack()
+    await page.waitForTimeout(400)
+  }
+
+  if (want('pos')) {
   // ── POS: the phone bill deck (Native Till Android v2) ──────────────────────
   // The deck is the redesign's whole thesis — the bill lives on screen instead of inside a sheet —
   // so the shots have to show it in all four states it can be in, for BOTH data owners.
@@ -568,6 +745,7 @@ for (const pass of [
   await page.waitForTimeout(700)
   await page.screenshot({ path: `${dir}/pos-bill-expanded.png` })
   console.log(`[${pass.name}] pos-bill-expanded ok`)
+  }
 
   await ctx.close()
 }
