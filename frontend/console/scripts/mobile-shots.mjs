@@ -11,6 +11,7 @@
  *
  * SHOT_ONLY=screens,more,pos,stocktake,laporan,inventory (comma list) restricts the walk to those sections — the
  * whole pass is a couple of minutes, and a redesign of one screen only needs its own section.
+ * SHOT_FULL=1 makes the `screens` pass capture full scroll height (review a long screen whole).
  *
  * Dev-auth grants all four roles, so the MANAGER tab bar renders everywhere; the
  * employee-only tab set differs only in tab items (same component) and is covered by the
@@ -23,6 +24,9 @@ const BASE = process.env.SHOT_BASE ?? 'http://localhost:5173'
 const OUT = process.argv[2] ?? 'shots-mobile'
 const ONLY = (process.env.SHOT_ONLY ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 const want = (section) => ONLY.length === 0 || ONLY.includes(section)
+// SHOT_FULL=1 captures the whole scroll height of each screen instead of the first viewport —
+// for reviewing a long home against its design, not for the matrix.
+const FULL = process.env.SHOT_FULL === '1'
 
 // ── Fixtures (IDR, minor units = whole rupiah) ────────────────────────────────
 
@@ -281,6 +285,32 @@ const INBOX_DETAIL = {
   reimbursementRunId: null, settledAt: null, approvedAt: null, decidedBy: null, decidedAt: null, decisionComment: null,
 }
 
+// Three outlets; the first is the session's businessId (the POS OutletGate needs the terminal's
+// own outlet in the list), the other two exist so the home's "per outlet" section has bars to draw.
+const OUTLET_LIST = [
+  { id: COMPANY.businessId, name: 'Kemang' },
+  { id: 'ou2', name: 'Senopati' },
+  { id: 'ou3', name: 'Cipete' },
+]
+
+// ADR 0082 — eight outlet-local days ending `to` (today): the strip shows seven, the eighth back is
+// the same weekday last week the hero compares against. Kemang leads; the others scale off it.
+const DAILY_SALES = (businessId, to) => {
+  const scale = businessId === 'ou2' ? 0.69 : businessId === 'ou3' ? 0.37 : 1
+  const shape = [7953000, 6080000, 6620000, 4920000, 5630000, 6350000, 7330000, 8940000]
+  const end = new Date(`${to ?? '2026-09-10'}T00:00:00Z`)
+  return shape.map((net, i) => {
+    const day = new Date(end.getTime() - (shape.length - 1 - i) * 86400000).toISOString().slice(0, 10)
+    const netSalesMinor = Math.round(net * scale)
+    const transactionCount = Math.max(1, Math.round(netSalesMinor / 28750))
+    return {
+      businessDate: day, transactionCount, netSalesMinor,
+      cogsMinor: Math.round(netSalesMinor * 0.388), costedTransactionCount: transactionCount,
+      currency: 'IDR', usesIllustrativeRules: false,
+    }
+  })
+}
+
 const pnlFor = (period) => {
   const m = Number(period.slice(5, 7)) || 1
   const revenue = 400000000 + m * 12000000
@@ -502,12 +532,14 @@ const ROUTES = [
   ['/api/v1/org-units', () => []],
   // One real outlet, id == COMPANY.businessId: the POS OutletGate blocks the whole till without
   // one, and the session's businessId has to be the outlet the terminal is ringing on.
-  ['/api/v1/outlets', () => [{ id: COMPANY.businessId, name: 'Kemang' }]],
+  ['/api/v1/outlets', () => OUTLET_LIST],
   ['/api/v1/users/me/outlets', () => []],
   // ADR 0076 — the home page's overdue-payout nudge. It renders nothing when the list is empty,
   // which is what we want in a shot; without a fixture it fell through to the `{}` default and
   // `overdue.map` threw, taking the whole dashboard down behind the error boundary.
   ['/api/v1/platform-settlements/overdue', () => []],
+  // ADR 0082 — the phone home's per-outlet day rows; one call per outlet, 8 days ending today.
+  ['/api/v1/sales/daily', (u) => DAILY_SALES(u.searchParams.get('businessId'), u.searchParams.get('to'))],
 ]
 
 function resolveFixture(url, req) {
@@ -575,7 +607,7 @@ for (const pass of [
   if (want('screens')) for (const [name, path] of SCREENS) {
     await page.goto(`${BASE}${path}`, { waitUntil: 'load' })
     await page.waitForTimeout(1200)
-    await page.screenshot({ path: `${dir}/${name}.png`, fullPage: false })
+    await page.screenshot({ path: `${dir}/${name}.png`, fullPage: FULL })
     console.log(`[${pass.name}] ${name} ok (${page.url().replace(BASE, '') || '/'})`)
   }
 

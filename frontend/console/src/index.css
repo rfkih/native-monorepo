@@ -412,6 +412,31 @@ body {
       stroke-dasharray: none;
     }
   }
+  /* The phone home's entrance (ADR 0082, Native Console Android): each section rises in on a
+     stagger set inline via animation-delay; the hero figure blurs in; the strip's bars grow from
+     the floor and an outlet's share bar from the left. */
+  .rise-in {
+    animation: rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .num-rise {
+    animation: num-rise 0.78s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .bar-up {
+    transform-origin: bottom;
+    animation: bar-up 0.82s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .bar-wide {
+    transform-origin: left;
+    animation: bar-wide 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rise-in,
+    .num-rise,
+    .bar-up,
+    .bar-wide {
+      animation: none;
+    }
+  }
   /* Continuous, gentle float for the hero's floating accent cards. */
   .floaty {
     animation: var(--animate-float);
@@ -440,6 +465,44 @@ body {
   }
 }
 
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes num-rise {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+@keyframes bar-up {
+  from {
+    transform: scaleY(0.02);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes bar-wide {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
 @keyframes fade-up {
   from {
     opacity: 0;

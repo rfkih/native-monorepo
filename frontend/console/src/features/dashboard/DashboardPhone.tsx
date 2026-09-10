@@ -1,139 +1,400 @@
 /**
- * DashboardPhone — the manager phone home (Native Console Android design), rendered by
- * Dashboard.tsx below the 640px cutoff. HONEST monthly figures only: the same usePnl /
- * usePnlTrend / useOutletRevenue hooks and query keys as the desktop (shared cache), no
- * invented "today" numbers — the design's daily hero waits for a daily-sales endpoint.
+ * DashboardPhone — the manager phone home (Native Console Android design, ADR 0082), rendered by
+ * Dashboard.tsx below the 640px cutoff. It reads TODAY, not the month: the company's net sales so
+ * far against the same weekday last week over a seven-day strip, four figures about the day,
+ * what needs a decision, today's split by outlet, the best sellers, and four doors.
  *
- * The hero is an INVERTED card (bg-ink-900 + paper-toned text): in dark mode the ink ramp
- * flips so it renders as a light card on the dark page — deliberate, same contrast intent.
+ * Every figure is honest and sourced: the days come from restaurant-service's per-outlet
+ * `GET /api/v1/sales/daily` (todayApi.ts fans out one call per outlet, lib/todayView.ts folds
+ * them); open bills and best sellers reuse the POS hooks' cache entries; the tasks come from the
+ * claim inbox, the ADR 0081 catalog rules and the close history. "Omzet" is restaurant's gross
+ * sales net of refunds — not a GL word, so ADR 0071 AR-1 does not route it through finance; the
+ * gross margin is the sale-time COGS snapshot (V44) and says when it only covers part of the day.
+ *
+ * Only an office login WITH POS access sees this (owner/manager — the reads are POS_ROLES routes);
+ * a books-only login (accountant) keeps the monthly composition in DashboardPhoneMonthly.tsx.
+ *
+ * Draws no chrome of its own (ADR 0075 N2): the header row is in-flow, the Shell's topbar is the
+ * one sticky header. The hero is an INVERTED card (bg-ink-900 + paper-toned text): in dark mode
+ * the ink ramp flips so it renders as a light card on the dark page — deliberate.
  */
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { BookOpen, CalendarCheck, Inbox, Store, TriangleAlert } from 'lucide-react'
+import {
+  BookOpen,
+  ChartNoAxesColumn,
+  ChevronRight,
+  ClipboardCheck,
+  CookingPot,
+  EllipsisVertical,
+  Inbox,
+  NotebookText,
+  Store,
+  TriangleAlert,
+  type LucideIcon,
+} from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { OverdueSettlementCard } from '@/features/platform/OverdueSettlementCard'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
-import { canFinance } from '@/lib/rolePreset'
-import { useSession } from '@/lib/session'
+import { canFinance, canHr, canPos } from '@/lib/rolePreset'
+import { useSession, type CompanySession } from '@/lib/session'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
 import { localeOf } from '@/i18n'
-import { formatAmount, formatMoney, formatPercent } from '@/lib/money'
-import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
-import { PeriodNav } from '@/features/_shared/financeUi'
+import { formatMoney, formatPercent, formatSignedMoney } from '@/lib/money'
+import { currentPeriod, formatPeriod } from '@/lib/period'
+import { useOutlets } from '@/features/org/api'
+import { useClaims } from '@/features/expenses/api'
+import { useCloseHistory } from '@/features/close/api'
 import { useOpeningBalance, isOpeningBalanceNotRecorded } from '@/features/openingBalances/api'
-import { usePnl, usePnlTrend, useOutletRevenue } from './api'
-import { readFigures, monthShort } from './figures'
-import { DeltaPill } from './DeltaPill'
+import {
+  useIngredients,
+  useIngredientStockSummary,
+  usageDayKey,
+  usageWindowKeys,
+} from '@/features/inventory/ingredientApi'
+import { USAGE_WINDOW_DAYS, buildRows, usageRates } from '@/features/inventory/lib/catalogView'
+import { usePnl } from './api'
+import { readFigures } from './figures'
+import { DashboardPhoneMonthly } from './DashboardPhoneMonthly'
+import { useDailySalesByOutlet, useItemSalesByOutlet, useOpenBillsByOutlet } from './todayApi'
+import {
+  WEEK_DAYS,
+  avgBill,
+  dayKeyOffset,
+  figuresFor,
+  grossMargin,
+  initials,
+  jakartaDayBounds,
+  lowStockNames,
+  mergeDaily,
+  mergeTopItems,
+  outletShares,
+  periodToClose,
+  weekBars,
+  weekWindow,
+  weekdayDelta,
+} from './lib/todayView'
 
-/** Match the desktop's trailing window so the trend queries share the desktop's cache keys. */
-const TREND_MONTHS = 8
+/** Lazy — keeps the stocktake code out of the main chunk until the tile is used (as MorePage). */
+const StandaloneStocktake = lazy(() =>
+  import('@/features/stocktake/StandaloneStocktake').then((m) => ({
+    default: m.StandaloneStocktake,
+  })),
+)
+
+/** The outlet-local zone every "today" here is read in — the server's OutletZone. */
+const OUTLET_ZONE = 'Asia/Jakarta'
+
+const SECTION_LABEL = 'pl-1 text-[12px] font-semibold text-ink-3'
+const LIST_CARD = 'mt-2 overflow-hidden rounded-[18px] border border-line bg-surface'
+const TILE_CLASS =
+  'flex min-h-[60px] items-center gap-[11px] rounded-2xl border border-line bg-surface px-3.5 py-3 text-left text-[13.5px] font-semibold leading-tight text-ink transition-[background-color,border-color,transform] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.98] motion-reduce:active:scale-100'
 
 export function DashboardPhone() {
-  const { t, i18n } = useTranslation()
   const { company } = useSession()
-  // The overdue read is FINANCE_ROLES-gated at the gateway, so a manager would 403 on it.
   const auth = useAuth()
-  const canSeeSettlements = canFinance(effectiveRoles(auth.roles, auth.elevatedRoles))
+  if (!company) return null
+  // The today reads are POS_ROLES routes; a login without POS access (books-only) would 403 on
+  // every one of them, so it keeps the monthly home. Raw roles, as MorePage's posOk — POS access
+  // is the outlet token's own, never elevated.
+  return canPos(auth.roles) ? <TodayHome company={company} /> : <DashboardPhoneMonthly />
+}
+
+function TodayHome({ company }: { company: CompanySession }) {
+  const { t, i18n } = useTranslation()
+  const auth = useAuth()
+  const roles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const financeOk = canFinance(roles)
+  const hrOk = canHr(roles)
+  const posOk = canPos(auth.roles)
   const pageAccess = usePageAccess()
   const tierAccess = useTierAccess()
   const locale = localeOf(i18n.language)
-  const [period, setPeriod] = useState(currentPeriod())
+  const [stocktakeOpen, setStocktakeOpen] = useState(false)
 
-  const query = usePnl({
-    companyId: company?.companyId ?? '',
-    actor: company?.actor ?? '',
-    baseCurrency: company?.baseCurrency ?? 'USD',
-    period,
-    presentation: undefined,
-    enabled: !!company,
+  // Today in the outlet's zone; the fetch window reaches back one extra day so the same weekday
+  // last week is in it (the strip shows seven, the comparison needs the eighth).
+  const todayKey = usageDayKey()
+  const weekKeys = weekWindow(todayKey)
+  const window = { from: dayKeyOffset(todayKey, -WEEK_DAYS), to: todayKey }
+
+  const outletsQuery = useOutlets(company.companyId, company.actor)
+  const outlets = outletsQuery.data ?? []
+  const outletIds = outlets.map((o) => o.id)
+  const daily = useDailySalesByOutlet(company, outletIds, window)
+  const bills = useOpenBillsByOutlet(company, outletIds)
+  const items = useItemSalesByOutlet(company, outletIds, jakartaDayBounds(todayKey))
+
+  // Tasks — each gated exactly as the More page gates its door to the same place.
+  const claimsOk = hrOk && pageAccess.isAllowed('expenses') && tierAccess.allows('expenses')
+  const stockOk = posOk && pageAccess.isAllowed('menu') && tierAccess.allows('products')
+  const closeOk = financeOk && pageAccess.isAllowed('close') && tierAccess.allows('orgStructure')
+  const claimsQuery = useClaims({
+    companyId: company.companyId,
+    actor: company.actor,
+    status: 'SUBMITTED',
+    size: 1,
+    enabled: claimsOk,
   })
-  const trend = usePnlTrend({
-    companyId: company?.companyId ?? '',
-    actor: company?.actor ?? '',
-    baseCurrency: company?.baseCurrency ?? 'USD',
-    period,
-    presentation: undefined,
-    months: TREND_MONTHS,
-    enabled: !!company,
-  })
-  const outletQuery = useOutletRevenue({
-    companyId: company?.companyId ?? '',
-    actor: company?.actor ?? '',
-    period,
-    enabled: !!company,
+  const ingredientsQuery = useIngredients(company, stockOk)
+  const stockSummaryQuery = useIngredientStockSummary(
+    company,
+    usageWindowKeys(USAGE_WINDOW_DAYS),
+    stockOk,
+  )
+  const closeQuery = useCloseHistory({
+    companyId: company.companyId,
+    actor: company.actor,
+    enabled: closeOk,
   })
 
-  // Opening-balances shortcut signal (same cache entry as the desktop dashboard) — see
-  // Dashboard.tsx: a settled not-recorded 404 on fresh books surfaces the shortcut.
+  // Fresh books: the first-sale prompt needs to know the month has no postings either — one
+  // /pnl call, the same cache entry Laporan's income tab reads.
+  const pnlQuery = usePnl({
+    companyId: company.companyId,
+    actor: company.actor,
+    baseCurrency: company.baseCurrency,
+    period: currentPeriod(),
+    presentation: undefined,
+    enabled: true,
+  })
+
+  const series = mergeDaily(daily.byOutlet)
+  const today = figuresFor(series, todayKey)
+  const bars = weekBars(series, weekKeys)
+  const delta = weekdayDelta(series, todayKey)
+  const avg = avgBill(today)
+  const margin = grossMargin(today)
+  const currency = company.baseCurrency
+  const outletCount = outletIds.length
+  const allFailed = outletCount > 0 && daily.failedCount === outletCount
+  const weekAllZero =
+    !daily.isLoading &&
+    weekKeys.every((k) => figuresFor(series, k).txn === 0 && figuresFor(series, k).net === 0)
+  const monthFigures = readFigures(pnlQuery.data ?? null, false)
+  const monthEmpty =
+    !pnlQuery.isLoading &&
+    monthFigures.revenue === 0 &&
+    monthFigures.expense === 0 &&
+    monthFigures.net === 0
+  const showFirstSale =
+    !outletsQuery.isLoading && daily.failedCount === 0 && weekAllZero && monthEmpty
   const openingQuery = useOpeningBalance({
-    companyId: company?.companyId ?? '',
-    actor: company?.actor ?? '',
-    enabled: !!company && tierAccess.allows('accounting'),
+    companyId: company.companyId,
+    actor: company.actor,
+    enabled: showFirstSale && tierAccess.allows('accounting'),
   })
-
-  if (!company) return null
-
-  const data = query.data ?? null
-  const figures = readFigures(data, false)
-  const profit = figures.net >= 0
-  const margin = figures.revenue > 0 ? figures.net / figures.revenue : 0
-  const marginLabel = figures.revenue > 0 ? formatPercent(margin, locale) : '—'
-
-  const points = trend.map((p) => ({
-    period: p.period,
-    fig: readFigures(p.data, false),
-    loaded: p.data != null,
-  }))
-  const prev = points.length >= 2 ? points[points.length - 2] : null
-  const revDelta =
-    prev && prev.fig.revenue > 0 ? (figures.revenue - prev.fig.revenue) / prev.fig.revenue : 0
-  const prevMonthLabel = prev ? monthShort(prev.period, locale) : ''
-  const trendEmpty =
-    !query.isLoading &&
-    points.every((p) => p.loaded) &&
-    points.every((p) => p.fig.net === 0 && p.fig.revenue === 0 && p.fig.expense === 0)
   const showOpeningShortcut =
-    trendEmpty && tierAccess.allows('accounting') && isOpeningBalanceNotRecorded(openingQuery.error)
+    showFirstSale &&
+    tierAccess.allows('accounting') &&
+    isOpeningBalanceNotRecorded(openingQuery.error)
 
-  const outlets = outletQuery.data?.outlets ?? []
-  const outletCurrency = outletQuery.data?.currency ?? company.baseCurrency
-  const maxOutlet = outlets.reduce((m, o) => Math.max(m, o.revenueMinor), 0)
+  const openBills = bills.byOutlet.flatMap((list) => list ?? [])
+  const openBillsValue = openBills.reduce((s, b) => s + b.runningTotalMinor, 0)
+  const topItems = mergeTopItems(items.byOutlet, 3)
+  const shares = outletShares(
+    outlets.map((o, i) => ({
+      id: o.id,
+      name: o.name,
+      net: figuresFor(mergeDaily([daily.byOutlet[i]]), todayKey).net,
+    })),
+  )
 
-  const quickTiles = [
-    pageAccess.isAllowed('expenses') && tierAccess.allows('expenses')
-      ? { key: 'inbox', to: '/expenses', icon: Inbox, label: t('mobile.more.claimInbox') }
+  const pendingClaims = claimsOk ? (claimsQuery.data?.totalElements ?? 0) : 0
+  const lowStock =
+    stockOk && ingredientsQuery.data
+      ? lowStockNames(
+          buildRows(
+            ingredientsQuery.data,
+            usageRates(stockSummaryQuery.data ?? []).rateById,
+            new Map(),
+          ),
+          3,
+        )
+      : { count: 0, names: [] }
+  const openPeriod =
+    closeOk && closeQuery.data
+      ? periodToClose(
+          closeQuery.data.map((c) => c.period),
+          currentPeriod(),
+        )
+      : null
+
+  const tasks = [
+    pendingClaims > 0
+      ? {
+          key: 'claims',
+          to: '/expenses',
+          icon: Inbox,
+          label: t('mobile.more.claimInbox'),
+          sub: t('dashboardPhone.claimsWaiting', { count: pendingClaims }),
+          count: pendingClaims,
+        }
       : null,
-    pageAccess.isAllowed('close') && tierAccess.allows('orgStructure')
-      ? { key: 'close', to: '/close', icon: CalendarCheck, label: t('mobile.more.closeBook') }
+    lowStock.count > 0
+      ? {
+          key: 'stock',
+          to: '/inventory',
+          icon: TriangleAlert,
+          label: t('dashboardPhone.lowStock'),
+          sub: new Intl.ListFormat(locale, { style: 'short', type: 'unit' }).format(
+            lowStock.names,
+          ),
+          count: lowStock.count,
+        }
+      : null,
+    openPeriod
+      ? {
+          key: 'close',
+          to: '/close',
+          icon: BookOpen,
+          label: t('dashboardPhone.closePeriod', { month: formatPeriod(openPeriod, locale) }),
+          sub: t('dashboardPhone.periodStillOpen'),
+          count: 1,
+        }
       : null,
   ].filter((x) => x != null)
 
+  const doors: {
+    key: string
+    icon: LucideIcon
+    label: string
+    to?: string
+    onClick?: () => void
+  }[] = [
+    stockOk
+      ? {
+          key: 'stocktake',
+          icon: ClipboardCheck,
+          label: t('mobile.more.stocktake'),
+          onClick: () => setStocktakeOpen(true),
+        }
+      : null,
+    stockOk
+      ? { key: 'menu', to: '/menu', icon: NotebookText, label: t('mobile.more.menuPrices') }
+      : null,
+    posOk && pageAccess.isAllowed('kitchen') && tierAccess.allows('kitchen')
+      ? { key: 'kitchen', to: '/kitchen', icon: CookingPot, label: t('mobile.more.kitchenDisplay') }
+      : null,
+    pageAccess.isAllowed('dashboard')
+      ? {
+          key: 'pnl',
+          to: '/statements/income',
+          icon: ChartNoAxesColumn,
+          label: t('statements.phone.tab.pnl'),
+        }
+      : null,
+  ].filter((x) => x != null)
+
+  const dateLine = t('dashboardPhone.dateLine', {
+    date: new Intl.DateTimeFormat(locale, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      timeZone: OUTLET_ZONE,
+    }).format(new Date()),
+    outlets: t('dashboard.activeOutlets', { count: outletCount }),
+  })
+  const weekdayName = (key: string) =>
+    new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone: 'UTC' }).format(
+      new Date(`${key}T00:00:00Z`),
+    )
+  const weekdayShort = (key: string) =>
+    new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' }).format(
+      new Date(`${key}T00:00:00Z`),
+    )
+  const integer = new Intl.NumberFormat(locale)
+  const signedInteger = new Intl.NumberFormat(locale, { signDisplay: 'exceptZero' })
+  const signedPercent = new Intl.NumberFormat(locale, {
+    style: 'percent',
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    signDisplay: 'exceptZero',
+  })
+  const lastWeekday = delta ? weekdayName(delta.lastKey) : ''
+
+  const stats = [
+    {
+      key: 'txn',
+      label: t('dashboardPhone.transactions'),
+      value: integer.format(today.txn),
+      sub: delta
+        ? t('dashboardPhone.vsLastWeekday', {
+            delta: signedInteger.format(delta.txn),
+            day: lastWeekday,
+          })
+        : '',
+    },
+    {
+      key: 'avg',
+      label: t('dashboardPhone.avgBill'),
+      value: avg != null ? formatMoney(Math.round(avg), currency, locale) : '—',
+      sub:
+        delta?.avgPct != null
+          ? t('dashboardPhone.vsLastWeekday', {
+              delta: signedPercent.format(delta.avgPct),
+              day: lastWeekday,
+            })
+          : '',
+    },
+    {
+      key: 'bills',
+      label: t('dashboardPhone.openBills'),
+      value: bills.isLoading ? null : integer.format(openBills.length),
+      sub: bills.isLoading
+        ? ''
+        : openBills.length > 0
+          ? t('dashboardPhone.openBillsValue', {
+              amount: formatMoney(openBillsValue, currency, locale),
+            })
+          : t('dashboardPhone.noOpenBills'),
+    },
+    {
+      key: 'margin',
+      label: t('dashboardPhone.grossMargin'),
+      value: margin ? formatPercent(margin.ratio, locale) : '—',
+      sub: margin
+        ? margin.partial
+          ? t('dashboardPhone.cogsPartial', { costed: today.costed, total: today.txn })
+          : t('dashboardPhone.cogs', { amount: formatMoney(today.cogs ?? 0, currency, locale) })
+        : t('dashboardPhone.noCogs'),
+    },
+  ]
+
   return (
-    <div className="flex flex-col gap-3.5">
-      <OverdueSettlementCard session={company} locale={locale} enabled={canSeeSettlements} />
+    <div className="flex flex-col gap-3">
+      <OverdueSettlementCard session={company} locale={locale} enabled={financeOk} />
 
-      {/* Header: company + scope, then the period stepper. */}
-      <div>
-        <h1 className="font-display text-[19px] font-bold leading-tight tracking-[-0.01em] text-ink">
-          {company.name}
-        </h1>
-        <p className="mt-0.5 text-[12.5px] text-ink-3">{t('dashboard.scopeAllUnits')}</p>
+      {/* Header — in-flow, the Shell's topbar is the one sticky header (ADR 0075 N2). */}
+      <div className="flex items-center gap-3">
+        <div
+          aria-hidden="true"
+          className="grid size-11 shrink-0 place-items-center rounded-[15px] bg-ink-900 font-display text-[15px] font-extrabold tracking-[-0.02em] text-paper"
+        >
+          {initials(company.name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate font-display text-[19px] font-extrabold leading-tight tracking-[-0.025em] text-ink">
+            {company.name}
+          </h1>
+          <p className="mt-0.5 text-[12.5px] font-medium text-ink-3">{dateLine}</p>
+        </div>
+        <Link
+          to="/more"
+          viewTransition
+          aria-label={t('dashboardPhone.menu')}
+          className="-mr-2.5 grid size-11 shrink-0 place-items-center rounded-full text-ink-2 transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.94] motion-reduce:active:scale-100"
+        >
+          <EllipsisVertical className="size-5" aria-hidden="true" />
+        </Link>
       </div>
-      <PeriodNav
-        period={period}
-        locale={locale}
-        onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
-        onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
-        prevLabel={t('dashboard.prevPeriod')}
-        nextLabel={t('dashboard.nextPeriod')}
-      />
 
-      {data?.usesIllustrativeRules ? (
+      {today.illustrative ? (
         <div>
           <Badge tone="amber">
             <TriangleAlert className="size-3" /> {t('dashboard.illustrative')}
@@ -141,58 +402,134 @@ export function DashboardPhone() {
         </div>
       ) : null}
 
-      {query.isError ? (
+      {outletsQuery.isError ? (
         <ErrorDiagnostics
-          message={t('dashboard.error')}
-          pathPrefix="/api/v1/pnl"
-          onRecovered={() => query.refetch()}
+          message={t('dashboardPhone.error')}
+          pathPrefix="/api/v1/outlets"
+          onRecovered={() => outletsQuery.refetch()}
+        />
+      ) : allFailed ? (
+        <ErrorDiagnostics
+          message={t('dashboardPhone.error')}
+          pathPrefix="/api/v1/sales/daily"
+          onRecovered={daily.retryFailed}
         />
       ) : (
         <>
-          {/* Hero — monthly net on the inverted card. */}
-          <div className="rounded-[22px] bg-ink-900 p-5 shadow-lg">
-            <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.07em] text-paper/55">
-              {profit ? t('dashboard.netProfit') : t('dashboard.netLoss')} ·{' '}
-              {formatPeriod(period, locale)}
+          {/* Hero — today's net on the inverted card, against the same weekday last week. */}
+          <div
+            className="rise-in rounded-[22px] bg-ink-900 px-5 pb-[18px] pt-5 shadow-lg"
+            style={{ animationDelay: '0.05s' }}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="flex-1 text-[12px] font-semibold tracking-[0.02em] text-paper/60">
+                {t('dashboardPhone.todayRevenue')}
+              </span>
+              {delta ? (
+                <span className="tnum grid h-6 shrink-0 place-items-center rounded-full bg-paper/10 px-2.5 text-[11.5px] font-bold text-paper">
+                  {signedPercent.format(delta.netPct)}
+                </span>
+              ) : null}
             </div>
-            {/* Figures split by role (ADR 0077): the ONE figure a screen is about is set in the
-                display face at 800, and mono is kept for anything that lines up in a column —
-                the sub-stats below, and every table. */}
-            {query.isLoading ? (
-              <div className="mt-2 h-9 w-52 max-w-full animate-pulse rounded-lg bg-paper/20" />
+            {/* The ONE figure this screen is about is set in the display face at 800; mono is kept
+                for anything that lines up in a column — the tiles and lists below. */}
+            {daily.isLoading || outletsQuery.isLoading ? (
+              <div className="mt-2 h-[33px] w-56 max-w-full animate-pulse rounded-lg bg-paper/20" />
             ) : (
-              <div className="tnum mt-2 font-display text-[32px] font-extrabold leading-none tracking-[-0.035em] text-paper">
-                {formatMoney(figures.net, company.baseCurrency, locale)}
+              <div
+                className="num-rise tnum mt-2 font-display text-[33px] font-extrabold leading-none tracking-[-0.04em] text-paper"
+                style={{ animationDelay: '0.18s' }}
+              >
+                {formatMoney(today.net, currency, locale)}
               </div>
             )}
-            {prev && prev.fig.revenue > 0 ? (
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <DeltaPill value={revDelta} locale={locale} />
-                <span className="text-[12px] text-paper/55">
-                  {t('dashboard.revenueVsPrev', { month: prevMonthLabel })}
-                </span>
+            {delta ? (
+              <div className="mt-2 text-[12.5px] font-medium text-paper/60">
+                <span
+                  className={cn('tnum font-bold', delta.net >= 0 ? 'text-profit' : 'text-loss')}
+                >
+                  {formatSignedMoney(delta.net, currency, locale)}
+                </span>{' '}
+                {t('dashboardPhone.fromLastWeekday', { day: lastWeekday })}
+              </div>
+            ) : !daily.isLoading && today.net > 0 ? (
+              <div className="mt-2 text-[12.5px] font-medium text-paper/60">
+                {t('dashboardPhone.noComparison', { day: weekdayName(todayKey) })}
               </div>
             ) : null}
-            {/* Sub-stats are BARE grouped numbers (formatAmount) — the hero figure above already
-                names the currency, and a truncated money string would misreport the amount. */}
-            <div className="mt-4 flex border-t border-paper/10 pt-4">
-              {[
-                { key: 'revenue', label: t('dashboard.revenue'), value: formatAmount(figures.revenue, company.baseCurrency, locale) },
-                { key: 'expense', label: t('dashboard.expense'), value: formatAmount(figures.expense, company.baseCurrency, locale) },
-                { key: 'margin', label: t('dashboard.margin'), value: marginLabel },
-              ].map((s) => (
-                <div key={s.key} className="min-w-0 flex-1">
-                  <div className="text-[11px] text-paper/50">{s.label}</div>
-                  <div className="tnum mt-0.5 pr-2 font-mono text-[13.5px] font-bold text-paper">
-                    {s.value}
+            <div
+              role="img"
+              aria-label={t('dashboardPhone.weekChart', { count: WEEK_DAYS })}
+              className="mt-5 flex h-[94px] items-end gap-[7px]"
+            >
+              {bars.map((b, i) => (
+                <div
+                  key={b.key}
+                  className="flex h-full flex-1 flex-col items-center justify-end gap-[9px]"
+                >
+                  <div className="flex min-h-0 w-full flex-1 items-end">
+                    <div
+                      className={cn(
+                        'bar-up w-full rounded-[6px]',
+                        b.isToday ? 'bg-paper' : 'bg-paper/25',
+                      )}
+                      style={{
+                        height: `${Math.max(b.pct, 2.5)}%`,
+                        animationDelay: `${(0.34 + i * 0.06).toFixed(2)}s`,
+                      }}
+                    />
                   </div>
+                  <span
+                    className={cn(
+                      'text-[10.5px] font-semibold leading-none',
+                      b.isToday ? 'text-paper' : 'text-paper/55',
+                    )}
+                  >
+                    {weekdayShort(b.key)}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
+          {/* An outlet that failed leaves the figure partial — say so, and offer the retry. */}
+          {daily.failedCount > 0 ? (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-warning-line bg-tint-warning px-3.5 py-2.5 text-[12.5px] font-medium text-amber-2">
+              <span>{t('dashboardPhone.partialFailed', { count: daily.failedCount })}</span>
+              <button
+                type="button"
+                onClick={daily.retryFailed}
+                className="shrink-0 rounded-full bg-surface px-3 py-1 text-[12px] font-bold text-ink hover:bg-hover"
+              >
+                {t('dashboardPhone.retry')}
+              </button>
+            </div>
+          ) : null}
+
+          {/* Four figures about the day. */}
+          <div className="rise-in grid grid-cols-2 gap-2.5" style={{ animationDelay: '0.3s' }}>
+            {stats.map((s) => (
+              <div
+                key={s.key}
+                className="rounded-[18px] border border-line bg-surface px-3.5 pb-3 pt-[13px]"
+              >
+                <div className="text-[11.5px] font-semibold text-ink-3">{s.label}</div>
+                {s.value == null ? (
+                  <div className="mt-1.5 h-[19px] w-16 animate-pulse rounded-md bg-ink-100" />
+                ) : (
+                  <div className="tnum mt-1.5 truncate font-mono text-[19px] font-bold leading-none tracking-[-0.02em] text-ink">
+                    {s.value}
+                  </div>
+                )}
+                <div className="mt-1.5 min-h-[14px] truncate text-[11px] font-medium text-ink-3">
+                  {s.sub}
+                </div>
+              </div>
+            ))}
+          </div>
+
           {/* Brand-new company — first-sale prompt instead of empty figures (UX audit parity). */}
-          {trendEmpty ? (
+          {showFirstSale ? (
             <Card className="flex flex-col items-center gap-3 p-6 text-center">
               <span className="grid size-11 place-items-center rounded-full bg-emerald-tint text-emerald-2">
                 <Store className="size-5" aria-hidden="true" />
@@ -221,61 +558,157 @@ export function DashboardPhone() {
             </Card>
           ) : null}
 
-          {/* Per-outlet contribution — real POSTED figures only, bar = share of the top outlet. */}
-          {outlets.length > 0 ? (
-            <Card className="p-[18px]">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[14.5px] font-bold text-ink">
+          {/* What needs a decision — only rows with something in them; no section when none. */}
+          {tasks.length > 0 ? (
+            <section className="rise-in" style={{ animationDelay: '0.4s' }}>
+              <div className={SECTION_LABEL}>{t('dashboardPhone.needsAction')}</div>
+              <div className={LIST_CARD}>
+                {tasks.map((task) => {
+                  const TaskIcon = task.icon
+                  return (
+                    <Link
+                      key={task.key}
+                      to={task.to}
+                      viewTransition
+                      className="flex min-h-[68px] w-full items-center gap-3 border-b border-line/60 px-[15px] py-[13px] text-left transition-colors last:border-b-0 hover:bg-hover active:bg-ink-50"
+                    >
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ink-50 text-ink">
+                        <TaskIcon className="size-[18px]" strokeWidth={1.8} aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[14px] font-semibold leading-snug tracking-[-0.01em] text-ink">
+                          {task.label}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[12.5px] text-ink-3">
+                          {task.sub}
+                        </span>
+                      </span>
+                      <span className="tnum grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-ink-50 px-2 text-[12px] font-bold text-ink-2">
+                        {integer.format(task.count)}
+                      </span>
+                      <ChevronRight
+                        className="size-4 shrink-0 text-ink-300"
+                        strokeWidth={2}
+                        aria-hidden="true"
+                      />
+                    </Link>
+                  )
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {/* Today by outlet — bar = share of the busiest; pointless for a single outlet. */}
+          {shares.length > 1 ? (
+            <section className="rise-in" style={{ animationDelay: '0.5s' }}>
+              <div className="flex items-baseline justify-between gap-2.5 px-1">
+                <span className="text-[12px] font-semibold text-ink-3">
                   {t('dashboardPhone.perOutlet')}
                 </span>
-                <span className="text-[11.5px] text-ink-3">{formatPeriod(period, locale)}</span>
+                <span className="text-[11.5px] font-medium text-ink-400">
+                  {t('dashboardPhone.today')}
+                </span>
               </div>
-              <div className="mt-3.5 flex flex-col gap-3">
-                {outlets.map((o) => (
-                  <div key={o.businessId}>
-                    <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                      <span className="truncate text-[13px] font-semibold text-ink-2">
-                        {o.outletName}
+              <div className="mt-2 rounded-[18px] border border-line bg-surface px-4 pb-1 pt-4">
+                {shares.map((o) => (
+                  <div key={o.id} className="mb-3.5">
+                    <div className="flex items-baseline gap-2.5">
+                      <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">
+                        {o.name}
                       </span>
-                      <span className="tnum shrink-0 font-mono text-[13px] font-semibold text-ink">
-                        {formatMoney(o.revenueMinor, outletCurrency, locale)}
+                      <span className="tnum shrink-0 font-mono text-[13.5px] font-semibold leading-none text-ink">
+                        {formatMoney(o.net, currency, locale)}
                       </span>
                     </div>
-                    {/* Ink, not the brand ramp (ADR 0077): this is a magnitude bar in a list, not a
-                        chart — the design draws it in the same ink as the figure beside it. */}
-                    <div className="h-[7px] overflow-hidden rounded-full bg-hover">
+                    {/* Ink, not a series colour: a magnitude bar in a list, drawn in the figure's ink. */}
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-hover">
                       <div
-                        className="h-full rounded-full bg-emerald"
-                        style={{ width: maxOutlet > 0 ? `${(o.revenueMinor / maxOutlet) * 100}%` : '0%' }}
+                        className="bar-wide h-full rounded-full bg-emerald"
+                        style={{ width: `${o.pct}%`, animationDelay: '0.55s' }}
                       />
                     </div>
                   </div>
                 ))}
               </div>
-            </Card>
+            </section>
           ) : null}
 
-          {/* Quick tiles */}
-          {quickTiles.length > 0 ? (
-            <div className={cn('grid gap-2.5', quickTiles.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
-              {quickTiles.map((tile) => {
-                const TileIcon = tile.icon
-                return (
-                  <Link
-                    key={tile.key}
-                    to={tile.to}
-                    viewTransition
-                    className="flex min-h-[88px] flex-col justify-between rounded-[18px] border border-line bg-surface p-3.5 transition-colors hover:border-emerald-line hover:bg-emerald-tint"
+          {/* Best sellers today, across outlets. */}
+          {topItems.length > 0 ? (
+            <section className="rise-in" style={{ animationDelay: '0.6s' }}>
+              <div className={SECTION_LABEL}>{t('dashboardPhone.topItems')}</div>
+              <div className={LIST_CARD}>
+                {topItems.map((item) => (
+                  <div
+                    key={item.rank}
+                    className="flex min-h-[58px] items-center gap-3 border-b border-line/60 px-[15px] py-[11px] last:border-b-0"
                   >
-                    <TileIcon className="size-[21px] text-emerald-2" strokeWidth={1.8} aria-hidden />
-                    <span className="text-[13.5px] font-bold leading-tight text-ink">{tile.label}</span>
+                    <span className="tnum grid size-[22px] shrink-0 place-items-center rounded-[7px] bg-ink-50 font-mono text-[11px] font-bold text-ink-2">
+                      {item.rank}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13.5px] font-semibold text-ink">
+                        {item.name}
+                      </span>
+                      <span className="mt-0.5 block text-[12px] text-ink-3">
+                        {t('dashboardPhone.sold', { count: item.soldQty })}
+                      </span>
+                    </span>
+                    <span className="tnum shrink-0 font-mono text-[13px] font-semibold leading-none text-ink-2">
+                      {formatMoney(item.revenueMinor, currency, locale)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {/* Four doors. */}
+          {doors.length > 0 ? (
+            <div
+              className={cn(
+                'rise-in grid gap-2.5',
+                doors.length > 1 ? 'grid-cols-2' : 'grid-cols-1',
+              )}
+              style={{ animationDelay: '0.7s' }}
+            >
+              {doors.map((door) => {
+                const DoorIcon = door.icon
+                const body = (
+                  <>
+                    <DoorIcon
+                      className="size-5 shrink-0 text-ink"
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                    />
+                    {door.label}
+                  </>
+                )
+                return door.to ? (
+                  <Link key={door.key} to={door.to} viewTransition className={TILE_CLASS}>
+                    {body}
                   </Link>
+                ) : (
+                  <button
+                    key={door.key}
+                    type="button"
+                    onClick={door.onClick}
+                    className={TILE_CLASS}
+                  >
+                    {body}
+                  </button>
                 )
               })}
             </div>
           ) : null}
         </>
       )}
+
+      {stocktakeOpen ? (
+        <Suspense fallback={null}>
+          <StandaloneStocktake onClose={() => setStocktakeOpen(false)} />
+        </Suspense>
+      ) : null}
     </div>
   )
 }
