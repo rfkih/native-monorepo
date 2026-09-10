@@ -1,5 +1,55 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-11 — the phone home reads today, not the month (ADR 0082)
+
+The "Native Console Android" design's *Beranda manajer* moved on from the monthly re-fit of Aug 7:
+it now leads with today — omzet so far against the same weekday last week over a seven-day strip,
+four figures about the day, what needs a decision, today by outlet, the best sellers, four doors.
+The old `DashboardPhone.tsx` had said in its own header why it stopped at the month: *the design's
+daily hero waits for a daily-sales endpoint*. Nothing served one — finance is `YYYY-MM` only, the
+register summary is a session window (absent for an unclosed day), the sales list is capped at 200
+rows, and `sale.cogs_minor` (V44) was written on every costed sale and read by nothing.
+
+**One read, restated per day.** restaurant-service gains `GET /api/v1/sales/daily?businessId&from&to`
+(`SaleRepository#findDailySummary`): one row per Asia/Jakarta day in the inclusive window that had a
+tendered sale or a refund — net (Σ `amount_minor` of `tender_type IS NOT NULL` sales, exactly the
+Z-report's universe, minus `payment_refund` by the day it was *refunded* on, FULL OUTER so a
+refund-only day nets negative instead of vanishing), the count, Σ `cogs_minor` with how many sales
+carried one, the currency, the illustrative flag. `OutletZone` resolves the day bounds; the writer
+enforces the history read's `OutletAccessGuard`; the window is capped at 92 days and an inverted one
+is a 400, not an empty list. Three web-slice + three Testcontainers cases, one of them a 23:30-WIB
+sale that is 16:30 UTC.
+
+**The home folds outlets client-side.** `todayApi.ts` fans one call per outlet with `useQueries`,
+keyed like the POS hooks for the same resource (`['bills', …]`, `['itemSales', …]`) so the till and
+the home share cache entries; `lib/todayView.ts` (pure, 23 tests) folds the rows into company days
+and reads each figure: the strip scaled to the tallest day, the same-weekday delta (absent when last
+week has nothing to compare against — never an infinite percentage), average bill, gross margin
+only when a sale was costed and marked partial when not all were, best sellers merged by sold-time
+name because the same dish has a different id in every outlet. Tasks are the More page's doors,
+gated the same way: claims waiting (HR), low stock via the ADR 0081 ladder, the current period
+still open (FINANCE — the current one, because `PeriodClose` closes `currentPeriod()` and nothing
+else; the design's "Tutup buku Agustus" in September would have named a close the console cannot
+make, caught in review); a row renders only with something in it.
+
+**Which words come from where.** *Omzet hari ini* is restaurant's gross sales net of refunds — an
+operations figure, not a GL word (ADR 0071 AR-1), so it does not pretend to be *Pendapatan*; the
+month and *laba bersih* stay finance's and live in Laporan (ADR 0080), the home's fourth door.
+
+**A books-only login keeps the month.** Every today read is a POS_ROLES route, so
+`DashboardPhone` checks `canPos(auth.roles)` (the outlet token's own, as MorePage) and renders the
+previous composition — moved byte-for-byte to `DashboardPhoneMonthly.tsx` — for an accountant alone.
+
+**Gates.** restaurant-service 881 tests green, `check-no-select-star` clean; console `tsc -b`,
+eslint (the four warnings pre-date this), vitest 944, `vite build`; `mobile-shots.mjs` gained the
+`/sales/daily` fixture, three outlets, and `SHOT_FULL=1` for full-height captures — `home.png`
+verified against the design in both passes. Code review (5 findings, all in the composition,
+all fixed): the close task named the wrong month; the first-sale prompt now needs a successful
+all-zero `/pnl` for this month and last, not a failed one; a failed bills read is "—" not "none
+open"; `dashboard.activeOutlets` gained `_one`/`_other`; counts in copy go through `Intl`. Found on
+the way: the shared `ApiExceptionHandler`'s
+catch-all answers a missing `@RequestParam` with 500, not 400 — fleet-wide, untouched here.
+
 ## 2026-09-10 — the inventory reads in days, not quantities (ADR 0081)
 
 The "Native Persediaan" design started from one observation: *jumlah tidak bisa menjawab apa pun

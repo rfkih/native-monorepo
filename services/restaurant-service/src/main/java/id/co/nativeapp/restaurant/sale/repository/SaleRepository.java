@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.sale.repository;
 
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.projection.ChannelSalesSummaryView;
+import id.co.nativeapp.restaurant.sale.projection.DailySalesView;
 import id.co.nativeapp.restaurant.sale.projection.SaleHistoryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
@@ -153,4 +154,66 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
           """,
       nativeQuery = true)
   List<ChannelSalesSummaryView> findChannelSummary(@Param("period") String period);
+
+  /**
+   * The per-day sales summary for an outlet over a half-open instant window ({@code GET
+   * /api/v1/sales/daily}, ADR 0082) — one row per OUTLET-LOCAL calendar day that had a tendered
+   * sale or a refund, oldest first. The phone home reads a week of these to lead with today.
+   *
+   * <p><strong>The day.</strong> {@code occurred_at} / {@code refunded_at} are shifted to {@code
+   * Asia/Jakarta} BEFORE the {@code ::date} cast — the same attribution as the register's business
+   * date, V42/V47's ledger day and the leak report ({@code OutletZone}); a UTC-derived date would
+   * move every evening shift onto the next day.
+   *
+   * <p><strong>The universe.</strong> Sales: {@code tender_type IS NOT NULL} — exactly {@code
+   * RegisterSessionRepository#summarizeSales}'s population, so a day's net here equals what its
+   * Z-report nets. Refunds: the append-only {@code payment_refund} ledger for the four settleable
+   * tenders, attributed to the day they were REFUNDED on (mirrors {@code
+   * findClosedHistoryWithSalesByBusinessId}), and joined FULL OUTER so a day that only refunded
+   * still appears (negative) instead of vanishing. {@code cogs_minor} (V44) is summed as-is —
+   * {@code SUM} of an all-NULL day is NULL, which the projection carries as "no costed sale", and
+   * {@code COUNT(cogs_minor)} says how many sales the fold covers. Every money aggregate is a plain
+   * integer {@code SUM} (rule 8). RLS-scoped automatically (rule 5) — no manual {@code company_id}.
+   */
+  @Query(
+      value =
+          """
+          SELECT COALESCE(d.business_date, r.business_date)                          AS business_date,
+                 COALESCE(d.txn_count, 0)                                            AS transaction_count,
+                 (COALESCE(d.total_minor, 0) - COALESCE(r.refunds_minor, 0))::bigint AS net_sales_minor,
+                 d.cogs_minor                                                        AS cogs_minor,
+                 COALESCE(d.costed_count, 0)                                         AS costed_transaction_count,
+                 COALESCE(d.currency, r.currency)                                    AS currency,
+                 COALESCE(d.uses_illustrative_rules, FALSE)                          AS uses_illustrative_rules
+            FROM (
+                 SELECT (s.occurred_at AT TIME ZONE 'Asia/Jakarta')::date            AS business_date,
+                        COUNT(*)                                                     AS txn_count,
+                        COALESCE(SUM(s.amount_minor), 0)::bigint                     AS total_minor,
+                        SUM(s.cogs_minor)::bigint                                    AS cogs_minor,
+                        COUNT(s.cogs_minor)                                          AS costed_count,
+                        MAX(s.currency)                                              AS currency,
+                        COALESCE(BOOL_OR(s.uses_illustrative_rules), FALSE)          AS uses_illustrative_rules
+                   FROM sale s
+                  WHERE s.business_id = :businessId
+                    AND s.tender_type IS NOT NULL
+                    AND s.occurred_at >= :from
+                    AND s.occurred_at <  :to
+                  GROUP BY 1
+            ) d
+            FULL OUTER JOIN (
+                 SELECT (r.refunded_at AT TIME ZONE 'Asia/Jakarta')::date            AS business_date,
+                        COALESCE(SUM(r.amount_minor), 0)::bigint                     AS refunds_minor,
+                        MAX(r.currency)                                              AS currency
+                   FROM payment_refund r
+                  WHERE r.business_id = :businessId
+                    AND r.tender_type IN ('CASH', 'CARD', 'QRIS', 'ONLINE')
+                    AND r.refunded_at >= :from
+                    AND r.refunded_at <  :to
+                  GROUP BY 1
+            ) r ON r.business_date = d.business_date
+           ORDER BY 1
+          """,
+      nativeQuery = true)
+  List<DailySalesView> findDailySummary(
+      @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
 }

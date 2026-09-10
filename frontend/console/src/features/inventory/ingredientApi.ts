@@ -71,8 +71,9 @@ function tenantOf(session: CompanySession) {
 }
 
 /** GET /api/v1/ingredients?businessId= — the outlet's ACTIVE ingredients, ordered by name. */
-export function useIngredients(session: CompanySession) {
+export function useIngredients(session: CompanySession, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: INGREDIENTS_KEY(session),
     queryFn: () =>
       apiFetch<Ingredient[]>('/api/v1/ingredients', {
