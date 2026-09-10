@@ -38,3 +38,14 @@ export function detailRows(
     }))
     .sort((a, b) => b.amountMinor - a.amountMinor)
 }
+
+export type IncomeDetailKind = 'revenue' | 'expense' | 'net'
+
+/** The title a drill-down container shows above its body — one source for the drawer and the sheet. */
+export function incomeDetailTitle(kind: IncomeDetailKind, t: (key: string) => string): string {
+  return kind === 'revenue'
+    ? t('statements.revenueDetailTitle')
+    : kind === 'expense'
+      ? t('statements.expenseDetailTitle')
+      : t('statements.netDetailTitle')
+}

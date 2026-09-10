@@ -6,31 +6,25 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { useSession } from '@/lib/session'
-import { cn } from '@/lib/cn'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount } from '@/lib/money'
 import { printCurrentPage } from '@/lib/nativeShell'
 import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
-import { useBalanceSheet, type BalanceLine } from './api'
+import { useBalanceSheet } from './api'
 import { downloadCsv } from '@/lib/csv'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
+import { Laporan } from './Laporan'
+import { balanceSheetCsv } from './statementsCsv'
 import { accountLabel } from './accountLabels'
-import {
-  groupAssetLines,
-  isNettedFixedAssetRow,
-  netFixedAssetLines,
-  splitZeroLines,
-  unnaturalAssetLines,
-} from './balanceSheetView'
+import { displayBalanceSheet, type BalanceDisplayLine } from './balanceSheetView'
 import {
   EntityScope,
+  EquationRow,
   LineSection,
   PeriodNav,
   StatementEmptyState,
   type DisplayLine,
 } from './parts'
-
-/** The synthetic profit row finance-service appends to every balance sheet (not a chart account). */
-const RETAINED_EARNINGS_ACCOUNT = '3000-RETAINED-EARNINGS'
 
 /**
  * Balance Sheet (Neraca) — rebuilt around the question an owner actually opens it with.
@@ -52,6 +46,7 @@ export function BalanceSheet() {
   const { company } = useSession()
   const locale = localeOf(i18n.language)
 
+  const isPhone = useIsPhone()
   const [asOf, setAsOf] = useState(currentPeriod())
   // Zero-balance rows are hidden by default. One switch for the whole statement — each section
   // still states its own count, so nothing is hidden without saying so where it happened.
@@ -63,6 +58,8 @@ export function BalanceSheet() {
     asOf,
     enabled: !!company,
   })
+
+  if (isPhone) return <Laporan tab="bs" />
 
   if (!company) {
     return (
@@ -83,52 +80,22 @@ export function BalanceSheet() {
   const delta = totalAssets - (data?.totalLiabilitiesAndEquityMinor ?? 0)
   const balanced = delta === 0
 
-  // Equipment is shown at what it is WORTH: cost and its depreciation land on one row. The CSV
-  // export reads `data.assetLines` directly, so it still carries both lines untouched.
-  const assetLines = netFixedAssetLines(data?.assetLines ?? [])
-  const liabilityLines = data?.liabilityLines ?? []
-  const equityLines = data?.equityLines ?? []
-
-  // Figures that cannot be real. Flagged on their own row AND called out above the tables — the
-  // only thing on a balance sheet that asks the reader to go and do something.
-  const flagged = unnaturalAssetLines(assetLines)
-  const flaggedCodes = new Set(flagged.map((l) => l.accountCode))
-
-  const assetSplit = splitZeroLines(assetLines)
-  const liabilitySplit = splitZeroLines(liabilityLines)
-  const equitySplit = splitZeroLines(equityLines)
-
-  /**
-   * Rows worth nothing stay in the DOM and are hidden by CSS, so the PRINTED statement still lists
-   * every account the ledger holds — dropping them from the markup would leave a printout quietly
-   * shorter than the books, and the on-screen disclosure is itself `print:hidden`.
-   */
-  const toDisplay =
-    (options: { flag?: boolean } = {}) =>
-    (l: BalanceLine): DisplayLine => ({
-      accountCode: l.accountCode,
-      amountMinor: l.balanceMinor,
-      // Only assets are checked for an impossible balance; a liability or equity row must never
-      // inherit the treatment just because its code happens to collide.
-      flagged: options.flag === true && flaggedCodes.has(l.accountCode),
-      // Fully depreciated equipment nets to zero but is still owned — hiding it would tell an
-      // owner they have none, so it stays on screen even when other zero rows are folded away.
-      printOnly: !showZeros && l.balanceMinor === 0 && !isNettedFixedAssetRow(l),
-    })
-
-  const toAssetDisplay = toDisplay({ flag: true })
-  const toPlainDisplay = toDisplay()
-
-  // The synthetic profit row is not a chart account: show its name with no code chip, since
-  // `3000-RETAINED-EARNINGS` means nothing to a reader. The CSV still carries the code.
-  const toEquityDisplay = (l: BalanceLine): DisplayLine =>
-    l.accountCode === RETAINED_EARNINGS_ACCOUNT
-      ? { accountCode: '', label: accountLabel(t, l.accountCode), amountMinor: l.balanceMinor }
-      : toPlainDisplay(l)
-
-  const assetGroups = groupAssetLines(assetLines).map((g) => ({
+  // Every display decision — equipment netted to book value, liquidity groups, impossible balances
+  // flagged (assets only), zero rows kept in the DOM for the printout, the synthetic profit row named
+  // instead of coded — is one pure step shared with the phone screen (balanceSheetView.ts), so the
+  // two can never disagree on a row. The CSV export reads `data.assetLines` untouched.
+  const view = displayBalanceSheet(data ?? { assetLines: [], liabilityLines: [], equityLines: [] }, { showZeros })
+  const flagged = view.flagged
+  const toLine = (l: BalanceDisplayLine): DisplayLine => ({
+    accountCode: l.accountCode,
+    label: l.labelKey ? t(l.labelKey) : undefined,
+    amountMinor: l.amountMinor,
+    flagged: l.flagged,
+    printOnly: l.printOnly,
+  })
+  const assetGroups = view.assetGroups.map((g) => ({
     label: t(g.labelKey),
-    lines: g.lines.map(toAssetDisplay),
+    lines: g.lines.map(toLine),
     subtotalMinor: g.subtotalMinor,
   }))
 
@@ -154,37 +121,12 @@ export function BalanceSheet() {
       </p>
     )
 
-  // The export keeps the FORMAL wording (assets / liabilities / equity) and every line including
-  // the ones worth nothing: the spreadsheet is the accountant's artefact, the page is the owner's.
-  //
-  // COLUMN CONTRACT: code | name | amount. A total row leaves the code cell empty and the label in
-  // the NAME cell, so every figure in the file sits in column C and `SUM(C:C)` reaches the totals
-  // too. Getting this wrong silently mixes text and numbers down one column.
-  const csvLine = (l: BalanceLine) => [
-    l.accountCode,
-    accountLabel(t, l.accountCode) ?? '',
-    l.balanceMinor,
-  ]
-  const csvTotal = (label: string, amountMinor: number) => ['', label, amountMinor]
-
+  // Built by the shared, tested builder (statementsCsv.ts): the FORMAL wording, every line including
+  // the zeros — the spreadsheet is the accountant's artefact. One source with the phone Export sheet.
   const exportCsv = () => {
     if (!data) return
-    downloadCsv(`balance-sheet-${asOf}.csv`, [
-      [company.name, t('statements.scopeAllUnits')],
-      [t('statements.balanceTitle'), asOf, currency],
-      [],
-      [t('statements.assets')],
-      ...data.assetLines.map(csvLine),
-      csvTotal(t('statements.totalAssets'), data.totalAssetsMinor),
-      [],
-      [t('statements.liabilities')],
-      ...data.liabilityLines.map(csvLine),
-      csvTotal(t('statements.totalLiabilities'), data.totalLiabilitiesMinor),
-      [],
-      [t('statements.equity')],
-      ...data.equityLines.map(csvLine),
-      csvTotal(t('statements.totalEquity'), data.totalEquityMinor),
-    ])
+    const file = balanceSheetCsv({ translate: t, companyName: company.name }, data)
+    downloadCsv(file.filename, file.rows)
   }
 
   return (
@@ -360,89 +302,38 @@ export function BalanceSheet() {
                 locale={locale}
                 emptyLabel={t('statements.noLines')}
                 format={formatAmount}
-                footnote={zeroFootnote(assetSplit.hidden.length)}
+                footnote={zeroFootnote(view.hiddenAssets)}
               />
             </Card>
             <Card className="p-6">
               <LineSection
                 heading={t('statements.plain.liabilities')}
-                lines={liabilityLines.map(toPlainDisplay)}
+                lines={view.liabilityLines.map(toLine)}
                 totalLabel={t('statements.plain.totalLiabilities')}
                 totalMinor={totalLiabilities}
                 currency={currency}
                 locale={locale}
                 emptyLabel={t('statements.noLines')}
                 format={formatAmount}
-                footnote={zeroFootnote(liabilitySplit.hidden.length)}
+                footnote={zeroFootnote(view.hiddenLiabilities)}
               />
               <div className="mt-6">
                 <LineSection
                   heading={t('statements.plain.equity')}
-                  lines={equityLines.map(toEquityDisplay)}
+                  lines={view.equityLines.map(toLine)}
                   totalLabel={t('statements.plain.totalEquity')}
                   totalMinor={totalEquity}
                   currency={currency}
                   locale={locale}
                   emptyLabel={t('statements.noLines')}
                   format={formatAmount}
-                  footnote={zeroFootnote(equitySplit.hidden.length)}
+                  footnote={zeroFootnote(view.hiddenEquity)}
                 />
               </div>
             </Card>
           </div>
         </>
       )}
-    </div>
-  )
-}
-
-/**
- * One line of the owned − owed = yours sum. Laid out as a vertical calculation rather than an inline
- * row: inline, the three terms spread across the full card on a desktop and the `=` strands at the
- * end of a wrapped line on a phone. Stacked, it reads as the arithmetic it is at every width, and
- * the answer sits under a rule where the eye already expects a result.
- */
-function EquationRow({
-  op,
-  label,
-  value,
-  answer,
-  tone,
-}: {
-  op?: string
-  label: string
-  value: string
-  answer?: boolean
-  tone?: 'warning'
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-baseline gap-3',
-        answer && 'border-t border-line-strong pt-2.5',
-      )}
-    >
-      {/* The operator column keeps every label on the same left edge, sum-style. */}
-      <span aria-hidden className="w-3 shrink-0 font-mono text-sm text-ink-3">
-        {op}
-      </span>
-      <span
-        className={cn(
-          'min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.08em]',
-          tone === 'warning' ? 'text-amber-2' : answer ? 'text-emerald-2' : 'text-ink-3',
-        )}
-      >
-        {label}
-      </span>
-      <span
-        className={cn(
-          'tnum shrink-0 font-mono text-[15px]',
-          tone === 'warning' ? 'text-amber-2' : 'text-ink',
-          answer ? 'font-bold' : 'font-semibold',
-        )}
-      >
-        {value}
-      </span>
     </div>
   )
 }

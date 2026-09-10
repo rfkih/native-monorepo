@@ -840,6 +840,28 @@ export const en = {
     noCompanyHint: 'Create a company to see its consolidated position.',
   },
   statements: {
+    /** Native Laporan — the phone reports screen (tabs, the chart that is the period control, sheets). */
+    phone: {
+      title: 'Reports',
+      tab: { pnl: 'Income', bs: 'Balance', cf: 'Cash flow', exp: 'Expenses' },
+      trendCaption: 'Last {{n}} months',
+      chart: { bar: 'Bar chart', line: 'Line chart' },
+      selectMonth: 'Select {{month}}',
+      emptyFor: 'No data for {{period}} yet',
+      emptyTap: 'Tap another month on the chart.',
+      retry: 'Try again',
+      whereFrom: 'Where it comes from',
+      netWorthNote: 'Assets less liabilities',
+      cashNote: 'Indirect method',
+      expenseTab: { title: 'Every expense account', note: 'share of total expense' },
+      export: {
+        title: 'Export {{report}}',
+        csv: 'Download CSV',
+        print: 'Print',
+        printNote: 'Includes the zero-balance accounts hidden on screen',
+        close: 'Close',
+      },
+    },
     scopeAllUnits: 'all outlets',
     incomeTitle: 'Income statement',
     incomeSubtitle: 'Revenue, expense and net for the period.',

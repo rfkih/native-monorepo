@@ -271,3 +271,54 @@ export function LineSection({
     </div>
   )
 }
+
+/**
+ * One line of the owned − owed = yours sum. Laid out as a vertical calculation rather than an inline
+ * row: inline, the three terms spread across the full card on a desktop and the `=` strands at the
+ * end of a wrapped line on a phone. Stacked, it reads as the arithmetic it is at every width, and
+ * the answer sits under a rule where the eye already expects a result.
+ */
+export function EquationRow({
+  op,
+  label,
+  value,
+  answer,
+  tone,
+}: {
+  op?: string
+  label: string
+  value: string
+  answer?: boolean
+  tone?: 'warning'
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-baseline gap-3',
+        answer && 'border-t border-line-strong pt-2.5',
+      )}
+    >
+      {/* The operator column keeps every label on the same left edge, sum-style. */}
+      <span aria-hidden className="w-3 shrink-0 font-mono text-sm text-ink-3">
+        {op}
+      </span>
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.08em]',
+          tone === 'warning' ? 'text-amber-2' : answer ? 'text-emerald-2' : 'text-ink-3',
+        )}
+      >
+        {label}
+      </span>
+      <span
+        className={cn(
+          'tnum shrink-0 font-mono text-[15px]',
+          tone === 'warning' ? 'text-amber-2' : 'text-ink',
+          answer ? 'font-bold' : 'font-semibold',
+        )}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}

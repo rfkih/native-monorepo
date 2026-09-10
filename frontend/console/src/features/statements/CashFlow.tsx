@@ -10,13 +10,13 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount } from '@/lib/money'
 import { printCurrentPage } from '@/lib/nativeShell'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
-import { useCashFlow, type CashFlowLine } from './api'
+import { useCashFlow } from './api'
 import { downloadCsv } from '@/lib/csv'
-import { accountLabel } from './accountLabels'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
+import { Laporan } from './Laporan'
+import { DISPOSAL_PROCEEDS, cashFlowCsv } from './statementsCsv'
 import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
-/** The synthetic investing row finance-service emits for asset-sale proceeds (not a chart account). */
-const DISPOSAL_PROCEEDS = 'DISPOSAL_PROCEEDS'
 
 /**
  * Cash Flow Statement (Arus Kas) — the indirect method, derived from the GL. Net income + the
@@ -28,6 +28,7 @@ export function CashFlow() {
   const { company } = useSession()
   const locale = localeOf(i18n.language)
 
+  const isPhone = useIsPhone()
   const [period, setPeriod] = useState(currentPeriod())
 
   const query = useCashFlow({
@@ -36,6 +37,8 @@ export function CashFlow() {
     period,
     enabled: !!company,
   })
+
+  if (isPhone) return <Laporan tab="cf" />
 
   if (!company) {
     return (
@@ -54,40 +57,11 @@ export function CashFlow() {
       ]
     : []
 
-  // Each exported line carries the account NAME beside its code — the spreadsheet is read by the
-  // same people as the page, and a bare code is just as opaque there. DISPOSAL_PROCEEDS is a
-  // synthetic marker, not a chart account, so it exports under its localized label alone.
-  //
-  // COLUMN CONTRACT: code | name | amount. Rows without a code (the synthetic markers and every
-  // subtotal) leave the code cell empty and put their label in the NAME cell, so every figure in
-  // the file lands in column C and `SUM(C:C)` reaches the subtotals too.
-  const csvLine = (l: CashFlowLine) =>
-    l.accountCode === DISPOSAL_PROCEEDS
-      ? ['', t('statements.cashFlow.disposalProceeds'), l.amountMinor]
-      : [l.accountCode, accountLabel(t, l.accountCode) ?? '', l.amountMinor]
-  const csvTotal = (label: string, amountMinor: number) => ['', label, amountMinor]
-
+  // Built by the shared, tested builder (statementsCsv.ts) — one source with the phone Export sheet.
   const exportCsv = () => {
     if (!data) return
-    downloadCsv(`cash-flow-${period}.csv`, [
-      [company.name, t('statements.scopeAllUnits')],
-      [t('statements.cashFlow.title'), period, currency],
-      [],
-      [t('statements.cashFlow.operating')],
-      csvTotal(t('statements.cashFlow.netIncome'), data.netIncomeMinor),
-      ...data.operatingLines.map(csvLine),
-      csvTotal(t('statements.cashFlow.fromOperating'), data.cashFromOperatingMinor),
-      [],
-      [t('statements.cashFlow.investing')],
-      ...data.investingLines.map(csvLine),
-      csvTotal(t('statements.cashFlow.fromInvesting'), data.cashFromInvestingMinor),
-      [],
-      [t('statements.cashFlow.financing')],
-      ...data.financingLines.map(csvLine),
-      csvTotal(t('statements.cashFlow.fromFinancing'), data.cashFromFinancingMinor),
-      [],
-      csvTotal(t('statements.cashFlow.netChange'), data.netChangeInCashMinor),
-    ])
+    const file = cashFlowCsv({ translate: t, companyName: company.name }, data)
+    downloadCsv(file.filename, file.rows)
   }
 
   return (
