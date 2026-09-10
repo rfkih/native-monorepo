@@ -220,14 +220,14 @@ describe('outletShares — bars against the busiest outlet', () => {
   })
 })
 
-describe('periodToClose — the previous month is open until it is in the history', () => {
-  it('names the previous period when it has not been closed', () => {
-    expect(periodToClose(['2026-06', '2026-07'], '2026-09')).toBe('2026-08')
-    expect(periodToClose([], '2026-01')).toBe('2025-12')
+describe('periodToClose — the current period is open until it is in the history', () => {
+  it('names the current period when it has not been closed', () => {
+    expect(periodToClose(['2026-07', '2026-08'], '2026-09')).toBe('2026-09')
+    expect(periodToClose([], '2026-01')).toBe('2026-01')
   })
 
-  it('is null once the previous period is closed', () => {
-    expect(periodToClose(['2026-08'], '2026-09')).toBeNull()
+  it('is null once the current period is closed', () => {
+    expect(periodToClose(['2026-08', '2026-09'], '2026-09')).toBeNull()
   })
 })
 

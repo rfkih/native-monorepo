@@ -73,8 +73,10 @@ kotor*, never HPP-as-posted.
 
 **Tasks are the same doors More offers, gated the same way.** Claims waiting
 (`/expense-claims?status=SUBMITTED`, HR), low stock (the ADR 0081 class ladder over the active
-outlet's catalog: `zero` + `low`, names first), and the previous period still open (absent from
-`/closes`, FINANCE). A row renders only with something in it; the section only with a row.
+outlet's catalog: `zero` + `low`, names first), and the current period still open (absent from
+`/closes`, FINANCE) — the current one, because that is the only period `PeriodClose` offers to
+close; the design's "Tutup buku Agustus" in September names a close the console cannot make. A
+row renders only with something in it; the section only with a row.
 
 **A books-only login keeps the month.** Every today read is a POS_ROLES route, so an office login
 without POS access (an accountant alone) would 403 on all of them. `DashboardPhone` checks
@@ -87,12 +89,15 @@ gerai", ⋮ to `/more` — is in-flow; the Shell's topbar stays the one sticky h
 ## Consequences
 
 **The home is live and honest.** Every figure names a source that exists; none is monthly data
-relabelled as today. The daily rows are cached 30 s; open bills 10 s; item sales 60 s. An outlet
-whose call fails leaves the figure partial and the screen says so with a retry; only when every
-outlet fails does the hero give way to the error diagnostics.
+relabelled as today. The first-sale prompt needs a SUCCESSFUL, all-zero `/pnl` for this month and
+last on top of an empty week — a finance outage or a week's holiday over a month start is not
+"never sold" — and a failed bills read shows "—", never "none open". The daily rows are cached
+30 s; open bills 10 s; item sales 60 s. An outlet whose call fails leaves the figure partial and
+the screen says so with a retry; only when every outlet fails does the hero give way to the error
+diagnostics.
 
 **Requests per visit** scale with outlets: three per outlet (days, bills, items) plus outlets,
-`/pnl` for the fresh-books check, and the gated task reads. For a three-outlet company that is a
+two `/pnl` for the fresh-books check, and the gated task reads. For a three-outlet company that is a
 dozen small reads, all cached, none blocking another.
 
 **One zone, still.** The day is fixed Asia/Jakarta on both sides (`OutletZone` on the server,

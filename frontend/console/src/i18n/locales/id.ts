@@ -846,6 +846,8 @@ export const id = {
     healthy: 'sehat',
     outletContribution: 'Kontribusi gerai',
     activeOutlets: '{{count}} gerai',
+    activeOutlets_one: '{{count}} gerai',
+    activeOutlets_other: '{{count}} gerai',
     postedToLedger: 'Terbukukan di buku besar',
     noOutletData: 'Belum ada gerai yang membukukan periode ini',
     noOutletDataHint:

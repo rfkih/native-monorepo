@@ -46,7 +46,7 @@ import { useTierAccess } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatPercent, formatSignedMoney } from '@/lib/money'
-import { currentPeriod, formatPeriod } from '@/lib/period'
+import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { useOutlets } from '@/features/org/api'
 import { useClaims } from '@/features/expenses/api'
 import { useCloseHistory } from '@/features/close/api'
@@ -153,13 +153,23 @@ function TodayHome({ company }: { company: CompanySession }) {
     enabled: closeOk,
   })
 
-  // Fresh books: the first-sale prompt needs to know the month has no postings either — one
-  // /pnl call, the same cache entry Laporan's income tab reads.
+  // Fresh books: the first-sale prompt needs to know the ledger is empty too — this month AND
+  // last, so an established outlet closed for a week over a month start is not told it has never
+  // sold. Two /pnl calls, the same cache entries Laporan's twelve-month trend reads.
+  const period = currentPeriod()
   const pnlQuery = usePnl({
     companyId: company.companyId,
     actor: company.actor,
     baseCurrency: company.baseCurrency,
-    period: currentPeriod(),
+    period,
+    presentation: undefined,
+    enabled: true,
+  })
+  const prevPnlQuery = usePnl({
+    companyId: company.companyId,
+    actor: company.actor,
+    baseCurrency: company.baseCurrency,
+    period: shiftPeriod(period, -1),
     presentation: undefined,
     enabled: true,
   })
@@ -176,14 +186,14 @@ function TodayHome({ company }: { company: CompanySession }) {
   const weekAllZero =
     !daily.isLoading &&
     weekKeys.every((k) => figuresFor(series, k).txn === 0 && figuresFor(series, k).net === 0)
-  const monthFigures = readFigures(pnlQuery.data ?? null, false)
-  const monthEmpty =
-    !pnlQuery.isLoading &&
-    monthFigures.revenue === 0 &&
-    monthFigures.expense === 0 &&
-    monthFigures.net === 0
+  // A failed /pnl is not an empty one: only a SUCCESSFUL read with all-zero figures counts.
+  const ledgerEmpty = [pnlQuery, prevPnlQuery].every((q) => {
+    if (!q.isSuccess) return false
+    const f = readFigures(q.data ?? null, false)
+    return f.revenue === 0 && f.expense === 0 && f.net === 0
+  })
   const showFirstSale =
-    !outletsQuery.isLoading && daily.failedCount === 0 && weekAllZero && monthEmpty
+    !outletsQuery.isLoading && daily.failedCount === 0 && weekAllZero && ledgerEmpty
   const openingQuery = useOpeningBalance({
     companyId: company.companyId,
     actor: company.actor,
@@ -221,7 +231,7 @@ function TodayHome({ company }: { company: CompanySession }) {
     closeOk && closeQuery.data
       ? periodToClose(
           closeQuery.data.map((c) => c.period),
-          currentPeriod(),
+          period,
         )
       : null
 
@@ -242,9 +252,7 @@ function TodayHome({ company }: { company: CompanySession }) {
           to: '/inventory',
           icon: TriangleAlert,
           label: t('dashboardPhone.lowStock'),
-          sub: new Intl.ListFormat(locale, { style: 'short', type: 'unit' }).format(
-            lowStock.names,
-          ),
+          sub: new Intl.ListFormat(locale, { style: 'short', type: 'unit' }).format(lowStock.names),
           count: lowStock.count,
         }
       : null,
@@ -345,14 +353,20 @@ function TodayHome({ company }: { company: CompanySession }) {
     {
       key: 'bills',
       label: t('dashboardPhone.openBills'),
-      value: bills.isLoading ? null : integer.format(openBills.length),
-      sub: bills.isLoading
-        ? ''
-        : openBills.length > 0
-          ? t('dashboardPhone.openBillsValue', {
-              amount: formatMoney(openBillsValue, currency, locale),
-            })
-          : t('dashboardPhone.noOpenBills'),
+      // A failed bills read is "—", never a confident "none open" on a floor with open tables.
+      value: bills.isLoading
+        ? null
+        : bills.failedCount > 0
+          ? '—'
+          : integer.format(openBills.length),
+      sub:
+        bills.isLoading || bills.failedCount > 0
+          ? ''
+          : openBills.length > 0
+            ? t('dashboardPhone.openBillsValue', {
+                amount: formatMoney(openBillsValue, currency, locale),
+              })
+            : t('dashboardPhone.noOpenBills'),
     },
     {
       key: 'margin',
@@ -360,7 +374,10 @@ function TodayHome({ company }: { company: CompanySession }) {
       value: margin ? formatPercent(margin.ratio, locale) : '—',
       sub: margin
         ? margin.partial
-          ? t('dashboardPhone.cogsPartial', { costed: today.costed, total: today.txn })
+          ? t('dashboardPhone.cogsPartial', {
+              costed: integer.format(today.costed),
+              total: integer.format(today.txn),
+            })
           : t('dashboardPhone.cogs', { amount: formatMoney(today.cogs ?? 0, currency, locale) })
         : t('dashboardPhone.noCogs'),
     },

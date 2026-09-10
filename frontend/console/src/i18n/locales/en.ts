@@ -861,6 +861,8 @@ export const en = {
     healthy: 'healthy',
     outletContribution: 'Outlet contribution',
     activeOutlets: '{{count}} outlets',
+    activeOutlets_one: '{{count}} outlet',
+    activeOutlets_other: '{{count}} outlets',
     postedToLedger: 'Posted to the ledger',
     noOutletData: 'No outlet has posted this period',
     noOutletDataHint:

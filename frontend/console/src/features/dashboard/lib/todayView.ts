@@ -12,7 +12,6 @@
  * 24-hour steps and a day's instants are fixed +07:00 offsets.
  */
 import type { CatalogRow } from '@/features/inventory/lib/catalogView'
-import { shiftPeriod } from '@/lib/period'
 
 /** Mirror of restaurant-service DailySalesResponse. */
 export interface DailySalesRow {
@@ -232,15 +231,15 @@ export function outletShares(
 }
 
 /**
- * The previous period is "to close" until it appears in the close history — the same rule the
- * PeriodClose screen's open-period banner follows. Returns that period key, or null once closed.
+ * The period the close screen offers is the CURRENT one (`PeriodClose` closes `currentPeriod()`;
+ * finance has no sequential-close rule), so that is the only period this task can honestly name:
+ * it is "to close" until it appears in the close history. Null once closed.
  */
 export function periodToClose(
   closedPeriods: readonly string[],
   currentPeriod: string,
 ): string | null {
-  const previous = shiftPeriod(currentPeriod, -1)
-  return closedPeriods.includes(previous) ? null : previous
+  return closedPeriods.includes(currentPeriod) ? null : currentPeriod
 }
 
 /**

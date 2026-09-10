@@ -27,8 +27,10 @@ and reads each figure: the strip scaled to the tallest day, the same-weekday del
 week has nothing to compare against — never an infinite percentage), average bill, gross margin
 only when a sale was costed and marked partial when not all were, best sellers merged by sold-time
 name because the same dish has a different id in every outlet. Tasks are the More page's doors,
-gated the same way: claims waiting (HR), low stock via the ADR 0081 ladder, the previous period
-still open (FINANCE); a row renders only with something in it.
+gated the same way: claims waiting (HR), low stock via the ADR 0081 ladder, the current period
+still open (FINANCE — the current one, because `PeriodClose` closes `currentPeriod()` and nothing
+else; the design's "Tutup buku Agustus" in September would have named a close the console cannot
+make, caught in review); a row renders only with something in it.
 
 **Which words come from where.** *Omzet hari ini* is restaurant's gross sales net of refunds — an
 operations figure, not a GL word (ADR 0071 AR-1), so it does not pretend to be *Pendapatan*; the
@@ -41,7 +43,11 @@ previous composition — moved byte-for-byte to `DashboardPhoneMonthly.tsx` — 
 **Gates.** restaurant-service 881 tests green, `check-no-select-star` clean; console `tsc -b`,
 eslint (the four warnings pre-date this), vitest 944, `vite build`; `mobile-shots.mjs` gained the
 `/sales/daily` fixture, three outlets, and `SHOT_FULL=1` for full-height captures — `home.png`
-verified against the design in both passes. Found on the way: the shared `ApiExceptionHandler`'s
+verified against the design in both passes. Code review (5 findings, all in the composition,
+all fixed): the close task named the wrong month; the first-sale prompt now needs a successful
+all-zero `/pnl` for this month and last, not a failed one; a failed bills read is "—" not "none
+open"; `dashboard.activeOutlets` gained `_one`/`_other`; counts in copy go through `Intl`. Found on
+the way: the shared `ApiExceptionHandler`'s
 catch-all answers a missing `@RequestParam` with 500, not 400 — fleet-wide, untouched here.
 
 ## 2026-09-10 — the inventory reads in days, not quantities (ADR 0081)
