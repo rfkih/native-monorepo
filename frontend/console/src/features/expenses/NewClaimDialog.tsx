@@ -336,7 +336,7 @@ export function NewClaimDialog({
               className={cn(
                 'block w-full text-sm text-ink-2',
                 'file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-tint file:px-3 file:py-2',
-                'file:text-sm file:font-semibold file:text-emerald-2 hover:file:bg-brand-100/60',
+                'file:text-sm file:font-semibold file:text-emerald-2 hover:file:bg-emerald-tint',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
               )}
             />

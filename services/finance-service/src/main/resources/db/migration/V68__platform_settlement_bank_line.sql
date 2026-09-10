@@ -1,0 +1,41 @@
+-- ============================================================================================================================
+-- V68 — a payout deposits into the BANK, not into the cash drawer (ADR 0076)
+-- ============================================================================================================================
+-- QRIS and marketplace money never touches the till. The customer pays the acquirer or the platform,
+-- and days later that party transfers to the merchant's BANK ACCOUNT. Recording the payout left the
+-- net in CASH_CLEARING (1900) — the same account that holds physical drawer cash — so the owner's
+-- "cash" figure was neither the drawer nor the bank, and 1000 Bank stayed at zero forever because
+-- nothing ever swept it.
+--
+-- The payout now finishes the journey: it writes the bank statement line for its own deposit and
+-- reconciles it, so the money lands where it actually is.
+--
+--   settlement entry     Dr CASH_CLEARING (net) + Dr fee   / Cr receivable (gross)   [unchanged]
+--   reconciliation entry Dr BANK (net)                     / Cr CASH_CLEARING (net)
+--
+-- CASH_CLEARING nets to ZERO across the two — a genuine pass-through, which is what a clearing
+-- account is for — and the drawer figure stops being polluted by money bound for the bank.
+--
+-- ---------------------------------------------------------------------------------------------
+-- Why the reconciliation is real, not bypassed
+-- ---------------------------------------------------------------------------------------------
+-- ADR 0016 makes bank reconciliation the ONLY writer that debits BANK, so the books' bank balance
+-- means "what the bank says you have". The payout does not weaken that: it creates a statement line
+-- and calls the same ReconciliationWriter every manual reconcile goes through. Nothing new debits
+-- BANK, and the line cannot be reconciled a second time — which also closes the double-credit risk
+-- ADR 0076 recorded, where a payout and a manual reconcile of the same transfer both credited 1901.
+--
+-- An earlier draft had the settlement debit BANK directly and skip reconciliation, on the grounds
+-- that a reconciliation cannot be undone and so a void would be stuck. That requirement was wrong:
+-- a reconciliation is CORRECTED, not undone — by a contra entry, exactly as every other correction
+-- in this ledger works. With that, the faithful design costs nothing.
+--
+-- ---------------------------------------------------------------------------------------------
+-- The link
+-- ---------------------------------------------------------------------------------------------
+-- Voiding a payout must reverse BOTH entries, so the settlement remembers the line it created.
+-- NULLABLE with no default: payouts recorded before this migration have none (their net is still
+-- sitting in 1900 and reaches the bank the manual way), and an old image writes settlements without
+-- it and keeps working.
+ALTER TABLE platform_settlement
+    ADD COLUMN bank_line_id UUID;

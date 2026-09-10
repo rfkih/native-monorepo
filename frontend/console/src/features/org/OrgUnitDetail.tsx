@@ -171,7 +171,7 @@ export function OrgUnitDetail() {
     return (
       <div className="mx-auto max-w-md space-y-4 text-center">
         <EmptyState title={t('orgHub.notFound.title')} hint={t('orgHub.notFound.hint')} />
-        <Link to="/org" className="text-sm font-semibold text-brand-700 hover:underline">
+        <Link to="/org" className="text-sm font-semibold text-emerald-2 hover:underline">
           {t('orgHub.notFound.back')}
         </Link>
       </div>
@@ -202,7 +202,7 @@ export function OrgUnitDetail() {
     <div className="flex flex-col gap-[18px]">
       {/* Breadcrumb trail */}
       <nav aria-label={t('orgHub.breadcrumbLabel')} className="flex items-center gap-1.5 text-sm">
-        <Link to="/org" className="font-medium text-ink-3 transition-colors hover:text-brand-700">
+        <Link to="/org" className="font-medium text-ink-3 transition-colors hover:text-emerald-2">
           {t('org.title')}
         </Link>
         <ChevronRight className="size-3.5 text-ink-3" aria-hidden="true" />
@@ -612,7 +612,7 @@ function ContributionRow({
       <div className="flex items-center justify-between gap-3">
         <Link
           to={`/org/${row.orgUnitId}`}
-          className="min-w-0 truncate text-sm font-semibold text-ink hover:text-brand-700 hover:underline"
+          className="min-w-0 truncate text-sm font-semibold text-ink hover:text-emerald-2 hover:underline"
         >
           {row.name ?? row.orgUnitId.slice(0, 8)}
         </Link>
@@ -687,7 +687,7 @@ function OutletsTab({
             >
               <Link
                 to={`/org/${outlet.id}`}
-                className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-ink hover:text-brand-700 hover:underline"
+                className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-ink hover:text-emerald-2 hover:underline"
               >
                 {outlet.name}
               </Link>
@@ -725,7 +725,7 @@ function OutletsTab({
                 ) : (
                   <button
                     type="button"
-                    className="rounded-md px-2 py-1 text-xs text-brand-600/80 hover:bg-emerald-tint hover:text-brand-700"
+                    className="rounded-md px-2 py-1 text-xs text-emerald-2/80 hover:bg-emerald-tint hover:text-emerald-2"
                     onClick={() => onReactivate(outlet)}
                   >
                     {t('org.reactivate')}

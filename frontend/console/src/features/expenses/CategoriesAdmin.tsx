@@ -64,7 +64,7 @@ export function CategoriesAdmin() {
       >
         <Link
           to="/expenses"
-          className="font-medium text-ink-3 transition-colors hover:text-brand-700"
+          className="font-medium text-ink-3 transition-colors hover:text-emerald-2"
         >
           {t('nav.expenses')}
         </Link>
@@ -145,7 +145,7 @@ export function CategoriesAdmin() {
                       <button
                         type="button"
                         onClick={() => setDialog({ mode: 'edit', category: c })}
-                        className="text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
+                        className="text-sm font-semibold text-emerald-2 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
                       >
                         {t('expenses.categories.edit')}
                       </button>

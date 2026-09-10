@@ -122,7 +122,7 @@ export function IncomeDetailDrawer({
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-ink-50">
                       <div
-                        className={cn('h-full rounded-full', isRevenue ? 'bg-brand-500' : 'bg-loss')}
+                        className={cn('h-full rounded-full', isRevenue ? 'bg-emerald' : 'bg-loss')}
                         style={{ width: `${width}%` }}
                       />
                     </div>

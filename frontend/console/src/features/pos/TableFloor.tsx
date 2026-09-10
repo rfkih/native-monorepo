@@ -133,7 +133,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div className="flex items-center gap-2.5">
-            <Table2 className="size-5 text-brand-500" aria-hidden="true" />
+            <Table2 className="size-5 text-emerald-2" aria-hidden="true" />
             <h2 className="font-display text-lg font-semibold text-ink">{t('bills.floorTitle')}</h2>
             {occupiedTableIds.size > 0 ? (
               <Badge tone="emerald">{occupiedTableIds.size}</Badge>
@@ -200,7 +200,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
                 <button
                   type="button"
                   onClick={() => setShowTableMgmt(true)}
-                  className="mt-2 text-xs text-brand-600 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+                  className="mt-2 text-xs text-emerald-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
                 >
                   {t('pos.table.addTable')}
                 </button>
@@ -276,7 +276,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
                 disabled={openBill.isPending}
                 className={cn(
                   'flex w-full items-center gap-3 rounded-2xl border border-dashed border-line px-4 py-3 text-left transition-colors',
-                  'hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700',
+                  'hover:border-line-strong hover:bg-emerald-tint hover:text-emerald-2',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                   openBill.isPending && 'cursor-not-allowed opacity-60',
                 )}
@@ -285,7 +285,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
                 {openingTakeaway ? (
                   <Spinner />
                 ) : (
-                  <Plus className="size-4 shrink-0 text-brand-500" aria-hidden="true" />
+                  <Plus className="size-4 shrink-0 text-emerald-2" aria-hidden="true" />
                 )}
                 <span className="text-sm font-medium text-ink-2">{t('bills.newTakeaway')}</span>
               </button>
@@ -357,7 +357,7 @@ function TableCard({
             ]
           : [
               'border-line bg-surface',
-              'hover:border-brand-400 hover:shadow-md hover:-translate-y-0.5',
+              'hover:border-line-strong hover:shadow-md hover:-translate-y-0.5',
             ],
         isOpening && 'opacity-60 cursor-not-allowed',
       )}
@@ -425,7 +425,7 @@ function TakeawayBillRow({
       onClick={() => onOpen(bill.id)}
       className={cn(
         'flex w-full items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-left transition-all',
-        'hover:border-brand-300 hover:shadow-md',
+        'hover:border-line-strong hover:shadow-md',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
       )}
       aria-label={t('bills.openExistingBill', { label: bill.guestLabel })}
@@ -438,7 +438,7 @@ function TakeawayBillRow({
       <div className="tnum shrink-0 font-mono text-sm font-semibold text-ink">
         {formatMoney(bill.runningTotalMinor, bill.currency, locale)}
       </div>
-      <span className="text-xs font-semibold text-brand-700">{t('bills.open')}</span>
+      <span className="text-xs font-semibold text-emerald-2">{t('bills.open')}</span>
     </button>
   )
 }

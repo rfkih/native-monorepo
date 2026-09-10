@@ -100,7 +100,7 @@ function StatusFilterBar({ value, onChange }: { value: string; onChange: (v: str
           className={cn(
             'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
             value === f.value
-              ? 'bg-brand-600 text-white'
+              ? 'bg-emerald text-white'
               : 'bg-ink-50 text-ink-2 hover:bg-ink-100',
           )}
         >

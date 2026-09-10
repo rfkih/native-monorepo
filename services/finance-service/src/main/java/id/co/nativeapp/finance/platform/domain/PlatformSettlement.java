@@ -54,6 +54,26 @@ public class PlatformSettlement extends Auditable {
   @Column(name = "settled_at", nullable = false, updatable = false)
   private Instant settledAt;
 
+  /**
+   * When this payout was taken back, or {@code null} while it stands (V67). Voiding never deletes
+   * or edits the settlement: the row is stamped and a CONTRA entry is posted, so the ledger keeps
+   * both the mistake and its correction.
+   */
+  @Column(name = "voided_at")
+  private Instant voidedAt;
+
+  /**
+   * The bank statement line this payout created for its own deposit, reconciled in the same
+   * transaction (V68) — {@code null} for payouts recorded before that, whose net is still sitting
+   * in CASH_CLEARING and reaches the bank the manual way. Voiding reverses this leg too.
+   */
+  @Column(name = "bank_line_id")
+  private UUID bankLineId;
+
+  /** The contra journal entry that negated this payout's legs, or {@code null} while it stands. */
+  @Column(name = "void_entry_id")
+  private UUID voidEntryId;
+
   /** The Idempotency-Key that produced this settlement — the replay lookup key. */
   @Column(name = "idempotency_key", nullable = false, updatable = false, length = 64)
   private String idempotencyKey;
@@ -114,5 +134,29 @@ public class PlatformSettlement extends Auditable {
 
   public String getIdempotencyKey() {
     return idempotencyKey;
+  }
+
+  public Instant getVoidedAt() {
+    return voidedAt;
+  }
+
+  public void setVoidedAt(Instant voidedAt) {
+    this.voidedAt = voidedAt;
+  }
+
+  public UUID getVoidEntryId() {
+    return voidEntryId;
+  }
+
+  public void setVoidEntryId(UUID voidEntryId) {
+    this.voidEntryId = voidEntryId;
+  }
+
+  public UUID getBankLineId() {
+    return bankLineId;
+  }
+
+  public void setBankLineId(UUID bankLineId) {
+    this.bankLineId = bankLineId;
   }
 }

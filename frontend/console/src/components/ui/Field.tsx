@@ -32,7 +32,8 @@ export function Field({
 }
 
 /**
- * The single focus treatment (audit finding 09): brand-600 border plus a 4px soft halo.
+ * The single focus treatment (audit finding 09): a primary-coloured border plus a 4px soft halo —
+ * ink since ADR 0077, and it inverts with the rest of the primary pair on dark.
  * Every focusable field in the product uses this ring — nothing else.
  */
 export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {

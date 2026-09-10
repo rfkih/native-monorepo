@@ -211,7 +211,7 @@ function ClaimRow({
         <button
           type="button"
           onClick={onOpen}
-          className="font-semibold text-ink hover:text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
+          className="font-semibold text-ink hover:text-emerald-2 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
         >
           {claim.employeeName}
         </button>

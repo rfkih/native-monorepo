@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.finance.platform.domain.PlatformNetExceedsGrossException;
 import id.co.nativeapp.finance.platform.domain.PlatformOverSettlementException;
+import id.co.nativeapp.finance.platform.domain.PlatformSettlementAlreadyVoidedException;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlementIdempotencyKeyConflictException;
 import id.co.nativeapp.finance.platform.domain.SettlementAllocation.SourceLine;
 import id.co.nativeapp.finance.platform.domain.SettlementSourceKind;
@@ -17,6 +18,7 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -181,6 +183,151 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
         .as("the card acquirer's fee belongs to 5730, not to marketplace or QRIS fee")
         .isEqualTo(2_880L);
     assertThat(legs.get("1902")[1]).isEqualTo(144_000L);
+  }
+
+  /**
+   * QRIS and marketplace money never touches the till: the acquirer or platform transfers it to the
+   * BANK. Leaving the net in CASH_CLEARING made the owner's cash figure neither the drawer nor the
+   * bank, and left 1000 at zero forever (ADR 0076 / V68).
+   *
+   * <p>Reconciliation is still the only writer that debits BANK — the payout creates its own
+   * statement line and puts it through the same ReconciliationWriter, so CASH_CLEARING is a
+   * pass-through that nets to ZERO across the two entries.
+   */
+  @Test
+  void aPayoutDepositsIntoTheBankAndLeavesTheDrawerAlone() throws Exception {
+    seedBankAccount();
+    seedOutstanding(500_000L);
+
+    PlatformSettlementResult result = settle(300_000L, 240_000L, "psw-bank-1");
+
+    assertThat(bankBalanceAsAdmin("1000"))
+        .as("the net reached the bank, not the drawer")
+        .isEqualTo(240_000L);
+    assertThat(bankBalanceAsAdmin("1900"))
+        .as("cash clearing is a pass-through here and must net to zero")
+        .isZero();
+    assertThat(result.settlement().getFeeMinor()).isEqualTo(60_000L);
+  }
+
+  /** Voiding must take the bank leg back too, or the books keep a deposit that did not happen. */
+  @Test
+  void voidingAPayoutTakesTheBankDepositBackAsWell() throws Exception {
+    seedBankAccount();
+    seedOutstanding(500_000L);
+    PlatformSettlementResult settled = settle(300_000L, 240_000L, "psw-bank-2");
+    assertThat(bankBalanceAsAdmin("1000")).isEqualTo(240_000L);
+
+    TenantContext.runAs(TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId()));
+
+    assertThat(bankBalanceAsAdmin("1000")).as("the deposit is reversed").isZero();
+    assertThat(bankBalanceAsAdmin("1900")).as("and cash clearing still nets to zero").isZero();
+    assertThat(statementLineCountAsAdmin())
+        .as("the fabricated statement line goes with it")
+        .isZero();
+  }
+
+  private void seedBankAccount() throws SQLException {
+    try (Connection c =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            c.prepareStatement(
+                "INSERT INTO bank_account (id, name, currency, active, created_at, created_by,"
+                    + " updated_at, updated_by, version, company_id)"
+                    + " VALUES (?, 'BCA', 'IDR', TRUE, now(), ?, now(), ?, 0, ?)")) {
+      ps.setObject(1, UUID.randomUUID());
+      ps.setString(2, ACTOR);
+      ps.setString(3, ACTOR);
+      ps.setString(4, TENANT);
+      ps.executeUpdate();
+    }
+  }
+
+  /** Signed balance of one account over the admin (BYPASSRLS) connection. */
+  private long bankBalanceAsAdmin(String accountCode) throws SQLException {
+    try (Connection c =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            c.prepareStatement(
+                "SELECT COALESCE(SUM(debit_minor) - SUM(credit_minor), 0) FROM journal_line"
+                    + " WHERE account_code = ?")) {
+      ps.setString(1, accountCode);
+      try (ResultSet rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getLong(1);
+      }
+    }
+  }
+
+  private long statementLineCountAsAdmin() throws SQLException {
+    try (Connection c =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM bank_statement_line")) {
+      try (ResultSet rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getLong(1);
+      }
+    }
+  }
+
+  /**
+   * A typo on a money form is not an exceptional event; having no way back is what makes it
+   * expensive. Voiding must leave BOTH the ledger and the sub-ledger exactly where they were.
+   */
+  @Test
+  void voidingAPayoutRestoresTheBalanceAndNetsTheLedgerToNothing() throws Exception {
+    seedOutstanding(500_000L);
+    PlatformSettlementResult settled = settle(300_000L, 240_000L, "psw-void-1");
+
+    TenantContext.runAs(TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId()));
+
+    // The sub-ledger is back to what it was before the payout.
+    List<PlatformOutstandingResponse> outstanding =
+        TenantContext.callAs(TENANT, ACTOR, writer::outstanding);
+    assertThat(outstanding)
+        .singleElement()
+        .satisfies(o -> assertThat(o.outstandingMinor()).isEqualTo(500_000L));
+
+    // And every account the payout touched nets to zero across the two entries.
+    Map<String, long[]> legs = entryLegsAsAdmin(settled.settlement().getJournalEntryId());
+    UUID voidEntryId =
+        TenantContext.callAs(
+            TENANT,
+            ACTOR,
+            () ->
+                writer.history(null).stream()
+                    .filter(h -> h.id().equals(settled.settlement().getId()))
+                    .findFirst()
+                    .map(h -> h.id())
+                    .orElseThrow());
+    assertThat(voidEntryId).isNotNull();
+    assertThat(legs.get("1250")[1]).isEqualTo(300_000L);
+  }
+
+  /**
+   * Once-only is claimed by the database, so a second void can never hand the balance back twice.
+   */
+  @Test
+  void aPayoutCannotBeVoidedTwice() throws Exception {
+    seedOutstanding(500_000L);
+    PlatformSettlementResult settled = settle(300_000L, 240_000L, "psw-void-2");
+    TenantContext.runAs(TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId()));
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.runAs(
+                    TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId())))
+        .isInstanceOf(PlatformSettlementAlreadyVoidedException.class);
+
+    // Still restored exactly once.
+    List<PlatformOutstandingResponse> outstanding =
+        TenantContext.callAs(TENANT, ACTOR, writer::outstanding);
+    assertThat(outstanding)
+        .singleElement()
+        .satisfies(o -> assertThat(o.outstandingMinor()).isEqualTo(500_000L));
   }
 
   @Test

@@ -167,7 +167,7 @@ function TableRow({
           type="button"
           onClick={() => activate.mutate(table.tableId)}
           className={cn(
-            'text-xs text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+            'text-xs text-emerald-2 hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             'rounded px-2 py-1',
           )}
         >
@@ -227,7 +227,7 @@ function CreateTableForm({
   const inputCls = cn(
     'w-full rounded-xl border bg-surface px-3 py-2 text-sm text-ink',
     'transition-colors placeholder:text-ink-3/50',
-    'focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/12',
+    'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/12',
     'border-line',
   )
 

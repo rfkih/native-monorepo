@@ -20,6 +20,7 @@ import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -51,6 +52,17 @@ public class PlatformSettlementController {
   @GetMapping("/overdue")
   public List<OverdueSourceResponse> overdue() {
     return writer.overdueSources();
+  }
+
+  @Operation(
+      summary =
+          "Take a recorded payout back — posts a contra entry negating its legs and hands each"
+              + " line's gross back to the sub-ledger. The settlement is stamped, never deleted, so"
+              + " the ledger keeps both the mistake and its correction")
+  @PostMapping("/{id}/void")
+  public ResponseEntity<Void> voidSettlement(@PathVariable("id") java.util.UUID id) {
+    writer.voidSettlement(id);
+    return ResponseEntity.noContent().build();
   }
 
   @Operation(
