@@ -19,6 +19,14 @@
 # `environment:`, so it runs (and can fail fast) BEFORE the reviewer is asked to approve — nobody
 # approves a deploy whose CI hasn't even started.
 #
+# SSH keepalive (v0.1.57 post-mortem): the deploy step is a single ssh session that goes QUIET for
+# minutes while `up -d` and the health gate run on the VPS. With no keepalive, an idle NAT/edge
+# timeout dropped that session 4 minutes in ("client_loop: send disconnect: Broken pipe", exit
+# 255) — the runner reported a failed deploy that was neither a health nor a smoke failure, and
+# prod-deploy.sh was orphaned mid-run (the release still landed only because a re-run found the
+# flock free and prod auto-safe on LAST_GOOD). ServerAliveInterval=30 with CountMax=10 keeps the
+# session alive through a full 900s health-gate wait.
+#
 # The deploy itself is scripts/prod-deploy.sh ON the VPS: flock → DB snapshot (disaster net) →
 # pull → rolling up → health gate → smoke → LAST_GOOD | AUTO-ROLLBACK. Exit codes: 0 deployed,
 # 1 rolled back to LAST_GOOD (this job fails, prod is healthy), 2 needs manual intervention.
@@ -194,7 +202,7 @@ jobs:
         env:
           TAG: ${{ steps.rel.outputs.tag }}
         run: |
-          SSH="ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes"
+          SSH="ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=10"
           $SSH "$PROD_USER@$PROD_HOST" "mkdir -p ~/$PROD_DIR/releases ~/$PROD_DIR/scripts ~/$PROD_DIR/backups"
           # Stack definition + configs (prod.env is NEVER synced — it lives only on the VPS).
           rsync -az -e "$SSH" \
@@ -217,7 +225,7 @@ jobs:
           GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           test -n "$GHCR_READ_TOKEN" || { echo "::error::no GHCR credential available"; exit 1; }
-          SSH="ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes"
+          SSH="ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=10"
           # Login only for the pull window; logout in the always-step below.
           printf '%s' "$GHCR_READ_TOKEN" | $SSH "$PROD_USER@$PROD_HOST" \
             "docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
@@ -235,5 +243,5 @@ jobs:
       - name: GHCR logout on the VPS
         if: always()
         run: |
-          ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes "$PROD_USER@$PROD_HOST" \
+          ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "$PROD_USER@$PROD_HOST" \
             "docker logout ghcr.io" || true
