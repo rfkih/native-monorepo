@@ -21,6 +21,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import {
+  ArrowLeft,
   Banknote,
   BookOpen,
   CalendarClock,
@@ -36,6 +37,7 @@ import {
   Monitor,
   Moon,
   Package,
+  Percent,
   Sun,
   Table2,
   Undo2,
@@ -48,9 +50,13 @@ import { accountMenuVisibility } from '@/features/pos-shell/layout/accountMenuGa
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
+import { formatMoney } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
 import { OutletGate } from '@/components/OutletGate'
 import { GiftCardSellModal } from '@/components/GiftCardSellModal'
+import { CouponField } from '@/components/CouponField'
+import { MemberField } from '@/components/MemberField'
+import { OfflineHint } from './offline/OfflineHint'
 import type { MemberResponse } from '@/features/loyalty/api'
 import { useOffline } from './offline/useOffline'
 import { useCachedCatalogFallback } from './offline/catalogCache'
@@ -109,8 +115,17 @@ import { operatorSignInRequired } from '@/features/operator/operatorGate'
 import { OperatorPinSheet } from '@/features/operator/OperatorPinSheet'
 import { useOutletPinPolicy } from '@/features/operator/api'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
-import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
-import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
+import { PosPhoneHeader } from '@/features/pos-shell/layout/PosPhoneHeader'
+import { BillDock, type DockAction, type DockLine } from '@/features/pos-shell/layout/BillDock'
+import { TillMenuSheet, type TillMenuItem } from '@/features/pos-shell/layout/TillMenuSheet'
+import {
+  usePrinterStatusAction,
+  toTillMenuItem,
+} from '@/features/pos-shell/layout/usePrinterStatusAction'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { backIntentFor } from '@/components/mobile/backGuardProtocol'
+import { dockActions, dueLabelKey, peekLines } from './lib/dockLines'
 import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
 import { SalesHistorySheet } from './SalesHistorySheet'
 import { ClosingHistorySheet } from './ClosingHistorySheet'
@@ -315,6 +330,25 @@ function PosInner({ session }: { session: CompanySession }) {
   // Bottom sheet open state (expands the BillDetail sheet from summary bar)
   const [billSheetOpen, setBillSheetOpen] = useState(false)
 
+  // Native Till Android v2 — on a phone the bill is a deck that is always attached, not a sheet you
+  // open. This is the deck's ONE piece of state: peeking, or dragged up to the full ticket. The
+  // bill-mode deck has its own copy of it inside BillDetail (it owns the bill's lines and
+  // mutations), so the two never render at once — Pos only mounts the deck for the walk-in cart.
+  const isPhone = useIsPhone()
+  const [dockExpanded, setDockExpanded] = useState(false)
+  // BACK collapses the expanded deck before it leaves the till (ADR 0075: back pops, never pushes).
+  useBackDismiss(() => setDockExpanded(false), isPhone && dockExpanded && !openBillId)
+
+  // How many of each menu item the OPEN BILL holds unpaid — reported up by BillDetail, which is
+  // the only place the full bill lives (the bill LIST response carries a line count and nothing
+  // per item). Lets the catalog tiles badge a count in bill mode, as they do for the cart.
+  // Stamped with the bill it describes: switching bills would otherwise badge the new bill's tiles
+  // with the previous one's counts for the frame or two before its query resolves.
+  const [billQty, setBillQty] = useState<{ billId: string | null; byItem: Record<string, number> }>({
+    billId: null,
+    byItem: {},
+  })
+
   // Phone bill selector
   const [showBillSelector, setShowBillSelector] = useState(false)
   // New bill dialog
@@ -415,17 +449,25 @@ function PosInner({ session }: { session: CompanySession }) {
   // so the menu scroll area always clears it and the last rows are never hidden behind the dock.
   const [dockHeight, setDockHeight] = useState(0)
   useEffect(() => {
+    // Tablet+ only — the phone deck pads the catalog by a fixed CSS height instead (see the grid).
+    if (isPhone) return
     const el = document.getElementById('pos-summary-dock')
     // Route the no-element case through `measure` too — a direct setState in the effect body trips
     // react-hooks' "setState synchronously within an effect"; going through the measure/observer
     // callback is the accepted pattern and preserves the exact behaviour (0 when the dock is absent).
-    const measure = () => setDockHeight(el?.offsetHeight ?? 0)
+    const measure = () => {
+      // While the deck is EXPANDED it is modal (its own scrim covers the grid), so re-padding the
+      // catalog to 620px would only scroll-jump a surface nobody can see — and jump it back on
+      // collapse. The grid always clears the PEEK height.
+      if (el?.dataset.expanded === 'true') return
+      setDockHeight(el?.offsetHeight ?? 0)
+    }
     measure()
     if (!el) return
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [openBillId, lineCount])
+  }, [openBillId, lineCount, isPhone])
 
   const discountMinor = parseDiscountInput(discountInput, currency)
   const clientSubtotalMinor = cart.reduce(
@@ -515,11 +557,74 @@ function PosInner({ session }: { session: CompanySession }) {
 
   const totalBills = openBillsList.length
 
-  // In bill mode, the tile qty badge reflects the open bill's line sums (not the local cart)
-  // BillSummaryResponse has lineCount only (no per-item breakdown), so in bill mode
-  // we hide per-item counts rather than show stale local-cart counts.
+  // ── The walk-in deck (phone, Native Till Android v2) ────────────────────────────────────────
+  // BillDock renders strings, never numbers: every money value is formatted here through
+  // formatMoney (rule 9). Bill mode has its own mapping inside BillDetail — same component, other
+  // data owner.
+  const walkInDockLines: DockLine[] = cart.map((l) => {
+    const key = lineKey(l.menuItemId, l.selectedOptionIds)
+    const name = items.find((i) => i.id === l.menuItemId)?.name ?? ''
+    return {
+      key,
+      name:
+        l.selectedOptionNames.length > 0
+          ? `${name} · ${l.selectedOptionNames.join(', ')}`
+          : name,
+      unitLabel: t('posShell.dock.lineUnit', {
+        qty: l.qty,
+        price: formatMoney(l.effectiveUnitPriceMinor, currency, locale),
+      }),
+      totalLabel: formatMoney(l.effectiveUnitPriceMinor * l.qty, currency, locale),
+      qty: l.qty,
+      paid: false,
+      selectable: false,
+      selected: false,
+      // The walk-in cart is a client array until Charge — anyone ringing may trim it. The
+      // owner/manager lockdown is a BILL rule (billPermissions), not a cart one.
+      canRemove: true,
+      onInc: () => changeCartQty(key, 1),
+      onDec: () => changeCartQty(key, -1),
+    }
+  })
+
+  // The chips only exist while the deck is expanded, so they need only scroll their field into
+  // view — the coupon / member / manual-discount stack lives in the deck's `extras` slot.
+  function revealDockField(anchor: 'discount' | 'member') {
+    document.getElementById(`pos-dock-${anchor}`)?.scrollIntoView({ block: 'nearest' })
+  }
+
+  // Keyed lookup rather than a ternary: dockActions owns WHICH chips appear, and a key it grows
+  // later must fail loudly here (undefined → filtered out) instead of silently rendering as Member.
+  const WALK_IN_CHIPS: Partial<Record<string, Omit<DockAction, 'key'>>> = {
+    discount: {
+      icon: <Percent className="size-[15px]" aria-hidden="true" />,
+      label: t('posShell.dock.action.discount'),
+      active: discountMinor > 0,
+      onClick: () => revealDockField('discount'),
+    },
+    member: {
+      icon: <UserRound className="size-[15px]" aria-hidden="true" />,
+      label: t('posShell.dock.action.member'),
+      active: attachedMember != null,
+      onClick: () => revealDockField('member'),
+    },
+  }
+  const walkInDockActions: DockAction[] = dockActions({
+    isBill: false,
+    unpaidCount: cart.length,
+    canManualDiscount,
+  }).flatMap((key) => {
+    const chip = WALK_IN_CHIPS[key]
+    return chip ? [{ key, ...chip }] : []
+  })
+
+  const walkInDueText = formatMoney(grandTotalMinor, currency, locale)
+
+  // In bill mode the tile badge counts the OPEN BILL's unpaid lines, never the local cart. The
+  // count comes from BillDetail (onUnpaidQtyByItem) because BillSummaryResponse has no per-item
+  // breakdown; before the deck, bill mode simply showed no badge at all.
   function tileQty(menuItemId: string): number {
-    if (openBillId) return 0 // no per-item count available from summary; hide badge
+    if (openBillId) return billQty.billId === openBillId ? (billQty.byItem[menuItemId] ?? 0) : 0
     return cartQtyMap.get(menuItemId) ?? 0
   }
 
@@ -579,6 +684,40 @@ function PosInner({ session }: { session: CompanySession }) {
       next[idx] = { ...next[idx], qty: nextQty }
       return next
     })
+  }
+
+  /**
+   * The dock's Pay, shared by the phone deck and the tablet summary bar — both entry points (walk-in
+   * cart and bill mode) must pass the same two gates in the same order.
+   */
+  function handleDockPay() {
+    // ADR 0049 P3b operator gate — checked FIRST, before the register-open gate below (a
+    // cashier identifies themselves before anything else happens at the till).
+    if (operatorSignInRequired(isDeviceTerminal, operatorSession.operator)) {
+      setShowOperatorPinSheet(true)
+      return
+    }
+    // Payment gate (owner request "open the register first"): online + no confirmed open
+    // session → redirect to the RegisterSheet instead of proceeding. Loading/error states
+    // fail OPEN (let the sale proceed) — see registerGate.ts.
+    if (
+      noConfirmedOpenSession({
+        offline,
+        isLoading: registerSessionQuery.isLoading,
+        isError: registerSessionQuery.isError,
+        session: registerSessionQuery.data,
+      })
+    ) {
+      setRegisterGateActive(true)
+      setShowRegisterSheet(true)
+      return
+    }
+    if (openBillId) {
+      // P4: Pay pays — BillDetail opens its pay modal directly (full unpaid check).
+      setAutoPayToken((k) => k + 1)
+    } else {
+      setModal('payment')
+    }
   }
 
   function removeCartLineByKey(key: string) {
@@ -712,7 +851,35 @@ function PosInner({ session }: { session: CompanySession }) {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
 
-      {/* ── 1. Status bar (56px ink band — redesign P4) ─────────────────────── */}
+      {/* ── 1a. Phone identity band (52px white — Native Till Android v2) ────── */}
+      {isPhone ? (
+        <PosPhoneHeader
+          businessName={session.name}
+          outletPicker={<OutletPicker variant="subtitle" />}
+          // Who is ringing. On a device terminal that is the signed-in operator (ADR 0049 P3b);
+          // on an ordinary login it is the principal's own username, which needs no translation.
+          identity={
+            operatorSession.operator
+              ? t('posShell.identity', {
+                  role: operatorSession.operator.role,
+                  name: operatorSession.operator.displayName,
+                })
+              : auth.actor
+          }
+          offline={offline}
+          queuedCount={queuedCount + rejectedCount}
+          onConnectionClick={() => setShowSyncCenter(true)}
+          parkedCount={parkedCount}
+          onParkedClick={() => setShowParkedTray(true)}
+          parkedDisabled={offline}
+          parkedDisabledTitle={t('offline.disabled.parked')}
+          onOverflowClick={() => setShowTillMenu((v) => !v)}
+          overflowOpen={showTillMenu}
+        />
+      ) : null}
+
+      {/* ── 1b. Status bar (56px ink band — redesign P4; tablet and up) ──────── */}
+      {isPhone ? null : (
       <PosStatusBar
         businessName={session.name}
         outletPicker={<OutletPicker />}
@@ -748,8 +915,12 @@ function PosInner({ session }: { session: CompanySession }) {
         showOperatorSignIn={isDeviceTerminal && !operatorSession.operator}
         onOperatorSignInClick={() => setShowOperatorPinSheet(true)}
       />
+      )}
 
-      {/* ── 2. Bill context strip (64px) — Walk-in tab + open-bill tabs ─────── */}
+      {/* ── 2. Bill context strip (64px) — Walk-in tab + open-bill tabs ───────
+          Tablet and up only. On a phone the deck's own title IS the ticket's identity, and tapping
+          it opens the same order switcher this strip's selector did — 64px back to the catalog. */}
+      {isPhone ? null : (
       <BillTabsBar
         bills={openBillsList}
         activeBillId={openBillId}
@@ -766,6 +937,45 @@ function PosInner({ session }: { session: CompanySession }) {
         onNewBill={() => setShowOpenBillDialog(true)}
         onSelectorClick={() => setShowBillSelector(true)}
       />
+      )}
+
+      {/* ── 2b. Phone search + floor row (Native Till Android v2) ─────────────
+          The search field belongs WITH the catalog it filters, and "Tables" belongs beside it:
+          both are ways of choosing what the next tap lands on. Kept out of the scroll area so a
+          cashier hunting an item never has to scroll back up to the box. */}
+      {isPhone ? (
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-surface px-3.5 py-2">
+          <div className="relative min-w-0 flex-1">
+            <svg
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3"
+              width="17" height="17" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+            </svg>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('bills.searchItems', { count: items.length })}
+              aria-label={t('bills.searchItems', { count: items.length })}
+              className="h-11 w-full rounded-[13px] bg-hover pl-10 pr-3 text-sm text-ink placeholder:text-ink-3 focus:outline-2 focus:outline-offset-[-2px] focus:outline-emerald"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowTableFloor(true)}
+            disabled={offline}
+            data-testid="pos-tables"
+            title={offline ? t('offline.disabled.tableFloor') : undefined}
+            className="flex h-11 shrink-0 items-center gap-1.5 rounded-[13px] border border-line bg-surface px-3 text-[13px] font-semibold text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Table2 className="size-4" aria-hidden="true" />
+            {t('bills.floorTitle')}
+          </button>
+        </div>
+      ) : null}
 
       {/* ── Body: category rail + menu grid ─────────────────────────────────── */}
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
@@ -799,11 +1009,12 @@ function PosInner({ session }: { session: CompanySession }) {
           ))}
         </nav>
 
-        {/* ── Phone category chips (shown <560px as horizontal row) ─────── */}
+        {/* ── Phone category chips ────────────────────────────────────────
+            In normal flow under the search row, not floating over the grid: the deck now owns the
+            bottom of the screen, so every pixel of the catalog's own scroll area has to be real. */}
         <div
           aria-label={t('pos.categories')}
-          className="absolute top-0 left-0 right-0 z-10 flex h-14 items-center gap-2 overflow-x-auto px-4 pb-0 sm:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          style={{ background: 'var(--color-paper)' }}
+          className="absolute top-0 left-0 right-0 z-10 flex h-[52px] items-center gap-2 overflow-x-auto border-b border-line bg-surface px-3.5 sm:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <button
             type="button"
@@ -838,14 +1049,22 @@ function PosInner({ session }: { session: CompanySession }) {
 
         {/* ── 4. Menu grid ─────────────────────────────────────────────── */}
         <div
-          className="min-h-0 flex-1 overflow-y-auto px-5 pb-28 pt-3 sm:pb-28"
-          style={dockHeight ? { paddingBottom: dockHeight + 24 } : undefined}
+          className={cn(
+            'min-h-0 flex-1 overflow-y-auto px-5 pb-28 pt-3 sm:pb-28',
+            // Phone: pad by the deck's own (CSS-known) peek height rather than by measurement. The
+            // deck is rendered by EITHER Pos or BillDetail, and BillDetail's mounts a beat late —
+            // it shows a skeleton while the bill loads — so a ResizeObserver installed when
+            // `openBillId` changes finds nothing and the last tile row would sit under the deck.
+            'max-sm:pb-[188px] max-sm:[@media(min-height:720px)]:pb-[242px]',
+          )}
+          style={!isPhone && dockHeight ? { paddingBottom: dockHeight + 24 } : undefined}
         >
-          {/* Phone: spacer for the chip row */}
-          <div className="h-14 sm:hidden" aria-hidden="true" />
+          {/* Phone: spacer for the pinned chip row */}
+          <div className="h-[52px] sm:hidden" aria-hidden="true" />
 
-          {/* Catalog search — lives WITH the catalog it filters (redesign P4), not in the chrome */}
-          <div className="relative mb-3 max-w-md">
+          {/* Catalog search — lives WITH the catalog it filters (redesign P4), not in the chrome.
+              Phone has its own copy in the header row above, beside the Tables button. */}
+          <div className="relative mb-3 hidden max-w-md sm:block">
             <svg
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3"
               width="17" height="17" viewBox="0 0 24 24" fill="none"
@@ -908,9 +1127,97 @@ function PosInner({ session }: { session: CompanySession }) {
         </div>
       </div>
 
-      {/* ── 5. Bottom summary bar (96px, rounded-t-[28px]) ──────────────────── */}
+      {/* ── 5a. The walk-in deck (phone) — always attached, never "opened" ──────
+          Mounted only for the walk-in cart: with a bill open, BillDetail renders the deck instead
+          (it owns the bill's lines and their mutations), so the two never stack. Present even on an
+          empty cart — a deck you have to summon is the thing this redesign removes. */}
+      {isPhone && !openBillId ? (
+        <BillDock
+          title={t('posShell.walkInSale')}
+          meta={t('bills.lineCount', { n: lineCount })}
+          onTitleClick={() => setShowBillSelector(true)}
+          expanded={dockExpanded}
+          onExpandedChange={setDockExpanded}
+          lines={dockExpanded ? walkInDockLines : peekLines(walkInDockLines)}
+          emptyHint={t('posShell.dock.emptyCart')}
+          actions={walkInDockActions}
+          breakdown={lineCount > 0 ? breakdown : null}
+          promotions={breakdown?.appliedPromotions ?? []}
+          extras={
+            lineCount > 0 ? (
+              <div className="flex flex-col gap-2.5 pt-1">
+                <div id="pos-dock-discount" className="flex flex-col gap-2.5">
+                  <CouponField
+                    code={couponCode}
+                    status={breakdown?.couponStatus ?? null}
+                    onApply={setCouponCode}
+                    onClear={() => setCouponCode(null)}
+                    disabled={offline}
+                  />
+                  {offline ? <OfflineHint text={t('offline.disabled.coupon')} /> : null}
+                  {canManualDiscount ? (
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="pos-discount" className="shrink-0 text-sm font-medium text-ink-2">
+                        {t('pos.addDiscount')}
+                      </label>
+                      <input
+                        id="pos-discount"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={discountInput}
+                        onChange={(e) => setDiscountInput(e.target.value)}
+                        placeholder="0"
+                        aria-describedby={discountInvalid ? 'pos-discount-error' : undefined}
+                        className={cn(
+                          'h-11 w-40 rounded-xl border bg-surface px-3 text-sm text-ink placeholder:text-ink-3/50 transition-colors',
+                          'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15',
+                          discountInvalid ? 'border-loss' : 'border-line',
+                        )}
+                      />
+                      {discountInvalid ? (
+                        <p id="pos-discount-error" className="text-xs text-loss" role="alert">
+                          {t('pos.discountInvalid')}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                <div id="pos-dock-member" className="flex flex-col gap-2.5">
+                  <MemberField
+                    session={session}
+                    currency={currency}
+                    locale={locale}
+                    member={attachedMember}
+                    onAttach={setAttachedMember}
+                    onClear={() => {
+                      setAttachedMember(null)
+                      setLoyaltyRedeemPoints(0)
+                    }}
+                    redeemPoints={offline ? 0 : loyaltyRedeemPoints}
+                    maxRedeemable={maxRedeemablePoints}
+                    onRedeemChange={setLoyaltyRedeemPoints}
+                    disabled={offline}
+                  />
+                  {offline ? <OfflineHint text={t('offline.disabled.member')} /> : null}
+                </div>
+              </div>
+            ) : null
+          }
+          currency={currency}
+          locale={locale}
+          dueLabel={t(dueLabelKey({ splitMode: false, hasPaidLines: false }))}
+          dueText={walkInDueText}
+          totalPending={!offline && quoteQuery.refreshing}
+          payLabel={t('posShell.chargeAmount', { amount: walkInDueText })}
+          payDisabled={lineCount === 0}
+          onPay={handleDockPay}
+        />
+      ) : null}
+
+      {/* ── 5b. Bottom summary bar (96px, rounded-t-[28px]) — tablet and up ──── */}
       {/* Only shown when there is an active bill OR items in the immediate cart */}
-      {(activeBill || lineCount > 0) ? (
+      {!isPhone && (activeBill || lineCount > 0) ? (
         <SummaryBar
           activeBill={activeBill ?? null}
           lineCount={lineCount}
@@ -955,36 +1262,7 @@ function PosInner({ session }: { session: CompanySession }) {
             // (the KOT and payment overlays render sheet-independently inside BillDetail).
             setAutoKotToken((k) => k + 1)
           }}
-          onPay={() => {
-            // ADR 0049 P3b operator gate — checked FIRST, before the register-open gate below (a
-            // cashier identifies themselves before anything else happens at the till).
-            if (operatorSignInRequired(isDeviceTerminal, operatorSession.operator)) {
-              setShowOperatorPinSheet(true)
-              return
-            }
-            // Payment gate (owner request "open the register first"): online + no confirmed open
-            // session → redirect to the RegisterSheet instead of proceeding. Loading/error states
-            // fail OPEN (let the sale proceed) — see registerGate.ts. Covers BOTH pay entry points
-            // (walk-in cart and bill mode), since both call this same handler.
-            if (
-              noConfirmedOpenSession({
-                offline,
-                isLoading: registerSessionQuery.isLoading,
-                isError: registerSessionQuery.isError,
-                session: registerSessionQuery.data,
-              })
-            ) {
-              setRegisterGateActive(true)
-              setShowRegisterSheet(true)
-              return
-            }
-            if (openBillId) {
-              // P4: Pay pays — BillDetail opens its pay modal directly (full unpaid check).
-              setAutoPayToken((k) => k + 1)
-            } else {
-              setModal('payment')
-            }
-          }}
+          onPay={handleDockPay}
         />
       ) : null}
 
@@ -1093,6 +1371,38 @@ function PosInner({ session }: { session: CompanySession }) {
         <TillMenuSheet
           onClose={() => setShowTillMenu(false)}
           items={[
+            // Native Till Android v2: the phone header pins nothing but Incoming, so the three
+            // affordances the ink band used to carry — leaving the till, printer status, and the
+            // operator sign-in — arrive here instead. On tablet+ they stay in the band and these
+            // rows are not added, so the menu never doubles up.
+            ...(isPhone
+              ? ([
+                  {
+                    key: 'leave-till',
+                    icon: <ArrowLeft className="size-4" aria-hidden="true" />,
+                    label: t('posShell.leaveTill'),
+                    // Back is an ACTION, not a destination (ADR 0075 rule N1) — the same intent
+                    // BackButton resolves, reused rather than re-derived. `/` is only the fallback
+                    // for a cold start straight into /pos.
+                    onSelect: () => {
+                      const intent = backIntentFor(window.history.state)
+                      if (intent.kind === 'pop') navigate(intent.delta)
+                      else navigate('/', { replace: true })
+                    },
+                  },
+                  toTillMenuItem(printerStatusAction),
+                  ...(isDeviceTerminal && !operatorSession.operator
+                    ? [
+                        {
+                          key: 'operator-signin',
+                          icon: <KeyRound className="size-4" aria-hidden="true" />,
+                          label: t('posShell.operatorSignIn'),
+                          onSelect: () => setShowOperatorPinSheet(true),
+                        },
+                      ]
+                    : []),
+                ] satisfies TillMenuItem[])
+              : []),
             {
               key: 'register',
               icon: <Banknote className="size-4" aria-hidden="true" />,
@@ -1380,6 +1690,8 @@ function PosInner({ session }: { session: CompanySession }) {
           autoKotToken={autoKotToken}
           autoPayToken={autoPayToken}
           canVoid={canVoidBill}
+          onSwitchOrder={() => setShowBillSelector(true)}
+          onUnpaidQtyByItem={(byItem) => setBillQty({ billId: openBillId, byItem })}
           onBack={() => {
             setOpenBillId(null)
             setBillSheetOpen(false)
