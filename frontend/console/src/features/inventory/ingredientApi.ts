@@ -23,7 +23,10 @@ export const INGREDIENT_UNITS = ['g', 'kg', 'ml', 'liter', 'pcs', 'pack'] as con
 export type IngredientUnit = (typeof INGREDIENT_UNITS)[number]
 
 /** The picker groups units by kind (weight / volume / count) for a clearer, less crowded UI. */
-export const INGREDIENT_UNIT_GROUPS: { key: 'weight' | 'volume' | 'count'; units: IngredientUnit[] }[] = [
+export const INGREDIENT_UNIT_GROUPS: {
+  key: 'weight' | 'volume' | 'count'
+  units: IngredientUnit[]
+}[] = [
   { key: 'weight', units: ['g', 'kg'] },
   { key: 'volume', units: ['ml', 'liter'] },
   // `pack` is deliberately ABSENT. A pack is a purchase CONTAINER, not a unit of consumption:
@@ -118,6 +121,61 @@ export function useIngredientUsage(session: CompanySession, dateKey: string, ena
   })
 }
 
+/**
+ * One ingredient's stock-movement roll-up over an inclusive day window (V47 ledger, ADR 0074) —
+ * totals and counts only; the client divides by whichever denominator it means (`lib/catalogView`
+ * turns `totalUsedQty` into a per-open-day rate and a "sisa hari"). Ingredients that did not move
+ * in the window are ABSENT (treat absence as no usage, never as an error).
+ */
+export interface IngredientStockSummary {
+  ingredientId: string
+  name: string
+  unit: string
+  totalUsedQty: number
+  totalReceivedQty: number
+  netAdjustmentQty: number
+  totalWasteQty: number
+  receiptCount: number
+  adjustmentCount: number
+  daysWithMovement: number
+  daysWithUsage: number
+  latestClosingQty: number | null
+}
+
+/** The inclusive [from, to] window of the last `days` outlet-local days ending today. */
+export function usageWindowKeys(days: number, at: Date = new Date()): { from: string; to: string } {
+  // Jakarta has no DST, so stepping back whole days in milliseconds lands on the right calendar day.
+  const from = new Date(at.getTime() - (days - 1) * 86_400_000)
+  return { from: usageDayKey(from), to: usageDayKey(at) }
+}
+
+/**
+ * GET /api/v1/ingredients/stock-history?businessId&from&to — the per-ingredient movement roll-up
+ * for one outlet over an inclusive day window. Backs the catalog's usage rate / days-left column.
+ */
+export function useIngredientStockSummary(
+  session: CompanySession,
+  window: { from: string; to: string },
+  enabled = true,
+) {
+  return useQuery({
+    enabled,
+    queryKey: [
+      'ingredient-stock-summary',
+      session.companyId,
+      session.businessId,
+      window.from,
+      window.to,
+    ],
+    staleTime: 30_000,
+    queryFn: () =>
+      apiFetch<IngredientStockSummary[]>('/api/v1/ingredients/stock-history', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId, from: window.from, to: window.to },
+      }),
+  })
+}
+
 export interface CreateIngredientInput {
   name: string
   /** BASE unit (g/ml/pcs/pack). */
@@ -137,6 +195,17 @@ export interface CreateIngredientInput {
 export function useCreateIngredient(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
+    // The created row is appended to the cached list BEFORE the invalidation refetches it, so a
+    // caller that navigates straight to `/inventory/<id>` finds the id in the list it already has
+    // (the detail route sends an unknown id back to the catalog). The refetch then replaces it.
+    onSuccess: (created) => {
+      if (created) {
+        qc.setQueryData<Ingredient[]>(INGREDIENTS_KEY(session), (old) =>
+          old ? [...old.filter((i) => i.id !== created.id), created] : old,
+        )
+      }
+      void qc.invalidateQueries({ queryKey: INGREDIENTS_KEY(session) })
+    },
     mutationFn: (input: CreateIngredientInput) =>
       apiFetch<Ingredient>('/api/v1/ingredients', {
         method: 'POST',
@@ -152,7 +221,6 @@ export function useCreateIngredient(session: CompanySession) {
           packSize: input.packSize ?? null,
         },
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: INGREDIENTS_KEY(session) }),
   })
 }
 

@@ -48,27 +48,30 @@ export function DialogOverlay({
   onClose,
   ariaLabel,
   size = 'md',
+  className,
 }: {
-  children: ReactNode
+  /** Plain content, or a render function handed the overlay's own close — so a close button drawn
+   *  INSIDE the panel plays the same exit as the scrim, Escape and Back, instead of unmounting the
+   *  dialog on the spot. */
+  children: ReactNode | ((requestClose: () => void) => ReactNode)
   onClose: () => void
   /** Already-translated accessible name for the dialog. */
   ariaLabel?: string
   /** `lg` is the wide variant the bank dialogs used (max-w-2xl); everything else is `md`. */
   size?: 'md' | 'lg'
+  /** Extra classes on the panel, merged LAST — a content that lays itself out edge to edge (a
+   *  keypad sheet, a list with hairline rows) passes `p-0` and owns its padding. */
+  className?: string
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const [exiting, setExiting] = useState(false)
-  const closing = useRef(false)
 
-  const requestClose = useCallback(() => {
-    if (closing.current) return
-    closing.current = true
-    if (prefersReducedMotion()) {
-      onClose()
-      return
-    }
-    setExiting(true)
-  }, [onClose])
+  // Idempotent by construction, with no "closing" ref: every close request — animated or not —
+  // is one state flip, and a second request during the exit sets `exiting` to the value it already
+  // has, so the timer effect below neither re-runs nor calls `onClose` twice. (A ref here made the
+  // callback a ref-carrying value, which the compiler's ref rule refuses to hand to a render-prop
+  // child.)
+  const requestClose = useCallback(() => setExiting(true), [])
 
   // Hardware/browser Back closes it, exactly like the scrim and Escape do.
   useBackDismiss(requestClose)
@@ -76,10 +79,10 @@ export function DialogOverlay({
 
   // Run the parent's unmount after the exit animation. A timer rather than `animationend`: under
   // reduced motion the animation never fires an event, and a dialog that can only be closed by
-  // users who allow animation is not a dialog.
+  // users who allow animation is not a dialog — there the delay is skipped, not waited out.
   useEffect(() => {
     if (!exiting) return
-    const id = window.setTimeout(onClose, DIALOG_EXIT_MS)
+    const id = window.setTimeout(onClose, prefersReducedMotion() ? 0 : DIALOG_EXIT_MS)
     return () => window.clearTimeout(id)
   }, [exiting, onClose])
 
@@ -147,9 +150,10 @@ export function DialogOverlay({
           // Phone: a bottom sheet flush to the edge. Tablet+: a centred card.
           'max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]',
           exiting ? 'max-sm:sheet-down sm:dialog-out' : 'max-sm:sheet-up sm:dialog-in',
+          className,
         )}
       >
-        {children}
+        {typeof children === 'function' ? children(requestClose) : children}
       </Card>
     </div>
   )

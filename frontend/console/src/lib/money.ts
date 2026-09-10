@@ -40,6 +40,25 @@ export function formatMoney(minor: number, currency: string, locale: string): st
   }
 }
 
+/**
+ * `formatMoney` with an explicit sign on every non-zero amount (`+Rp 34.000` / `-Rp 165.200`) — for
+ * a VARIANCE or a delta, where the direction is the point and an unsigned figure beside a colour
+ * would leave a reader guessing. Intl's `signDisplay` does the sign, never string concatenation
+ * (rule 9). Zero stays plain.
+ */
+export function formatSignedMoney(minor: number, currency: string, locale: string): string {
+  const major = minorToMajor(minor, currency)
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      signDisplay: 'exceptZero',
+    }).format(major)
+  } catch {
+    return `${major.toLocaleString(locale, { signDisplay: 'exceptZero' })} ${currency}`
+  }
+}
+
 /** Just the grouped number (no currency symbol) — for tight tabular columns with a separate code. */
 export function formatAmount(minor: number, currency: string, locale: string): string {
   const digits = isoDisplayDigits(currency)

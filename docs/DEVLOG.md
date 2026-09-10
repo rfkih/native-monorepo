@@ -1,5 +1,126 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-10 — the inventory reads in days, not quantities (ADR 0081)
+
+The "Native Persediaan" design started from one observation: *jumlah tidak bisa menjawab apa pun
+sendirian*. The ingredient catalog was a flat, name-ordered list — name, cost per unit, one quantity
+chip, three buttons — and its only status was `stockQty === 0`, lit only after it was too late. Three
+kilograms is a lot of turmeric and nothing of flour; an owner scrolling sixteen rows every morning
+was guessing.
+
+**Days left leads every row.** Stock ÷ what a day consumes, coloured by class, the per-day rate under
+it. The rate is the V47 movement ledger's seven-day roll-up (`/ingredients/stock-history`, which
+the console had never consumed) divided by the most days any ingredient moved in the window — per
+*open* day, so a sporadic item is not read as burning daily and a three-day-old ledger is not
+diluted to a seventh. The design had assumed only today's usage existed; the average was chosen with
+the owner because one day is noise. The rules are one pure module (`inventory/lib/catalogView.ts`):
+the class ladder `zero → low (≤ 3 days) → unit → nocost → ok`, the action ranking, four chips that
+count independently, and totals that never sum two currencies. "Terpakai hari ini" (today, in money)
+stays its own figure from the single-day endpoint.
+
+**A value hero, and one action per row.** The per-row stock value had been on screen for months and
+never added up; its sum is exactly what account 1100 holds once perpetual inventory is on, and only
+if every item carries a cost — so the hero names how many are uncosted instead of hiding them, and for
+the owner it is the door to `/settings/inventory`, handing the catalog value over as the suggested
+opening figure. Terima stays on the row (deliveries come daily); set-quantity, edit and the unit
+fix-up live on the ingredient's own screen.
+
+**Screens are routes** (ADR 0075/0078): `/inventory/:id`, `/new`, `/:id/edit`, `/:id/convert`,
+`/history[/:stocktakeId]`. Back pops to the list with `?filter=` and `?sort=` intact; below `lg`
+each is a `ScreenHeader` screen, from `lg` the catalog is a two-pane page whose rail follows the
+route and whose row clicks *replace*. The pages scroll the document, not an inner container — the
+old `h-[100dvh] overflow-hidden` frame had quietly defeated N4's scroll restore. The one modal is
+the quantity keypad, a `DialogOverlay` sharing the opname's pad (`countKeypad.ts` moved to
+`inventory/lib`, the grid extracted as `QtyKeypad`). `useBackNavigation` is BackButton's decision
+as a callable, for a form that finishes on its own.
+
+**Found in the code while reading it.** `StocktakeHistorySheet` printed `line.systemQty` raw with
+`line.unit` — the same item read `8.400 g` in the history and `8,4 kg` in the catalog. The history
+bodies now format through the catalog's ingredient (falling back to the base unit only for a removed
+item) and are shared by the `/inventory/history` screens and the overlay the standalone opname opens,
+which also stops hand-rolling its scrim. The `isIngredientInRecipe` doc claimed the console showed the
+server's item names; it maps to a generic key (the `detail` string is diagnostics) — the form now says
+so and points at Menu & prices. A comma in a money field is accepted (`parseDiscountInput` wanted a
+dot). `/settings/inventory` became inline steps instead of a modal, with the same safety framing.
+
+**Harness.** `mobile-shots.mjs` gains `SHOT_ONLY=inventory` (fixtures for the roll-up, two past
+counts, the inactive method) and asserts the chip lands in the URL and the detail is a route.
+
+## 2026-09-10 — filled in is not checked: the stock opname gets a "checked" status
+
+The "Native Opname Stok" design put one sentence on trial: *terisi bukan berarti terperiksa*. Every
+count field on the opname arrives pre-filled with the system quantity, so a row nobody looked at and
+a row someone counted and found equal sent the **same number** to the ledger and looked the same on
+screen. On a sixteen-item count that turns the opname into a rubber stamp — the operator corrects
+the two items they remember and submits fourteen "counts" that were never counts. The whole leak
+programme (ADR 0074) reads those fourteen as verified.
+
+**"Checked" is a status of its own now** (`stocktake/lib/stocktakeMarks.ts`). A row starts
+*pending* and leaves it two ways: one tap on its check mark (matches the system) or a typed count
+that differs (*changed*). The header strip carries real progress ("5 dari 16 diperiksa"), the
+footer names how many unchecked rows will go out at their system quantity, and the discard confirm
+names how many rows of work would be lost. It is deliberately **client-side only**: the payload is
+unchanged, one `countedQty` per ingredient, and an unchecked row still goes out at its system
+quantity. Blocking on "all checked" would be the same mistake the variance guard avoids — the guard
+fails open, and so does this.
+
+**The count sheet.** The inline text field raised the system keyboard, which on a 412px phone covers
+~40% of the screen *including the row being edited*. The row still shows its figure as a writing
+line, but tapping it opens a `DialogOverlay` of its own: name, system reference, live variance
+preview, and a 3×4 pad (`lib/countKeypad.ts`) that knows whether the item admits fractions — a
+`pcs` item simply has a hole where the decimal key would be. A physical keyboard goes through the
+same reducer as the pad (first key replaces, one separator, no fraction on a whole-unit item), so
+there is no second, looser path; `inputMode="none"` keeps the on-screen keyboard down.
+
+**The guard writes its reasons out.** `checkStocktakeVariance` computed the ratio and the value and
+then the dialog never showed them. The flag now carries `ratio` and `varianceValueMinor`, and the
+confirm says "774× jumlah sistem — kg terbaca sebagai g" and "worth Rp 160.831.929, above the
+Rp 5.000.000 threshold" — the ADR 0068 incident figures, which are what make someone recount.
+
+**Shared primitives touched, minimally.** `DialogOverlay` takes an optional `className` (the sheet
+lays out edge-to-edge, so `p-0`) and a render-prop child handed the overlay's own `requestClose`,
+so a Save or Close button *inside* the panel plays the same exit as the scrim. Its `closing` ref
+went — the compiler's ref rule refuses to hand a ref-carrying callback to a render-prop child — and
+every close is now the one state flip `setExiting(true)`, idempotent by construction, with a 0ms
+exit under reduced motion instead of a synchronous branch. `ScreenHeader` takes a `subtitle`; the
+standalone host shows "company · outlet" so the operator can see whose stock is about to be
+adjusted, and gains a history button (only once the outlet gate would pass — a button that is live
+while the gate shows a panel taps to nothing) — `StocktakeHistorySheet` had been reachable only
+from the inventory screen.
+
+**What code review caught: the Back-opened dialog that Back could not close.** The discard confirm
+became a child `DialogOverlay`, which parks its own history entry — and the sheet answered the
+Back that opened it by *re-parking* its own (the `rearmKey` mechanism from v0.1.43). Child effects
+run before parent effects, so the sheet's fresh entry landed on top of the dialog's in the overlay
+registry, and every further Back went to the sheet, which found the dialog already open and did
+nothing. The confirm could only be left by tapping. The re-arm is gone: the sheet's (and, in
+screen chrome, the host's) back-dismiss is simply **disabled while the confirm is up**, and re-runs
+when it closes — adopting the confirm's still-parked entry if it was closed by tap, parking a
+fresh one if Back consumed it. `useBackDismiss` already knew how to adopt; nothing there changed.
+In screen chrome the host learns about the confirm through `onDiscardAskedChange` — the same
+ordering trap the memory note warned about, from the other side. Also from review: the figure
+button's `aria-label` had replaced the count with "counted for X", so a reader never heard the
+number; the keypad's nine-digit cap was on the typed string, so nine kg-digits were 10¹² g, past
+the server's `int` — it is on the base magnitude now (six whole digits + three fraction for kg);
+the result summary's "partial value" note was dead code, because the server 422s any count whose
+costed lines span two currencies; and the guard's "kg read as g" slip was written the same way
+round for a count 1000× too *small*.
+
+**Where the design was argued with.** It is drawn at 412px; the harness shoots 390, and the 128px
+figure column clipped "terpakai 0,42" off the meta line of the very first row — 120px and a 10px
+mono line fit. Its "not drawn" panels (history, inventory) are real screens here.
+
+**Verification.** `mobile-shots.mjs` gains a `stocktake` section and a `SHOT_ONLY` filter (the
+full walk is minutes; a one-screen redesign needs one section): count, progress, sheet empty/typed,
+changed rows, the summary the POST echoes back, the guard on the incident figure, the discard
+confirm — light/en and dark/id. The harness also sets `window.__NATIVE_CONFIG__.authMode='dev'`
+in its init script, so the untracked `.env.development.local` that forces oidc can no longer land
+it on the marketing page. Unit tests cover the marks state machine and the keypad reducer.
+
+**Left open.** The design notes that the checked status "needs a place in the local draft, not
+just screen memory" — there is no local draft persistence on the opname at all today (a reload
+loses a half-done count), so that is a feature of its own. No virtualisation on the list.
+
 ## 2026-09-10 — a month that failed to load is not a month with nothing in it
 
 Follow-up to the phone reports: a trend month whose request errored drew the same gap as a 204

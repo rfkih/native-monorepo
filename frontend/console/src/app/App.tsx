@@ -617,8 +617,35 @@ export function App() {
           {posAllowed && <Route path="/pos/customer-display" element={<CustomerDisplay />} />}
           {menuAllowed && <Route path="/menu" element={<MenuManagement />} />}
           {/* Inventory (stock-item) catalog behind the stock opname (ADR 0046) — same product-
-              management surface as /menu, gated identically. Internally "ingredient". */}
-          {menuAllowed && <Route path="/inventory" element={<IngredientManagement />} />}
+              management surface as /menu, gated identically. Internally "ingredient". Its
+              sub-screens are ROUTES (ADR 0081 / 0078: a destination earns a history entry, so
+              Back pops to the list): detail, create/edit, unit conversion, opname history. */}
+          {menuAllowed && <Route path="/inventory" element={<IngredientManagement page="catalog" />} />}
+          {menuAllowed && <Route path="/inventory/new" element={<IngredientManagement page="create" />} />}
+          {menuAllowed && (
+            <Route path="/inventory/history" element={<IngredientManagement page="history" />} />
+          )}
+          {menuAllowed && (
+            <Route
+              path="/inventory/history/:stocktakeId"
+              element={<IngredientManagement page="history" />}
+            />
+          )}
+          {menuAllowed && (
+            <Route path="/inventory/:ingredientId" element={<IngredientManagement page="detail" />} />
+          )}
+          {menuAllowed && (
+            <Route
+              path="/inventory/:ingredientId/edit"
+              element={<IngredientManagement page="edit" />}
+            />
+          )}
+          {menuAllowed && (
+            <Route
+              path="/inventory/:ingredientId/convert"
+              element={<IngredientManagement page="convert" />}
+            />
+          )}
           {/* /catalog is the carwash counterpart of /menu — gated identically (menuAllowed). */}
           {menuAllowed && <Route path="/catalog" element={<CatalogSwitch />} />}
           {kitchenAllowed && <Route path="/kitchen" element={<Kitchen />} />}

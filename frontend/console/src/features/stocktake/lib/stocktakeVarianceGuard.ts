@@ -49,7 +49,8 @@ const VALUE_THRESHOLD_MAJOR: Record<string, number> = {
 }
 const DEFAULT_VALUE_THRESHOLD_MAJOR = 500
 
-function valueThresholdMinor(currency: string): number {
+/** Exported so the confirm can NAME the threshold a line cleared, not just say "implausible". */
+export function valueThresholdMinor(currency: string): number {
   const majorThreshold = VALUE_THRESHOLD_MAJOR[currency] ?? DEFAULT_VALUE_THRESHOLD_MAJOR
   return majorThreshold * 10 ** isoMinorExponent(currency)
 }
@@ -81,6 +82,14 @@ export interface StocktakeVarianceFlag {
   /** Which trip wire(s) fired — 'ratio' = order-of-magnitude gap, 'value' = variance value over the
    * threshold. A line can carry both. */
   reasons: StocktakeVarianceReason[]
+  /**
+   * The larger side over the smaller (≥ 1) whenever both sides are positive, null otherwise — so the
+   * confirm can say "774× the system quantity", the figure that actually makes someone recount,
+   * instead of the word "implausible". Reported whether or not the ratio wire fired.
+   */
+  ratio: number | null
+  /** |counted − system| × unitCostMinor in the line's currency; null for an uncosted line. */
+  varianceValueMinor: number | null
 }
 
 /**
@@ -98,17 +107,22 @@ export function checkStocktakeVariance(lines: StocktakeVarianceLine[]): Stocktak
     // Ratio undefined (division by zero) when either side is 0 — a brand-new ingredient's first
     // count, or a physical count of exactly nothing, is not itself implausible; the VALUE trip wire
     // is the only one that can flag those (see the class doc above).
-    if (systemQty > 0 && countedQty > 0 && absDelta >= MIN_ABSOLUTE_DELTA_QTY) {
-      const ratio = Math.max(systemQty, countedQty) / Math.min(systemQty, countedQty)
-      if (ratio >= IMPLAUSIBLE_RATIO) reasons.push('ratio')
+    const ratio =
+      systemQty > 0 && countedQty > 0
+        ? Math.max(systemQty, countedQty) / Math.min(systemQty, countedQty)
+        : null
+    if (ratio != null && absDelta >= MIN_ABSOLUTE_DELTA_QTY && ratio >= IMPLAUSIBLE_RATIO) {
+      reasons.push('ratio')
     }
 
-    if (unitCostMinor != null) {
-      const varianceValueMinor = absDelta * unitCostMinor
-      if (varianceValueMinor >= valueThresholdMinor(currency)) reasons.push('value')
+    const varianceValueMinor = unitCostMinor != null ? absDelta * unitCostMinor : null
+    if (varianceValueMinor != null && varianceValueMinor >= valueThresholdMinor(currency)) {
+      reasons.push('value')
     }
 
-    if (reasons.length > 0) flags.push({ ingredientId, systemQty, countedQty, reasons })
+    if (reasons.length > 0) {
+      flags.push({ ingredientId, systemQty, countedQty, reasons, ratio, varianceValueMinor })
+    }
   }
 
   return flags

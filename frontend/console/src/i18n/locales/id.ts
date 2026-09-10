@@ -671,11 +671,20 @@ export const id = {
        * HANYA OWNER: aktivasi membukukan entri GL nyata dan sifatnya nyaris tak bisa dibatalkan
        * (tidak ada alur nonaktifkan/ubah), jadi ini tidak pernah ditampilkan sebagai tombol biasa. */
       title: 'Akuntansi persediaan',
+      phoneSubtitle: 'Hanya pemilik',
       subtitle:
         'Akuntansi persediaan perpetual mengkapitalisasi pembelian ke akun aset Persediaan dan membebankannya sebagai Harga Pokok Penjualan (HPP) hanya saat terjual — bukan langsung dibebankan sebagai biaya saat dibeli.',
       loadError: 'Tidak dapat memuat status akuntansi persediaan. Coba lagi.',
       status: {
         activeBadge: 'Persediaan perpetual aktif',
+        assetHero: 'Aset persediaan di buku',
+        assetNote:
+          'Yang dipegang buku besar di akun 1100 — tiap penerimaan mendebitnya, tiap penjualan mengkreditkannya lewat HPP.',
+        matchesCatalog:
+          'Sama dengan total katalog {{outlet}} — semua barang berbiaya sudah di buku; barang tanpa biaya tidak pernah memposting apa pun.',
+        negativeNote: 'Saldo mustahil. Akun 1100 tidak bisa negatif kalau tiap pergerakan dibukukan sekali.',
+        factsLabel: 'Status penetapan',
+        ownerFootnote: 'Hanya pemilik yang bisa melihat halaman ini, dan tidak ada apa pun di sini yang bisa diubah setelah aktif.',
         cutoverLabel: 'Bulan cutover',
         activatedLabel: 'Diaktifkan',
         assetLabel: 'Aset persediaan (1100)',
@@ -684,13 +693,16 @@ export const id = {
           'Akun aset persediaan bernilai negatif — periksa penerimaan stok terbaru dan harga pokok penjualan untuk pembelian yang belum ditandai atau kelebihan jual.',
       },
       inactive: {
-        heading: 'Belum diaktifkan',
+        heading: 'Persediaan belum masuk buku',
         body: 'Saat ini, setiap pembelian langsung dibebankan sebagai biaya dan akun aset persediaan tidak dilacak. Mengaktifkan persediaan perpetual mengubah cara pembelian dan penjualan dibukukan mulai sekarang: sistem membukukan satu entri pembukaan untuk stok yang ada saat ini, lalu mengkapitalisasi pembelian persediaan berikutnya dan membebankannya sebagai HPP hanya setelah terjual.',
         bullet1: 'Perubahan akuntansi yang disengaja dan hanya bisa dilakukan owner — bukan sekadar tombol.',
         bullet2:
           'Berlaku sejak bulan cutover yang Anda pilih ke depan; periode yang sudah disegel tetap memakai entri lama.',
         bullet3: 'Tidak bisa dimatikan setelah diaktifkan.',
-        action: 'Aktifkan persediaan perpetual',
+        // Native Persediaan — katalog menyerahkan nilainya saat membuka halaman ini.
+        catalogValue:
+          'Katalog {{outlet}} sekarang bernilai {{value}}. Angka itu bisa dipakai sebagai nilai awal di langkah berikut.',
+        action: 'Aktifkan persediaan perpetual…',
       },
       activate: {
         formTitle: 'Aktifkan persediaan perpetual',
@@ -708,6 +720,8 @@ export const id = {
         confirmOpeningValue: 'Nilai persediaan awal',
         confirmNote:
           'Pembelian yang Anda tandai sebagai persediaan (atau dicatat sebagai penerimaan stok) akan dikapitalisasi ke pembukuan sejak {{period}}, dan harga pokok penjualan akan otomatis dibukukan saat barang terjual.',
+        useCatalogValue: 'Pakai nilai katalog {{value}}',
+        zeroOk: 'Nol juga sah — perusahaan tanpa stok terhitung tetap bisa aktif, hanya tanpa jurnal pembuka.',
         acknowledge: 'Saya paham perubahan ini permanen dan memengaruhi pembukuan perusahaan.',
         confirmAction: 'Aktifkan persediaan perpetual',
       },
@@ -1489,71 +1503,140 @@ export const id = {
     summaryError: 'Ringkasan gagal dimuat. Coba lagi.',
   },
   stocktake: {
-    /** ADR 0038 fase 3 + ADR 0046 — stock opname sekarang menghitung BAHAN, bukan item menu.
-     * Stok item menu tetap di /menu sebagai penanda habis (86). */
+    /** ADR 0038 fase 3 + ADR 0046 — stock opname menghitung BARANG PERSEDIAAN (bahan + perlengkapan),
+     * bukan item menu; stok item menu tetap di /menu sebagai penanda habis (86). Layar ini mengikuti
+     * desain "Native Opname Stok" (2026-09-10): baris punya status "sudah diperiksa" sendiri, dan
+     * angka diketik di lembar hitung dengan papan angkanya sendiri, bukan kolom sebaris. */
     title: 'Stock opname',
     tillMenuLabel: 'Stock opname',
-    /** Dipendekkan: di HP versi lamanya memakan ~5 baris tepat di atas daftar hitungan, dan
-     * menyusut jadi 3 baris terlihat begitu keyboard naik. */
-    entryHint: 'Angka sistem sudah terisi — ubah yang berbeda dari hasil hitung fisik Anda.',
-    /** Filter daftar bahan (muncul di atas 12 bahan) — hanya menyaring tampilan; yang dikirim
-     * tetap SELURUH bahan, yang tak disentuh terkirim pada angka sistemnya. */
-    searchLabel: 'Cari bahan',
-    searchPlaceholder: 'Cari bahan…',
-    searchEmpty: 'Tidak ada bahan yang cocok.',
-    /** Ringkasan footer sebelum kirim — angka yang dulu baru terlihat SESUDAH pembukuan jalan. */
-    changedLines: 'Barang selisih: {{formatted}}',
-    invalidLines: 'Belum dihitung: {{formatted}}',
-    showInvalid: 'Tunjukkan',
-    /** Ditempel di belakang nilai bila ada bahan berbiaya mata uang lain yang tak ikut dijumlah. */
-    partialValueMark: '(sebagian)',
-    soldTodayTitle: 'Barang terjual hari ini',
-    soldTodayEmpty: 'Belum ada penjualan hari ini.',
-    /** Baris lembar hitung — huruf kecil tanpa titik dua supaya muat satu baris di samping kolom
-     * angka. "hari ini" dibuang: opname-nya memang hari ini, dan panel di atasnya sudah menyebut
-     * "hari ini". Satuan tetap menempel pada KEDUA angka (aturan unit-di-samping-angka). */
-    systemQty: 'sistem {{qty}} {{unit}}',
-    usedToday: 'terpakai {{qty}} {{unit}}',
+    /** Baris kedua kepala layar: perusahaan · gerai. */
+    headerSubtitle: '{{company}} · {{outlet}}',
+    entryHint:
+      'Jumlah sistem sudah terisi. Ketuk centang kalau hitungan fisik Anda sama, atau ketuk angkanya untuk memasukkan hitungan lain.',
+    /** Strip kemajuan di kepala layar — "diperiksa" = dicentang sama dengan sistem ATAU diberi
+     * hitungan lain. Baris yang belum disentuh tetap terkirim sesuai sistem (lihat listFootnote). */
+    progress: '{{resolved}} dari {{total}} diperiksa',
+    progressRemaining: '{{formatted}} belum',
+    progressComplete: 'semua terperiksa',
+    /** Nama aksesibel bilah kemajuannya (nilainya dibacakan terpisah). */
+    progressLabel: 'Baris diperiksa',
+    /** Filter daftar (muncul di atas 12 barang) — hanya menyaring tampilan; yang dikirim tetap
+     * SELURUH barang. */
+    searchLabel: 'Cari barang',
+    searchPlaceholder: 'Cari nama barang',
+    searchClear: 'Hapus pencarian',
+    searchEmpty: 'Tidak ada barang yang cocok dengan pencarian ini.',
+    /** Tombol centang di kiri baris — tiga arti, tergantung status barisnya. */
+    markPending: 'Tandai {{name}} sama dengan sistem',
+    markReset: 'Kembalikan {{name}} ke jumlah sistem',
+    markUnverify: 'Batalkan tanda periksa {{name}}',
+    /** Baris lembar hitung — huruf kecil tanpa titik dua, SATU baris dengan elipsis. Satuan hanya
+     * pada angka sistem: mengulanginya di "terpakai" yang membuat baris liter jadi dua baris. */
+    systemQty: 'sistem {{qty}} {{unit}}',
+    usedTodayShort: 'terpakai {{qty}}',
+    usedTodayLong: 'terpakai hari ini {{qty}} {{unit}}',
+    unitCost: '{{money}}/{{unit}}',
+    noCost: 'tanpa biaya',
     usedThatDay: 'Terpakai hari itu: {{qty}} {{unit}}',
+    /** Ringkasan footer sebelum kirim — angka yang dulu baru terlihat SESUDAH pembukuan jalan.
+     * Bentuk jamak i18next mengikuti en.ts (kuncinya harus sama); bahasa Indonesia tidak berubah
+     * bentuk, jadi keduanya satu teks. */
+    changedLines_one: '{{formatted}} baris berubah',
+    changedLines_other: '{{formatted}} baris berubah',
+    changedNone: 'Tidak ada baris yang berubah',
+    invalidLines_one: '{{formatted}} baris belum bisa dikirim',
+    invalidLines_other: '{{formatted}} baris belum bisa dikirim',
+    showInvalid: 'Tunjukkan',
+    /** Angkanya memang satu mata uang; server pun menolak opname yang baris berbiayanya memakai
+     * dua mata uang (422), jadi ini peringatan soal apa yang akan ditemui Kirim, bukan catatan kaki
+     * pada angka yang sebenarnya baik-baik saja. */
+    partialValueNote:
+      'Ada baris berbiaya mata uang lain — angka di atas belum termasuk baris itu, bukan dijumlah paksa jadi satu.',
+    unverifiedNote_one: '{{formatted}} baris belum diperiksa akan terkirim sesuai jumlah sistem.',
+    unverifiedNote_other: '{{formatted}} baris belum diperiksa akan terkirim sesuai jumlah sistem.',
+    listFootnote:
+      'Baris yang belum diperiksa tetap terkirim sesuai jumlah sistem. Server menghitung ulang sistem, hitungan, dan selisihnya, lalu memposting susut bernilai untuk barang yang punya biaya.',
+    soldTodayTitle: 'Terjual hari ini',
+    soldTodayEmpty: 'Belum ada penjualan hari ini.',
+    /** "42×" — tanda kali menempel pada jumlah yang diformat Intl. */
+    soldTimes: '{{formatted}}×',
+    soldTodayNote:
+      'Acuan baca saja, per item menu. Opname dikunci ke barang persediaan, jadi daftar ini tidak masuk ke hitungan.',
     historyTitle: 'Riwayat opname',
     historyAction: 'Riwayat opname',
     historyError: 'Tidak dapat memuat riwayat opname.',
     historyEmpty: 'Belum ada stock opname tercatat.',
     historyVariedCount: '{{formatted}} barang selisih',
-    countedForItem: 'Jumlah terhitung untuk {{name}}',
+    /** Tombol angka di baris: hitungannya ADALAH labelnya, kalau tidak pembaca layar tak pernah
+     * mendengarnya. */
+    rowFigureLabel: '{{name}}: {{value}} {{unit}}, ketuk untuk mengubah',
+    /** Kolom di lembar hitung (nilainya dibacakan terpisah di sana). */
     countedForItemWithUnit: 'Hasil hitung {{name}}, dalam {{unit}}',
-    notCounted: 'Belum dihitung',
-    submitAction: 'Kirim stock opname',
+    notCounted: 'belum dihitung',
+    /** Lembar hitung — papan angka sendiri, bukan keyboard sistem yang menutupi 40% layar. */
+    sheetHintFraction: 'Koma dan titik dua-duanya diterima.',
+    sheetHintWhole: 'Bilangan bulat saja.',
+    sheetInvalidFraction: 'Angka ini belum sah. Satu pemisah desimal saja, koma atau titik.',
+    sheetInvalidWhole: '{{unit}} tidak menerima pecahan — masukkan bilangan bulat.',
+    sheetReset: 'Sama dengan sistem',
+    sheetSave: 'Simpan hitungan',
+    submitAction: 'Kirim hitungan',
     errorGeneric: 'Tidak dapat mengirim stock opname. Silakan coba lagi.',
-    loadError: 'Tidak dapat memuat daftar persediaan.',
+    loadError: 'Daftar persediaan gagal dimuat',
+    loadErrorBody:
+      'Opname butuh gerai yang daring — stok dikunci pada gerai sungguhan, jadi tidak ada mode luring di sini.',
+    retry: 'Coba lagi',
+    emptyTitle: 'Belum ada barang di gerai ini',
     emptyHint:
-      'Belum ada barang di gerai ini — tambahkan yang Anda beli dan hitung (roti, saus, gelas, sedotan…) untuk mulai stock opname.',
-    emptyCta: 'Buka persediaan',
+      'Opname menghitung barang persediaan, bukan menu. Daftarkan barangnya dulu di Persediaan, lengkap dengan satuan dan biayanya.',
+    emptyCta: 'Buka Persediaan',
     /** Muncul di ringkasan saat tidak ada baris berbiaya — tidak ada yang dibukukan. */
-    noValuedLines: 'Terhitung — tidak ada barang berbiaya, jadi tidak ada yang dibukukan.',
+    noValuedLines:
+      'Tidak ada baris berbiaya di hitungan ini, jadi tidak ada yang diposting ke buku besar. Stoknya tetap disesuaikan.',
     countedAt: 'Dihitung',
-    resultBalanced: 'Seimbang — tidak ada penyusutan',
-    resultLoss: 'Penyusutan bersih (rugi)',
+    resultBalanced: 'Seimbang',
+    resultLoss: 'Susut bersih',
     resultGain: 'Kelebihan bersih',
     done: 'Selesai',
-    varianceLinesTitle: 'Item dengan selisih',
+    varianceLinesTitle: 'Baris yang berselisih',
+    noVariedLines: 'Tidak ada baris yang berselisih — setiap hitungan sama dengan jumlah sistem.',
     lineCounts: 'Sistem {{system}} → terhitung {{counted}}',
+    /** Bentuk ringkas untuk ringkasan hasil: "3,411 → 3,32 kg". */
+    lineArrow: '{{system}} → {{counted}} {{unit}}',
     /** ADR 0068 fase 3 — jaring pengaman konfirmasi selisih sebelum submit
-     * (stocktakeVarianceGuard.ts): satu atau lebih jumlah terhitung tampak tidak masuk akal
-     * (salah kg/g, kelebihan angka nol...). Jaring pengaman salah ketik, bukan penghalang keras —
-     * operator selalu bisa "Simpan saja". */
-    varianceGuardTitle: 'Periksa lagi hitungan ini',
-    varianceGuardBody:
-      'Hitungan untuk satu atau lebih barang tampak jauh di luar perkiraan — penyebab umumnya salah kg/g atau kelebihan angka nol. Periksa jumlahnya di bawah ini sebelum menyimpan:',
-    varianceGuardRecount: 'Periksa lagi',
-    varianceGuardProceed: 'Simpan saja',
-    /** Keluar dengan hitungan yang sudah diketik tapi belum dikirim — dulu langsung hilang tanpa
+     * (stocktakeVarianceGuard.ts). Alasannya DITULIS — "774× jumlah sistem" yang membuat orang
+     * menghitung ulang, bukan kata "tidak wajar". Jaring pengaman, bukan penghalang keras. */
+    varianceGuardTitle: 'Periksa hitungan ini dulu',
+    varianceGuardIntroOne:
+      'Satu baris tidak masuk akal dibanding jumlah sistemnya. Opname memposting susut bernilai ke buku besar, jadi satu angka keliru di sini jadi laba atau rugi palsu di laporan.',
+    varianceGuardIntroMany:
+      'Beberapa baris tidak masuk akal dibanding jumlah sistemnya. Opname memposting susut bernilai ke buku besar, jadi angka keliru di sini jadi laba atau rugi palsu di laporan.',
+    guardSystem: 'Jumlah sistem',
+    guardCounted: 'Hitungan Anda',
+    guardReasonRatioAbove: 'Hitungan ini {{ratio}}× jumlah sistem.',
+    guardReasonRatioBelow: 'Hitungan ini {{ratio}}× lebih kecil dari jumlah sistem.',
+    /** Tertukarnya berarah: terlalu besar = angka {{from}} diketik di kolom {{to}}. */
+    guardReasonSlipAbove:
+      'Beda sebesar itu biasanya satuan yang tertukar — angka {{from}} diketik sebagai {{to}} — atau ada nol berlebih.',
+    guardReasonSlipBelow:
+      'Beda sebesar itu biasanya satuan yang tertukar — angka {{from}} diketik sebagai {{to}} — atau ada nol yang kurang.',
+    guardReasonZerosAbove: 'Beda sebesar itu biasanya ada nol berlebih.',
+    guardReasonZerosBelow: 'Beda sebesar itu biasanya ada nol yang kurang.',
+    guardReasonValue:
+      'Selisihnya bernilai {{value}}, jauh di atas ambang {{threshold}} untuk satu baris.',
+    varianceGuardNote:
+      'Ini jaring pengaman, bukan penghalang. Server tetap mencatat dan menilai apa pun yang dikirim — kalau hitungan itu memang benar, lanjutkan saja.',
+    varianceGuardRecount: 'Hitung ulang',
+    varianceGuardProceed: 'Kirim saja',
+    /** Keluar dengan baris yang sudah dikerjakan tapi belum dikirim — dulu langsung hilang tanpa
      * sepatah kata (tombol BACK fisik adalah cara paling umum kehilangannya). */
-    discardTitle: 'Buang hitungan ini?',
-    discardBody:
-      'Hitungan yang Anda ketik belum dikirim. Kalau keluar sekarang, semuanya hilang.',
-    discardKeep: 'Lanjut menghitung',
-    discardLeave: 'Buang hitungan',
+    discardTitle: 'Tinggalkan hitungan ini?',
+    discardBody_one:
+      'Ada {{formatted}} baris yang sudah Anda kerjakan dan belum dikirim. Hitungan hanya hidup di layar ini sampai dikirim — keluar sekarang membuangnya.',
+    discardBody_other:
+      'Ada {{formatted}} baris yang sudah Anda kerjakan dan belum dikirim. Hitungan hanya hidup di layar ini sampai dikirim — keluar sekarang membuangnya.',
+    discardKeep: 'Lanjut hitung',
+    discardLeave: 'Buang',
   },
   inventory: {
     /** ADR 0046 fase 1 — katalog barang stok per gerai di balik stock opname. Penamaan owner
@@ -1568,12 +1651,7 @@ export const id = {
     emptyTitle: 'Belum ada barang',
     emptyHint:
       'Tambahkan yang dibeli dan dihitung gerai ini — bahan (roti, patty, saus) maupun perlengkapan (gelas, piring kertas, sedotan). Stock opname menghitung barang-barang ini, bukan item menu.',
-    costPerUnit: '{{cost}} / {{unit}}',
-    stockValue: 'Nilai stok {{value}}',
-    noCost: 'Belum ada biaya — dihitung, tidak pernah dibukukan',
     receiveAction: 'Terima',
-    setAction: 'Atur jumlah',
-    editAction: 'Ubah',
     addTitle: 'Tambah barang',
     editTitle: 'Ubah barang',
     nameLabel: 'Nama',
@@ -1582,15 +1660,13 @@ export const id = {
     unitLabel: 'Satuan',
     unitHint: 'Dihitung dalam bilangan bulat — pakai g atau ml untuk yang ditimbang atau ditakar pecahan.',
     convertUnit: {
-      badge: 'Tidak bisa dipakai di resep ({{unit}}) — perbaiki',
       title: 'Ubah satuan {{name}}',
       intro:
         'Satu {{unit}} adalah jumlah terkecil yang bisa diminta resep, jadi bahan ini tidak bisa dimasukkan ke resep. Sebutkan isi satu {{unit}} dan stoknya akan dihitung ulang dalam satuan yang lebih kecil — cara Anda membeli tetap sama.',
       toUnitLabel: 'Hitung dalam',
       factorLabel: '1 {{from}} isinya berapa {{to}}?',
-      preview: 'Stok menjadi {{after}} (sebelumnya {{before}}). Tidak ada yang dibeli atau hilang.',
-      note: 'Resep dan riwayat stok ikut dihitung ulang dalam satuan baru, jadi tidak ada yang bergeser. Nilai total stok Anda tidak berubah.',
       submit: 'Ubah satuan',
+      screenTitle: 'Ubah satuan',
       errors: {
         factor: 'Masukkan bilangan bulat lebih dari 0.',
         overflow: 'Angka stoknya jadi terlalu besar. Pilih satuan yang lebih besar.',
@@ -1598,18 +1674,12 @@ export const id = {
       },
     },
     unitGroup: { weight: 'Berat', volume: 'Volume', count: 'Jumlah' },
-    costLabel: 'Biaya per satuan ({{currency}}, opsional)',
-    costHint:
-      'Dipakai menilai selisih stock opname di pembukuan. Kosongkan untuk menghitung tanpa membukukan apa pun.',
     costPlaceholder: 'Opsional',
-    initialQtyLabel: 'Jumlah awal',
     // Cara isi biaya saat menambah barang: masukkan TOTAL yang dibayar ke pemasok (biaya per
     // satuan dihitung otomatis dari jumlah) atau biaya per satuan langsung.
     costModeLabel: 'Cara isi biaya',
     costModeTotal: 'Harga total',
     costModeUnit: 'Per satuan',
-    qtyBoughtLabel: 'Jumlah dibeli ({{unit}})',
-    totalCostLabel: 'Total harga beli ({{currency}}, opsional)',
     totalCostHint: 'Total yang dibayar ke pemasok — biaya per satuan dihitung otomatis dari jumlah.',
     totalNeedsQty: 'Isi jumlah dibeli di atas untuk menghitung biaya per satuan.',
     packSizeLabel: 'Isi per kemasan ({{unit}}, opsional)',
@@ -1617,25 +1687,164 @@ export const id = {
     packSizePlaceholder: 'Opsional',
     packSizeInvalid: 'Isi angka lebih dari nol (atau kosongkan).',
     removeAction: 'Hapus barang',
-    removeConfirm: 'Ketuk lagi untuk menghapus — hilang dari daftar dan hitungan berikutnya.',
-    receiveTitle: 'Terima — {{name}}',
-    receiveHint: 'Stok saat ini: {{qty}} {{unit}}. Masukkan jumlah yang diterima (atau koreksi negatif).',
-    receiveAmountLabel: 'Jumlah ({{unit}})',
-    receiveUnitPriceHint: '≈ {{price}} / {{unit}}',
-    receivePricedHint: 'Membeli ini dengan pembayaran yang perlu dicatat?',
-    receivePricedHintLink: 'Catat sebagai pengeluaran',
-    receiveSubmit: 'Tambahkan ke stok',
-    setTitle: 'Atur jumlah — {{name}}',
-    setHint: 'Stok saat ini: {{qty}} {{unit}}. Masukkan jumlah absolut yang baru.',
-    setQtyLabel: 'Jumlah baru ({{unit}})',
-    setSubmit: 'Atur jumlah',
     errorGeneric: 'Tidak dapat menyimpan. Silakan coba lagi.',
     nameTaken: 'Barang dengan nama ini sudah ada di gerai ini.',
-    unitChangeBlockedGeneric:
-      '“{{name}}” masih memiliki stok {{qty}} {{fromUnit}} — satuan tidak bisa diubah dari {{fromUnit}} ke {{toUnit}} sebelum stoknya nol.',
-    unitChangeBlockedHint: 'Kosongkan dulu stoknya lewat stock opname, baru ubah satuannya dan masukkan kembali jumlahnya dalam satuan baru.',
-    baseUnitChangedNote:
-      'Mengubah satuan mengosongkan isi per kemasan dan biaya di bawah — keduanya tidak ikut pindah dan harus diisi ulang.',
+    /**
+     * Native Persediaan (ADR 0081) — katalog terbaca dalam HARI: hero nilai, terpakai hari ini
+     * dalam uang, toggle prediksi stok, chip saringan, dan satu baris per barang yang angkanya
+     * adalah sisa hari. Layar barang, sheet papan angka terima/atur, form, dan layar riwayat
+     * opname hidup di sub-ruang nama masing-masing di bawah.
+     */
+    keypad: {
+      digit: 'Angka {{digit}}',
+      decimal: 'Pemisah desimal',
+      backspace: 'Hapus satu angka',
+    },
+    catalog: {
+      // Bahasa Indonesia has one plural form; both keys exist so the shape matches `en`.
+      subtitle_one: '{{company}} · {{count}} barang aktif',
+      subtitle_other: '{{company}} · {{count}} barang aktif',
+      searchPlaceholder: 'Cari barang',
+      heroLabel_one: 'Nilai persediaan · {{count}} barang',
+      heroLabel_other: 'Nilai persediaan · {{count}} barang',
+      heroUncosted_one: '{{count}} barang belum berbiaya — dihitung, tidak dibukukan',
+      heroUncosted_other: '{{count}} barang belum berbiaya — dihitung, tidak dibukukan',
+      heroAllCosted: 'Semua barang berbiaya — angka ini bisa masuk buku',
+      heroOpenMethod: 'Akuntansi persediaan',
+      usedToday: 'Terpakai hari ini',
+      shelf: 'Isi rak',
+      shelfDays: '≈ {{days}} hari isi rak',
+      shelfDaysUnknown: 'Belum ada pemakaian',
+      predictionLabel: 'Prediksi stok',
+      predictionHint: 'Sisa hari = stok ÷ rata-rata pemakaian per hari buka selama {{days}} hari terakhir.',
+      chips: { zero: 'Stok nol', low: 'Hampir habis', unit: 'Satuan bermasalah', nocost: 'Tanpa biaya' },
+      rowChip: { zero: 'Stok nol', unit: 'Satuan {{unit}}', nocost: 'Tanpa biaya' },
+      sort: { action: 'Perlu tindakan', value: 'Nilai stok', name: 'Nama' },
+      sortAria: 'Urut {{sort}} — ketuk untuk mengganti',
+      caption_one: '{{count}} barang',
+      caption_other: '{{count}} barang',
+      captionFiltered_one: 'Saringan aktif · {{count}} barang',
+      captionFiltered_other: 'Saringan aktif · {{count}} barang',
+      noHitsTitle: 'Tidak ada barang di saringan ini',
+      noHitsHint: 'Ketuk chip-nya lagi untuk melihat semuanya.',
+      qtyValue: '{{qty}} {{unit}} · {{value}}',
+      daysShort: '{{days}} hr',
+      daysNone: '—',
+      rateLine: '{{qty}} {{unit}}/hari',
+      rateNone: 'tak terpakai',
+      receiveAria: 'Terima {{name}}',
+      columns: { name: 'Barang', stock: 'Stok', value: 'Nilai', rate: 'Terpakai/hari', days: 'Sisa' },
+      packLine: 'kemasan {{qty}} {{unit}}',
+      valueUncosted: 'tanpa biaya',
+      emptyFirst: 'Tambah barang pertama',
+      retry: 'Coba lagi',
+    },
+    detail: {
+      subtitle: 'Satuan dasar {{unit}}',
+      subtitleShown: 'Satuan dasar {{unit}} · tampil {{shown}}',
+      stockNow: 'Stok sekarang',
+      noteZero: 'Stok nol — terpakai {{qty}} {{unit}} sehari sebelum habis',
+      noteZeroNoRate: 'Stok nol',
+      noteDays: '≈ {{days}} hari lagi · {{qty}} {{unit}}/hari',
+      noteNoUsage: 'Belum ada data terpakai',
+      noteUnitUnused: 'Tidak terpakai — barang ini tidak ada di resep mana pun',
+      convTitle: 'Satuan dasarnya {{unit}}, terlalu kasar untuk dimasak',
+      convBody:
+        'Tidak ada apa pun di bawah satu {{unit}}, jadi barang ini tidak bisa masuk resep — hilang dari HPP dan dari deteksi kekurangan bahan.',
+      convAction: 'Ubah satuannya →',
+      receive: 'Terima stok',
+      set: 'Atur jumlah',
+      edit: 'Ubah barang',
+      facts: 'Angka barang ini',
+      factValue: 'Nilai stok',
+      factValueNone: 'tidak dinilai',
+      factCost: 'Biaya per {{unit}}',
+      factCostNone: 'belum diisi',
+      factUsedToday: 'Terpakai hari ini',
+      factUsedTodayNone: 'tidak ada penjualan',
+      factRate: 'Rata-rata per hari',
+      factRateNone: 'tidak ada pemakaian',
+      factPack: 'Isi per kemasan',
+      factPackNone: 'tidak diingat',
+      factBase: 'Satuan dasar · disimpan',
+      factShown: 'Satuan tampil',
+      factShownSame: 'sama dengan dasar',
+      lastCounts: 'Opname terakhir',
+      allHistory: 'Semua riwayat',
+      noCounts: 'Belum pernah dihitung',
+      countLine: 'sistem {{system}} → hitung {{counted}} {{unit}}',
+    },
+    keypadSheet: {
+      receiveTitle: 'Terima stok',
+      correctTitle: 'Koreksi kurang',
+      setTitle: 'Atur jumlah',
+      current: 'sekarang {{qty}} {{unit}}',
+      signAdd: 'Tambah',
+      signRemove: 'Koreksi kurang',
+      typeAmount: 'Ketik jumlahnya',
+      receivePreview: '{{before}} → {{after}} {{unit}}',
+      receiveClipped: '{{before}} → 0 {{unit}} — stok tidak bisa di bawah nol',
+      setPreview: 'selisih {{diff}} {{unit}} dari sistem',
+      setSame: 'sama dengan sistem',
+      // ADR 0072 §5 — pembelian berharga dicatat di form pengeluaran perusahaan (satu-satunya jalur
+      // berharga); hanya tampil untuk login keuangan.
+      financeHint: 'Kalau pembelian ini ada pembayarannya, catat sekali di',
+      financeLink: 'Pengeluaran perusahaan',
+      financeHintTail: '— uangnya dan stoknya masuk bersamaan.',
+      submitReceive: 'Terima',
+      submitCorrect: 'Catat koreksi',
+      submitSet: 'Simpan jumlah',
+      figureAria: '{{name}} — jumlah dalam {{unit}}',
+    },
+    form: {
+      unitNote:
+        'pack tidak lagi ditawarkan. Pilih satuan halus lalu isi kemasan di bawah — beli per pack tetap jalan.',
+      // F3 — perubahan satuan DASAR (bukan sekadar label tampil seperti g -> kg) mengosongkan isi per
+      // kemasan dan biaya per satuan: tidak ada rasio ke dasar yang baru, dan backend juga mereset
+      // keduanya pada pertukaran dasar yang sungguhan.
+      baseChangedNote:
+        'Satuan dasarnya berubah dari {{from}} ke {{to}}, jadi biaya dan isi per kemasan dikosongkan — tidak ada rasio yang menghubungkan keduanya. Isi ulang keduanya dalam satuan yang baru.',
+      qtyBought: 'Jumlah yang dibeli',
+      startingQty: 'Stok awal',
+      costTotalLabel: 'Total dibayar ke vendor',
+      costUnitLabel: 'Biaya per {{unit}}',
+      costDerived: '{{price}} per {{unit}} — inilah yang dibukukan',
+      costCleared: 'Dikosongkan karena satuan dasarnya berubah',
+      costInvalid: 'Isi biayanya sebagai angka polos, atau kosongkan.',
+      costOptional: 'Boleh dikosongkan. Barang tanpa biaya tetap dihitung saat opname tapi tidak pernah masuk buku.',
+      packLabel: 'Isi per kemasan · opsional',
+      packHint: 'Cuma nilai awal yang diingat. Baris pembelian mengisinya dari sini tapi tetap bisa diubah per baris.',
+      errNameHint: 'Nama unik per gerai — buka barang yang sudah ada, atau pilih nama lain.',
+      // Penolakan 409 ingredient-in-recipe: konsol menampilkan pesan generik ini dan menunjuk ke Menu &
+      // harga (`detail` server menyebut nama menunya, tapi string itu diagnostik developer).
+      errRecipeTitle: 'Barang ini masih dipakai resep yang aktif',
+      errRecipeHint: 'Server menolak penghapusan selama ada item menu yang memakainya. Cari resepnya di Menu & harga.',
+      errRecipeAction: 'Buka Menu & harga',
+      // V46 — 409 ingredient-unit-change-blocked, dengan jalan keluarnya sebagai tombol.
+      errUnitTitle: 'Satuan {{name}} tidak bisa diubah dari {{from}} ke {{to}}',
+      errUnitHint:
+        'Masih ada {{qty}} {{from}}. Tidak ada rasio yang menghubungkan {{from}} dengan {{to}}, jadi menulisnya ulang akan menafsirkan stok itu jadi angka lain dan meracuni biaya rata-rata bergeraknya. Kosongkan stoknya lewat Atur jumlah, ubah satuannya, lalu terima kembali.',
+      errUnitAction: 'Atur jumlah jadi 0',
+      removeTwice: 'Ketuk lagi untuk menghapus {{name}}',
+    },
+    convert: {
+      result: 'Hasilnya',
+      invalid: 'faktor tidak sah',
+      resultNote:
+        'Nilai stok tidak berubah — tidak ada yang dibeli, dijual, atau hilang. Server mengubah skala stok, biaya, baris resep dan seluruh buku harian barang ini dalam satu transaksi.',
+    },
+    history: {
+      subtitleList: '{{company}} · 50 terakhir',
+      subtitleDetail: 'Rincian opname',
+      intro: 'Server mengembalikan 50 opname terakhir. Nilai di kanan adalah susutnya — merah berarti hilang, hijau berarti ketemu lebih.',
+      varied_one: '{{count}} barang berselisih',
+      varied_other: '{{count}} barang berselisih',
+      allMatch: 'Semua cocok dengan sistem',
+      shrinkBooked: 'susut dibukukan',
+      foundMore: 'ketemu lebih dari sistem',
+      balanced: 'seimbang · tidak ada susut',
+      usedThatDay: 'terpakai hari itu {{qty}} {{unit}}',
+    },
   },
   inventoryPicker: {
     addNew: '+ Tambah bahan baru',

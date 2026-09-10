@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { checkStocktakeVariance, type StocktakeVarianceLine } from '../stocktakeVarianceGuard'
+import {
+  checkStocktakeVariance,
+  valueThresholdMinor,
+  type StocktakeVarianceLine,
+} from '../stocktakeVarianceGuard'
 
 /** A plausible base line every test tweaks — a small everyday ingredient count. */
 function line(overrides: Partial<StocktakeVarianceLine>): StocktakeVarianceLine {
@@ -32,6 +36,23 @@ describe('checkStocktakeVariance', () => {
     expect(flags[0]).toMatchObject({ ingredientId: 'daging-kebab', systemQty: 3_411, countedQty: 2_640_000 })
     expect(flags[0].reasons).toContain('ratio')
     expect(flags[0].reasons).toContain('value')
+    // The confirm names these: "774× the system quantity", worth the Rp 160,831,929 the ADR records.
+    expect(flags[0].ratio).toBeCloseTo(773.97, 1)
+    expect(flags[0].varianceValueMinor).toBe(160_831_929)
+  })
+
+  it('reports the ratio even when only the value wire fired, and null value for an uncosted line', () => {
+    const valueOnly = checkStocktakeVariance([line({ systemQty: 100, countedQty: 150, unitCostMinor: 200_000 })])
+    expect(valueOnly[0]).toMatchObject({ reasons: ['value'], ratio: 1.5, varianceValueMinor: 10_000_000 })
+
+    const uncosted = checkStocktakeVariance([line({ countedQty: 4_000_000, unitCostMinor: null })])
+    expect(uncosted[0]).toMatchObject({ reasons: ['ratio'], varianceValueMinor: null })
+  })
+
+  it('exposes the currency-scaled value threshold in minor units', () => {
+    expect(valueThresholdMinor('IDR')).toBe(5_000_000)
+    expect(valueThresholdMinor('USD')).toBe(50_000)
+    expect(valueThresholdMinor('SGD')).toBe(50_000)
   })
 
   it('mirrored slip — counted 1000× too SMALL — also trips the ratio wire', () => {
