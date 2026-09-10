@@ -81,7 +81,7 @@ export function BillDock({
   title,
   meta,
   hasPaidLines = false,
-  onTitleClick,
+  onSwitchOrder,
   expanded,
   onExpandedChange,
   lines,
@@ -110,8 +110,12 @@ export function BillDock({
   /** "#A-1182 · 5 items". */
   meta: string
   hasPaidLines?: boolean
-  /** Tapping the title opens the order switcher (BillSelectorOverlay). */
-  onTitleClick?: () => void
+  /**
+   * Opens the order switcher (BillSelectorOverlay). Rendered as its OWN 44px button at the right
+   * edge of the handle, never as the title: the title is where a thumb lands to open the ticket,
+   * and a switcher there sent cashiers to a different screen when they wanted to see their order.
+   */
+  onSwitchOrder?: () => void
   expanded: boolean
   onExpandedChange: (next: boolean) => void
   /** Collapsed: the newest unpaid lines (lib/dockLines.peekLines). Expanded: the whole ticket. */
@@ -165,7 +169,7 @@ export function BillDock({
           type="button"
           aria-label={t('posShell.dock.collapse')}
           onClick={() => onExpandedChange(false)}
-          className="motion-safe:animate-in motion-safe:fade-in-0 fixed inset-0 z-40 cursor-default bg-ink-900/40"
+          className="motion-safe:animate-in motion-safe:fade-in-0 fixed inset-0 z-[29] cursor-default bg-ink-900/40"
         />
       ) : null}
 
@@ -174,57 +178,64 @@ export function BillDock({
         data-testid="pos-bill-dock"
         data-expanded={expanded}
         className={cn(
-          'fixed inset-x-0 bottom-0 z-[45] flex flex-col overflow-hidden rounded-t-[22px]',
+          // z-30 is the CHROME tier — the same one SummaryBar occupied, and the tier this deck
+          // replaced it in. It must stay below the modal layer: the walk-in payment surface is
+          // z-40 (PaymentSurfaceFrame's default), the POS overlays are z-50, dialogs z-[60]. The
+          // deck shipped at z-[45], which is above z-40 and below z-50 — so it covered the bottom
+          // of the Charge modal (its keypad and Finish button) and nothing else, which is exactly
+          // how the bug presented. The scrim rides one below the deck, not at the modal tier.
+          'fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-[22px]',
           'border-t border-line bg-surface shadow-[0_-14px_34px_rgba(15,23,42,.16)]',
           'pb-[var(--safe-area-inset-bottom,0px)] motion-safe:transition-[height] motion-safe:duration-[260ms]',
           'motion-safe:ease-[cubic-bezier(.16,1,.3,1)]',
           // Peek height. The mockup pins 204px on a 412×915 reference, where the newest row ends
-          // up clipped; 218px is that height plus the sliver it was missing, so the row the cashier
-          // just tapped is whole. Below 720px of viewport there is no room for a row AND the
+          // up clipped; 228px fits one whole row WITH its stepper (py-3 + a 44px control = 68px),
+          // so the row the cashier just tapped is both visible and editable. Below 720px of viewport there is no room for a row AND the
           // catalog, so the deck drops to handle + footer (164px) and hides the list rather than
           // showing a cropped half-row — see the list's own variant below. The two thresholds are
           // deliberately the same number.
-          expanded ? 'h-[min(620px,74dvh)]' : 'h-[164px] [@media(min-height:720px)]:h-[218px]',
+          expanded ? 'h-[min(620px,74dvh)]' : 'h-[164px] [@media(min-height:720px)]:h-[228px]',
         )}
       >
-        {/* Handle — the grip toggles; the title inside the same row opens the order switcher. */}
-        <div className="flex h-11 shrink-0 flex-col items-center justify-center gap-2">
+        {/* Handle. The WHOLE row is the toggle — grip, title and meta together, ≥44px — exactly
+            as the mockup draws it. It shipped as a 16px grip strip above a title that opened the
+            order switcher, so the obvious tap ("Walk-in sale ⇕") left the till for another screen
+            and the actual way into your ticket was a sliver. The switcher is now a separate,
+            bordered 44px button at the right edge: still one tap away (it is bill mode's only
+            door out on a phone), but no longer where a thumb lands by default. */}
+        <div className="flex shrink-0 items-stretch pr-1.5">
           <button
             type="button"
             data-testid="pos-dock-toggle"
             onClick={() => onExpandedChange(!expanded)}
             aria-expanded={expanded}
             aria-label={expanded ? t('posShell.dock.collapse') : t('posShell.dock.expand')}
-            className="grid h-4 w-full place-items-center focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald"
+            className="flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1.5 pb-1.5 pl-4 pr-2 pt-2 text-left transition-colors active:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald"
           >
             <span className="h-1 w-10 rounded-full bg-ink-300" aria-hidden="true" />
-          </button>
-          <div className="flex w-full items-baseline gap-1.5 px-4">
-            <button
-              type="button"
-              data-testid="pos-dock-title"
-              onClick={onTitleClick}
-              disabled={!onTitleClick}
-              aria-label={onTitleClick ? t('posShell.currentOrder') : undefined}
-              className={cn(
-                'flex min-w-0 items-baseline gap-1.5 rounded-lg text-left',
-                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
-                onTitleClick && 'transition-opacity active:opacity-60',
-              )}
-            >
+            <span className="flex w-full items-baseline gap-1.5">
               <span className="truncate text-[14px] font-bold leading-none text-ink">{title}</span>
               <span className="truncate text-[12px] font-medium leading-none text-ink-3">{meta}</span>
-              {onTitleClick ? (
-                <ChevronsUpDown className="size-3 shrink-0 self-center text-ink-3" aria-hidden="true" />
+              <span className="flex-1" />
+              {hasPaidLines ? (
+                <span className="grid h-[19px] shrink-0 place-items-center self-center rounded-full border border-profit-line px-1.5 text-[10px] font-bold text-profit-ink">
+                  {t('posShell.dock.partiallyPaid')}
+                </span>
               ) : null}
+            </span>
+          </button>
+          {onSwitchOrder ? (
+            <button
+              type="button"
+              data-testid="pos-dock-switch"
+              onClick={onSwitchOrder}
+              aria-label={t('posShell.currentOrder')}
+              title={t('posShell.currentOrder')}
+              className="grid size-11 shrink-0 place-items-center self-center rounded-xl border border-line text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            >
+              <ChevronsUpDown className="size-4" aria-hidden="true" />
             </button>
-            <span className="flex-1" />
-            {hasPaidLines ? (
-              <span className="grid h-[19px] shrink-0 place-items-center self-center rounded-full border border-profit-line px-1.5 text-[10px] font-bold text-profit-ink">
-                {t('posShell.dock.partiallyPaid')}
-              </span>
-            ) : null}
-          </div>
+          ) : null}
         </div>
 
         {/* Action rail — expanded only. */}
@@ -326,8 +337,10 @@ export function BillDock({
                     </div>
                   </div>
 
-                  {/* Stepper — expanded only, and never on a settled line. */}
-                  {expanded && !splitMode && !l.paid ? (
+                  {/* Stepper — never on a settled line, never mid-split. The mockup drew it
+                      expanded-only; it shows in the peek as well because the single most common
+                      edit is undoing the tap you just made, and the peek is where you see it. */}
+                  {!splitMode && !l.paid ? (
                     <div className="flex shrink-0 items-center overflow-hidden rounded-xl border border-line">
                       {l.canRemove ? (
                         <button
