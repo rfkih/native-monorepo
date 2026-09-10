@@ -529,7 +529,6 @@ export const en = {
       clearSearch: 'Clear search',
       noMatches: 'No page matches',
       noMatchesHint: 'Try another word, or use the tiles above.',
-      yourWork: 'Your work',
     },
   },
   settings: {

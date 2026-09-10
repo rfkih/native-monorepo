@@ -55,7 +55,7 @@ import { useOfferedLangs } from '@/lib/geo'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
 import { useNavGroups, type Icon } from './navGroups'
-import { OWN_GROUPS, arrangeNavGroups, isOwnGroup, normalizeQuery } from './moreNavPolicy'
+import { OWN_GROUPS, arrangeNavGroups, normalizeQuery } from './moreNavPolicy'
 
 /** Lazy — keeps the stocktake/register + POS API code out of the main chunk until a tile is used. */
 const StandaloneStocktake = lazy(() =>
@@ -245,14 +245,7 @@ export function MorePage({ home }: { home: string }) {
 
         {arranged.map((group) => (
           <div key={group.key}>
-            <div className="flex items-baseline gap-2">
-              <MicroHeading>{group.heading}</MicroHeading>
-              {isOwnGroup(group.key, query, ownGroupKeys) ? (
-                <span className="pt-4 text-[11.5px] font-semibold text-profit-ink">
-                  {t('mobile.more.yourWork')}
-                </span>
-              ) : null}
-            </div>
+            <MicroHeading>{group.heading}</MicroHeading>
             {group.items.map((item) => {
               const ItemIcon = item.icon
               return (

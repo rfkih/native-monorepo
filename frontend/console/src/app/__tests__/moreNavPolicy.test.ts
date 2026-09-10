@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OWN_GROUPS, arrangeNavGroups, isOwnGroup, normalizeQuery } from '../moreNavPolicy'
+import { OWN_GROUPS, arrangeNavGroups, normalizeQuery } from '../moreNavPolicy'
 
 // Headings are REAL here: the fixture used to omit them, which is exactly why the search bug
 // (typing a group name returned nothing) slipped through a green suite.
@@ -91,14 +91,6 @@ describe('arrangeNavGroups — filtering', () => {
     const before = JSON.stringify(GROUPS)
     arrangeNavGroups(GROUPS, 'bank', OWN_GROUPS.finance)
     expect(JSON.stringify(GROUPS)).toBe(before)
-  })
-})
-
-describe('isOwnGroup', () => {
-  it('marks a persona group only at rest — a filtered list is not "your work"', () => {
-    expect(isOwnGroup('receivables', '', OWN_GROUPS.finance)).toBe(true)
-    expect(isOwnGroup('receivables', 'inv', OWN_GROUPS.finance)).toBe(false)
-    expect(isOwnGroup('sales', '', OWN_GROUPS.finance)).toBe(false)
   })
 })
 

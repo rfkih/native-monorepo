@@ -62,8 +62,3 @@ export function arrangeNavGroups<G extends NavLike>(
   const rest = groups.filter((g) => !ownKeys.includes(g.key))
   return [...own, ...rest]
 }
-
-/** Whether a group should carry the "your work" marker — only meaningful at rest. */
-export function isOwnGroup(key: string, query: string, ownKeys: readonly string[]): boolean {
-  return normalizeQuery(query).length === 0 && ownKeys.includes(key)
-}
