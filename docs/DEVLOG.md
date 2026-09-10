@@ -1,5 +1,59 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-10 — the phone reports become one screen, and the chart picks the month
+
+The three statements had one layout — desktop — that the phone merely compressed: title, three
+stacked cards, a `‹ Sep 2026 ›` stepper, icon-only Print/Export, then the tables in cards. Nothing
+in `features/statements/` knew it was on a phone. The Laporan design replaces that below 640px with
+**one screen repeated four times**: tabs (Laba rugi · Neraca · Arus kas · Biaya), one answering
+figure, a **twelve-month chart that is also the period control** — tap a column, the hero, banners
+and ledger move to that month — then the detail down to the last account, a drill-down sheet and
+an export sheet. [ADR 0080](adr/0080-the-phone-reports-chart-is-the-period-picker.md).
+
+**Nothing re-derived.** Liquidity groups, netted equipment, the negative-asset allowlist, the zero
+split, the reconciliation banners and the account names are the desktop's own modules. What the
+desktop did inline moved into pure, tested code that BOTH now consume, so the two cannot disagree on
+a row: the Neraca's display mapping (`displayBalanceSheet`), the three CSV builders
+(`statementsCsv.ts` — the test locks `code | name | amount` and the padded total rows, the bug that
+once made SUM skip them), the drawer body (`IncomeDetailBody`, the desktop Drawer at its own
+metrics, the phone sheet at the phone's). The twelve-month trend is the dashboard's own idiom
+(`useQueries`, one call per month; Balance and Cash flow key each month identically to their
+single-period hook so the month on screen shares its cache entry with its column; Income reuses the
+Beranda's `/api/v1/pnl` window) with a five-minute `staleTime` — a closed month does not change.
+
+**Two things the screenshots caught.** The window was anchored to the *selected* month, so tapping
+December re-windowed the chart to Jan–Dec and pushed December to the right edge — there was no way
+back to the current month short of a reload. The window is now the twelve months up to today,
+fixed; the selection moves within it. And the last column, selected by default, was clipped: the
+scroller's padding sat outside the scrollable width, so the maths' clamp and the browser's disagreed
+by 16px. The track now carries its own end inset (`chartTrack().inset`), tested, and the component
+has no padding of its own. Also at 360px the three cash-flow figures — nine-digit rupiah in a
+third of the width — needed a `sm` size. Desktop shots of all three pages: unchanged.
+
+**And what the fresh-context review caught.** The screen had drawn a sticky header of its own —
+inside the Shell, whose topbar is already sticky, so after a scroll two headers sat at y=0 and the
+inner one painted over the outer with the gutters showing either side. Gone: like DashboardPhone
+the title is an in-flow row, the Shell's topbar is the one header. Print fired from inside the
+export sheet's handler — `window.print` is synchronous, so the snapshot carried the scrim and a
+scroll-locked body; it now runs from an effect after the sheet has unmounted, with the tabs, chart
+and actions `print:hidden`. A tab switch is a route change (a different lazy element), so the
+selected month was resetting to today on every tab — it lives in the URL now (`?period=`,
+`?chart=`), and the harness asserts it travels. Positive columns overshot the baseline by the 6px
+the plot box reserves for the selected marker's ring; an all-zero window (every new company's first
+Income tab) hung its slivers from a top-edge hairline; revenue bars had turned green (green is
+profit and nothing else — ADR 0077); the sheets bypassed the one Dialog primitive. All fixed, the
+maths ones with tests.
+
+The chart follows the dataviz specs: ≤24px columns in 44px slots, 4px rounded data end and square at
+the baseline, 2px line, ≥8px selected marker with a surface ring, hairline solid baseline, every
+column a full-height hit target with a title tooltip that enhances and never gates. Colour is
+meaning, not identity: a signed series (net, cash) is green/red by sign; a magnitude (net worth,
+expense) is ink.
+
+`mobile-shots.mjs` gained balance-sheet and cash-flow fixtures that balance every month and a
+Laporan walk (four tabs, a tapped month that must survive every tab switch, the line variant, both
+sheets, light/en + dark/id).
+
 ## 2026-09-10 — the phone bill stops living in a sheet
 
 The Till Android v2 design put one thing on trial: the phone kept the ticket *inside* a sheet, so

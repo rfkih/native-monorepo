@@ -180,22 +180,73 @@ const OUTLETS = (period) => ({
   ],
 })
 
-const INCOME = (period) => ({
-  period, currency: 'IDR',
-  revenueLines: [
-    { accountCode: '4-1000', accountType: 'REVENUE', netMinor: 452000000, currency: 'IDR' },
-    { accountCode: '4-1100', accountType: 'REVENUE', netMinor: 34200000, currency: 'IDR' },
-  ],
-  expenseLines: [
-    { accountCode: '5-1000', accountType: 'EXPENSE', netMinor: 198400000, currency: 'IDR' },
-    { accountCode: '6-1000', accountType: 'EXPENSE', netMinor: 84200000, currency: 'IDR' },
-    { accountCode: '6-2000', accountType: 'EXPENSE', netMinor: 36000000, currency: 'IDR' },
-    { accountCode: '6-2100', accountType: 'EXPENSE', netMinor: 14750000, currency: 'IDR' },
-    { accountCode: '6-3000', accountType: 'EXPENSE', netMinor: 13800000, currency: 'IDR' },
-  ],
-  totalRevenueMinor: 486200000, totalExpenseMinor: 347150000, netMinor: 139050000,
-  usesIllustrativeRules: false,
-})
+// Statement lines carry codes the console can NAME (accountLabels.ts) — an unlabelled code would
+// fail the real build, so the fixture uses the chart's own codes. Totals equal pnlFor(period) so
+// the twelve-month chart (/api/v1/pnl) and the tapped month's statement never disagree.
+const INCOME = (period) => {
+  const { revenueMinor: rev, expenseMinor: exp } = pnlFor(period)
+  const line = (accountCode, accountType, share, total) => ({ accountCode, accountType, netMinor: Math.round(total * share), currency: 'IDR' })
+  const exact = (lines, total) => { lines[0].netMinor += total - lines.reduce((a, l) => a + l.netMinor, 0); return lines }
+  return {
+    period, currency: 'IDR',
+    revenueLines: exact([line('4000', 'REVENUE', 0.93, rev), line('4100', 'REVENUE', 0.07, rev)], rev),
+    expenseLines: exact([
+      line('5100', 'EXPENSE', 0.57, exp), line('5300', 'EXPENSE', 0.24, exp), line('5500', 'EXPENSE', 0.10, exp),
+      line('6000', 'EXPENSE', 0.05, exp), line('6100', 'EXPENSE', 0.04, exp),
+    ], exp),
+    totalRevenueMinor: rev, totalExpenseMinor: exp, netMinor: rev - exp,
+    usesIllustrativeRules: false,
+  }
+}
+
+// Neraca per month (codes as the console names them: 1000 bank, 1200 receivables, 1250 platform
+// receivable, 1100 inventory, 1300/1310 VAT, 1400 prepaid, 1500/1590 equipment, 2000 payables,
+// 2200 VAT payable, 2500 gift cards, 3000 capital, 3100 prior years): the bank grows, equipment
+// depreciates, gift-card float is redeemed; 1250 sits negative — allowlisted, so no red banner —
+// and 1310 is a zero row so the "show zero balances" toggle has something to show. This year's
+// profit is the plug that balances.
+const BALANCE = (asOf) => {
+  const m = Number(asOf.slice(5, 7)) || 1
+  const row = (accountType) => (accountCode, balanceMinor) => ({ accountCode, accountType, balanceMinor, currency: 'IDR' })
+  const a = row('ASSET'), l = row('LIABILITY'), e = row('EQUITY')
+  const sum = (lines) => lines.reduce((t, x) => t + x.balanceMinor, 0)
+  const assetLines = [
+    a('1000', 318000000 + m * 21000000), a('1200', 27500000 + m * 400000), a('1250', -6400000),
+    a('1100', 64000000 - m * 900000), a('1300', 12800000 + m * 250000), a('1310', 0), a('1400', 18000000),
+    a('1500', 240000000), a('1590', -(m * 4000000)),
+  ]
+  const liabilityLines = [l('2000', 48200000 + m * 700000), l('2200', 12100000 + m * 300000), l('2500', 60000000 - m * 2500000)]
+  const capital = 300000000
+  const prior = 96000000
+  const retained = sum(assetLines) - sum(liabilityLines) - capital - prior
+  return {
+    asOf, currency: 'IDR', assetLines, liabilityLines,
+    equityLines: [e('3000', capital), e('3100', prior), e('3000-RETAINED-EARNINGS', retained)],
+    totalAssetsMinor: sum(assetLines), totalLiabilitiesMinor: sum(liabilityLines),
+    totalEquityMinor: capital + prior + retained, totalLiabilitiesAndEquityMinor: sum(assetLines),
+    retainedEarningsMinor: retained, usesIllustrativeRules: false,
+  }
+}
+
+// Arus kas (indirect): profit + working-capital lines, an equipment purchase every third month,
+// a steady loan repayment; the movement always reconciles to the ledger here.
+const CASHFLOW = (period) => {
+  const m = Number(period.slice(5, 7)) || 1
+  const net = pnlFor(period).netMinor
+  const line = (accountCode, accountType, amountMinor) => ({ accountCode, accountType, amountMinor })
+  const sum = (lines) => lines.reduce((t, x) => t + x.amountMinor, 0)
+  const operatingLines = [line('1590', 'ASSET', 4000000), line('1200', 'ASSET', -400000), line('1100', 'ASSET', 900000), line('2000', 'LIABILITY', 700000), line('2200', 'LIABILITY', 300000)]
+  const investingLines = m % 3 === 0 ? [line('1500', 'ASSET', -18000000)] : []
+  const financingLines = [line('2500', 'LIABILITY', -2500000)]
+  const op = net + sum(operatingLines), inv = sum(investingLines), fin = sum(financingLines)
+  return {
+    period, currency: 'IDR', netIncomeMinor: net,
+    operatingLines, cashFromOperatingMinor: op, investingLines, cashFromInvestingMinor: inv,
+    financingLines, cashFromFinancingMinor: fin,
+    netChangeInCashMinor: op + inv + fin, cashMovementMinor: op + inv + fin, reconciled: true,
+    usesIllustrativeRules: false,
+  }
+}
 
 const CLOSES = [
   { closeId: 'x1', period: '2026-07', baseCurrency: 'IDR', firstClose: false, reconciled: true, usesIllustrativeRules: false },
@@ -289,6 +340,8 @@ const ROUTES = [
   ['/api/v1/pnl/outlets', (u) => OUTLETS(u.searchParams.get('period') ?? '2026-08')],
   ['/api/v1/pnl', (u) => pnlFor(u.searchParams.get('period') ?? '2026-08')],
   ['/api/v1/statements/income', (u) => INCOME(u.searchParams.get('period') ?? '2026-08')],
+  ['/api/v1/statements/balance-sheet', (u) => BALANCE(u.searchParams.get('asOf') ?? '2026-08')],
+  ['/api/v1/statements/cash-flow', (u) => CASHFLOW(u.searchParams.get('period') ?? '2026-08')],
   ['/api/v1/closes', () => CLOSES],
   ['/api/v1/ar/aging', (u) => AR_AGING(u.searchParams.get('asOf') ?? '2026-08-07')],
   ['/api/v1/ap/aging', (u) => AP_AGING(u.searchParams.get('asOf') ?? '2026-08-07')],
@@ -363,8 +416,10 @@ const SCREENS = [
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 
 for (const pass of [
-  { name: 'light-en', theme: 'light', lang: 'en', moreLabel: 'More', ordersLabel: 'Orders' },
-  { name: 'dark-id', theme: 'dark', lang: 'id', moreLabel: 'Lainnya', ordersLabel: 'Pesanan' },
+  { name: 'light-en', theme: 'light', lang: 'en', moreLabel: 'More', ordersLabel: 'Orders',
+    lineChart: 'Line chart', tabs: { bs: 'Balance', cf: 'Cash flow', exp: 'Expenses' } },
+  { name: 'dark-id', theme: 'dark', lang: 'id', moreLabel: 'Lainnya', ordersLabel: 'Pesanan',
+    lineChart: 'Grafik garis', tabs: { bs: 'Neraca', cf: 'Arus kas', exp: 'Biaya' } },
 ]) {
   const dir = `${OUT}/${pass.name}`
   mkdirSync(dir, { recursive: true })
@@ -420,6 +475,47 @@ for (const pass of [
   await page.screenshot({ path: `${dir}/payslip-open.png`, fullPage: true })
   console.log(`[${pass.name}] payslip-open ok`)
 
+
+  // ── Laporan: the three statements as one phone screen (Native Laporan) ─────
+  // The chart IS the period control — a tapped column moves the whole report — so the shots pair
+  // the first tab with a month change and the line variant, then the two sheets, then each tab.
+  await page.goto(`${BASE}/statements/income`, { waitUntil: 'load' })
+  await page.waitForTimeout(1800)
+  await page.screenshot({ path: `${dir}/laporan-pnl.png`, fullPage: true })
+  console.log(`[${pass.name}] laporan-pnl ok`)
+  // Chart columns are the only pressed-state buttons that carry a title (month · value).
+  await page.locator('button[title][aria-pressed="false"]').nth(2).click({ timeout: 8000 })
+  await page.waitForTimeout(1200)
+  await page.screenshot({ path: `${dir}/laporan-pnl-month.png` })
+  console.log(`[${pass.name}] laporan-pnl-month ok`)
+  await page.getByRole('button', { name: pass.lineChart, exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: `${dir}/laporan-pnl-line.png` })
+  console.log(`[${pass.name}] laporan-pnl-line ok`)
+  // Drill-down sheet from the hero figure; BACK closes it (ADR 0075), not a tap on the scrim.
+  await page.getByTestId('laporan-hero').click({ timeout: 8000 })
+  await page.waitForTimeout(800)
+  await page.screenshot({ path: `${dir}/laporan-detail-sheet.png` })
+  console.log(`[${pass.name}] laporan-detail-sheet ok`)
+  await page.goBack()
+  await page.waitForTimeout(600)
+  // The tapped month and the line chart travel with the tab (they live in the URL) — the shot of
+  // each tab must show the SAME earlier month, or a tab switch has silently reset the reader.
+  for (const [key, label] of Object.entries(pass.tabs)) {
+    await page.getByRole('tab', { name: label, exact: true }).click({ timeout: 8000 })
+    await page.waitForTimeout(1800)
+    const url = page.url().replace(BASE, '')
+    if (!/period=\d{4}-\d{2}/.test(url) || !url.includes('chart=line')) throw new Error(`tab ${key} lost the selection: ${url}`)
+    await page.screenshot({ path: `${dir}/laporan-${key}.png`, fullPage: true })
+    console.log(`[${pass.name}] laporan-${key} ok (${url})`)
+  }
+  // Export sheet — the title row's action.
+  await page.getByTestId('laporan-export').click({ timeout: 8000 })
+  await page.waitForTimeout(800)
+  await page.screenshot({ path: `${dir}/laporan-export-sheet.png` })
+  console.log(`[${pass.name}] laporan-export-sheet ok`)
+  await page.goBack()
+  await page.waitForTimeout(400)
 
   // ── POS: the phone bill deck (Native Till Android v2) ──────────────────────
   // The deck is the redesign's whole thesis — the bill lives on screen instead of inside a sheet —
