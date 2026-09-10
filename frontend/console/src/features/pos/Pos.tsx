@@ -1055,7 +1055,7 @@ function PosInner({ session }: { session: CompanySession }) {
             // deck is rendered by EITHER Pos or BillDetail, and BillDetail's mounts a beat late —
             // it shows a skeleton while the bill loads — so a ResizeObserver installed when
             // `openBillId` changes finds nothing and the last tile row would sit under the deck.
-            'max-sm:pb-[188px] max-sm:[@media(min-height:720px)]:pb-[242px]',
+            'max-sm:pb-[188px] max-sm:[@media(min-height:720px)]:pb-[252px]',
           )}
           style={!isPhone && dockHeight ? { paddingBottom: dockHeight + 24 } : undefined}
         >
@@ -1135,7 +1135,7 @@ function PosInner({ session }: { session: CompanySession }) {
         <BillDock
           title={t('posShell.walkInSale')}
           meta={t('bills.lineCount', { n: lineCount })}
-          onTitleClick={() => setShowBillSelector(true)}
+          onSwitchOrder={() => setShowBillSelector(true)}
           expanded={dockExpanded}
           onExpandedChange={setDockExpanded}
           lines={dockExpanded ? walkInDockLines : peekLines(walkInDockLines)}
@@ -1212,6 +1212,19 @@ function PosInner({ session }: { session: CompanySession }) {
           payLabel={t('posShell.chargeAmount', { amount: walkInDueText })}
           payDisabled={lineCount === 0}
           onPay={handleDockPay}
+          // "Clear order" — WalkInCartSheet had it and the deck had dropped it, leaving a five-line
+          // mis-ring five taps from empty. No manager gate: the cart is a client array until Charge.
+          cancel={
+            lineCount > 0
+              ? {
+                  canCancel: true,
+                  hintVisible: false,
+                  hint: '',
+                  label: t('pos.clearCart'),
+                  onCancel: clearCart,
+                }
+              : null
+          }
         />
       ) : null}
 

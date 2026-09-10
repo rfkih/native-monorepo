@@ -557,7 +557,7 @@ export function BillDetail({
             .filter(Boolean)
             .join(' · ')}
           hasPaidLines={billHasPaidLines}
-          onTitleClick={onSwitchOrder}
+          onSwitchOrder={onSwitchOrder}
           expanded={dockExpanded}
           onExpandedChange={setDockExpanded}
           lines={dockExpanded ? dockLines : peekLines(dockLines)}

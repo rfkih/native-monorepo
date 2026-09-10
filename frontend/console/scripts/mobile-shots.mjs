@@ -452,7 +452,7 @@ for (const pass of [
   await page.waitForTimeout(500)
 
   // Same component, other data owner: a partially-paid open bill (BillDetail renders the deck).
-  await page.getByTestId('pos-dock-title').click({ timeout: 8000 })
+  await page.getByTestId('pos-dock-switch').click({ timeout: 8000 })
   await page.waitForTimeout(600)
   await page.getByText('Meja 07').first().click({ timeout: 8000 })
   await page.waitForTimeout(1400)
