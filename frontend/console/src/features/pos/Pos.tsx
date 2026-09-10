@@ -1135,7 +1135,6 @@ function PosInner({ session }: { session: CompanySession }) {
         <BillDock
           title={t('posShell.walkInSale')}
           meta={t('bills.lineCount', { n: lineCount })}
-          onSwitchOrder={() => setShowBillSelector(true)}
           expanded={dockExpanded}
           onExpandedChange={setDockExpanded}
           lines={dockExpanded ? walkInDockLines : peekLines(walkInDockLines)}
@@ -1390,6 +1389,15 @@ function PosInner({ session }: { session: CompanySession }) {
             // rows are not added, so the menu never doubles up.
             ...(isPhone
               ? ([
+                  {
+                    // The order switcher (walk-in / bills / floor / parked). It used to be a button
+                    // on the deck's handle, where it competed with the ticket's name for the tap that
+                    // means "show me my order"; here it is deliberately one level down.
+                    key: 'orders',
+                    icon: <ClipboardList className="size-4" aria-hidden="true" />,
+                    label: t('posShell.switcherTitle'),
+                    onSelect: () => setShowBillSelector(true),
+                  },
                   {
                     key: 'leave-till',
                     icon: <ArrowLeft className="size-4" aria-hidden="true" />,

@@ -19,6 +19,7 @@ import {
   Table2,
   ReceiptText,
   ChefHat,
+  ChevronsUpDown,
   Paperclip,
   SplitSquareHorizontal,
   ChevronDown,
@@ -505,15 +506,23 @@ export function BillDetail({
     unpaidCount: unpaidLines.length,
     canManualDiscount: false,
   }).map((key) =>
-    key === 'split'
+    key === 'switch'
       ? {
+          key,
+          icon: <ChevronsUpDown className="size-[15px]" aria-hidden="true" />,
+          label: t('posShell.dock.action.switch'),
+          active: false,
+          onClick: () => onSwitchOrder?.(),
+        }
+      : key === 'split'
+        ? {
           key,
           icon: <SplitSquareHorizontal className="size-[15px]" aria-hidden="true" />,
           label: t('posShell.dock.action.split'),
           active: splitMode,
           onClick: toggleSplitMode,
         }
-      : {
+        : {
           key,
           icon: <Paperclip className="size-[15px]" aria-hidden="true" />,
           label: t('posShell.dock.action.attachments'),
@@ -557,7 +566,6 @@ export function BillDetail({
             .filter(Boolean)
             .join(' · ')}
           hasPaidLines={billHasPaidLines}
-          onSwitchOrder={onSwitchOrder}
           expanded={dockExpanded}
           onExpandedChange={setDockExpanded}
           lines={dockExpanded ? dockLines : peekLines(dockLines)}

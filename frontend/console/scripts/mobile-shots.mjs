@@ -363,8 +363,8 @@ const SCREENS = [
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 
 for (const pass of [
-  { name: 'light-en', theme: 'light', lang: 'en', moreLabel: 'More' },
-  { name: 'dark-id', theme: 'dark', lang: 'id', moreLabel: 'Lainnya' },
+  { name: 'light-en', theme: 'light', lang: 'en', moreLabel: 'More', ordersLabel: 'Orders' },
+  { name: 'dark-id', theme: 'dark', lang: 'id', moreLabel: 'Lainnya', ordersLabel: 'Pesanan' },
 ]) {
   const dir = `${OUT}/${pass.name}`
   mkdirSync(dir, { recursive: true })
@@ -452,7 +452,10 @@ for (const pass of [
   await page.waitForTimeout(500)
 
   // Same component, other data owner: a partially-paid open bill (BillDetail renders the deck).
-  await page.getByTestId('pos-dock-switch').click({ timeout: 8000 })
+  // The switcher lives in the till menu now (and, in bill mode, as the deck's first chip).
+  await page.getByTestId('pos-till-menu').click({ timeout: 8000 })
+  await page.waitForTimeout(400)
+  await page.getByRole('menuitem', { name: pass.ordersLabel, exact: true }).click({ timeout: 8000 })
   await page.waitForTimeout(600)
   await page.getByText('Meja 07').first().click({ timeout: 8000 })
   await page.waitForTimeout(1400)
