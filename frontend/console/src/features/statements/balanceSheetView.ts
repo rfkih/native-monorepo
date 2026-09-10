@@ -18,6 +18,7 @@
  *     It must not render in the same ink as every other figure.
  */
 import type { BalanceLine } from './api'
+import { ACCOUNT_LABEL_KEYS } from './accountLabels'
 
 /**
  * The asset accounts where a negative balance is genuinely IMPOSSIBLE rather than merely unusual —
@@ -167,4 +168,76 @@ export function unnaturalAssetLines(lines: readonly BalanceLine[]): BalanceLine[
   return lines.filter(
     (l) => l.balanceMinor < 0 && IMPOSSIBLY_NEGATIVE_ASSET_CODES.has(l.accountCode),
   )
+}
+
+/** The synthetic profit row finance-service appends to every balance sheet (not a chart account). */
+export const RETAINED_EARNINGS_ACCOUNT = '3000-RETAINED-EARNINGS'
+
+/**
+ * One row as the statement tables want it, still unformatted and un-translated: `labelKey` is set
+ * only for the synthetic profit row (its code means nothing to a reader, so it shows a name and no
+ * code chip); `flagged` marks an impossible balance; `printOnly` keeps a hidden zero row in the DOM
+ * for the printout. The page turns `labelKey` into copy and formats the amount at the edge.
+ */
+export interface BalanceDisplayLine {
+  accountCode: string
+  labelKey?: string
+  amountMinor: number
+  flagged?: boolean
+  printOnly?: boolean
+}
+
+export interface BalanceSheetDisplay {
+  assetGroups: { labelKey: string; lines: BalanceDisplayLine[]; subtotalMinor: number }[]
+  liabilityLines: BalanceDisplayLine[]
+  equityLines: BalanceDisplayLine[]
+  hiddenAssets: number
+  hiddenLiabilities: number
+  hiddenEquity: number
+  /** The asset lines carrying a balance that cannot be real — see {@link unnaturalAssetLines}. */
+  flagged: BalanceLine[]
+}
+
+/**
+ * Everything the Neraca decides before it renders, in one pure step: equipment netted to book value,
+ * assets grouped by liquidity, impossible balances flagged (assets only — a liability must never
+ * inherit the treatment because its code collides), zero rows folded away unless `showZeros`, the
+ * netted equipment row kept even at zero (fully depreciated is not gone), and the synthetic profit
+ * row given a name key instead of a code. The desktop page and the phone screen both render THIS,
+ * so they cannot disagree on a row.
+ */
+export function displayBalanceSheet(
+  data: { assetLines: BalanceLine[]; liabilityLines: BalanceLine[]; equityLines: BalanceLine[] },
+  opts: { showZeros: boolean },
+): BalanceSheetDisplay {
+  const assetLines = netFixedAssetLines(data.assetLines)
+  const flagged = unnaturalAssetLines(assetLines)
+  const flaggedCodes = new Set(flagged.map((l) => l.accountCode))
+
+  const toDisplay =
+    (flag: boolean) =>
+    (l: BalanceLine): BalanceDisplayLine => ({
+      accountCode: l.accountCode,
+      amountMinor: l.balanceMinor,
+      flagged: flag && flaggedCodes.has(l.accountCode),
+      printOnly: !opts.showZeros && l.balanceMinor === 0 && !isNettedFixedAssetRow(l),
+    })
+
+  return {
+    assetGroups: groupAssetLines(assetLines).map((g) => ({
+      labelKey: g.labelKey,
+      lines: g.lines.map(toDisplay(true)),
+      subtotalMinor: g.subtotalMinor,
+    })),
+    liabilityLines: data.liabilityLines.map(toDisplay(false)),
+    equityLines: data.equityLines.map((l) =>
+      l.accountCode === RETAINED_EARNINGS_ACCOUNT
+        ? { accountCode: '', labelKey: ACCOUNT_LABEL_KEYS[RETAINED_EARNINGS_ACCOUNT], amountMinor: l.balanceMinor }
+        : toDisplay(false)(l),
+    ),
+    hiddenAssets: splitZeroLines(assetLines).hidden.length,
+    hiddenLiabilities: splitZeroLines(data.liabilityLines).hidden.length,
+    hiddenEquity: splitZeroLines(data.equityLines).hidden.length,
+    flagged,
+  }
 }

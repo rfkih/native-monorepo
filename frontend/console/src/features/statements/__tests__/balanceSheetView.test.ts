@@ -3,6 +3,8 @@ import {
   ASSET_GROUPS,
   IMPOSSIBLY_NEGATIVE_ASSET_CODES,
   OTHER_ASSETS_LABEL_KEY,
+  RETAINED_EARNINGS_ACCOUNT,
+  displayBalanceSheet,
   groupAssetLines,
   netFixedAssetLines,
   splitZeroLines,
@@ -154,5 +156,64 @@ describe('unnaturalAssetLines', () => {
 
   it('says nothing when every asset is positive', () => {
     expect(unnaturalAssetLines([line('1900', 1), line('1500', 2)])).toEqual([])
+  })
+})
+
+describe('displayBalanceSheet — the one display step the desktop page and the phone screen share', () => {
+  const typed = (accountType: string) => (accountCode: string, balanceMinor: number): BalanceLine => ({
+    ...line(accountCode, balanceMinor),
+    accountType,
+  })
+  const liability = typed('LIABILITY')
+  const equity = typed('EQUITY')
+  const data = {
+    // Inventory impossibly negative; equipment fully depreciated (nets to zero); a zero VAT row.
+    assetLines: [line('1000', 5_000), line('1100', -4_000), line('1300', 0), line('1500', 9_000), line('1590', -9_000)],
+    // Utang usaha nets to zero — a real UAT shape.
+    liabilityLines: [liability('2000', 0), liability('2200', 1_200)],
+    equityLines: [equity('3000', 10_000), equity(RETAINED_EARNINGS_ACCOUNT, -3_200)],
+  }
+  const flat = (v: ReturnType<typeof displayBalanceSheet>) => v.assetGroups.flatMap((g) => g.lines)
+
+  it('flags impossible balances on ASSET rows only, never on a colliding liability or equity code', () => {
+    const view = displayBalanceSheet(data, { showZeros: false })
+    expect(view.flagged.map((l) => l.accountCode)).toEqual(['1100'])
+    expect(flat(view).find((l) => l.accountCode === '1100')?.flagged).toBe(true)
+    expect(view.liabilityLines.every((l) => !l.flagged)).toBe(true)
+    expect(view.equityLines.every((l) => !l.flagged)).toBe(true)
+  })
+
+  it('keeps zero rows in the output as print-only, except the netted equipment row', () => {
+    const view = displayBalanceSheet(data, { showZeros: false })
+    const byCode = Object.fromEntries(flat(view).map((l) => [l.accountCode, l]))
+    expect(byCode['1300'].printOnly).toBe(true)
+    // Cost and depreciation land on one row worth nothing — still owned, so still on screen.
+    expect(byCode['1500']).toMatchObject({ amountMinor: 0, printOnly: false })
+    expect(byCode['1590']).toBeUndefined()
+    expect(view.liabilityLines.find((l) => l.accountCode === '2000')?.printOnly).toBe(true)
+    expect(view.hiddenAssets).toBe(2)
+    expect(view.hiddenLiabilities).toBe(1)
+    expect(view.hiddenEquity).toBe(0)
+  })
+
+  it('shows every row when zeros are revealed; the hidden counts still say how many there were', () => {
+    const view = displayBalanceSheet(data, { showZeros: true })
+    expect([...flat(view), ...view.liabilityLines, ...view.equityLines].every((l) => !l.printOnly)).toBe(true)
+    expect(view.hiddenAssets).toBe(2)
+  })
+
+  it('names the synthetic profit row instead of showing its code', () => {
+    const view = displayBalanceSheet(data, { showZeros: false })
+    const profit = view.equityLines[1]
+    expect(profit.accountCode).toBe('')
+    expect(profit.labelKey).toBe(ACCOUNT_LABEL_KEYS[RETAINED_EARNINGS_ACCOUNT])
+    expect(profit.amountMinor).toBe(-3_200)
+    expect(view.equityLines[0].accountCode).toBe('3000')
+    expect(view.equityLines[0].labelKey).toBeUndefined()
+  })
+
+  it('groups assets by liquidity with the group label keys the page translates', () => {
+    const view = displayBalanceSheet(data, { showZeros: false })
+    expect(view.assetGroups.map((g) => g.labelKey)).toEqual(ASSET_GROUPS.filter((g) => g.codes.some((c) => ['1000', '1100', '1300', '1500'].includes(c))).map((g) => g.labelKey))
   })
 })
