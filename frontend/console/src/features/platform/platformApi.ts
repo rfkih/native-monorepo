@@ -41,6 +41,8 @@ export interface PlatformSettlementRecord {
   feeMinor: number
   currency: string
   settledAt: string
+  /** True once this payout has been taken back — the row stays in history, but it is not live. */
+  voided: boolean
 }
 
 /** POST /api/v1/platform-settlements body. */

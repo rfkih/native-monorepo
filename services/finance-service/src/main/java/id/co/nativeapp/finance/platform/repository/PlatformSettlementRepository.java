@@ -31,7 +31,8 @@ public interface PlatformSettlementRepository extends JpaRepository<PlatformSett
                  s.net_minor    AS net_minor,
                  s.fee_minor    AS fee_minor,
                  s.currency     AS currency,
-                 s.settled_at   AS settled_at
+                 s.settled_at   AS settled_at,
+                 s.voided_at    AS voided_at
             FROM platform_settlement s
            WHERE (:channelCode IS NULL OR s.channel_code = :channelCode)
            ORDER BY s.settled_at DESC
@@ -50,6 +51,10 @@ public interface PlatformSettlementRepository extends JpaRepository<PlatformSett
    * Asia/Jakarta} business-date convention (NOT the DATE-column {@code BillRepository} idiom, which
    * is timezone-immune). RLS-scoped automatically (rule 5) — no manual {@code company_id}
    * predicate, matching this repository's other native queries.
+   *
+   * <p>VOIDED payouts are excluded. A void contra nets the GL to zero on every account it touched,
+   * so counting the taken-back row here would leave this report claiming gross and fee the ledger
+   * no longer carries — the precise report-vs-ledger disagreement the void was built to fix.
    */
   @Query(
       value =
@@ -62,6 +67,7 @@ public interface PlatformSettlementRepository extends JpaRepository<PlatformSett
                  s.currency          AS currency
             FROM platform_settlement s
            WHERE to_char(s.settled_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM') = :period
+             AND s.voided_at IS NULL
            GROUP BY s.channel_code, s.currency
            ORDER BY s.channel_code
           """,

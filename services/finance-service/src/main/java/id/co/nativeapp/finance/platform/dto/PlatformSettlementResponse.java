@@ -12,7 +12,9 @@ public record PlatformSettlementResponse(
     long netMinor,
     long feeMinor,
     String currency,
-    Instant settledAt) {
+    Instant settledAt,
+    /** True once this payout has been taken back — the console must not offer Take-back twice. */
+    boolean voided) {
 
   /** Maps the write-side aggregate (post settle / replay) to the response shape. */
   public static PlatformSettlementResponse from(PlatformSettlement s) {
@@ -23,6 +25,7 @@ public record PlatformSettlementResponse(
         s.getNetMinor(),
         s.getFeeMinor(),
         s.getCurrency() == null ? null : s.getCurrency().strip(),
-        s.getSettledAt());
+        s.getSettledAt(),
+        s.getVoidedAt() != null);
   }
 }

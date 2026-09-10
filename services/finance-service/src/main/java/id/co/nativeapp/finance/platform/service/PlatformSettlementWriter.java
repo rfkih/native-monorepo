@@ -38,7 +38,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -70,6 +70,13 @@ public class PlatformSettlementWriter {
 
   private static final org.slf4j.Logger log =
       org.slf4j.LoggerFactory.getLogger(PlatformSettlementWriter.class);
+
+  /**
+   * The fleet business date (Asia/Jakarta — the same zone {@code findSummary} shifts {@code
+   * settled_at} into). Used for the statement line a payout deposits, so its date matches the date
+   * the bank will show.
+   */
+  private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Jakarta");
 
   private final PlatformSettlementRepository settlementRepository;
   private final PlatformReceivableWriter platformReceivable;
@@ -309,9 +316,11 @@ public class PlatformSettlementWriter {
     List<AllocatedLine> allocated = SettlementAllocation.allocate(lines, settlement.getFeeMinor());
 
     // Hand each line's gross back to the row it was taken from. Restoring is an ADD, mirroring the
-    // accrual, so a balance that moved on in the meantime is not overwritten.
+    // accrual, so a balance that moved on in the meantime is not overwritten — and it goes through
+    // `restore`, not `accumulate`, so it adds the money without re-stating who pays that row: the
+    // header names the payer as it was at settle time, which may since have been re-mapped.
     for (AllocatedLine line : allocated) {
-      platformReceivable.accumulate(
+      platformReceivable.restore(
           companyId,
           new SettlementSourceReader.SettlementSourceRef(
               line.kind(), line.channelCode(), settlement.getChannelCode()),
@@ -321,6 +330,11 @@ public class PlatformSettlementWriter {
     }
 
     String period = LedgerPosting.periodOf(now);
+    // Every other posting path in this service guards this (settle above, AR/AP,
+    // ReconciliationWriter)
+    // and a contra is a posting like any other: voiding an old IDR payout into a period that has
+    // since taken USD entries is exactly the divergence the guard exists to stop.
+    requireConsistentGlCurrency(period, Money.ofMinor(settlement.getNetMinor(), currency));
     JournalEntry contra =
         buildVoidEntry(
             settlement.getChannelCode(),
@@ -411,23 +425,44 @@ public class PlatformSettlementWriter {
    * twice, which also closes the double-credit risk of a payout and a manual reconcile both
    * clearing the same transfer.
    *
-   * <p>Silently does nothing when the company has no bank account yet — the payout still posts, its
-   * net simply waits in CASH_CLEARING to be swept the manual way, exactly as before V68. Booking
-   * money is never blocked on a missing setting.
+   * <p>Silently does nothing when there is no ONE obvious account to deposit into — the payout
+   * still posts, its net simply waits in CASH_CLEARING to be swept the manual way, exactly as
+   * before V68. Booking money is never blocked on a missing setting, and that promise is why the
+   * candidate list is filtered rather than merely counted:
+   *
+   * <ul>
+   *   <li><b>Active only.</b> {@code findAllView} returns archived accounts too. One stale account
+   *       beside the current one made {@code size() != 1} true and skipped the deposit silently; a
+   *       company whose only row is deactivated would have had money booked into a closed account.
+   *   <li><b>Matching currency.</b> {@link StatementLineWriter#importLines} stamps the line with
+   *       the ACCOUNT's currency and {@link ReconciliationWriter#reconcile} then posts in it. The
+   *       settlement entry was already flushed in this same transaction in the payout's currency,
+   *       so a USD account on IDR books threw {@code MismatchedPostingCurrencyException} — and
+   *       because this runs inside {@code settleSources}' transaction, it rolled back the ENTIRE
+   *       payout. Skipping is the behaviour this javadoc promises; failing the payout is not.
+   * </ul>
    */
   private void depositIntoBank(PlatformSettlement settlement, Money net, Instant now) {
     if (net.amountMinor() <= 0) {
       return;
     }
-    List<BankAccountView> accounts = bankAccountRepository.findAllView();
+    // getCurrencyCode(), not currency(): Money.currency() is a java.util.Currency, and comparing a
+    // String to it compiles happily (String.equals takes Object) while never matching.
+    String payoutCurrency = net.currency().getCurrencyCode();
+    List<BankAccountView> accounts =
+        bankAccountRepository.findAllView().stream()
+            .filter(BankAccountView::getActive)
+            .filter(a -> a.getCurrency() != null && a.getCurrency().strip().equals(payoutCurrency))
+            .toList();
     if (accounts.size() != 1) {
       // Zero: nothing to deposit into. More than one: which account received it is a fact only the
       // merchant knows, and guessing would put money in the wrong place — the request carries it
       // once the console asks (deliberately not inferred here).
       log.warn(
-          "platform settlement {} not auto-deposited: {} bank accounts configured",
+          "platform settlement {} not auto-deposited: {} active {} bank accounts configured",
           settlement.getId(),
-          accounts.size());
+          accounts.size(),
+          payoutCurrency);
       return;
     }
 
@@ -437,7 +472,10 @@ public class PlatformSettlementWriter {
             bankAccountId,
             List.of(
                 new StatementLineInput(
-                    LocalDate.ofInstant(now, ZoneOffset.UTC),
+                    // The business date is Asia/Jakarta, the same convention findSummary shifts to.
+                    // Dated in UTC, a payout recorded 00:00-07:00 WIB landed on the PREVIOUS day
+                    // and would not line up with the real bank statement at reconciliation.
+                    LocalDate.ofInstant(now, BUSINESS_ZONE),
                     net.amountMinor(),
                     "Pencairan " + settlement.getChannelCode(),
                     settlement.getIdempotencyKey())));
@@ -746,6 +784,10 @@ public class PlatformSettlementWriter {
   /**
    * When this payer last paid out, or {@code null} if it never has.
    *
+   * <p>Voided payouts are excluded: taking one back returns the balance, so counting it here would
+   * suppress the Beranda nudge for a whole cadence window (up to a week for Shopee) over money that
+   * was never actually paid out.
+   *
    * <p>Found through the payout's LINES rather than the header's payer name. A settlement header
    * records the payer as it was named at the time, but naming an acquirer re-points a balance from
    * (say) `QRIS` to `SHOPEE` — matching on the header alone would make a payer that settled
@@ -766,6 +808,7 @@ public class PlatformSettlementWriter {
               FROM platform_settlement s
               JOIN platform_settlement_line l ON l.settlement_id = s.id
              WHERE l.channel_code IN (%s)
+               AND s.voided_at IS NULL
             """
                 .formatted(placeholders),
             (rs, rowNum) -> {
@@ -789,7 +832,8 @@ public class PlatformSettlementWriter {
                     v.getNetMinor(),
                     v.getFeeMinor(),
                     v.getCurrency() == null ? null : v.getCurrency().strip(),
-                    v.getSettledAt()))
+                    v.getSettledAt(),
+                    v.getVoidedAt() != null))
         .toList();
   }
 

@@ -4035,6 +4035,8 @@ export const id = {
       void: 'Batalkan',
       voidConfirm: 'Batalkan pencairan ini?',
       voidYes: 'Ya, batalkan',
+      voided: 'Sudah ditarik',
+      voidFailed: 'Pencairan itu tidak bisa ditarik — muat ulang daftarnya dan periksa apakah sudah pernah ditarik.',
       colFee: 'Komisi',
     },
   },
