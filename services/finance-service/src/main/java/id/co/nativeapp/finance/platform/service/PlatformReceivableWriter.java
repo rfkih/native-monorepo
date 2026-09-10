@@ -46,6 +46,29 @@ public class PlatformReceivableWriter {
           version           = platform_receivable.version + 1
       """;
 
+  /**
+   * {@link #UPSERT_SQL} minus the two mapping columns — the void path's upsert.
+   *
+   * <p>A void hands back an amount that was taken from a row; it says nothing about who pays that
+   * row TODAY. Re-stating {@code source_kind}/{@code source_code} from the settlement header (which
+   * records the payer as it was named at settle time) would silently re-point a channel the
+   * merchant has since re-mapped in SettlementSourceSettings — e.g. voiding a pre-change payout
+   * would drag QRIS back out of the SHOPEE payout group. The INSERT branch still carries them,
+   * because a row that no longer exists has no current mapping to preserve.
+   */
+  private static final String RESTORE_SQL =
+      """
+      INSERT INTO platform_receivable
+          (id, channel_code, currency, outstanding_minor, source_kind, source_code,
+           created_at, created_by, updated_at, updated_by, version, company_id)
+      VALUES (?, ?, ?, ?, ?, ?, now(), ?, now(), ?, 0, ?)
+      ON CONFLICT (company_id, channel_code, currency) DO UPDATE SET
+          outstanding_minor = platform_receivable.outstanding_minor + EXCLUDED.outstanding_minor,
+          updated_at        = now(),
+          updated_by        = EXCLUDED.updated_by,
+          version           = platform_receivable.version + 1
+      """;
+
   private final JdbcTemplate jdbcTemplate;
 
   public PlatformReceivableWriter(JdbcTemplate jdbcTemplate) {
@@ -92,6 +115,30 @@ public class PlatformReceivableWriter {
    * during a rollback window heals itself: such a row carries V61's `source_code` default
    * ('UNKNOWN') and adopts its real payer on the next sale that touches it.
    */
+  /**
+   * Hands an amount BACK to a source row without touching its mapping — the void path. See {@link
+   * #RESTORE_SQL} for why a void must not re-state the payer.
+   */
+  @org.springframework.transaction.annotation.Transactional
+  public void restore(
+      String companyId,
+      SettlementSourceReader.SettlementSourceRef source,
+      String currency,
+      long deltaMinor,
+      String actor) {
+    jdbcTemplate.update(
+        RESTORE_SQL,
+        java.util.UUID.randomUUID(),
+        source.channelCode(),
+        currency,
+        deltaMinor,
+        source.kind().name(),
+        source.sourceCode(),
+        actor,
+        actor,
+        companyId);
+  }
+
   @org.springframework.transaction.annotation.Transactional
   public void accumulate(
       String companyId,

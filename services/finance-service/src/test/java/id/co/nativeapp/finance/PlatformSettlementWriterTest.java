@@ -228,6 +228,10 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
   }
 
   private void seedBankAccount() throws SQLException {
+    seedBankAccount("IDR", true);
+  }
+
+  private void seedBankAccount(String currency, boolean active) throws SQLException {
     try (Connection c =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -235,11 +239,13 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
             c.prepareStatement(
                 "INSERT INTO bank_account (id, name, currency, active, created_at, created_by,"
                     + " updated_at, updated_by, version, company_id)"
-                    + " VALUES (?, 'BCA', 'IDR', TRUE, now(), ?, now(), ?, 0, ?)")) {
+                    + " VALUES (?, 'BCA', ?, ?, now(), ?, now(), ?, 0, ?)")) {
       ps.setObject(1, UUID.randomUUID());
-      ps.setString(2, ACTOR);
-      ps.setString(3, ACTOR);
-      ps.setString(4, TENANT);
+      ps.setString(2, currency);
+      ps.setBoolean(3, active);
+      ps.setString(4, ACTOR);
+      ps.setString(5, ACTOR);
+      ps.setString(6, TENANT);
       ps.executeUpdate();
     }
   }
@@ -447,5 +453,78 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
         return rs.getBoolean(1);
       }
     }
+  }
+
+  /**
+   * The report and the ledger have to tell the same story. A void nets the GL to zero on every
+   * account it touched, so a summary that still counts the taken-back row is exactly the
+   * disagreement the void feature was built to remove.
+   */
+  @Test
+  void aVoidedPayoutDropsOutOfTheSummary() throws Exception {
+    seedOutstanding(500_000L);
+    PlatformSettlementResult settled = settle(300_000L, 240_000L, "psw-summary-void");
+    String period =
+        java.time.LocalDate.ofInstant(
+                settled.settlement().getSettledAt(), java.time.ZoneId.of("Asia/Jakarta"))
+            .toString()
+            .substring(0, 7);
+    assertThat(TenantContext.callAs(TENANT, ACTOR, () -> writer.summary(period)))
+        .as("it counts while it is live")
+        .isNotEmpty();
+
+    TenantContext.runAs(TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId()));
+
+    assertThat(TenantContext.callAs(TENANT, ACTOR, () -> writer.summary(period)))
+        .as("and stops counting the moment it is taken back")
+        .isEmpty();
+    assertThat(bankBalanceAsAdmin("1900")).as("matching a ledger that nets to zero").isZero();
+  }
+
+  /** History has to SAY a row was taken back, or the console offers Take-back on it a second time. */
+  @Test
+  void historyMarksATakenBackPayout() throws Exception {
+    seedOutstanding(500_000L);
+    PlatformSettlementResult settled = settle(300_000L, 240_000L, "psw-history-void");
+    assertThat(TenantContext.callAs(TENANT, ACTOR, () -> writer.history(CHANNEL)).getFirst().voided())
+        .isFalse();
+
+    TenantContext.runAs(TENANT, ACTOR, () -> writer.voidSettlement(settled.settlement().getId()));
+
+    assertThat(TenantContext.callAs(TENANT, ACTOR, () -> writer.history(CHANNEL)).getFirst().voided())
+        .isTrue();
+  }
+
+  /**
+   * The deposit is a convenience; the payout is the money. A bank account the deposit cannot legally
+   * use must make the deposit step stand down, NOT take the payout with it — importLines stamps the
+   * line with the ACCOUNT's currency, and the resulting mismatch used to roll back the whole
+   * transaction.
+   */
+  @Test
+  void aBankAccountInAnotherCurrencyIsSkippedRatherThanFailingThePayout() throws Exception {
+    seedBankAccount("USD", true);
+    seedOutstanding(500_000L);
+
+    PlatformSettlementResult settled = settle(300_000L, 240_000L, "psw-bank-usd");
+
+    assertThat(settled.created()).as("the payout still happens").isTrue();
+    assertThat(bankBalanceAsAdmin("1000")).as("but nothing lands in the bank").isZero();
+    assertThat(bankBalanceAsAdmin("1900"))
+        .as("the net waits in cash clearing to be swept manually")
+        .isEqualTo(240_000L);
+    assertThat(statementLineCountAsAdmin()).isZero();
+  }
+
+  /** An archived account is not a deposit target, and its presence must not hide the real one. */
+  @Test
+  void anArchivedBankAccountIsIgnoredSoTheLiveOneStillReceivesTheDeposit() throws Exception {
+    seedBankAccount("IDR", false);
+    seedBankAccount("IDR", true);
+    seedOutstanding(500_000L);
+
+    settle(300_000L, 240_000L, "psw-bank-archived");
+
+    assertThat(bankBalanceAsAdmin("1000")).isEqualTo(240_000L);
   }
 }

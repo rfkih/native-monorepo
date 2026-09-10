@@ -21,6 +21,7 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
+import { cn } from '@/lib/cn'
 import {
   usePayoutSources,
   useSettlementHistory,
@@ -143,7 +144,15 @@ function HistorySection({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-b border-ink-50 last:border-0 hover:bg-hover">
+                <tr
+                  key={row.id}
+                  className={cn(
+                    'border-b border-ink-50 last:border-0 hover:bg-hover',
+                    // A taken-back payout is history, not money: it stays on the page (the books
+                    // keep both entries) but must not read as a live figure.
+                    row.voided && 'text-ink-3 line-through decoration-ink-300',
+                  )}
+                >
                   <td className="px-4 py-3 font-mono text-ink-2">{row.channelCode}</td>
                   <td className="px-4 py-3 text-ink-3">{formatSettledAt(row.settledAt, locale)}</td>
                   <td className="tnum px-4 py-3 text-right font-mono text-ink">
@@ -156,7 +165,13 @@ function HistorySection({
                     {formatMoney(row.feeMinor, row.currency, locale)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <VoidButton session={session} row={row} />
+                    {row.voided ? (
+                      <span className="text-[12.5px] font-semibold text-ink-3 no-underline">
+                        {t('platform.history.voided')}
+                      </span>
+                    ) : (
+                      <VoidButton session={session} row={row} />
+                    )}
                   </td>
                 </tr>
               ))}
@@ -207,6 +222,11 @@ function VoidButton({
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">
       <span className="text-[12.5px] text-ink-3">{t('platform.history.voidConfirm')}</span>
+      {voidIt.isError ? (
+        <span className="text-[12.5px] text-loss" role="alert">
+          {t('platform.history.voidFailed')}
+        </span>
+      ) : null}
       <button
         type="button"
         disabled={voidIt.isPending}

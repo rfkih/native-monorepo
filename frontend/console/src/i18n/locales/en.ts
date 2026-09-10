@@ -4080,6 +4080,8 @@ export const en = {
       void: 'Take back',
       voidConfirm: 'Take this payout back?',
       voidYes: 'Yes, take it back',
+      voided: 'Taken back',
+      voidFailed: 'That payout could not be taken back — reload the list and check whether it already was.',
       colFee: 'Fee',
     },
   },
