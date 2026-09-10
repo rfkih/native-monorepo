@@ -1,6 +1,14 @@
 /**
- * MenuTile.tsx — extracted VERBATIM from Pos.tsx (redesign P2, mechanical move only).
- * Markup and behavior unchanged; closures became props where needed.
+ * MenuTile — the catalog card (Native Till Android v2).
+ *
+ * Redrawn from the phone mockup: a fixed 133px card whose separation comes from a 1px hairline
+ * rather than a shadow, and whose selected state is that hairline going ink. Two tiles per row on a
+ * 360px phone, so the card has to survive being ~156px wide — hence the 60px media band, the
+ * two-line name clamp, and the price on its own mono line.
+ *
+ * The badge is one slot with three mutually exclusive meanings, in priority order: how many are on
+ * the ticket → sold out → running low. Quantity is the only one that fills ink; the stock ones are
+ * outline-tinted, so "you added two" never looks like "only two left".
  */
 import { useTranslation } from 'react-i18next'
 import type { } from '@/lib/session'
@@ -21,10 +29,7 @@ function itemInitials(name: string): string {
   return letters.join('') || '·'
 }
 
-
-// ---------------------------------------------------------------------------
-// MenuTile — 3b design tile
-// ---------------------------------------------------------------------------
+const BADGE = 'absolute right-1.5 top-1.5 grid h-5 place-items-center rounded-full px-1.5 text-[10px] font-bold'
 
 export function MenuTile({
   item,
@@ -44,7 +49,6 @@ export function MenuTile({
   const unavailable = !item.available || stockSoldOut
   const isLowStock = item.stockQuantity != null && item.stockQuantity > 0 && item.stockQuantity <= 5
   const delayMs = Math.min(index, 12) * 40
-  const hasImage = !!item.imageUrl
 
   return (
     <button
@@ -59,88 +63,66 @@ export function MenuTile({
       aria-disabled={unavailable}
       style={{ animationDelay: `${delayMs}ms` }}
       className={cn(
-        'reveal relative flex flex-col overflow-hidden rounded-xl bg-surface text-left transition-all duration-200',
+        'reveal relative flex h-[133px] flex-col overflow-hidden rounded-[15px] border bg-surface text-left',
+        'transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
         unavailable
-          ? 'cursor-not-allowed opacity-55 shadow-sm'
+          ? 'cursor-not-allowed border-line opacity-55'
           : qty > 0
-            ? 'shadow-md ring-2 ring-emerald/25 hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]'
-            : 'shadow-sm hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]',
+            ? 'border-emerald active:bg-hover'
+            : 'border-line hover:bg-hover active:bg-hover',
       )}
     >
-      {/* Image area (104px) or placeholder */}
-      {hasImage ? (
-        <div className="relative h-[104px] w-full overflow-hidden bg-ink-50">
+      {/* Media band — 60px whether it holds a photo or the initials, so a mixed catalog still
+          lines its names and prices up across the row. */}
+      <span className="relative flex h-[60px] w-full shrink-0 items-center justify-center overflow-hidden bg-hover">
+        {item.imageUrl ? (
           <img
-            src={item.imageUrl!}
-            alt={item.name}
+            src={item.imageUrl}
+            alt=""
             loading="lazy"
-            className={cn(
-              'h-full w-full object-cover transition-transform duration-300',
-              !unavailable && 'group-hover:scale-[1.04]',
-              unavailable && 'grayscale',
-            )}
+            className={cn('size-full object-cover', unavailable && 'grayscale')}
           />
-          {/* Low stock / sold-out badge */}
-          {isLowStock && !unavailable ? (
-            <span className="absolute right-2 top-2 z-10 flex h-6 items-center rounded-full bg-tint-warning px-2.5 text-[11px] font-bold text-amber-2">
-              {t('menu.stock.lowStock', { count: item.stockQuantity })}
-            </span>
-          ) : unavailable ? (
-            <span className="absolute right-2 top-2 z-10 flex h-6 items-center rounded-full bg-ink-50 px-2.5 text-[11px] font-semibold text-ink-3">
-              {t('pos.soldOut')}
-            </span>
-          ) : null}
-          {/* Qty badge */}
-          {!unavailable && qty > 0 ? (
-            <span className="tnum absolute right-2 top-2 grid h-6 min-w-6 place-items-center rounded-full bg-emerald px-1.5 font-mono text-xs font-bold text-on-emerald shadow-sm">
-              {qty}
-            </span>
-          ) : null}
-        </div>
-      ) : (
-        /* Compact text tile for image-less items (72px) */
-        <div className="relative flex h-[72px] w-full items-center justify-center bg-emerald-tint">
-          <span aria-hidden="true" className="select-none text-xl font-extrabold tracking-wide text-ink-3">
+        ) : (
+          <span
+            aria-hidden="true"
+            className="select-none text-[18px] font-extrabold tracking-[.02em] text-ink-3"
+          >
             {itemInitials(item.name)}
           </span>
-          {isLowStock && !unavailable ? (
-            <span className="absolute right-2 top-2 flex h-6 items-center rounded-full bg-tint-warning px-2.5 text-[11px] font-bold text-amber-2">
-              {t('menu.stock.lowStock', { count: item.stockQuantity })}
-            </span>
-          ) : unavailable ? (
-            <span className="absolute right-2 top-2 flex h-6 items-center rounded-full bg-ink-50 px-2.5 text-[11px] font-semibold text-ink-3">
-              {t('pos.soldOut')}
-            </span>
-          ) : null}
-          {!unavailable && qty > 0 ? (
-            <span className="tnum absolute right-2 top-2 grid h-6 min-w-6 place-items-center rounded-full bg-emerald px-1.5 font-mono text-xs font-bold text-on-emerald shadow-sm">
-              {qty}
-            </span>
-          ) : null}
-        </div>
-      )}
+        )}
 
-      {/* Content */}
-      <div className="flex flex-col px-3 pb-3 pt-2.5">
+        {qty > 0 && !unavailable ? (
+          <span className={cn(BADGE, 'tnum min-w-5 bg-emerald font-mono text-[11px] text-on-emerald')}>
+            {qty}
+          </span>
+        ) : unavailable ? (
+          <span className={cn(BADGE, 'bg-ink-100 font-semibold text-ink-2')}>{t('pos.soldOut')}</span>
+        ) : isLowStock ? (
+          <span className={cn(BADGE, 'bg-tint-warning text-amber ring-1 ring-inset ring-warning-line')}>
+            {t('menu.stock.lowStock', { count: item.stockQuantity })}
+          </span>
+        ) : null}
+      </span>
+
+      {/* Name + price */}
+      <span className="flex min-w-0 flex-col px-3 pb-3 pt-2.5">
         <span
           className={cn(
-            'line-clamp-2 text-[13px] font-semibold leading-snug',
+            'line-clamp-2 min-h-[34px] text-[12.5px] font-semibold leading-[1.35]',
             unavailable ? 'text-ink-3' : 'text-ink',
           )}
         >
           {item.name}
         </span>
-        <div className="mt-1.5 flex items-end justify-between">
-          <span
-            className={cn(
-              'tnum font-mono text-[14px] font-semibold',
-              unavailable ? 'text-ink-3/50' : 'text-ink',
-            )}
-          >
-            {formatMoney(item.priceMinor, item.currency, locale)}
-          </span>
-        </div>
-      </div>
+        <span
+          className={cn(
+            'tnum mt-1 font-mono text-[13px] font-semibold leading-none',
+            unavailable ? 'text-ink-3' : 'text-ink-2',
+          )}
+        >
+          {formatMoney(item.priceMinor, item.currency, locale)}
+        </span>
+      </span>
     </button>
   )
 }

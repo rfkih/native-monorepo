@@ -26,7 +26,7 @@ import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
 // OutletPicker component
 // ---------------------------------------------------------------------------
 
-export function OutletPicker() {
+export function OutletPicker({ variant = 'pill' }: { variant?: 'pill' | 'subtitle' } = {}) {
   const { t } = useTranslation()
   const { company, activeOutletId, setActiveOutlet } = useSession()
   // Shared resolution (company outlets ∩ own assignments + self-heal) — the same hook the
@@ -117,17 +117,31 @@ export function OutletPicker() {
           aria-label={t('pos.outletSelectorLabel', { name: activeOutlet.name })}
           onClick={() => setOpen((v) => !v)}
           className={cn(
-            'flex h-[40px] w-full min-w-0 max-w-[200px] items-center gap-2 rounded-xl',
-            'border-[1.5px] border-emerald-line bg-emerald-tint px-3 text-left',
-            'text-[13px] font-semibold text-emerald-2',
-            'transition-all hover:bg-emerald-tint/70',
+            'flex w-full min-w-0 items-center text-left',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+            variant === 'subtitle'
+              ? // Native Till Android v2: on the phone till the picker IS the header's identity
+                // line, so it carries no chrome of its own — just the outlet name, a chevron, and
+                // the 11.5px muted weight the rest of that line uses.
+                'gap-1 rounded-md text-[11.5px] font-medium text-ink-3 transition-opacity active:opacity-60'
+              : cn(
+                  'h-[40px] max-w-[200px] gap-2 rounded-xl',
+                  'border-[1.5px] border-emerald-line bg-emerald-tint px-3',
+                  'text-[13px] font-semibold text-emerald-2',
+                  'transition-all hover:bg-emerald-tint/70',
+                ),
           )}
         >
-          <Store className="size-3.5 shrink-0 text-emerald-2" aria-hidden="true" />
+          {variant === 'pill' ? (
+            <Store className="size-3.5 shrink-0 text-emerald-2" aria-hidden="true" />
+          ) : null}
           <span className="min-w-0 truncate">{activeOutlet.name}</span>
           <ChevronDown
-            className={cn('size-3.5 shrink-0 transition-transform', open && 'rotate-180')}
+            className={cn(
+              'shrink-0 transition-transform',
+              variant === 'subtitle' ? 'size-3' : 'size-3.5',
+              open && 'rotate-180',
+            )}
             aria-hidden="true"
           />
         </button>

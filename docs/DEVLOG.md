@@ -1,5 +1,56 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-10 — the phone bill stops living in a sheet
+
+The Till Android v2 design put one thing on trial: the phone kept the ticket *inside* a sheet, so
+ringing an order was tap an item → tap a chevron → a full-screen sheet covers the catalog → check
+→ close → tap the next item. The check and the catalog were never on screen together, so confirming
+what you just rang always cost a round trip through the surface hiding the thing you were about to
+tap next. The tablet solves this with a permanent bill column; 412px has no such width, but it has
+height — and the till was spending it on chrome. Four bands (ink status 56, bill tabs 64, chip row
+56, summary bar 96) came to ~270px, and the bill was visible in none of them.
+
+So the bill became a **deck attached to the bottom**, never dismissed: ~218px peeking at the newest
+unpaid lines plus the amount due and the pay verb, dragged up to 74dvh for the whole ticket,
+steppers, breakdown and bill actions. [ADR 0079](adr/0079-the-phone-bill-is-a-deck-not-a-sheet.md).
+
+**One component, two data owners.** The walk-in cart is a local array owned by `Pos.tsx`; an open
+bill is a server aggregate owned by `BillDetail.tsx`, with its own mutations, split state and
+line-removal lockdown. They had grown two lookalike surfaces that behaved differently
+(`WalkInCartSheet`, `PhoneSheetContent`). Now both render one stateless `BillDock` and keep their
+own mutations, which is the pos-shell rule doing the work it was written for. The decisions worth
+naming — which lines the peek shows, what the due figure is called, which chips each owner gets —
+are pure functions in `lib/dockLines.ts` with tests, because none of them is visible in a shot.
+
+**Two bugs the screenshots found, that the type-checker could not.** The walk-in deck was offering
+a **Split** chip: `dockActions` gated split on "two unpaid lines" without asking whether this was a
+bill at all. A split check charges an explicit subset of bill *line ids* — the cart has none. The
+old sheet was bill-only by construction, so the rule had never needed stating; the shared deck made
+it a rule. And the tile qty badge, which had been hard-coded to 0 in bill mode forever
+(`BillSummaryResponse` carries a line count and no per-item detail), now works — `BillDetail`
+reports its unpaid quantities up. Passing that callback inline, the natural way, was an **infinite
+render loop**: the effect's own setState re-renders the caller, which rebuilds the callback, which
+re-runs the effect. It is held in a ref now, the way `useBackDismiss` holds its `onClose`.
+
+**Where the design had to be argued with.** The mockup pins the peek at 204px on a 412×915 phone,
+which clips the newest row — 218px makes it whole. On a 360×640 phone even that leaves the list a
+20px viewport, i.e. a cropped half-row that reads as broken, so below 720px of height the collapsed
+deck drops the list and keeps the title, the total and the verb. And the mockup's "Park" chip is
+not built: its only job there is to open the parked tray, which the header's Incoming button
+already does.
+
+**Deletions.** `PhoneSheetContent` is gone, and with it `BillDetail`'s catalog/modifier cluster —
+unreachable since the sheet stopped rendering a grid, but still taking seven props it never used.
+The ink status band is replaced on phone by a 52px white identity band whose subtitle *is* the
+outlet picker; leaving the till, printer status and operator sign-in moved into the ⋮ menu. Tablet
+and up are untouched on every count, as are the payment and receipt surfaces (ADR 0076 work is
+in flight there).
+
+**Verification.** `scripts/mobile-shots.mjs` gains a POS pass — fixture-driven, no backend —
+shooting the deck peeking and expanded, for the cart and for a deliberately *partially paid* bill,
+in light/en and dark/id. That fixture is the only state that exercises the deck's whole vocabulary
+at once: the "partly paid" badge, a dimmed settled row, and "still owing" rather than "total".
+
 ## 2026-09-09 — the brand was cyan in one file and gone in three designs
 
 Three redesigns landed together — Console Android, Console Web, Till Android — and the thing to
@@ -56,6 +107,50 @@ a raw `2026-07` after that label was localised.
 Still cyan, deliberately: the kitchen's live-status dot and empty-state icon (the one accent the
 designs keep), and the binary marks — launcher icons, favicon, OG image, Play Store assets — which
 are generated artwork, not CSS.
+
+## 2026-09-09 — the QRIS state worth warning about was the one nothing warned about
+
+This began as "implement QRIS with Xendit" and ended with no Xendit and no new QRIS feature, because
+Midtrans QRIS has been complete since ADR 0045: three modes, per-environment credentials, a signed
+webhook, events to the verticals, 1901 in finance. There are no merchants on it yet. So the honest
+task was not building — it was making sure the first real merchant cannot get stuck.
+
+Two ways they could, and both had already happened once.
+
+**The console warned in the wrong direction.** Picking PRODUCTION showed "Production uses real money
+— customers are charged for real." Running GATEWAY on SANDBOX showed nothing at all. That is exactly
+backwards: sandbox is the state that is dangerous *in production*, it is the state a prod company was
+once found live in, and it is silent by construction — a SANDBOX gateway reports `connected: true`
+and resolves to GATEWAY, so the mode cannot reveal it. The till rendered an ordinary QR; so did the
+customer display. Nobody in the room could tell the code was unpayable until a customer tried.
+
+The fix is frontend-only, because `gateway.environment` was already in the effective-settings
+payload the till fetches — the signal was there the whole time, just unread. `isSandboxGateway()`
+reads it as its own flag (deliberately NOT folded into `effectiveQrisMode`: degrading the mode would
+be a lie, the gateway really is connected), the panel turns red with a "Test mode" badge and says a
+real customer cannot pay it, the customer display carries a matching line, and the settings card now
+holds a standing warning while GATEWAY sits on SANDBOX.
+
+What I did **not** do: block sandbox charges server-side in prod. It is the stronger guarantee, and
+it is the wrong one right now — with zero merchants, the person who will exercise GATEWAY against
+production is us, and a hard block would lock out the only user there is. The danger was never that
+a sandbox charge exists; it was that nobody could see it.
+
+**A dead webhook is indistinguishable from a live one.** The 2026-08-22 outage survived months
+because the cashier's "Check payment status" tap applies the identical settlement transition —
+every charge settled, every receipt printed, nothing looked wrong, and the only cost was a human
+quietly doing the callback's job a few times a day. So the two edges now count themselves:
+`payment.charge.settled{source=webhook|sync}`. No schema change, no event change, no `company_id`
+tag (§5). The number to watch is the ratio: `source=webhook` flat at zero while `source=sync` climbs
+means the callback never arrives. A test asserts the counter actually moves and that a duplicate
+notification does not inflate it, because a canary nobody verified is just decoration.
+
+One commercial note recorded while deciding whether any of this was worth it. From **1 October 2026**
+BI's MDR-0% band widens to **every merchant category for transactions up to Rp100.000** (up to
+Rp500.000 for usaha mikro). Nearly every ticket in restaurant/carwash/barbershop sits under that, so
+the "gateway costs 0,7%" objection largely evaporates for our verticals — but Midtrans's own pricing
+page still states a flat 0,7% with no mention of the band, so this is not something to promise a
+merchant until they confirm they pass it through.
 
 ## 2026-09-06 — the migration gate caught what I did not think about
 

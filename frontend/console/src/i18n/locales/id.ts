@@ -656,9 +656,12 @@ export const id = {
         },
         activateNeedsKey: 'Isi server key environment ini dulu sebelum mengaktifkannya.',
         productionLiveWarning: 'Production memakai uang asli — pelanggan benar-benar terdebit.',
+        sandboxLiveWarning:
+          'Mode gateway menyala, tetapi environment aktifnya Sandbox — pelanggan asli tidak bisa membayar QR yang keluar. Pindahkan ke Production sebelum melayani pelanggan.',
         save: 'Simpan pengaturan gateway',
         saveError: 'Tidak dapat menyimpan pengaturan gateway. Coba lagi.',
         connected: 'Terhubung',
+        sandboxBadge: 'Terhubung ke Sandbox',
         connectedWithLast4: 'Terhubung · •••• {{last4}}',
         notConnected: 'Belum terhubung',
       },
@@ -1099,6 +1102,9 @@ export const id = {
           'Minta pelanggan memindai QR ini dengan aplikasi apa pun yang mendukung QRIS. Pembayaran dikonfirmasi otomatis — Anda tetap bisa menandainya lunas secara manual bila perlu.',
         gatewayWaiting: 'Membuat kode QR…',
         gatewayAutoReceipt: 'Pembayaran terkonfirmasi otomatis — mencetak struk…',
+        sandboxBadge: 'Mode uji coba',
+        sandboxHint:
+          'Ini kode QR Sandbox — pelanggan asli tidak bisa membayarnya. Minta pemilik memindahkan payment gateway ke Production.',
         expiresIn: 'Kedaluwarsa dalam {{time}}',
         expired: 'Kode QR kedaluwarsa',
         newQr: 'Kode QR baru',
@@ -1649,6 +1655,30 @@ export const id = {
     elevateEntry: 'Masuk untuk mengelola',
     endElevation: 'Keluar dari back office',
     logoutOutlet: 'Keluar dari gerai',
+    /** Native Till Android v2 — baris identitas header telepon dan dek bill yang selalu menempel. */
+    identity: '{{role}} {{name}}',
+    parkedOrders: 'Pesanan masuk',
+    leaveTill: 'Keluar dari kasir',
+    dock: {
+      expand: 'Buka bill',
+      collapse: 'Tutup bill',
+      partiallyPaid: 'Sebagian terbayar',
+      linePaid: 'Terbayar',
+      dueRemaining: 'Sisa tagihan',
+      estimated: 'estimasi',
+      lineUnit: '{{qty}} × {{price}}',
+      emptyCart: 'Ketuk menu untuk mulai menulis pesanan.',
+      emptyBill: 'Bill ini masih kosong — ketuk menu untuk menambahkan.',
+      splitHint:
+        'Centang baris yang dibayar sekarang. Baris terpilih ditagih sebagai satu cek; sisanya tetap terbuka di bill ini.',
+      action: {
+        split: 'Pisah',
+        discount: 'Diskon',
+        member: 'Member',
+        park: 'Parkir',
+        attachments: 'Lampiran',
+      },
+    },
   },
   /** ADR 0049 P3b — pemilihan karyawan + masuk PIN pada aplikasi Bisnis (OperatorPinSheet). */
   operatorPin: {
@@ -4639,6 +4669,7 @@ export const id = {
     qr: {
       scanToPay: 'Pindai kode QR untuk membayar',
       expiresIn: 'Kedaluwarsa dalam {{time}}',
+      sandbox: 'Kode uji coba — pembayaran ini belum aktif',
     },
   },
   // Mode tier P1 menyediakan kunci ini untuk layar <ExtendedFeatureLocked> di P2 (tautan langsung /

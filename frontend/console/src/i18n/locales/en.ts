@@ -673,9 +673,12 @@ export const en = {
         },
         activateNeedsKey: "Enter this environment's server key before making it active.",
         productionLiveWarning: 'Production uses real money — customers are charged for real.',
+        sandboxLiveWarning:
+          'Gateway mode is on, but the active environment is Sandbox — a real customer cannot pay these QR codes. Switch to Production before serving customers.',
         save: 'Save gateway settings',
         saveError: 'Could not save the gateway settings. Try again.',
         connected: 'Connected',
+        sandboxBadge: 'Connected to Sandbox',
         connectedWithLast4: 'Connected · •••• {{last4}}',
         notConnected: 'Not connected',
       },
@@ -1114,6 +1117,9 @@ export const en = {
           'Ask the customer to scan this QR with any QRIS-enabled app. Payment is confirmed automatically — you can still mark it as paid by hand if needed.',
         gatewayWaiting: 'Generating the QR code…',
         gatewayAutoReceipt: 'Payment confirmed automatically — printing the receipt…',
+        sandboxBadge: 'Test mode',
+        sandboxHint:
+          'This is a Sandbox QR code — a real customer cannot pay it. Ask the owner to switch the payment gateway to Production.',
         expiresIn: 'Expires in {{time}}',
         expired: 'QR code expired',
         newQr: 'New QR code',
@@ -1690,6 +1696,30 @@ export const en = {
     elevateEntry: 'Sign in to manage',
     endElevation: 'Sign out of back office',
     logoutOutlet: 'Log out outlet',
+    /** Native Till Android v2 — the phone header's identity line and the always-attached bill deck. */
+    identity: '{{role}} {{name}}',
+    parkedOrders: 'Incoming orders',
+    leaveTill: 'Leave the till',
+    dock: {
+      expand: 'Open the bill',
+      collapse: 'Close the bill',
+      partiallyPaid: 'Partly paid',
+      linePaid: 'Paid',
+      dueRemaining: 'Still owing',
+      estimated: 'estimate',
+      lineUnit: '{{qty}} × {{price}}',
+      emptyCart: 'Tap an item to start the ticket.',
+      emptyBill: 'Nothing on this bill yet — tap an item to add it.',
+      splitHint:
+        'Tick the lines being paid now. They are charged as one check; the rest stay open on this bill.',
+      action: {
+        split: 'Split',
+        discount: 'Discount',
+        member: 'Member',
+        park: 'Park',
+        attachments: 'Attachments',
+      },
+    },
   },
   /** ADR 0049 P3b — the Business-app till's employee-pick + PIN sign-in (OperatorPinSheet). */
   operatorPin: {
@@ -4713,6 +4743,7 @@ export const en = {
     qr: {
       scanToPay: 'Scan the QR code to pay',
       expiresIn: 'Expires in {{time}}',
+      sandbox: 'Test code — this payment is not active yet',
     },
   },
   // P1 tier-mode reserves these keys for P2's <ExtendedFeatureLocked> screen (a deep link / bookmark

@@ -1,6 +1,10 @@
 /**
- * BillDetail — 3b redesign: bottom-sheet overlay when sheetOpen=true (tablet+),
- * full-page overlay on phone.
+ * BillDetail — 3b redesign: bottom-sheet overlay when sheetOpen=true (tablet+).
+ *
+ * On a PHONE it renders the shared BillDock instead (Native Till Android v2): the bill is a deck
+ * that is always attached under the catalog, not a full-page sheet that covers it. Pos.tsx renders
+ * the same component for the walk-in cart — this file is simply the other data owner, because the
+ * bill's lines, their mutations and the split-check state all live here.
  *
  * All existing logic (bill data, line add/remove, split mode, payment, KOT,
  * receipt, cancel) is preserved exactly — only the presentation layer changed.
@@ -15,6 +19,7 @@ import {
   Table2,
   ReceiptText,
   ChefHat,
+  Paperclip,
   SplitSquareHorizontal,
   ChevronDown,
   Send,
@@ -26,16 +31,10 @@ import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import {
-  useMenu,
-  useCategories,
-  type MenuItem,
-} from './api'
-import { ModifierModal } from './ModifierModal'
-import { deriveCategories, visibleMenuItems,
-} from './lib/categories'
+import { useMenu } from './api'
 import { useMediaQuery } from './lib/useMediaQuery'
-import { PhoneSheetContent } from './components/PhoneSheetContent'
+import { BillDock, type DockAction, type DockLine } from '@/features/pos-shell/layout/BillDock'
+import { dockActions, dueLabelKey, peekLines } from './lib/dockLines'
 import { BillLineItem } from './components/BillLineItem'
 import { BillLineGroupItem } from './components/BillLineGroupItem'
 import { groupUnpaidLines, type BillLineGroup } from './lib/billLineGroups'
@@ -74,6 +73,19 @@ interface Props {
   autoPayToken?: number
   onBack: () => void
   onPaid: () => void
+  /**
+   * Opens the order switcher (walk-in / other bills / floor / parked). On a phone this is the ONLY
+   * way out of bill mode: the deck replaced the sheet that carried a back arrow, and the two other
+   * doors to the switcher — the bill-tabs strip and the summary bar — are tablet-and-up.
+   */
+  onSwitchOrder?: () => void
+  /**
+   * Reports how many of each menu item this bill currently holds UNPAID, so the catalog tiles
+   * behind the deck can badge a count in bill mode. The bill LIST response carries only a line
+   * count (no per-item detail), which is why Pos.tsx cannot derive this itself — the full bill
+   * lives here.
+   */
+  onUnpaidQtyByItem?: (qtyByItem: Record<string, number>) => void
   /** Open-bill lockdown: the login (incl. device-terminal elevation) is owner/manager — gates
    *  cancelling a bill WITH lines and removing/decrementing lines (see lib/billPermissions.ts;
    *  the server 403s regardless). */
@@ -95,28 +107,29 @@ export function BillDetail({
   autoPayToken = 0,
   onBack,
   onPaid,
+  onSwitchOrder,
+  onUnpaidQtyByItem,
   canVoid,
 }: Props) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const billQuery = useBill(session, billId)
   const menuQuery = useMenu(session)
-  const categoriesQuery = useCategories(session)
   const appendLines = useAppendLines(session)
   const removeLine = useRemoveLine(session)
   const cancelBill = useCancelBill(session)
 
   const bill = billQuery.data
   const items = menuQuery.data ?? []
-  const categories = (categoriesQuery.data ?? []).filter((c) => c.active)
 
-  const [modifierItem, setModifierItem] = useState<MenuItem | null>(null)
   const [showPayModal, setShowPayModal] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   // First failure of a group-remove loop (audit #6) — removeLine.isError alone resets to false
   // when a LATER line in the loop succeeds, hiding a mid-loop conflict.
   const [groupRemoveError, setGroupRemoveError] = useState<unknown>(null)
-  const [billOpen, setBillOpen] = useState(false) // phone-only: bill rail drawer
+  // Phone: the deck is peeking (false) or dragged up to the whole ticket (true). It is never
+  // "closed" — the deck is always on screen while a bill is open.
+  const [dockExpanded, setDockExpanded] = useState(false)
 
   // ─── Split mode ────────────────────────────────────────────────────────────
   const [splitMode, setSplitMode] = useState(false)
@@ -136,13 +149,6 @@ export function BillDetail({
 
   // ─── KOT ──────────────────────────────────────────────────────────────────
   const [showKot, setShowKot] = useState(false)
-
-  // ─── Category (for adding items) ──────────────────────────────────────────
-  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
-  const orderedCategories = deriveCategories(items, categories)
-  const resolvedCategoryId: string = activeCategoryId ?? orderedCategories[0]?.id ?? ''
-
-  const visibleItems = visibleMenuItems(items, orderedCategories, resolvedCategoryId, '')
 
   const currency = bill?.currency ?? items[0]?.currency ?? session.baseCurrency
   const lineCount = bill?.lines.reduce((s, l) => s + l.qty, 0) ?? 0
@@ -170,28 +176,6 @@ export function BillDetail({
   // ---------------------------------------------------------------------------
   // Handlers (logic unchanged)
   // ---------------------------------------------------------------------------
-
-  function handleItemTap(item: MenuItem) {
-    if (!item.available || (item.stockQuantity != null && item.stockQuantity <= 0)) return
-    if (!bill || bill.status !== 'OPEN') return
-    if (item.modifierGroups.length > 0) {
-      setModifierItem(item)
-      return
-    }
-    appendLines.mutate({
-      billId,
-      lines: [{ menuItemId: item.id, qty: 1, selectedOptionIds: [] }],
-})
-  }
-
-  function handleModifierConfirm(selectedOptionIds: string[]) {
-    if (!modifierItem || !bill) return
-    appendLines.mutate({
-      billId,
-      lines: [{ menuItemId: modifierItem.id, qty: 1, selectedOptionIds }],
-})
-    setModifierItem(null)
-  }
 
   function handleRemoveLine(lineId: string) {
     if (!allowRemoveLines) return // affordances are hidden; belt-and-braces (server 403s anyway)
@@ -285,11 +269,9 @@ export function BillDetail({
   const isTablet = useMediaQuery('(min-width: 640px)')
 
   // Hardware/browser Back collapses whichever bill surface is actually showing, instead of falling
-  // through to the route guard's "leave this page?" dialog — these were the last two overlays in
-  // the console that Back could not close. Both are MOUNTED-but-translated sheets rather than
-  // conditionally rendered ones, which is exactly what `enabled` is for; the two conditions are
-  // mutually exclusive via `isTablet`, so only one entry is ever parked.
-  useBackDismiss(() => setBillOpen(false), !isTablet && billOpen)
+  // through to the route guard's "leave this page?" dialog. The two conditions are mutually
+  // exclusive via `isTablet`, so only one entry is ever parked.
+  useBackDismiss(() => setDockExpanded(false), !isTablet && dockExpanded)
   useBackDismiss(() => onSheetOpenChange(false), isTablet && sheetOpen)
 
   function openPayModal() {
@@ -338,6 +320,28 @@ export function BillDetail({
       onPaid()
     }
   }
+
+  // Feed the catalog's qty badges (see onUnpaidQtyByItem). Two things keep this from looping:
+  // the effect fires on a stable SIGNATURE rather than the derived object (a fresh reference every
+  // render), and the callback itself is held in a ref — the same reason useBackDismiss keeps its
+  // onClose in one. Without the ref, a caller passing an inline arrow (the natural way to write it)
+  // re-runs the effect every render, and since the effect's own setState re-renders the caller,
+  // that is an infinite loop rather than a slow path.
+  const unpaidQtyByItem = (bill?.lines ?? []).reduce<Record<string, number>>((acc, l) => {
+    if (!l.paid) acc[l.menuItemId] = (acc[l.menuItemId] ?? 0) + l.qty
+    return acc
+  }, {})
+  const unpaidQtySignature = JSON.stringify(unpaidQtyByItem)
+  const reportQtyRef = useRef(onUnpaidQtyByItem)
+  useEffect(() => {
+    reportQtyRef.current = onUnpaidQtyByItem
+  })
+  useEffect(() => {
+    reportQtyRef.current?.(JSON.parse(unpaidQtySignature) as Record<string, number>)
+    // billId is a dep in its own right: this component is not keyed by it, so switching between two
+    // bills whose unpaid quantities happen to match (both empty, or both "1 x Es Teh") leaves the
+    // signature unchanged — and the caller's map would stay stamped with the bill you just left.
+  }, [billId, unpaidQtySignature])
 
   // P4 dock verbs: consume each token once, as soon as the bill has loaded and is OPEN. A token
   // arriving while the bill is still loading waits for the next effect run (billReady in deps).
@@ -437,11 +441,98 @@ export function BillDetail({
   // How many lines are NOT yet sent (simplified: all unpaid lines = "pending send")
   const unsentCount = unpaidLines.filter((l) => !l.paid).length
 
+  // ── The bill deck (phone, Native Till Android v2) ──────────────────────────────────────────
+  // BillDock renders strings, never numbers: every money value is formatted here (rule 8/9).
+  const busy = appendLines.isPending || removeLine.isPending || billQuery.isFetching
+  const modifierSuffix = (mods: { nameSnapshot: string }[]) =>
+    mods.length > 0 ? ` · ${mods.map((m) => m.nameSnapshot).join(', ')}` : ''
+
+  // Split mode charges an explicit SUBSET of line ids, so it lists bill.lines raw — one tickable
+  // row per line. The normal view collapses identical unpaid lines into one stepper row
+  // (billLineGroups) and appends the settled ones after them, dimmed.
+  const dockLines: DockLine[] = splitMode
+    ? bill.lines.map((l) => ({
+        key: l.id,
+        name: l.nameSnapshot + modifierSuffix(l.modifiers),
+        unitLabel: t('posShell.dock.lineUnit', {
+          qty: l.qty,
+          price: formatMoney(l.unitPriceMinor + l.modifierDeltaMinor, currency, locale),
+        }),
+        totalLabel: formatMoney(l.lineTotalMinor, currency, locale),
+        qty: l.qty,
+        paid: l.paid,
+        selectable: !l.paid,
+        selected: selectedLineIds.has(l.id),
+        canRemove: allowRemoveLines,
+        onToggleSelect: () => toggleLineSelection(l.id),
+      }))
+    : [
+        ...lineGroups.map((g) => ({
+          key: g.key,
+          name: g.nameSnapshot + modifierSuffix(g.modifiers),
+          unitLabel: t('posShell.dock.lineUnit', {
+            qty: g.qty,
+            price: formatMoney(g.unitPriceMinor + g.modifierDeltaMinor, currency, locale),
+          }),
+          totalLabel: formatMoney(g.lineTotalMinor, currency, locale),
+          qty: g.qty,
+          paid: false,
+          selectable: false,
+          selected: false,
+          // Open-bill lockdown: adding stays open to any cashier, TRIMMING is owner/manager.
+          canRemove: allowRemoveLines,
+          onInc: () => handleIncrementGroup(g),
+          onDec: () => handleDecrementGroup(g),
+        })),
+        ...paidLines.map((l) => ({
+          key: l.id,
+          name: l.nameSnapshot + modifierSuffix(l.modifiers),
+          unitLabel: t('posShell.dock.lineUnit', {
+            qty: l.qty,
+            price: formatMoney(l.unitPriceMinor + l.modifierDeltaMinor, currency, locale),
+          }),
+          totalLabel: formatMoney(l.lineTotalMinor, currency, locale),
+          qty: l.qty,
+          paid: true,
+          selectable: false,
+          selected: false,
+          canRemove: false,
+        })),
+      ]
+
+  const dockChips: DockAction[] = dockActions({
+    isBill: true,
+    unpaidCount: unpaidLines.length,
+    canManualDiscount: false,
+  }).map((key) =>
+    key === 'split'
+      ? {
+          key,
+          icon: <SplitSquareHorizontal className="size-[15px]" aria-hidden="true" />,
+          label: t('posShell.dock.action.split'),
+          active: splitMode,
+          onClick: toggleSplitMode,
+        }
+      : {
+          key,
+          icon: <Paperclip className="size-[15px]" aria-hidden="true" />,
+          label: t('posShell.dock.action.attachments'),
+          active: false,
+          onClick: () =>
+            document
+              .getElementById('pos-dock-attachments')
+              ?.scrollIntoView({ block: 'nearest' }),
+        },
+  )
+
+  // Split mode charges the ticked subset; otherwise the whole unpaid remainder.
+  const dockDueMinor = splitMode ? selectedTotal : billHasPaidLines ? unpaidTotal : grandTotal
+  const dockDueText = formatMoney(dockDueMinor, currency, locale)
+
   return (
     <>
-      {/* Bottom sheet — slides up from bottom of screen */}
-      {/* On phone (<sm) it's full-screen when billOpen is true */}
-      {/* On sm+ it's a bottom sheet whose height depends on sheetOpen */}
+      {/* Bottom sheet — slides up from bottom of screen (tablet+). */}
+      {/* On phone the deck below is the bill surface; there is no sheet to open. */}
 
       {/* Backdrop (only when sheetOpen on tablet+) */}
       {sheetOpen ? (
@@ -452,60 +543,65 @@ export function BillDetail({
         />
       ) : null}
 
-      {/* Full-page phone sheet — mounted only on phone-sized viewports */}
+      {/* Phone: the bill deck. Always attached under the catalog, so tapping a tile in Pos.tsx
+          appends straight to this bill and the deck shows it — no "open the cart" step. */}
       {!isTablet ? (
-        <div
-          className={cn(
-            'fixed inset-0 z-50 flex flex-col bg-paper transition-transform duration-300 ease-out',
-            billOpen ? 'translate-y-0' : 'translate-y-full',
-          )}
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('bills.trayTitle')}
-        >
-          <PhoneSheetContent
-            bill={bill}
-            items={items}
-            visibleItems={visibleItems}
-            orderedCategories={orderedCategories}
-            resolvedCategoryId={resolvedCategoryId}
-            activeCategoryId={activeCategoryId}
-            setActiveCategoryId={setActiveCategoryId}
-            tableLabel={tableLabel}
-            locale={locale}
-            currency={currency}
-            lineCount={lineCount}
-            unpaidLines={unpaidLines}
-            unpaidTotal={unpaidTotal}
-            grandTotal={grandTotal}
-            selectedLines={selectedLines}
-            selectedTotal={selectedTotal}
-            selectedLineIds={selectedLineIds}
-            splitMode={splitMode}
-            allLinesPaid={allLinesPaid}
-            appendLines={appendLines}
-            removeLine={removeLine}
-            isRemoving={removeLine.isPending}
-            lineGroups={lineGroups}
-            paidLines={paidLines}
-            onIncrementGroup={handleIncrementGroup}
-            onDecrementGroup={handleDecrementGroup}
-            onRemoveGroup={handleRemoveGroup}
-            busy={appendLines.isPending || removeLine.isPending || billQuery.isFetching}
-            onItemTap={handleItemTap}
-            onToggleSplitMode={toggleSplitMode}
-            onToggleLineSelect={toggleLineSelection}
-            onRemoveLine={handleRemoveLine}
-            onKot={() => setShowKot(true)}
-            onCancel={() => setShowCancelConfirm(true)}
-            canCancel={allowCancel}
-            cancelHintVisible={cancelHintVisible}
-            canRemoveLines={allowRemoveLines}
-            onPayModal={openPayModal}
-            onClose={() => setBillOpen(false)}
-            onBack={onBack}
-          />
-        </div>
+        <BillDock
+          title={bill.guestLabel}
+          // A table bill's guestLabel usually IS the table's label, so showing both reads as a
+          // stutter ("Meja 07  Meja 07"); the table only earns the slot when it says something new.
+          meta={[
+            tableLabel && tableLabel !== bill.guestLabel ? tableLabel : null,
+            t('bills.lineCount', { n: lineCount }),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+          hasPaidLines={billHasPaidLines}
+          onTitleClick={onSwitchOrder}
+          expanded={dockExpanded}
+          onExpandedChange={setDockExpanded}
+          lines={dockExpanded ? dockLines : peekLines(dockLines)}
+          emptyHint={t('posShell.dock.emptyBill')}
+          splitMode={splitMode}
+          splitHint={t('posShell.dock.splitHint')}
+          actions={dockChips}
+          extras={
+            // ADR 0063's "real receipt" photo/PDF is a SECTION, not a dialog — it rides in the
+            // deck's extras slot and the chip above simply scrolls to it. Hidden during split-pay,
+            // exactly as on the tablet sheet.
+            !splitMode ? (
+              <div id="pos-dock-attachments">
+                <BillAttachments session={session} billId={bill.id} />
+              </div>
+            ) : null
+          }
+          breakdown={bill.breakdown}
+          currency={currency}
+          locale={locale}
+          dueLabel={t(dueLabelKey({ splitMode, hasPaidLines: billHasPaidLines }), {
+            n: selectedLines.length,
+          })}
+          dueText={dockDueText}
+          sendLabel={unsentCount > 0 && !splitMode ? t('bills.sendN', { n: unsentCount }) : undefined}
+          onSend={unsentCount > 0 && !splitMode ? () => setShowKot(true) : undefined}
+          payLabel={
+            splitMode
+              ? `${t('bills.paySplit', { n: selectedLines.length })} · ${dockDueText}`
+              : allLinesPaid
+                ? t('bills.allPaid')
+                : t('bills.payTotal', { total: dockDueText })
+          }
+          payDisabled={splitMode ? selectedLines.length === 0 : unpaidLines.length === 0}
+          onPay={openPayModal}
+          cancel={{
+            canCancel: allowCancel,
+            hintVisible: cancelHintVisible,
+            hint: t('bills.cancelNeedsManager'),
+            label: t('bills.cancelBill'),
+            onCancel: () => setShowCancelConfirm(true),
+          }}
+          busy={busy}
+        />
       ) : null}
 
       {/* Tablet+ bottom sheet — mounted only on sm+ viewports */}
@@ -751,37 +847,6 @@ export function BillDetail({
           ) : null}
         </div>
         </div>
-      ) : null}
-
-      {/* Phone: SummaryBar equivalent — tap to open phone sheet */}
-      {!isTablet && lineCount > 0 && !billOpen ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-area-inset-bottom,0px))] shadow-lg">
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
-              {t('pos.total')}
-            </div>
-            <div className="tnum font-mono text-lg font-bold text-ink">
-              {formatMoney(unpaidTotal, currency, locale)}
-            </div>
-          </div>
-          <Button onClick={() => setBillOpen(true)} className="shrink-0">
-            <ReceiptText className="size-4" />
-            {t('bills.viewBill')}
-            <span className="tnum grid h-5 min-w-5 place-items-center rounded-full bg-white/25 px-1.5 text-xs font-bold">
-              {lineCount}
-            </span>
-          </Button>
-        </div>
-      ) : null}
-
-      {/* Modifier picker modal */}
-      {modifierItem ? (
-        <ModifierModal
-          item={modifierItem}
-          locale={locale}
-          onConfirm={(ids) => handleModifierConfirm(ids)}
-          onClose={() => setModifierItem(null)}
-        />
       ) : null}
 
       {/* Bill payment modal */}

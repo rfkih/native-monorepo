@@ -16,6 +16,23 @@ import { useTranslation } from 'react-i18next'
 import { Printer } from 'lucide-react'
 import { usePrinter } from '@/lib/escpos/printerContext'
 import type { StatusBarAction } from './PosStatusBar'
+import type { TillMenuItem } from './TillMenuSheet'
+
+/**
+ * The phone header (Native Till Android v2) pins nothing but Incoming — printer status and the
+ * other per-shift actions move into the till menu behind the ⋮. The two shapes are near-identical,
+ * so a pinned action becomes a menu row without either component learning about the other.
+ */
+export function toTillMenuItem(action: StatusBarAction): TillMenuItem {
+  return {
+    key: action.key,
+    icon: action.icon,
+    label: action.label,
+    onSelect: action.onClick,
+    disabled: action.disabled,
+    disabledTitle: action.disabledTitle,
+  }
+}
 
 export function usePrinterStatusAction(): StatusBarAction {
   const { t } = useTranslation()

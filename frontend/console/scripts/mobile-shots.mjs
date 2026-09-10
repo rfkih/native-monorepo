@@ -66,6 +66,84 @@ const PAYSLIPS = [
   { runId: 'r3', period: '2026-05', runSeq: 1, postedAt: '2026-06-01', lineCount: 6, illustrative: true },
 ]
 
+// ── POS fixtures (Native Till Android v2 — the phone till's bill deck) ────────
+
+const menuItem = (id, name, priceMinor, categoryId, stockQuantity = null) => ({
+  id, businessId: COMPANY.businessId, name, category: '', categoryId,
+  priceMinor, currency: 'IDR', active: true, available: stockQuantity !== 0,
+  stockQuantity, unitCostMinor: null, modifierGroups: [], imageUrl: null,
+})
+
+const MENU = [
+  menuItem('m1', 'Nasi Goreng Spesial', 45000, 'c1', 12),
+  menuItem('m2', 'Ayam Bakar Madu', 52000, 'c1', 3),
+  menuItem('m3', 'Mie Goreng Jawa', 42000, 'c1', 8),
+  menuItem('m4', 'Sate Ayam 10 tusuk', 48000, 'c1', 0),
+  menuItem('m5', 'Soto Betawi', 46000, 'c1', 6),
+  menuItem('m6', 'Gado-Gado Siram', 38000, 'c1', 9),
+  menuItem('m7', 'Es Teh Manis', 12000, 'c2', 40),
+  menuItem('m8', 'Kopi Susu Gula Aren', 25000, 'c2', 18),
+  menuItem('m9', 'Jus Alpukat', 28000, 'c2', 5),
+  menuItem('m10', 'Air Mineral 600ml', 8000, 'c2', 60),
+  menuItem('m11', 'Pisang Goreng Keju', 32000, 'c3', 7),
+  menuItem('m12', 'Kerupuk Udang', 10000, 'c3', 25),
+]
+
+const MENU_CATEGORIES = [
+  { id: 'c1', businessId: COMPANY.businessId, name: 'Makanan', displayOrder: 1, active: true },
+  { id: 'c2', businessId: COMPANY.businessId, name: 'Minuman', displayOrder: 2, active: true },
+  { id: 'c3', businessId: COMPANY.businessId, name: 'Tambahan', displayOrder: 3, active: true },
+]
+
+const TABLES = [
+  { tableId: 't1', businessId: COMPANY.businessId, label: 'Meja 01', capacity: 4, area: null, active: true, occupied: false },
+  { tableId: 't7', businessId: COMPANY.businessId, label: 'Meja 07', capacity: 4, area: null, active: true, occupied: true },
+]
+
+const breakdownOf = (subtotal) => ({
+  subtotalMinor: subtotal, discountMinor: 0, serviceChargeMinor: 0, taxMinor: 0,
+  grandTotalMinor: subtotal, currency: 'IDR', usesIllustrativeRules: false,
+  appliedPromotions: [], couponStatus: null, loyaltyRedeemedMinor: 0,
+  giftCardAppliedMinor: 0, residualDueMinor: subtotal,
+})
+
+const billLine = (id, menuItemId, nameSnapshot, unitPriceMinor, paid = false) => ({
+  id, menuItemId, nameSnapshot, unitPriceMinor, modifierDeltaMinor: 0,
+  qty: 1, lineTotalMinor: unitPriceMinor, modifiers: [], paid,
+})
+
+// Deliberately a PARTIALLY paid bill: it is the state that exercises the deck's whole vocabulary —
+// the "Partly paid" badge, a dimmed settled row, and "Still owing" rather than "Total".
+const BILL_LINES = [
+  billLine('bl1', 'm1', 'Nasi Goreng Spesial', 45000, true),
+  billLine('bl2', 'm2', 'Ayam Bakar Madu', 52000),
+  billLine('bl3', 'm7', 'Es Teh Manis', 12000),
+  billLine('bl4', 'm8', 'Kopi Susu Gula Aren', 25000),
+  billLine('bl5', 'm11', 'Pisang Goreng Keju', 32000),
+]
+const BILL_UNPAID = BILL_LINES.filter((l) => !l.paid).reduce((s, l) => s + l.lineTotalMinor, 0)
+
+const BILL = {
+  id: 'b1', businessId: COMPANY.businessId, tableId: 't7', guestLabel: 'Meja 07',
+  status: 'OPEN', currency: 'IDR', discountMinor: null, saleId: null,
+  lines: BILL_LINES, breakdown: breakdownOf(BILL_UNPAID),
+}
+
+const BILL_SUMMARIES = [
+  {
+    id: 'b1', businessId: COMPANY.businessId, tableId: 't7', guestLabel: 'Meja 07',
+    status: 'OPEN', currency: 'IDR', discountMinor: null,
+    runningTotalMinor: BILL_UNPAID, lineCount: BILL_LINES.length,
+  },
+]
+
+const REGISTER_SESSION = {
+  id: 'rs1', businessId: COMPANY.businessId, status: 'OPEN', businessDate: '2026-08-07',
+  openedAt: '2026-08-07T00:02:00Z', openingFloatMinor: 500000, currency: 'IDR',
+  closedAt: null, cashSalesMinor: null, cashRefundsMinor: null,
+  expectedCashMinor: null, countedCashMinor: null, overShortMinor: null,
+}
+
 const page1 = (content) => ({ content, page: 0, size: 20, totalElements: content.length, totalPages: 1 })
 
 const MY_CLAIMS = [
@@ -216,24 +294,49 @@ const ROUTES = [
   ['/api/v1/ap/aging', (u) => AP_AGING(u.searchParams.get('asOf') ?? '2026-08-07')],
   ['/api/v1/invoices', () => INVOICES],
   ['/api/v1/ap/bills', () => BILLS],
+  // POS (Native Till Android v2). `/api/v1/bills/b1` must precede `/api/v1/bills`.
+  ['/api/v1/menu/categories', () => MENU_CATEGORIES],
+  ['/api/v1/menu', () => MENU],
+  ['/api/v1/tables', () => TABLES],
+  ['/api/v1/pricing/effective-rules', () => ({ serviceChargeBp: 0, taxBp: 0, serviceChargeInTaxBase: false, usesIllustrativeRules: false })],
+  // The live quote must echo the cart it was POSTed, or every shot of the deck reads "Rp 0" while
+  // the lines above it clearly are not free.
+  ['/api/v1/orders/quote', (u, m, req) => {
+    const lines = req?.postDataJSON?.()?.lines ?? []
+    const subtotal = lines.reduce(
+      (sum, l) => sum + (MENU.find((i) => i.id === l.menuItemId)?.priceMinor ?? 0) * (l.qty ?? 0),
+      0,
+    )
+    return breakdownOf(subtotal)
+  }],
+  ['/api/v1/orders/item-popularity', () => []],
+  ['/api/v1/orders/item-sales', () => []],
+  ['/api/v1/orders', () => []],
+  ['/api/v1/register-sessions/current', () => REGISTER_SESSION],
+  [/\/api\/v1\/bills\/[^/]+\/attachments$/, () => []],
+  [/\/api\/v1\/bills\/[^/]+$/, () => BILL],
+  ['/api/v1/bills', () => BILL_SUMMARIES],
   ['/api/v1/users/me/pages', () => ({ mode: 'ALL', pageKeys: [] })],
   ['/api/v1/users', () => TEAM],
   ['/api/v1/org-units', () => []],
-  ['/api/v1/outlets', () => []],
+  // One real outlet, id == COMPANY.businessId: the POS OutletGate blocks the whole till without
+  // one, and the session's businessId has to be the outlet the terminal is ringing on.
+  ['/api/v1/outlets', () => [{ id: COMPANY.businessId, name: 'Kemang' }]],
+  ['/api/v1/users/me/outlets', () => []],
   // ADR 0076 — the home page's overdue-payout nudge. It renders nothing when the list is empty,
   // which is what we want in a shot; without a fixture it fell through to the `{}` default and
   // `overdue.map` threw, taking the whole dashboard down behind the error boundary.
   ['/api/v1/platform-settlements/overdue', () => []],
 ]
 
-function resolveFixture(url) {
+function resolveFixture(url, req) {
   const u = new URL(url)
   for (const [pattern, fn] of ROUTES) {
     if (typeof pattern === 'string') {
-      if (u.pathname === pattern) return fn(u)
+      if (u.pathname === pattern) return fn(u, null, req)
     } else {
       const m = u.pathname.match(pattern)
-      if (m) return fn(u, m)
+      if (m) return fn(u, m, req)
     }
   }
   return {}
@@ -275,7 +378,7 @@ for (const pass of [
     [COMPANY, pass.theme, pass.lang],
   )
   await ctx.route('**/api/v1/**', async (route) => {
-    const fx = resolveFixture(route.request().url())
+    const fx = resolveFixture(route.request().url(), route.request())
     if (fx && fx.status === 404) return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' })
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fx) })
   })
@@ -316,6 +419,50 @@ for (const pass of [
   await page.waitForTimeout(900)
   await page.screenshot({ path: `${dir}/payslip-open.png`, fullPage: true })
   console.log(`[${pass.name}] payslip-open ok`)
+
+
+  // ── POS: the phone bill deck (Native Till Android v2) ──────────────────────
+  // The deck is the redesign's whole thesis — the bill lives on screen instead of inside a sheet —
+  // so the shots have to show it in all four states it can be in, for BOTH data owners.
+  await page.goto(`${BASE}/pos`, { waitUntil: 'load' })
+  await page.waitForTimeout(1600)
+  await page.screenshot({ path: `${dir}/pos-deck-empty.png` })
+  console.log(`[${pass.name}] pos-deck-empty ok`)
+
+  // Ring three items — the catalog stays visible the whole time, which is the point.
+  for (const item of ['Nasi Goreng Spesial', 'Es Teh Manis', 'Kopi Susu Gula Aren']) {
+    await page.getByRole('button', { name: new RegExp(item) }).first().click({ timeout: 8000 })
+    await page.waitForTimeout(350)
+  }
+  // The live quote is debounced; shooting before it settles catches the dimmed pending figure.
+  await page.waitForTimeout(1600)
+  // Clicking tiles auto-scrolls the catalog — put it back at the top so the shot shows the grid
+  // the way a cashier opens it.
+  await page.mouse.move(195, 350)
+  await page.mouse.wheel(0, -3000)
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: `${dir}/pos-deck-peek.png` })
+  console.log(`[${pass.name}] pos-deck-peek ok`)
+
+  await page.getByTestId('pos-dock-toggle').click({ timeout: 8000 })
+  await page.waitForTimeout(700)
+  await page.screenshot({ path: `${dir}/pos-deck-expanded.png` })
+  console.log(`[${pass.name}] pos-deck-expanded ok`)
+  await page.getByTestId('pos-dock-toggle').click({ timeout: 8000 })
+  await page.waitForTimeout(500)
+
+  // Same component, other data owner: a partially-paid open bill (BillDetail renders the deck).
+  await page.getByTestId('pos-dock-title').click({ timeout: 8000 })
+  await page.waitForTimeout(600)
+  await page.getByText('Meja 07').first().click({ timeout: 8000 })
+  await page.waitForTimeout(1400)
+  await page.screenshot({ path: `${dir}/pos-bill-peek.png` })
+  console.log(`[${pass.name}] pos-bill-peek ok`)
+
+  await page.getByTestId('pos-dock-toggle').click({ timeout: 8000 })
+  await page.waitForTimeout(700)
+  await page.screenshot({ path: `${dir}/pos-bill-expanded.png` })
+  console.log(`[${pass.name}] pos-bill-expanded ok`)
 
   await ctx.close()
 }
