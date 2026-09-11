@@ -33,6 +33,7 @@ import {
   type InviteResponse,
 } from './api'
 import { EditPagesDialog } from './EditPagesDialog'
+import { SAFE_AREA_BOTTOM } from '@/lib/safeArea'
 
 /**
  * The roles the invite/change-role UI offers — the full preset role-based access model Phase 1/2
@@ -95,7 +96,10 @@ function DialogOverlay({
         if (e.key === 'Escape') onClose()
       }}
     >
-      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet">
+      <Card
+        className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet"
+        style={{ paddingBottom: `calc(1.5rem + ${SAFE_AREA_BOTTOM})` }}
+      >
         {children}
       </Card>
     </div>

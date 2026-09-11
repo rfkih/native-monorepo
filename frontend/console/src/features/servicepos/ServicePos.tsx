@@ -60,6 +60,7 @@ import { PackageCard } from './components/PackageCard'
 import { AddonChip } from './components/AddonChip'
 import { SummaryPanel, type AddonLine } from './components/SummaryPanel'
 import { EmptyCatalog, CatalogSkeleton, ChipsSkeleton, NoCompany } from './components/ServiceStates'
+import { FULL_HEIGHT_BETWEEN_BARS } from '@/lib/safeArea'
 
 
 // ---------------------------------------------------------------------------
@@ -355,7 +356,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
+    <div className="flex flex-col overflow-hidden bg-paper" style={{ height: FULL_HEIGHT_BETWEEN_BARS }}>
       {/* P5: the shared terminal chrome — same band as the restaurant POS. */}
       <PosStatusBar
         businessName={session.name}

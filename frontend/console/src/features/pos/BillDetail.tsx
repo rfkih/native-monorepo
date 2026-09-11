@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/Button'
 import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { cn } from '@/lib/cn'
+import { SAFE_AREA_BOTTOM } from '@/lib/safeArea'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { useMenu } from './api'
@@ -627,7 +628,8 @@ export function BillDetail({
             sheetOpen ? 'translate-y-0' : 'translate-y-full',
             'max-h-[80dvh]',
           )}
-          style={{ minHeight: sheetOpen ? '540px' : undefined }}
+          // Android tablets have a nav bar too (lib/safeArea).
+          style={{ minHeight: sheetOpen ? '540px' : undefined, paddingBottom: SAFE_AREA_BOTTOM }}
           role="dialog"
           aria-modal="true"
           aria-label={bill.guestLabel}

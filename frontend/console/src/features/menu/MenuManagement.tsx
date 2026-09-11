@@ -86,6 +86,7 @@ import {
   type AutoLinkResult,
   type HppSummaryRow,
 } from './recipeApi'
+import { FULL_HEIGHT_BETWEEN_BARS, SAFE_AREA_BOTTOM } from '@/lib/safeArea'
 
 // ---------------------------------------------------------------------------
 // Entry guard
@@ -157,7 +158,12 @@ function DialogOverlay({
         if (e.key === 'Escape') onClose()
       }}
     >
-      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet">{children}</Card>
+      <Card
+        className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet"
+        style={{ paddingBottom: `calc(1.5rem + ${SAFE_AREA_BOTTOM})` }}
+      >
+        {children}
+      </Card>
     </div>
   )
 }
@@ -1971,7 +1977,10 @@ function ModifierGroupsPanel({
         if (e.key === 'Escape') onClose()
       }}
     >
-      <div className="flex w-full max-w-lg flex-col rounded-t-2xl bg-surface shadow-xl sm:rounded-2xl">
+      <div
+        className="flex w-full max-w-lg flex-col rounded-t-2xl bg-surface shadow-xl sm:rounded-2xl"
+        style={{ paddingBottom: SAFE_AREA_BOTTOM }}
+      >
         {/* Panel header */}
         <div className="flex items-start justify-between border-b border-line px-5 py-4">
           <div className="min-w-0 pr-3">
@@ -2516,7 +2525,7 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
   )
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
+    <div className="flex flex-col overflow-hidden bg-paper" style={{ height: FULL_HEIGHT_BETWEEN_BARS }}>
       {/* Header — mirrors POS chrome */}
       <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3 sm:px-5">
         {/* Pops back to wherever this page was opened FROM — the office sidebar, the phone More

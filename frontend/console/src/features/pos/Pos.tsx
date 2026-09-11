@@ -130,6 +130,7 @@ import { dockActions, dueLabelKey, peekLines } from './lib/dockLines'
 import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
 import { SalesHistorySheet } from './SalesHistorySheet'
 import { ClosingHistorySheet } from './ClosingHistorySheet'
+import { FULL_HEIGHT_BETWEEN_BARS } from '@/lib/safeArea'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -870,7 +871,9 @@ function PosInner({ session }: { session: CompanySession }) {
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
+    // The whole screen minus both Android bars (lib/safeArea): 100dvh alone overflows the
+    // inset-padded body by the two insets and the till scrolls by exactly that much.
+    <div className="flex flex-col overflow-hidden bg-paper" style={{ height: FULL_HEIGHT_BETWEEN_BARS }}>
 
       {/* ── 1a. Phone identity band (52px white — Native Till Android v2) ────── */}
       {isPhone ? (

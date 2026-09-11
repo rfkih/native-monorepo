@@ -27,6 +27,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
+import { SAFE_AREA_BOTTOM } from '@/lib/safeArea'
 import { Card } from './Card'
 
 /** Keep in step with --animate-dialog-out / --animate-sheet-down in index.css. */
@@ -60,11 +61,15 @@ export function DialogOverlay({
   /** `lg` is the wide variant the bank dialogs used (max-w-2xl); everything else is `md`. */
   size?: 'md' | 'lg'
   /** Extra classes on the panel, merged LAST — a content that lays itself out edge to edge (a
-   *  keypad sheet, a list with hairline rows) passes `p-0` and owns its padding. */
+   *  keypad sheet, a list with hairline rows) passes `p-0` and owns its padding — INCLUDING the
+   *  phone's nav-bar inset (lib/safeArea), which the default-padded panel adds by itself. */
   className?: string
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const [exiting, setExiting] = useState(false)
+  // `p-0` is the documented "I lay out my own edges" signal; every other panel is a padded card
+  // whose last row would otherwise sit under the Android nav bar on the phone.
+  const ownsEdges = (className ?? '').split(' ').includes('p-0')
 
   // Idempotent by construction, with no "closing" ref: every close request — animated or not —
   // is one state flip, and a second request during the exit sets `exiting` to the value it already
@@ -154,6 +159,11 @@ export function DialogOverlay({
         )}
       >
         {typeof children === 'function' ? children(requestClose) : children}
+        {/* Phone sheet: clear the Android navigation bar (fixed surfaces bypass the body's
+            safe-area padding). A spacer, not padding, so the caller's p-4/p-5/p-6 stay exact. */}
+        {!ownsEdges ? (
+          <div aria-hidden className="shrink-0 sm:hidden" style={{ height: SAFE_AREA_BOTTOM }} />
+        ) : null}
       </Card>
     </div>
   )

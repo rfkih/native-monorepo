@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/Card'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { cn } from '@/lib/cn'
+import { SAFE_AREA_BOTTOM, SAFE_AREA_TOP } from '@/lib/safeArea'
 
 export function PaymentSurfaceFrame({
   zIndexClass = 'z-40',
@@ -34,7 +35,10 @@ export function PaymentSurfaceFrame({
   useScrollLock()
   return (
     <div
-      className={cn('fixed inset-0 grid place-items-center bg-scrim p-4 backdrop-blur-sm', zIndexClass)}
+      className={cn('fixed inset-0 grid place-items-center bg-scrim px-4 backdrop-blur-sm', zIndexClass)}
+      // The 1rem gutter grows by the Android bars (lib/safeArea): a tall panel is max-h-full, and
+      // its last row was 16px above the screen edge — under a 48px navigation bar.
+      style={{ paddingTop: `calc(1rem + ${SAFE_AREA_TOP})`, paddingBottom: `calc(1rem + ${SAFE_AREA_BOTTOM})` }}
       role="dialog"
       aria-modal="true"
       aria-label={t('pos.payment.title')}
