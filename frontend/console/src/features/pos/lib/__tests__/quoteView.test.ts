@@ -9,12 +9,12 @@ describe('visibleQuote', () => {
   })
 
   it('shows nothing while the quote is still absent', () => {
-    expect(visibleQuote(3, undefined)).toBeNull()
+    expect(visibleQuote(3, undefined)).toBeUndefined()
   })
 
   it('shows NOTHING for an empty cart, even when a previous quote is still around', () => {
     // The bug: ring an item, remove it — the last non-empty quote lingered as placeholder data
     // and the deck kept the old total under an empty list.
-    expect(visibleQuote(0, breakdown)).toBeNull()
+    expect(visibleQuote(0, breakdown)).toBeUndefined()
   })
 })

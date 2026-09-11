@@ -351,7 +351,7 @@ export function useQuote(
 
   return {
     ...query,
-    data: visibleQuote(lines.length, query.data) ?? undefined,
+    data: visibleQuote(lines.length, query.data),
     /**
      * True while the shown total may still belong to the PREVIOUS cart state (debounce window +
      * in-flight fetch under keepPreviousData) — the UI dims it (UX audit: a fresh item count next

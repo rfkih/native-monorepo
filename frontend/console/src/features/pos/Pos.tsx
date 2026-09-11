@@ -493,13 +493,22 @@ function PosInner({ session }: { session: CompanySession }) {
           fixedDiscountMinor: discountMinor > 0 ? discountMinor : null,
 })
       : null
+  // An EMPTY cart shows no breakdown and a zero total, whichever cache still holds a figure. The
+  // live quote masks itself (useQuote → visibleQuote), but a RESUMED parked order carries its own
+  // breakdown and total, and neither is cleared when the cashier takes its lines off one by one —
+  // so without this gate the deck kept showing the parked order's Rp 45.000 under an empty list,
+  // the same stale-total bug through a second door.
+  const cartEmpty = cart.length === 0
   const breakdown: PriceBreakdownResponse | null = offline
     ? provisionalBreakdown
       ? toDisplayBreakdown(provisionalBreakdown)
       : null
-    : (quoteQuery.data ?? resumedOrder?.breakdown ?? null)
-  const grandTotalMinor =
-    breakdown?.grandTotalMinor ?? (resumedOrder?.totalMinor ?? clientSubtotalMinor)
+    : cartEmpty
+      ? null
+      : (quoteQuery.data ?? resumedOrder?.breakdown ?? null)
+  const grandTotalMinor = cartEmpty
+    ? 0
+    : (breakdown?.grandTotalMinor ?? resumedOrder?.totalMinor ?? clientSubtotalMinor)
   // The redemption ceiling: the member's balance, capped by the total due BEFORE this redemption
   // (grandTotalMinor already has any currently-committed redemption subtracted — add it back so
   // the cap doesn't shrink itself as points are applied; loyaltyRedeemedMinor is 0 until the quote

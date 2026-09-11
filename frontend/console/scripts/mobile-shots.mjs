@@ -282,6 +282,31 @@ const stocktakeResult = (req) => {
   }
 }
 
+// A parked walk-in order the phone can RESUME from the till menu — the second door for the
+// stale-total assertion below (its breakdown/total survive the cart being emptied unless gated).
+const PARKED_LINES = [
+  { menuItemId: 'm1', name: 'Nasi Goreng Spesial', unitPriceMinor: 45000, qty: 1, lineTotalMinor: 45000, modifiers: [] },
+  { menuItemId: 'm7', name: 'Es Teh Manis', unitPriceMinor: 12000, qty: 1, lineTotalMinor: 12000, modifiers: [] },
+]
+const PARKED_TOTAL = PARKED_LINES.reduce((s, l) => s + l.lineTotalMinor, 0)
+const PARKED_ORDER = {
+  orderId: 'o1', businessId: COMPANY.businessId, totalMinor: PARKED_TOTAL, currency: 'IDR', saleId: null,
+  lines: PARKED_LINES, payment: null, breakdown: breakdownOf(PARKED_TOTAL),
+  status: 'PARKED', orderType: 'TAKEAWAY', tableId: null, occurredAt: '2026-09-11T03:10:00Z',
+}
+const PARKED_SUMMARIES = [
+  { orderId: 'o1', businessId: COMPANY.businessId, totalMinor: PARKED_TOTAL, currency: 'IDR',
+    tableLabel: null, lineCount: PARKED_LINES.length, occurredAt: PARKED_ORDER.occurredAt, orderType: 'TAKEAWAY', source: 'POS' },
+]
+
+/** The emptied deck must read ZERO on both the due figure and the Charge label. */
+async function assertEmptiedDeck(page, passName, where) {
+  const due = (await page.getByTestId('pos-dock-due').textContent())?.trim() ?? ''
+  const pay = (await page.getByTestId('pos-pay').textContent())?.trim() ?? ''
+  if (!/^(Rp|IDR)\s?0$/.test(due)) throw new Error(`[${passName}] ${where}: due still shows "${due}"`)
+  if (!/(Rp|IDR)\s?0$/.test(pay)) throw new Error(`[${passName}] ${where}: Charge label still shows "${pay}"`)
+}
+
 const REGISTER_SESSION = {
   id: 'rs1', businessId: COMPANY.businessId, status: 'OPEN', businessDate: '2026-08-07',
   openedAt: '2026-08-07T00:02:00Z', openingFloatMinor: 500000, currency: 'IDR',
@@ -567,6 +592,9 @@ const ROUTES = [
   }],
   ['/api/v1/orders/item-popularity', () => []],
   ['/api/v1/orders/item-sales', () => ITEM_SALES],
+  // The parked order, by id (resume) and in the PARKED list (the tray). Must precede the bare
+  // `/api/v1/orders` entry, and the string routes above win over this regex by order.
+  [/\/api\/v1\/orders\/o1$/, () => PARKED_ORDER],
   // Stock opname. `/ingredients/usage` must precede `/ingredients`; the stocktake route answers a
   // GET (history) with nothing and a POST (submit) with the echoed result.
   ['/api/v1/ingredients/usage', () => INGREDIENT_USAGE],
@@ -575,7 +603,7 @@ const ROUTES = [
   ['/api/v1/ingredient-stocktakes', (u, m, req) => (req?.method() === 'POST' ? stocktakeResult(req) : STOCKTAKE_HISTORY)],
   // Owner-only inventory-method page: inactive, so the activation steps can be walked.
   ['/api/v1/inventory-method', () => ({ active: false, method: null, cutoverPeriod: null, activatedAt: null, inventoryAssetMinor: 0, inventoryAssetNegative: false, currency: null })],
-  ['/api/v1/orders', () => []],
+  ['/api/v1/orders', (u) => (u.searchParams.get('status') === 'PARKED' ? PARKED_SUMMARIES : [])],
   ['/api/v1/register-sessions/current', () => REGISTER_SESSION],
   [/\/api\/v1\/bills\/[^/]+\/attachments$/, () => []],
   [/\/api\/v1\/bills\/[^/]+$/, () => BILL],
@@ -630,8 +658,10 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true })
 
 for (const pass of [
   { name: 'light-en', theme: 'light', lang: 'en', moreLabel: 'More', ordersLabel: 'Orders',
+    parkedLabel: 'Parked orders',
     lineChart: 'Line chart', tabs: { bs: 'Balance', cf: 'Cash flow', exp: 'Expenses' } },
   { name: 'dark-id', theme: 'dark', lang: 'id', moreLabel: 'Lainnya', ordersLabel: 'Pesanan',
+    parkedLabel: 'Pesanan tertahan',
     lineChart: 'Grafik garis', tabs: { bs: 'Neraca', cf: 'Arus kas', exp: 'Biaya' } },
 ]) {
   const dir = `${OUT}/${pass.name}`
@@ -943,13 +973,13 @@ for (const pass of [
     await page.getByRole('button', { name: new RegExp(`^(Decrease quantity of|Kurangi jumlah) ${item}$`) }).click({ timeout: 8000 })
     await page.waitForTimeout(250)
   }
-  await page.waitForTimeout(1200)
-  const dueAfterEmpty = (await page.getByTestId('pos-dock-due').textContent())?.trim() ?? ''
-  if (!/^(Rp|IDR)\s?0$/.test(dueAfterEmpty)) {
-    throw new Error(`[${pass.name}] emptied deck still shows a total: "${dueAfterEmpty}"`)
-  }
+  // Read IMMEDIATELY (well inside the quote's 400 ms debounce): the total has to drop the instant
+  // the last line goes, not once the debounced query settles. Both halves of the symptom are
+  // checked — the due figure and the Charge label that repeats it.
+  await page.waitForTimeout(100)
+  await assertEmptiedDeck(page, pass.name, 'emptied deck')
   await page.screenshot({ path: `${dir}/pos-deck-emptied.png` })
-  console.log(`[${pass.name}] pos-deck-emptied ok (due reads "${dueAfterEmpty}")`)
+  console.log(`[${pass.name}] pos-deck-emptied ok`)
 
   // Collapse the (still expanded) deck — its scrim covers the catalog — then ring the three again
   // for the bill shots below.
@@ -976,6 +1006,27 @@ for (const pass of [
   await page.waitForTimeout(700)
   await page.screenshot({ path: `${dir}/pos-bill-expanded.png` })
   console.log(`[${pass.name}] pos-bill-expanded ok`)
+
+  // The same stale-total bug through its second door: a RESUMED parked order carries its own
+  // breakdown and total, which the quote mask cannot reach. Resume the fixture's parked order from
+  // the till menu, take its lines off one by one, and the deck must read zero all the same.
+  await page.goto(`${BASE}/pos`, { waitUntil: 'load' })
+  await page.waitForTimeout(1600)
+  // On the phone the tray is the header's "Incoming" button (PosPhoneHeader), not a menu item.
+  await page.getByTestId('pos-parked').click({ timeout: 8000 })
+  await page.waitForTimeout(800)
+  await page.getByRole('dialog', { name: pass.parkedLabel }).locator('li button').first().click({ timeout: 8000 })
+  await page.waitForTimeout(1400)
+  await page.getByTestId('pos-dock-toggle').click({ timeout: 8000 })
+  await page.waitForTimeout(700)
+  for (const item of PARKED_ORDER.lines.map((l) => l.name)) {
+    await page.getByRole('button', { name: new RegExp(`^(Decrease quantity of|Kurangi jumlah) ${item}$`) }).click({ timeout: 8000 })
+    await page.waitForTimeout(250)
+  }
+  await page.waitForTimeout(100)
+  await assertEmptiedDeck(page, pass.name, 'emptied resumed order')
+  await page.screenshot({ path: `${dir}/pos-resumed-emptied.png` })
+  console.log(`[${pass.name}] pos-resumed-emptied ok`)
   }
 
   if (want('bills')) {
