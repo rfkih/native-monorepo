@@ -9,6 +9,7 @@ import { autoPrintEnabled } from '@/lib/escpos/printerStore'
 import type { PaperWidth } from '@/lib/escpos/receipt'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
+import { receiptLineItems } from '@/features/pos/lib/receiptLines'
 import { useSession } from '@/lib/session'
 import {
   classifyConnectError,
@@ -128,9 +129,12 @@ export function PrinterSettings() {
     // Sample figures for a throwaway test receipt (never a real sale) — still real Money (rule 8:
     // minor units + the company's own base currency) run through formatMoney (rule 9), never a
     // hardcoded "Rp" string that would misrepresent a USD-book company.
-    const lineTotalMinor = 50_000
+    // 2× at 25.000 with a +2.000 add-on: the paper must add up in the reader's hand —
+    // product 50.000 + add-on 4.000 = 54.000 (features/pos/lib/receiptLines owns the rule).
+    const qty = 2
+    const unitPriceMinor = 25_000
     const modifierDeltaMinor = 2_000
-    const subtotalMinor = lineTotalMinor + modifierDeltaMinor
+    const subtotalMinor = (unitPriceMinor + modifierDeltaMinor) * qty
     const dateTime = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
       new Date(),
     )
@@ -140,19 +144,18 @@ export function PrinterSettings() {
       reference: 'TEST-0001',
       dateTime,
       metaRows: [{ label: t('settings.printer.testRow'), valueLabel: t('settings.printer.testRowValue') }],
-      lineItems: [
-        {
-          qty: 2,
-          name: t('settings.printer.testItem'),
-          priceLabel: formatMoney(lineTotalMinor, currency, locale),
-          modifiers: [
-            {
-              label: t('settings.printer.testModifier'),
-              deltaLabel: `+${formatMoney(modifierDeltaMinor, currency, locale)}`,
-            },
-          ],
-        },
-      ],
+      lineItems: receiptLineItems(
+        [
+          {
+            qty,
+            name: t('settings.printer.testItem'),
+            unitPriceMinor,
+            modifiers: [{ nameSnapshot: t('settings.printer.testModifier'), priceDeltaMinor: modifierDeltaMinor }],
+          },
+        ],
+        currency,
+        locale,
+      ),
       totalRows: [{ label: t('pos.receipt.subtotal'), valueLabel: formatMoney(subtotalMinor, currency, locale) }],
       grandTotalLabel: formatMoney(subtotalMinor, currency, locale),
       grandTotalCaption: t('pos.receipt.total'),

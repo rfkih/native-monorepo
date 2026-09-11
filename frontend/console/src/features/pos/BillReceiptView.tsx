@@ -20,6 +20,7 @@ import { printCurrentPage } from '@/lib/nativeShell'
 import type { BillLineResponse, BillResponse } from './billsApi'
 import { ThermalReceipt } from './ThermalReceipt'
 import type { ThermalRow, ThermalLineItem } from './ThermalReceipt'
+import { receiptLineItems } from './lib/receiptLines'
 
 interface Props {
   bill: BillResponse
@@ -99,19 +100,12 @@ export function BillReceiptView({
     })
   }
 
-  // Line items
-  const lineItems: ThermalLineItem[] = paidLines.map((line) => ({
-    qty: line.qty,
-    name: line.nameSnapshot,
-    priceLabel: formatMoney(line.lineTotalMinor, currency, locale),
-    modifiers: line.modifiers.map((mod) => ({
-      label: mod.nameSnapshot,
-      deltaLabel:
-        mod.priceDeltaMinor !== 0
-          ? `${mod.priceDeltaMinor > 0 ? '+' : ''}${formatMoney(mod.priceDeltaMinor, currency, locale)}`
-          : undefined,
-    })),
-  }))
+  // Line items — product row = base × qty, add-on rows = delta × qty (lib/receiptLines).
+  const lineItems: ThermalLineItem[] = receiptLineItems(
+    paidLines.map((line) => ({ ...line, name: line.nameSnapshot })),
+    currency,
+    locale,
+  )
 
   // Total rows — bill receipt has only one row (the check total)
   const totalRows: ThermalRow[] = []
