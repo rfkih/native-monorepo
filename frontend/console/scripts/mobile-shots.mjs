@@ -934,6 +934,29 @@ for (const pass of [
   await page.waitForTimeout(700)
   await page.screenshot({ path: `${dir}/pos-deck-expanded.png` })
   console.log(`[${pass.name}] pos-deck-expanded ok`)
+
+  // Ring, then take everything off again: the last non-empty quote used to linger as placeholder
+  // data once the query was disabled, so the emptied deck kept showing the old total (and
+  // "Charge Rp 45.000") under an empty list. The due figure must read zero — this is asserted,
+  // not just photographed, because a stale amount is invisible unless you know what it should be.
+  for (const item of ['Nasi Goreng Spesial', 'Es Teh Manis', 'Kopi Susu Gula Aren']) {
+    await page.getByRole('button', { name: new RegExp(`^(Decrease quantity of|Kurangi jumlah) ${item}$`) }).click({ timeout: 8000 })
+    await page.waitForTimeout(250)
+  }
+  await page.waitForTimeout(1200)
+  const dueAfterEmpty = (await page.getByTestId('pos-dock-due').textContent())?.trim() ?? ''
+  if (!/^(Rp|IDR)\s?0$/.test(dueAfterEmpty)) {
+    throw new Error(`[${pass.name}] emptied deck still shows a total: "${dueAfterEmpty}"`)
+  }
+  await page.screenshot({ path: `${dir}/pos-deck-emptied.png` })
+  console.log(`[${pass.name}] pos-deck-emptied ok (due reads "${dueAfterEmpty}")`)
+
+  // Ring the three again for the bill shots below, then collapse.
+  for (const item of ['Nasi Goreng Spesial', 'Es Teh Manis', 'Kopi Susu Gula Aren']) {
+    await page.getByRole('button', { name: new RegExp(item) }).first().click({ timeout: 8000 })
+    await page.waitForTimeout(350)
+  }
+  await page.waitForTimeout(1200)
   await page.getByTestId('pos-dock-toggle').click({ timeout: 8000 })
   await page.waitForTimeout(500)
 
