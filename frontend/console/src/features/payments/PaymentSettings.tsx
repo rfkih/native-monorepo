@@ -84,7 +84,8 @@ export function PaymentSettings() {
       {/* This route renders OUTSIDE the dashboard Shell (owner-only, mirrors /settings/features'
           registration in App.tsx), so it carries its own minimal topbar — same idiom as /me and
           FeaturesSettings.tsx. */}
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur lg:px-8">
+      {/* Phone: scrolls away with the content, like the Shell's bar; tablet+: pinned. */}
+      <header className="z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur sm:sticky sm:top-0 lg:px-8">
         <Wordmark />
         <div className="flex-1" />
         <Link

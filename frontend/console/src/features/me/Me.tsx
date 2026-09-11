@@ -58,7 +58,8 @@ export function Me() {
   return (
     <div className="min-h-[100dvh] bg-paper">
       {/* Topbar */}
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur lg:px-8">
+      {/* Phone: scrolls away with the content, like the Shell's bar; tablet+: pinned. */}
+      <header className="z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur sm:sticky sm:top-0 lg:px-8">
         <Wordmark />
         <div className="flex-1" />
         {/* An employee+cashier/chef/waitress login can jump to the POS; any office-capable login
