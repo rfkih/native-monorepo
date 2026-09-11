@@ -1,5 +1,36 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-11 — the design tokens gain a scale (ADR 0085)
+
+A design-consistency audit of the console (static scan of `frontend/console/src`, both phone and
+desktop) found the token architecture from ADR 0077 sound — one `@theme`, dark by `var()`
+reassignment, no default-palette leaks, money always `font-mono tnum` — and no *scale* on top of it:
+34 arbitrary font sizes (seven half-pixel; 885 uses), 27 letter-spacings, 20 bracket radii
+(`rounded-[20px]` = `rounded-card` ×76), seven scrims, four surfaces naming tailwindcss-animate
+classes from a package that was never installed. Root cause: the designs are drawn at 11/13/15/17
+and Tailwind's defaults at 12/14/16/18, so every author reached past the scale.
+
+**Decision (ADR 0085): re-value Tailwind's own names onto the design** — `2xs` 11 · `xs` 12 · `sm`
+13 · `base` 15 · `lg` 17 · `xl` 22 · `2xl` 28 · `3xl` 32, one line-height each; two trackings
+(`display` −.02em, `eyebrow` .08em); four radii + `rounded-t-sheet` 26; one `bg-scrim` (deeper on
+dark); `ink-fixed` for the signup's photo scrim (the only ink that does not invert). 803 + 489
+call sites migrated mechanically (nearest step, ties up); landing, print surfaces and the wordmark
+exempt. The dead `animate-in` classes became the `scrim-in` / `dialog-in` keyframes index.css
+already had. The last cyan (kitchen empty-state icons, the whole signup panel) went ink, and the
+boot skeleton + `theme-color` moved off the pre-0077 blue-greys — every Android cold start had been
+re-tinting the page when React painted.
+
+**The gate:** `scripts/check-design-tokens.sh` (pre-commit when console sources are staged + CI
+`design_tokens`) forbids `text-[…px]`, `rounded-[…px]`, `tracking-[…]`, `bg-black/N`, the
+animate-in family, and the brand ramp as an action colour. **`docs/DESIGN-SYSTEM.md`** is new —
+the rules had lived only as comments in index.css and in ADR 0077.
+
+**Verified:** tsc, eslint, 981 unit tests unchanged; `mobile-shots.mjs` screens + more in both
+themes eyeballed (home, Lainnya, Laporan). **Left for the next changes, in this order:** role
+components (`PageTitle`, `Eyebrow`, `HeroFigure`, `SectionTitle`, `Icon` with one stroke width);
+`Button` default 44 px + a `danger` variant (13 inline copies); the ~10 hand-rolled overlays →
+`DialogOverlay` and MobileSheet's exit; one `AppHeader` for the nine sticky-header copies.
+
 ## 2026-09-11 — a bill the books can defend (ADR 0084)
 
 "Tagihan Baru" (Claude Design) asked one thing of the vendor-bill form: refuse to save a bill the
