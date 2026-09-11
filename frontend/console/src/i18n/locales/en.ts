@@ -459,6 +459,11 @@ export const en = {
     yourBusinesses: 'Your companies',
     addBusiness: 'Add company',
   },
+  session: {
+    loadFailedTitle: "Couldn't load your companies",
+    loadFailedBody:
+      'Your account is fine — the server did not answer just now (it may be updating). Try again in a moment.',
+  },
   dashboardPhone: {
     perOutlet: 'By outlet',
     // ADR 0082 — the home reads today, not the month.

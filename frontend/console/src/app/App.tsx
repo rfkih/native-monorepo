@@ -8,8 +8,10 @@ import { MobileTabBarGate } from '@/app/MobileTabBarGate'
 import { MorePage } from '@/app/MorePage'
 import { SettingsChrome } from '@/components/SettingsChrome'
 import { Spinner } from '@/components/ui/Spinner'
+import { Button } from '@/components/ui/Button'
 import { AppSkeleton, PageSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
+import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
 import { BackGuard } from '@/components/mobile/BackGuard'
@@ -352,6 +354,41 @@ function LoginLauncher() {
 }
 
 /**
+ * The companies list failed to load (SessionContextValue.loadError). Full-page, branded like the
+ * login splash, with the ONE action that helps — retry — plus ErrorDiagnostics for the 401/403
+ * recoveries and the copyable bundle. Deliberately no link to onboarding: a failed load is not a
+ * missing company, and the wizard would create a duplicate.
+ */
+function SessionLoadError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <div className="grid min-h-screen place-items-center bg-paper px-5">
+      <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
+        <span className="grid size-14 place-items-center rounded-2xl bg-emerald text-on-emerald shadow-md">
+          <BrandMark size={28} stroke="currentColor" strokeWidth={2.4} />
+        </span>
+        <div>
+          <div className="font-display text-lg font-extrabold tracking-display text-ink">
+            {t('session.loadFailedTitle')}
+          </div>
+          <p className="mt-1 text-sm text-ink-3">{t('session.loadFailedBody')}</p>
+        </div>
+        <Button size="xl" className="w-full" onClick={onRetry}>
+          {t('common.retry')}
+        </Button>
+        <div className="w-full text-left">
+          <ErrorDiagnostics
+            message={t('session.loadFailedTitle')}
+            pathPrefix="/api/v1/companies/mine"
+            onRecovered={onRetry}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
  * The /onboarding route decides its chrome ONCE, when it mounts: a first-ever company (no company
  * in the session yet) gets the standalone full-page wizard; adding another company keeps the shell.
  *
@@ -424,7 +461,7 @@ const PUBLIC_PATHS = new Set(['/signup'])
  */
 export function App() {
   const auth = useAuth()
-  const { company, loading } = useSession()
+  const { company, loading, loadError, retryLoad } = useSession()
   const { pathname } = useLocation()
   // Per-login page grants (owner/manager bypass; others fetch /me/pages). Called unconditionally
   // (hooks rule); its result is only consulted once we reach the authenticated routing below.
@@ -473,6 +510,16 @@ export function App() {
   // Authenticated → wait for the signed-in company AND the page grants to load, then route.
   if (loading || !pageAccess.ready) {
     return bootFallback
+  }
+
+  // The companies list could not be loaded. Every protected route below reads `company == null`
+  // as "no company yet" and sends the login to the create-a-company wizard — correct for a fresh
+  // signup, wrong for a request that died (the gateway or org-service mid-restart during a rolling
+  // deploy; 2026-09-11 the owner was asked to create a second company that way). So this gate
+  // sits BEFORE the routes: an error screen with a retry, and the wizard is never reachable from
+  // a failed load.
+  if (loadError) {
+    return <SessionLoadError onRetry={retryLoad} />
   }
 
   // ADR 0049 P3b — the MERGED role set (outlet/base roles ∪ any personal elevation). A normal
