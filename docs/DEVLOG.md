@@ -29,7 +29,14 @@ coffee) through a lazy `useQueries` fan-out keyed like `useRecipe`. Chips come f
 **Gates.** `tsc -b`, eslint (the four warnings pre-date this), vitest 955, `vite build`;
 `mobile-shots.mjs` gained a `menu` section (list · open row · ingredient picker · keypad · delete ·
 new item · search, with `/hpp-summary` and `/{id}/recipe` fixtures and real category strings on
-`MENU`) — 114 shots across every section, zero page errors.
+`MENU`) — 114 shots across every section, zero page errors. Code review (8 findings, all fixed):
+the price parser read "15.000" as fifteen for IDR — a separator in a no-minor-unit currency is
+grouping, never a decimal, and for USD the last separator is the decimal only when the fraction
+fits; the uncategorised chip needed a real key; recipe writes and Duplikat wait for the recipe to
+LOAD (a full-replace PUT from an empty placeholder would erase it) and a failed read says so; the
+create sheet's list navigation runs after the sheet unmounts (its Back entry was still parked) and
+clears the chip too; the qty sheet closes on a failed PUT so the panel's error line shows; a
+mixed-currency line never adds to the total; name and price commits use separate mutations.
 
 ## 2026-09-11 — the phone home reads today, not the month (ADR 0082)
 

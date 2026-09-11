@@ -121,6 +121,9 @@ export function MenuPhone({ session }: { session: CompanySession }) {
   const chip = params.get('cat') ?? ALL_CHIP
   const [openId, setOpenId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  // Set by the create sheet on success and applied in its onClose — the sheet's parked Back entry
+  // must be unwound (unmount) before the list navigates (`replace`), or the entry is orphaned.
+  const createdRef = useRef<string | null>(null)
 
   const setParam = (key: string, value: string) => {
     const sp = new URLSearchParams(params)
@@ -299,10 +302,23 @@ export function MenuPhone({ session }: { session: CompanySession }) {
           session={session}
           items={items}
           locale={locale}
-          onClose={() => setCreating(false)}
-          onCreated={(id) => {
-            setParam('q', '')
+          onClose={() => {
+            setCreating(false)
+            const id = createdRef.current
+            if (id == null) return
+            createdRef.current = null
+            // Clear the filters only when they would hide the new row (a no-op replace is
+            // still a navigation).
+            if (q !== '' || chip !== ALL_CHIP) {
+              const sp = new URLSearchParams(params)
+              sp.delete('q')
+              sp.delete('cat')
+              setParams(sp, { replace: true })
+            }
             setOpenId(id)
+          }}
+          onCreated={(id) => {
+            createdRef.current = id
           }}
         />
       ) : null}
@@ -442,7 +458,10 @@ function ItemPanel({
 }) {
   const { t } = useTranslation()
   const recipeQuery = useRecipe(session, item.id)
-  const update = useUpdateMenuItem(session)
+  // Two instances: TanStack only fires `mutate()` callbacks for the LATEST call on an instance, so
+  // a name commit followed at once by a price commit would drop the name's onError.
+  const updateName = useUpdateMenuItem(session)
+  const updatePrice = useUpdateMenuItem(session)
   const mark86 = use86Item(session)
   const unMark86 = useUn86Item(session)
   const putRecipe = usePutRecipe(session)
@@ -468,7 +487,7 @@ function ItemPanel({
       return
     }
     setError(null)
-    update.mutate({ itemId: item.id, name: next }, { onError: fail })
+    updateName.mutate({ itemId: item.id, name: next }, { onError: fail })
   }
   const commitPrice = (el: HTMLInputElement) => {
     const minor = parseMajorPrice(el.value, item.currency)
@@ -477,7 +496,7 @@ function ItemPanel({
       return
     }
     setError(null)
-    update.mutate({ itemId: item.id, priceMinor: minor }, { onError: fail })
+    updatePrice.mutate({ itemId: item.id, priceMinor: minor }, { onError: fail })
   }
   const toggleAvailable = () => {
     setError(null)
@@ -487,22 +506,31 @@ function ItemPanel({
 
   const lines: RecipeLine[] = recipeQuery.data?.lines ?? []
   const baseLines = lines.filter((l) => l.modifierOptionId == null)
-  const total = recipeTotal(lines)
+  const total = recipeTotal(lines, item.currency)
   const ingredientById = useMemo(() => new Map(ingredients.map((i) => [i.id, i])), [ingredients])
-  const busy = putRecipe.isPending || create.isPending || remove.isPending
+  // Every recipe write is a FULL REPLACE built from `lines`, so nothing may write — or copy —
+  // until the recipe has actually loaded: a PUT from an empty placeholder would erase it.
+  const recipeReady = recipeQuery.isSuccess
+  const busy = putRecipe.isPending || create.isPending || remove.isPending || !recipeReady
 
   const saveLines = (body: ReturnType<typeof withLine>, done?: () => void) => {
+    if (!recipeReady) return
     setError(null)
     putRecipe.mutate(
       { itemId: item.id, lines: body },
       {
         onSuccess: () => done?.(),
-        onError: fail,
+        // (6) the sheet closes either way; the panel's error line is where the reason shows.
+        onError: (err) => {
+          done?.()
+          fail(err)
+        },
       },
     )
   }
 
   const duplicate = () => {
+    if (!recipeReady) return
     setError(null)
     create.mutate(
       {
@@ -681,6 +709,18 @@ function ItemPanel({
       </div>
       {total.partial ? (
         <p className="mt-1.5 px-0.5 text-[11px] text-ink-3">{t('menu.phone.costPartial')}</p>
+      ) : null}
+      {recipeQuery.isError ? (
+        <p className="mt-1.5 px-0.5 text-[11.5px] text-loss" role="alert">
+          {t('recipe.loadError')}{' '}
+          <button
+            type="button"
+            onClick={() => void recipeQuery.refetch()}
+            className="font-semibold underline underline-offset-2"
+          >
+            {t('dashboardPhone.retry')}
+          </button>
+        </p>
       ) : null}
 
       <div className="mt-3.5 flex gap-[9px]">

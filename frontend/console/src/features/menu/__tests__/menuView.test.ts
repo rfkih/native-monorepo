@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ALL_CHIP,
+  NONE_CHIP,
   categoryChips,
   cloneLines,
   filterItems,
@@ -58,7 +59,7 @@ describe('categoryChips — every category the menu actually uses, counted', () 
       [ALL_CHIP, '', 4],
       ['makanan', 'makanan', 2],
       ['minuman', 'Minuman', 1],
-      ['', 'Tanpa kategori', 1],
+      [NONE_CHIP, 'Tanpa kategori', 1],
     ])
   })
 })
@@ -87,6 +88,13 @@ describe('filterItems — chip first, then the query over names AND ingredient n
     expect(
       filterItems(items, ALL_CHIP, 'SUSU', ingredientNames, canon, 'id-ID').map((i) => i.id),
     ).toEqual(['a'])
+  })
+
+  it('the uncategorised chip is a real key that narrows to the bucket', () => {
+    const withNone = [...items, item({ id: 'n', name: 'Misteri', category: ' ' })]
+    expect(
+      filterItems(withNone, NONE_CHIP, '', new Map(), canon, 'id-ID').map((i) => i.id),
+    ).toEqual(['n'])
   })
 
   it('an item whose recipe is unknown still matches on its own name', () => {
@@ -155,14 +163,27 @@ describe('recipe lines — cost is derived, the PUT body is immutable', () => {
     expect(lineCostMinor(line({ ingredientId: 'x', unitCostMinor: null }))).toBeNull()
   })
 
-  it('the total sums base lines only and says when a line is uncosted', () => {
-    const t = recipeTotal([
-      line({ ingredientId: 'a', qtyPerPortion: 10, unitCostMinor: 100 }),
-      line({ ingredientId: 'b', qtyPerPortion: 5, unitCostMinor: null }),
-      line({ ingredientId: 'c', qtyPerPortion: 1, unitCostMinor: 999, modifierOptionId: 'opt' }),
-    ])
+  it('the total sums base lines in the item currency only and says when a line is left out', () => {
+    const t = recipeTotal(
+      [
+        line({ ingredientId: 'a', qtyPerPortion: 10, unitCostMinor: 100 }),
+        line({ ingredientId: 'b', qtyPerPortion: 5, unitCostMinor: null }),
+        line({ ingredientId: 'c', qtyPerPortion: 1, unitCostMinor: 999, modifierOptionId: 'opt' }),
+      ],
+      'IDR',
+    )
     expect(t).toEqual({ minor: 1_000, partial: true, baseCount: 2 })
-    expect(recipeTotal([])).toEqual({ minor: null, partial: false, baseCount: 0 })
+    expect(recipeTotal([], 'IDR')).toEqual({ minor: null, partial: false, baseCount: 0 })
+    // A USD-costed import in an IDR recipe is never added to rupiah — it reads as uncosted.
+    expect(
+      recipeTotal(
+        [
+          line({ ingredientId: 'a', qtyPerPortion: 10, unitCostMinor: 100 }),
+          line({ ingredientId: 'x', qtyPerPortion: 1, unitCostMinor: 85, costCurrency: 'USD' }),
+        ],
+        'IDR',
+      ),
+    ).toEqual({ minor: 1_000, partial: true, baseCount: 2 })
   })
 
   it('clone / add / remove / requantify keep option deltas and never mutate the input', () => {
@@ -193,10 +214,25 @@ describe('recipe lines — cost is derived, the PUT body is immutable', () => {
 describe("parseMajorPrice — what the owner types, in the currency's minor units", () => {
   it('IDR has no fraction; USD has two; blanks and non-positive are null', () => {
     expect(parseMajorPrice('45000', 'IDR')).toBe(45_000)
-    expect(parseMajorPrice('45000.4', 'IDR')).toBe(45_000)
     expect(parseMajorPrice('12.5', 'USD')).toBe(1_250)
+    expect(parseMajorPrice('12.50', 'USD')).toBe(1_250)
     expect(parseMajorPrice('', 'IDR')).toBeNull()
     expect(parseMajorPrice('0', 'IDR')).toBeNull()
     expect(parseMajorPrice('abc', 'IDR')).toBeNull()
+    expect(parseMajorPrice('1e3', 'IDR')).toBeNull()
+  })
+
+  it('a separator in a no-minor-unit currency is grouping, never a decimal (the 1000× trap)', () => {
+    expect(parseMajorPrice('15.000', 'IDR')).toBe(15_000)
+    expect(parseMajorPrice('18,000', 'IDR')).toBe(18_000)
+    expect(parseMajorPrice('1.250.000', 'IDR')).toBe(1_250_000)
+    expect(parseMajorPrice('45000.4', 'IDR')).toBe(450_004)
+  })
+
+  it('with a minor unit, the last separator is the decimal only when the fraction fits', () => {
+    expect(parseMajorPrice('1,250.75', 'USD')).toBe(125_075)
+    expect(parseMajorPrice('1.250', 'USD')).toBe(125_000)
+    expect(parseMajorPrice('1,250', 'USD')).toBe(125_000)
+    expect(parseMajorPrice('.5', 'USD')).toBe(50)
   })
 })
