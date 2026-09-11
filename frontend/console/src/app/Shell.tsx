@@ -99,7 +99,13 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {/* Main column */}
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-line bg-surface px-5 print:hidden [view-transition-name:shell-topbar] lg:px-8">
+        {/* On the phone the wordmark bar SCROLLS AWAY with the content (owner request, 2026-09-11 —
+            "like Instagram"): it is identity, not navigation, and pinning it spent 64px of a
+            360×640 screen on a logo. Navigation on the phone is the fixed bottom tab bar; a
+            sub-screen's back+title ScreenHeader stays sticky on its own. Tablet+ keeps it pinned
+            (there is no tab bar there), and only there does it snapshot separately for the route
+            transition — on the phone it crossfades with the page like any other content. */}
+        <header className="z-20 flex h-16 items-center gap-4 border-b border-line bg-surface px-5 print:hidden sm:sticky sm:top-0 sm:[view-transition-name:shell-topbar] lg:px-8">
           {/* mobile menu + logo */}
           <button
             type="button"
