@@ -402,6 +402,7 @@ export function BillDock({
           <div className="flex items-baseline justify-between px-0.5 pb-2.5">
             <span className="text-sm font-bold leading-none text-ink">{dueLabel}</span>
             <span
+              data-testid="pos-dock-due"
               aria-busy={totalPending}
               className={cn(
                 'tnum text-2xl font-extrabold leading-none tracking-display text-ink transition-opacity',

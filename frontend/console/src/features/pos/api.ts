@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData, type UseQueryO
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
+import { visibleQuote } from './lib/quoteView'
 import { checkoutRequestBody, payParkedRequestBody } from './lib/tenderRequestBodies'
 import { stashCatalog } from './offline/catalogCache'
 import type { EffectiveRulesResponse } from './offline/provisionalPricing'
@@ -253,7 +254,10 @@ function tenantOf(session: CompanySession) {
  * The query is keyed by the debounced lines + discountMinor so it re-runs on every cart or
  * discount change (after 400 ms of inactivity to avoid flooding the API).
  * keepPreviousData keeps the last breakdown visible while the next one loads.
- * An empty cart short-circuits to null without any network call.
+ * An empty cart makes no network call AND reports no data: the query is disabled, but a disabled
+ * query still returns its placeholder — the previous cart's breakdown — so `data` is masked
+ * through `visibleQuote` on the CURRENT line count, not the debounced one (the total must drop
+ * the instant the last line goes, not 400 ms later).
  *
  * The debounce is implemented via useState so the query key and the request body are always
  * derived from the same settled snapshot — previously a useRef approach caused the queryFn to
@@ -347,6 +351,7 @@ export function useQuote(
 
   return {
     ...query,
+    data: visibleQuote(lines.length, query.data),
     /**
      * True while the shown total may still belong to the PREVIOUS cart state (debounce window +
      * in-flight fetch under keepPreviousData) — the UI dims it (UX audit: a fresh item count next
