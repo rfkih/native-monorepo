@@ -80,8 +80,13 @@ const SAFE_BOTTOM = (px: number) => ({
   paddingBottom: `calc(${px}px + var(--safe-area-inset-bottom, 0px))`,
 })
 
+/** Today as the LOCAL calendar day — `toISOString()` would be yesterday before 07:00 WIB. */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
 }
 
 function newLine(key: string): DraftLine {
@@ -169,6 +174,8 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
   })
   // Once the draft exists the figures are the server's: the form locks and only the retry runs.
   const locked = savedId != null
+  // The attachment control stays live after a FAILED upload so a refused file can be swapped.
+  const attachLocked = locked && saveError?.kind !== 'upload'
 
   const fmtDate = (iso: string | null) => {
     if (!iso) return '—'
@@ -225,6 +232,9 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
     if (!picked) return
     try {
       setFile(await prepareAttachment(picked))
+      // A new file after a refused one: not uploaded yet, the old failure cleared.
+      setUploaded(false)
+      if (saveError?.kind === 'upload') setSaveError(null)
     } catch {
       setFileError(t('ap.newBill.phone.attachError'))
     }
@@ -328,7 +338,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
         </span>
       </div>
 
-      <fieldset disabled={locked} className="m-0 min-w-0 flex-1 border-0 p-0 px-4 pb-[132px]">
+      <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0 px-4">
         {/* VENDOR */}
         <section className="pt-5">
           <div className={SECTION}>{t('ap.newBill.phone.vendorSection')}</div>
@@ -837,27 +847,31 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
             </div>
           </div>
         </section>
+      </fieldset>
 
-        {/* BUKTI DAN CATATAN */}
+      {/* BUKTI DAN CATATAN — outside the lock: a refused attachment must be replaceable. */}
+      <div className="px-4 pb-[132px]">
         <section className="pt-[22px]">
           <div className={SECTION}>{t('ap.newBill.phone.evidenceSection')}</div>
           <input
             ref={fileInput}
             type="file"
             accept="image/*,application/pdf"
-            capture="environment"
             className="hidden"
             onChange={(e) => {
               void onPickFile(e.target.files?.[0] ?? null)
               e.target.value = ''
             }}
           />
+          {/* No `capture` on the input: with it Android opens the camera directly and a PDF can
+              never be picked; the OS chooser still offers the camera. */}
           <button
             type="button"
+            disabled={attachLocked}
             onClick={() => (file ? setFile(null) : fileInput.current?.click())}
             className={cn(
               CARD,
-              'mt-2 flex min-h-[60px] w-full items-center gap-[11px] px-3.5 py-3 text-left hover:bg-paper',
+              'mt-2 flex min-h-[60px] w-full items-center gap-[11px] px-3.5 py-3 text-left hover:bg-paper disabled:opacity-60',
             )}
           >
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-hover text-ink-2">
@@ -883,6 +897,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
             <span className={FIELD_LABEL}>{t('ap.newBill.phone.noteLabel')}</span>
             <textarea
               value={note}
+              disabled={locked}
               onChange={(e) => setNote(e.target.value)}
               rows={2}
               maxLength={1000}
@@ -941,7 +956,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
                   : saveError.kind === 'post'
                     ? t('ap.newBill.phone.postFailed')
                     : (saveError.detail ?? t('ap.newBill.phone.failed'))}
-                {saveError.kind === 'post' && savedId ? (
+                {(saveError.kind === 'post' || saveError.kind === 'upload') && savedId ? (
                   <>
                     {' '}
                     <Link
@@ -956,7 +971,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
             </div>
           ) : null}
         </section>
-      </fieldset>
+      </div>
 
       {/* FOOTER — sticky; the tab bar does not mount on this route. */}
       <div

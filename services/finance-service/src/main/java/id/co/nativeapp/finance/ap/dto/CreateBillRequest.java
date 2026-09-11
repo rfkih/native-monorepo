@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.ap.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -28,7 +29,7 @@ public record CreateBillRequest(
     // absent and dates/terms fall back to the post-time rules.
     @Size(max = 64) String vendorInvoiceNumber,
     LocalDate billDate,
-    @PositiveOrZero Integer termDays,
+    @PositiveOrZero @Max(3650) Integer termDays,
     @PositiveOrZero Long discountMinor,
     Integer taxBp,
     @Size(max = 1000) String note) {

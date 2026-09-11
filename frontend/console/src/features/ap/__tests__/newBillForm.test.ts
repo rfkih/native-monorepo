@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyBasisPoints,
   checklist,
   dueDateOf,
   effectiveTerms,
@@ -103,6 +104,16 @@ describe('totals — subtotal, discount, DPP, PPN, total', () => {
       taxMinor: 108_000,
       totalMinor: 1_008_000,
     })
+  })
+
+  it('rounds the tax HALF_EVEN like the server — an exact half goes to the even unit', () => {
+    // 15,150 × 11 % = 1,666.5 → 1,666 (even), not 1,667; 15,350 × 11 % = 1,688.5 → 1,688.
+    expect(applyBasisPoints(15_150, 1100)).toBe(1_666)
+    expect(applyBasisPoints(15_350, 1100)).toBe(1_688)
+    expect(applyBasisPoints(15_250, 1100)).toBe(1_678) // 1,677.5 → 1,678 (even)
+    expect(applyBasisPoints(1_001, 1100)).toBe(110)
+    expect(applyBasisPoints(900_000, 1200)).toBe(108_000)
+    expect(totals([15_150], 0, 1100).totalMinor).toBe(16_816)
   })
 
   it('clamps the discount to the subtotal and rounds the tax once', () => {

@@ -133,6 +133,21 @@ export interface Totals {
   totalMinor: number
 }
 
+/**
+ * `value × bp / 10 000` rounded HALF_EVEN — exactly finance's `Money.applyBasisPoints` (`mulDiv`,
+ * `RoundingMode.HALF_EVEN`), so the total the form checks against the paper is the total the
+ * server will store. `Math.round` (half-up) would differ by one minor unit on every exact half.
+ */
+export function applyBasisPoints(valueMinor: number, bp: number): number {
+  const numerator = valueMinor * bp
+  const q = Math.trunc(numerator / 10_000)
+  const r = numerator - q * 10_000
+  const twice = r * 2
+  if (twice > 10_000) return q + 1
+  if (twice < 10_000) return q
+  return q % 2 === 0 ? q : q + 1
+}
+
 /** The summary card, over the VALID lines only (an invalid line adds nothing until it is fixed). */
 export function totals(
   lineTotalsMinor: readonly number[],
@@ -142,7 +157,7 @@ export function totals(
   const subtotal = lineTotalsMinor.reduce((s, t) => s + t, 0)
   const discount = Math.min(Math.max(0, Math.floor(discountMinor)), subtotal)
   const dpp = subtotal - discount
-  const tax = Math.round((dpp * taxBp) / 10_000)
+  const tax = applyBasisPoints(dpp, taxBp)
   return {
     subtotalMinor: subtotal,
     discountMinor: discount,

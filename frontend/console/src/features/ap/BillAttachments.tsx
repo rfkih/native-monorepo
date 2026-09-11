@@ -3,9 +3,11 @@
  * with a tap-to-open (fetched with the personal bearer as a private blob — never a public URL)
  * and a remove. Rendered on the bill detail; uploads happen from the phone form at save time.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileText, Image as ImageIcon, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { apiFetchBlob } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { billAttachmentPath, useBillAttachments, useDeleteBillAttachment } from './api'
@@ -35,8 +37,18 @@ export function BillAttachments({
   const remove = useDeleteBillAttachment({ companyId, actor, id: billId })
   const [opening, setOpening] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  // Shown right here, never window.open: a blob: URL cannot leave the page in the single-WebView
+  // app shell, and iOS blocks a window.open that follows an await (the POS attachments precedent).
+  const [lightbox, setLightbox] = useState<{ url: string; kind: 'image' | 'pdf' } | null>(null)
+  useBackDismiss(() => setLightbox(null), lightbox != null)
+  useScrollLock(lightbox != null)
+  useEffect(() => {
+    if (!lightbox) return undefined
+    const url = lightbox.url
+    return () => URL.revokeObjectURL(url)
+  }, [lightbox])
 
-  const open = async (attachmentId: string) => {
+  const open = async (attachmentId: string, contentType: string) => {
     setOpening(attachmentId)
     setFailed(false)
     try {
@@ -45,10 +57,10 @@ export function BillAttachments({
         auth: 'personal',
       })
       if (!blob) throw new Error('empty')
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank', 'noopener')
-      // The tab has the bytes; the object URL can go once it has surely loaded.
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      setLightbox({
+        url: URL.createObjectURL(blob),
+        kind: contentType === 'application/pdf' ? 'pdf' : 'image',
+      })
     } catch {
       setFailed(true)
     } finally {
@@ -72,7 +84,7 @@ export function BillAttachments({
             >
               <button
                 type="button"
-                onClick={() => void open(a.id)}
+                onClick={() => void open(a.id, a.contentType)}
                 disabled={opening != null}
                 className="flex min-w-0 flex-1 items-center gap-3 text-left hover:underline"
               >
@@ -114,6 +126,40 @@ export function BillAttachments({
         <p className="mt-2 text-[12px] text-loss-ink" role="alert">
           {t('ap.detail.errors.generic')}
         </p>
+      ) : null}
+
+      {lightbox ? (
+        <div
+          className="fixed inset-0 z-[80] grid place-items-center bg-black/85 p-4 print:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('ap.detail.attachments')}
+          onClick={() => setLightbox(null)}
+        >
+          {lightbox.kind === 'image' ? (
+            <img
+              src={lightbox.url}
+              alt={t('ap.detail.attachments')}
+              className="max-h-full max-w-full rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <iframe
+              src={lightbox.url}
+              title={t('ap.detail.attachments')}
+              className="h-[85vh] w-[90vw] max-w-2xl rounded-lg bg-white"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => setLightbox(null)}
+            aria-label={t('common.close')}
+            className="absolute right-4 top-4 grid size-10 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"
+          >
+            <X className="size-5" aria-hidden="true" />
+          </button>
+        </div>
       ) : null}
     </div>
   )

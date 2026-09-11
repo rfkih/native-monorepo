@@ -51,6 +51,12 @@ public class Bill extends Auditable {
   /** The rate a pre-ADR-0084 "taxable" bill was computed at — the official 11 % PPN (ADR 0042). */
   public static final int DEFAULT_TAX_BP = 1_100;
 
+  /** The longest payment term a bill may carry — ten years; beyond that the due date is a typo. */
+  public static final int MAX_TERM_DAYS = 3_650;
+
+  /** No invoice predates the fleet's earliest posting period; a later one is a typo too. */
+  public static final LocalDate EARLIEST_BILL_DATE = LocalDate.of(2000, 1, 1);
+
   @Id
   @Column(name = "id", nullable = false, updatable = false)
   private UUID id;
@@ -198,8 +204,15 @@ public class Bill extends Auditable {
     if (!ALLOWED_TAX_BP.contains(taxBp)) {
       throw new IllegalArgumentException("bill tax rate must be one of " + ALLOWED_TAX_BP + " bp");
     }
-    if (details.termDays() != null && details.termDays() < 0) {
-      throw new IllegalArgumentException("bill term days must not be negative");
+    if (details.termDays() != null
+        && (details.termDays() < 0 || details.termDays() > MAX_TERM_DAYS)) {
+      throw new IllegalArgumentException("bill term days must be within 0.." + MAX_TERM_DAYS);
+    }
+    if (details.billDate() != null
+        && (details.billDate().isBefore(EARLIEST_BILL_DATE)
+            || details.billDate().isAfter(LocalDate.now().plusYears(1)))) {
+      throw new IllegalArgumentException(
+          "bill date must be between 2000-01-01 and a year from now");
     }
     Money net = subtotal.minus(discount); // throws MismatchedCurrencyException if currencies differ
     Money total = net.plus(tax);

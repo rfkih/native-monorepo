@@ -25,8 +25,15 @@ public final class AttachmentContentValidator {
    */
   public static String validate(String declaredContentType, byte[] data) {
     String detected = detect(data);
+    // A browser sends `application/octet-stream` (or nothing) when the file's type is unknown —
+    // common for a PDF handed over by an Android file manager. That is "undeclared", not a lie.
     String normalizedDeclared =
         declaredContentType == null ? null : declaredContentType.strip().toLowerCase(Locale.ROOT);
+    if (normalizedDeclared != null
+        && (normalizedDeclared.isEmpty()
+            || normalizedDeclared.equals("application/octet-stream"))) {
+      normalizedDeclared = null;
+    }
     if (detected == null || (normalizedDeclared != null && !detected.equals(normalizedDeclared))) {
       throw new InvalidBillAttachmentException(declaredContentType, detected);
     }

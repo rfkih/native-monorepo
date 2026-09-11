@@ -82,7 +82,8 @@ class BillAttachmentControllerTest {
     mockMvc
         .perform(multipart("/api/v1/ap/bills/" + BILL + "/attachments").file(text))
         .andExpect(status().isUnprocessableEntity())
-        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/bill-attachment-invalid"));
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/bill-attachment-invalid"))
+        .andExpect(jsonPath("$.detail").value("Only JPEG, PNG, WEBP or PDF are accepted."));
 
     when(writer.upload(eq(BILL), any(), any(), any()))
         .thenThrow(new MaxUploadSizeExceededException(5 * 1024 * 1024));
@@ -113,7 +114,9 @@ class BillAttachmentControllerTest {
   @Test
   void contentIsServedPrivatelyWithAnEtagAndRevalidatesTo304() throws Exception {
     when(reader.contentMeta(BILL, ATTACHMENT))
-        .thenReturn(new BillAttachmentContentMeta("application/pdf", SHA, "finance/t/bill/x.pdf"));
+        .thenReturn(
+            new BillAttachmentContentMeta(
+                "application/pdf", SHA, "finance/t/bill/x.pdf", "faktur \"gas\"; ü.pdf"));
     when(reader.payload("finance/t/bill/x.pdf")).thenReturn("%PDF-1.4 x".getBytes());
 
     mockMvc
@@ -122,7 +125,8 @@ class BillAttachmentControllerTest {
         .andExpect(content().contentType(MediaType.APPLICATION_PDF))
         .andExpect(header().string("ETag", "\"" + SHA + "\""))
         .andExpect(header().string("Cache-Control", "max-age=300, private"))
-        .andExpect(header().string("X-Content-Type-Options", "nosniff"));
+        .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+        .andExpect(header().string("Content-Disposition", "inline; filename=\"faktur gas .pdf\""));
 
     mockMvc
         .perform(
@@ -142,5 +146,14 @@ class BillAttachmentControllerTest {
     mockMvc
         .perform(delete("/api/v1/ap/bills/" + BILL + "/attachments/" + ATTACHMENT))
         .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void aMultipartWithoutTheFilePartIsA400NotA500() throws Exception {
+    mockMvc
+        .perform(multipart("/api/v1/ap/bills/" + BILL + "/attachments"))
+        .andExpect(status().isBadRequest())
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/bill-attachment-malformed"));
   }
 }

@@ -9,9 +9,12 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 /**
  * RFC 7807 mapping for AP bill attachments (ADR 0084). Global and highest precedence because {@link
@@ -30,7 +33,8 @@ public class BillAttachmentAdvice {
     ProblemDetail problem =
         problem(HttpStatus.UNPROCESSABLE_ENTITY, "bill-attachment-invalid", request);
     problem.setTitle("Invalid attachment");
-    problem.setDetail(ex.getMessage());
+    // A fixed detail: the declared header is client input and is never reflected back.
+    problem.setDetail("Only JPEG, PNG, WEBP or PDF are accepted.");
     return problem;
   }
 
@@ -41,6 +45,27 @@ public class BillAttachmentAdvice {
         problem(HttpStatus.UNPROCESSABLE_ENTITY, "bill-attachment-limit", request);
     problem.setTitle("Attachment limit reached");
     problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * A multipart without the {@code file} part, or a body that is not multipart → 400/415, not 500.
+   */
+  @ExceptionHandler({MissingServletRequestPartException.class, MultipartException.class})
+  public ProblemDetail handleBadMultipart(Exception ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "bill-attachment-malformed", request);
+    problem.setTitle("Malformed upload");
+    problem.setDetail("Send the attachment as a multipart form with one 'file' part.");
+    return problem;
+  }
+
+  @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+  public ProblemDetail handleUnsupportedMediaType(
+      HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported-media-type", request);
+    problem.setTitle("Unsupported media type");
+    problem.setDetail("Send the attachment as multipart/form-data.");
     return problem;
   }
 

@@ -54,7 +54,10 @@ public class BillAttachmentReader {
             .filter(a -> a.getBillId().equals(billId))
             .orElseThrow(() -> new BillNotFoundException(billId));
     return new BillAttachmentContentMeta(
-        attachment.getContentType(), attachment.getSha256(), attachment.getObjectKey());
+        attachment.getContentType(),
+        attachment.getSha256(),
+        attachment.getObjectKey(),
+        attachment.getOriginalFilename());
   }
 
   /**

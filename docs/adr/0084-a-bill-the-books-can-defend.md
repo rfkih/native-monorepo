@@ -88,4 +88,9 @@ unchanged; the catalog notes it.
 
 **Open.** Per-line expense accounts (ADR 0015); attachments on the desktop form (it can view and
 remove them on the bill; uploads come from the phone form); a dirty-form leave guard; a
-per-vendor category (the design's "Bahan segar") — vendors carry no category.
+per-vendor category (the design's "Bahan segar") — vendors carry no category. From the security
+review (all LOW, fleet-consistent): the upload holds its DB transaction across the object-store
+put (as every media writer in the fleet does — a fleet-wide follow-up); the per-bill cap is not
+race-serialised (two concurrent uploads can land eleven, storage still bounded); any FINANCE role
+may remove evidence from a POSTED bill (CDC keeps the row's history and the object is retained) —
+owner-only or DRAFT-only delete is a candidate rule.

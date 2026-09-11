@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.finance.ap.domain.BillNotFoundException;
 import id.co.nativeapp.finance.ap.domain.DuplicateVendorInvoiceException;
 import id.co.nativeapp.finance.ap.domain.InvalidBillAttachmentException;
 import id.co.nativeapp.finance.ap.dto.BillAttachmentMetaResponse;
@@ -182,6 +183,13 @@ class BillInvoiceAndAttachmentIntegrationTest extends PostgresRlsTestBase {
         TenantContext.callAs(
             TENANT, ACTOR, () -> attachmentWriter.upload(billId, null, PDF, "faktur.pdf"));
     assertThat(again.id()).isEqualTo(meta.id());
+    // A browser that does not know the file's type declares octet-stream — undeclared, not a lie.
+    BillAttachmentMetaResponse octet =
+        TenantContext.callAs(
+            TENANT,
+            ACTOR,
+            () -> attachmentWriter.upload(billId, "application/octet-stream", PDF, "faktur.pdf"));
+    assertThat(octet.id()).isEqualTo(meta.id());
     assertThat(TenantContext.callAs(TENANT, ACTOR, () -> attachmentReader.list(billId))).hasSize(1);
 
     // Served bytes are the bytes.
@@ -200,9 +208,39 @@ class BillInvoiceAndAttachmentIntegrationTest extends PostgresRlsTestBase {
                         attachmentWriter.upload(billId, "text/plain", "hello".getBytes(), "x.txt")))
         .isInstanceOf(InvalidBillAttachmentException.class);
 
-    // Another tenant sees nothing of it.
+    // Another tenant sees nothing of it — the list, the serve and the delete alike.
     assertThat(TenantContext.callAs(OTHER_TENANT, ACTOR, () -> attachmentReader.list(billId)))
         .isEmpty();
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    OTHER_TENANT, ACTOR, () -> attachmentReader.contentMeta(billId, meta.id())))
+        .isInstanceOf(BillNotFoundException.class);
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    OTHER_TENANT,
+                    ACTOR,
+                    () -> {
+                      attachmentWriter.delete(billId, meta.id());
+                      return null;
+                    }))
+        .isInstanceOf(BillNotFoundException.class);
+    // Nor can a sibling bill's URL serve it: /ap/bills/{other}/attachments/{id} is a 404.
+    UUID siblingBill =
+        TenantContext.callAs(
+            TENANT,
+            ACTOR,
+            () -> {
+              UUID v = vendorWriter.create("PT Lain", null, null).id();
+              return billWriter.createDraft(draft(v, "LAIN-1", 5_000L));
+            });
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    TENANT, ACTOR, () -> attachmentReader.contentMeta(siblingBill, meta.id())))
+        .isInstanceOf(BillNotFoundException.class);
+    assertThat(TenantContext.callAs(TENANT, ACTOR, () -> attachmentReader.list(billId))).hasSize(1);
 
     // Delete removes the row only.
     TenantContext.callAs(

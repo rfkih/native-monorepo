@@ -38,7 +38,16 @@ in `prod.env` BEFORE the tag (RUNBOOK); an empty secret would fail `minio-init` 
 **Gates.** finance-service 907 tests green (V69, discount split balanced Dr 5000/5100/1300 Cr 2000,
 duplicate 409 + free after void, attachments upload/list/serve/dedupe/tenant-isolated, web slices);
 console `tsc -b`, eslint, vitest 974, `vite build`; `mobile-shots.mjs` gained a `bills` section
-(vendors · duplicate · mismatch · match · checklist · attach → save → detail).
+(vendors · duplicate · mismatch · match · checklist · attach → save → detail). Code review (6
+findings, all fixed): the form's tax now rounds HALF_EVEN like `Money.applyBasisPoints` so the
+printed-total gate and the stored total agree to the rupiah; attachments open in a lightbox, never
+`window.open` after an await (dead in the WebView shell); a refused upload leaves the file control
+live and links to the draft; `application/octet-stream` counts as undeclared (Android hands PDFs
+over that way); the default invoice date is the local day; no `capture` on the file input (it sent
+Android straight to the camera). Security review PASS (no HIGH), cheap hardening folded in:
+cross-tenant/cross-bill serve + delete proofs, `Content-Disposition` with an ASCII-safe name, a
+fixed 422 detail, multipart-shape errors → 400/415, terms capped at 3650 days and the invoice date
+bounded.
 
 ## 2026-09-11 — the phone menu is a work page, not a catalog (ADR 0083)
 

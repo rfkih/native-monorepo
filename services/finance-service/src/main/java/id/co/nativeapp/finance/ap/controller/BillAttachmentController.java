@@ -78,6 +78,9 @@ public class BillAttachmentController {
         .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
         .eTag(etag)
         .header("X-Content-Type-Options", "nosniff")
+        // Inline with a sanitised ASCII name: the viewer decides, the header never carries a
+        // client string verbatim.
+        .header("Content-Disposition", "inline; filename=\"" + meta.asciiFilename() + "\"")
         .body(data);
   }
 
