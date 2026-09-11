@@ -77,6 +77,8 @@ import {
 } from './api'
 import { resizeImageFile } from './image'
 import { RecipeDrawer } from './RecipeDrawer'
+import { MenuPhone } from './MenuPhone'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
 import {
   computeMarginRatio,
   useAutoLinkAll,
@@ -91,13 +93,21 @@ import {
 
 export function MenuManagement() {
   const { company } = useSession()
+  // Below 640px the page is the work page of ADR 0083 (MenuPhone); the desktop tree is untouched.
+  const isPhone = useIsPhone()
   if (!company) return <NoCompany />
   // The gate resolves a REAL outlet id so menu edits target the correct outlet (ADR 0012 —
   // no business-unit fallback). key forces a full remount when the effective outlet
   // changes, resetting any local dialog/edit state so it cannot bleed across outlets.
   return (
     <OutletGate company={company} requiredVertical="restaurant">
-      {(session) => <MenuManagementInner key={session.businessId} session={session} />}
+      {(session) =>
+        isPhone ? (
+          <MenuPhone key={session.businessId} session={session} />
+        ) : (
+          <MenuManagementInner key={session.businessId} session={session} />
+        )
+      }
     </OutletGate>
   )
 }

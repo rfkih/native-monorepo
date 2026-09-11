@@ -9,7 +9,7 @@
  *   npm run dev        (terminal 1)
  *   node scripts/mobile-shots.mjs [outDir]   (terminal 2)
  *
- * SHOT_ONLY=screens,more,pos,stocktake,laporan,inventory (comma list) restricts the walk to those sections — the
+ * SHOT_ONLY=screens,more,pos,stocktake,laporan,inventory,menu (comma list) restricts the walk to those sections — the
  * whole pass is a couple of minutes, and a redesign of one screen only needs its own section.
  * SHOT_FULL=1 makes the `screens` pass capture full scroll height (review a long screen whole).
  *
@@ -77,8 +77,9 @@ const PAYSLIPS = [
 
 // ── POS fixtures (Native Till Android v2 — the phone till's bill deck) ────────
 
+const CATEGORY_NAME = { c1: 'Makanan', c2: 'Minuman', c3: 'Tambahan' }
 const menuItem = (id, name, priceMinor, categoryId, stockQuantity = null) => ({
-  id, businessId: COMPANY.businessId, name, category: '', categoryId,
+  id, businessId: COMPANY.businessId, name, category: CATEGORY_NAME[categoryId] ?? '', categoryId,
   priceMinor, currency: 'IDR', active: true, available: stockQuantity !== 0,
   stockQuantity, unitCostMinor: null, modifierGroups: [], imageUrl: null,
 })
@@ -97,6 +98,29 @@ const MENU = [
   menuItem('m11', 'Pisang Goreng Keju', 32000, 'c3', 7),
   menuItem('m12', 'Kerupuk Udang', 10000, 'c3', 25),
 ]
+
+// ADR 0083 — the phone menu's recipes. Lines name INGREDIENTS entries; cost = qty × unit cost.
+const RECIPES = {
+  m1: [['beras-pandan', 200], ['minyak-sania', 15], ['bawang-merah', 20]],
+  m2: [['ayam-fillet', 250], ['gula-aren', 20]],
+  m8: [['kopi-robusta', 18], ['susu-uht', 150], ['gula-aren', 20]],
+  m11: [['tepung-cakra', 80], ['keju-mozarella', 30], ['minyak-sania', 40]],
+}
+const recipeFor = (itemId) => {
+  const lines = (RECIPES[itemId] ?? []).map(([ingredientId, qtyPerPortion], i) => {
+    const ing = INGREDIENTS.find((x) => x.id === ingredientId)
+    return {
+      id: `${itemId}-l${i}`, ingredientId, ingredientName: ing.name, unit: ing.unit, modifierOptionId: null,
+      qtyPerPortion, unitCostMinor: ing.unitCostMinor, costCurrency: ing.costCurrency, ingredientActive: true,
+    }
+  })
+  const hpp = lines.reduce((t, l) => t + l.qtyPerPortion * l.unitCostMinor, 0)
+  return { menuItemId: itemId, lines, unitHppMinor: lines.length ? hpp : null, hppCurrency: lines.length ? 'IDR' : null, completeness: lines.length ? 'COMPLETE' : 'MISSING_COST' }
+}
+const HPP_SUMMARY = () => Object.keys(RECIPES).map((id) => {
+  const r = recipeFor(id)
+  return { menuItemId: id, unitHppMinor: r.unitHppMinor, hppCurrency: r.hppCurrency, completeness: r.completeness }
+})
 
 const MENU_CATEGORIES = [
   { id: 'c1', businessId: COMPANY.businessId, name: 'Makanan', displayOrder: 1, active: true },
@@ -499,6 +523,8 @@ const ROUTES = [
   ['/api/v1/ap/bills', () => BILLS],
   // POS (Native Till Android v2). `/api/v1/bills/b1` must precede `/api/v1/bills`.
   ['/api/v1/menu/categories', () => MENU_CATEGORIES],
+  ['/api/v1/menu/hpp-summary', () => HPP_SUMMARY()],
+  [/\/api\/v1\/menu\/([^/]+)\/recipe$/, (u, m) => recipeFor(m[1])],
   ['/api/v1/menu', () => MENU],
   ['/api/v1/tables', () => TABLES],
   ['/api/v1/pricing/effective-rules', () => ({ serviceChargeBp: 0, taxBp: 0, serviceChargeInTaxBase: false, usesIllustrativeRules: false })],
@@ -899,6 +925,48 @@ for (const pass of [
   await page.waitForTimeout(700)
   await page.screenshot({ path: `${dir}/pos-bill-expanded.png` })
   console.log(`[${pass.name}] pos-bill-expanded ok`)
+  }
+
+  if (want('menu')) {
+    // ADR 0083 — the phone menu is a work page: one row opens into the item's whole editor.
+    const shot = async (name) => {
+      await page.screenshot({ path: `${dir}/${name}.png` })
+      console.log(`[${pass.name}] ${name} ok`)
+    }
+    await page.goto(`${BASE}/menu`, { waitUntil: 'load' })
+    await page.waitForTimeout(1400)
+    await shot('menu-list')
+    await page.getByRole('button', { name: /^(Buka|Open) Nasi Goreng Spesial$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(900)
+    await shot('menu-item-open')
+    await page.getByRole('button', { name: /^(Tambah bahan|Add ingredient)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(700)
+    await shot('menu-pick-ingredient')
+    await page.getByRole('button', { name: /^Susu UHT/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(700)
+    for (const d of ['1', '5', '0']) {
+      await page.getByRole('button', { name: new RegExp(`^(Angka|Digit) ${d}$`) }).click({ timeout: 8000 })
+      await page.waitForTimeout(100)
+    }
+    await page.waitForTimeout(300)
+    await shot('menu-qty')
+    await page.getByRole('button', { name: /^(Batal|Cancel)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    await page.getByRole('button', { name: /^(Hapus item|Delete item)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(700)
+    await shot('menu-delete')
+    await page.getByRole('button', { name: /^(Batal|Cancel)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    await page.getByRole('button', { name: /^Item$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(700)
+    await shot('menu-new')
+    await page.getByRole('button', { name: /^(Tutup|Close)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(400)
+    // Search reaches into the recipes: "susu" finds the coffee that uses it.
+    await page.getByRole('searchbox').first().fill('susu')
+    await page.waitForTimeout(900)
+    if (!page.url().includes('q=susu')) throw new Error('the query must live in the URL (N5)')
+    await shot('menu-search')
   }
 
   await ctx.close()

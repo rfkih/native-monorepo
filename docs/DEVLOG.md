@@ -1,5 +1,36 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-11 — the phone menu is a work page, not a catalog (ADR 0083)
+
+"Manajemen Menu" (Claude Design) asked for one thing of `/menu` on a phone: everything an owner does
+to an item finishes on the item's own row. The page had no phone variant at all — the desktop tree
+with `max-sm:` wraps, twelve dialogs, and a six-button action cluster folding onto its own line.
+
+**One row, one editor.** `MenuManagement` now switches to `MenuPhone` below 640px (desktop
+untouched). A row shows the category glyph, name (+ an ink "Habis" pill), a meta line — category ·
+stock, in a heavier weight when the item is low or out — the price and the margin. It opens into the
+item's editor: name and price are uncontrolled fields keyed on the server value that PATCH on blur or
+Enter (no save button — the note says so), a real `role="switch"` over `/86`·`/un-86`, and the
+recipe: each base line's ingredient, its quantity in the BASE unit ("200 g" — per-portion amounts
+are small, and it is the unit ADR 0050 stores), and qty × the moving-average unit cost, "—" when
+uncosted. "HPP dari resep" is that total; the row's margin is the HPP summary's.
+
+**Picked, not typed.** The design drew editable ingredient name and cost fields; the product has
+neither — an ingredient's name and cost belong to the catalog (ADR 0081), and a typed cost would
+silently disagree with the moving average. "Tambah bahan" opens the catalog in a sheet, then a
+digits-only base-unit keypad; the write is a full-replace `PUT /menu/{id}/recipe` built by the pure
+`withLine`/`withoutLine`. Duplikat is client-side (no clone endpoint): `POST /menu` + `PUT recipe`
+with the base lines, modifier groups not cloned and said so. "+ Item" is a sheet, not an empty row,
+because `POST` needs a name and a positive price. Search reaches into recipes ("susu" finds the
+coffee) through a lazy `useQueries` fan-out keyed like `useRecipe`. Chips come from the items' own
+`category` strings — `categoryId` is never written — canonicalised through `categoryCanon.ts`.
+`menu/lib/menuView.ts` holds the rules (18 tests).
+
+**Gates.** `tsc -b`, eslint (the four warnings pre-date this), vitest 955, `vite build`;
+`mobile-shots.mjs` gained a `menu` section (list · open row · ingredient picker · keypad · delete ·
+new item · search, with `/hpp-summary` and `/{id}/recipe` fixtures and real category strings on
+`MENU`) — 114 shots across every section, zero page errors.
+
 ## 2026-09-11 — the phone home reads today, not the month (ADR 0082)
 
 The "Native Console Android" design's *Beranda manajer* moved on from the monthly re-fit of Aug 7:
