@@ -29,7 +29,10 @@ import { AppliedPromotionChips, type AppliedPromotionEntry } from '@/components/
 export interface DockLine {
   key: string
   name: string
-  /** "2 × Rp 12.000" — pre-formatted by the caller. */
+  /** "Telur (+Rp 2.000), Less ice" — the line's add-ons, each with its per-unit price. Its own row
+   *  under the name (the name truncates; this wraps), so the price is never clipped away. */
+  modifiersLabel?: string
+  /** "2 × Rp 12.000" — the product's OWN unit price, pre-formatted by the caller. */
   unitLabel: string
   /** "Rp 24.000" — pre-formatted by the caller. */
   totalLabel: string
@@ -313,6 +316,9 @@ export function BillDock({
                         </span>
                       ) : null}
                     </div>
+                    {l.modifiersLabel ? (
+                      <div className="mt-0.5 break-words text-xs leading-[1.3] text-ink-3">{l.modifiersLabel}</div>
+                    ) : null}
                     <div className="tnum mt-0.5 font-mono text-xs leading-[1.3] text-ink-3">
                       {l.unitLabel}
                     </div>

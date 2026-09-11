@@ -18,6 +18,7 @@ import { printCurrentPage } from '@/lib/nativeShell'
 import type { AppliedPromotionResponse, OrderResponse, PaymentResponse } from './api'
 import { ThermalReceipt } from './ThermalReceipt'
 import type { ThermalRow, ThermalLineItem, ThermalSecondaryAction } from './ThermalReceipt'
+import { receiptLineItems } from './lib/receiptLines'
 
 interface Props {
   order: OrderResponse
@@ -174,19 +175,8 @@ export function ReceiptView({
     metaRows.push({ label: t('pos.history.reprintLabel'), valueLabel: dateTimeFormat.format(new Date()) })
   }
 
-  // Line items
-  const lineItems: ThermalLineItem[] = order.lines.map((line) => ({
-    qty: line.qty,
-    name: line.name,
-    priceLabel: formatMoney(line.lineTotalMinor, currency, locale),
-    modifiers: (line.modifiers ?? []).map((mod) => ({
-      label: mod.nameSnapshot,
-      deltaLabel:
-        mod.priceDeltaMinor !== 0
-          ? `${mod.priceDeltaMinor > 0 ? '+' : ''}${formatMoney(mod.priceDeltaMinor, currency, locale)}`
-          : undefined,
-    })),
-  }))
+  // Line items — product row = base × qty, add-on rows = delta × qty (lib/receiptLines).
+  const lineItems: ThermalLineItem[] = receiptLineItems(order.lines, currency, locale)
 
   // Total rows
   const totalRows: ThermalRow[] = []

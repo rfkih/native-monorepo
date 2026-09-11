@@ -42,14 +42,21 @@ import { cn } from '@/lib/cn'
 
 export interface ThermalModifier {
   label: string
-  /** Formatted delta string, e.g. "+Rp 2.000". Omit for free modifiers. */
+  /** Formatted add-on amount EXTENDED over the line's qty, e.g. "+Rp 4.000" for 2× at +2.000.
+   *  Omit for free modifiers. */
   deltaLabel?: string
 }
 
+/**
+ * One item block on the paper. The rows must add up in the customer's hand (2026-09-11 report):
+ * `priceLabel` is the PRODUCT's own price × qty — never the line total — and each modifier row
+ * carries its own extended amount, so product + add-ons = the line the server charged. Build
+ * these with `features/pos/lib/receiptLines.ts`, which owns that rule for both receipts.
+ */
 export interface ThermalLineItem {
   qty: number
   name: string
-  /** Formatted line total, e.g. "Rp 25.000". */
+  /** Formatted product price × qty, e.g. "Rp 50.000" for 2× at 25.000 — before any add-on. */
   priceLabel: string
   modifiers: ThermalModifier[]
 }

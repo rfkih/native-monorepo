@@ -9,6 +9,7 @@ import {
 import { Badge } from '@/components/ui/Badge'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
+import { modifierLabel } from '../lib/lineLabels'
 import type { } from '@/lib/session'
 import type { BillLineResponse } from '../billsApi'
 import type { } from '../lib/categories'
@@ -74,14 +75,15 @@ export function BillLineItem({
           </div>
           <div className="tnum mt-0.5 font-mono text-xs text-ink-3">
             {line.qty > 1 ? `${line.qty} × ` : ''}
-            {formatMoney(line.unitPriceMinor + line.modifierDeltaMinor, currency, locale)}
+            {/* The product's own price — the add-ons are priced on their pills below. */}
+            {formatMoney(line.unitPriceMinor, currency, locale)}
           </div>
           {/* Modifier pills */}
           {line.modifiers.length > 0 ? (
             <div className="mt-1 flex flex-wrap gap-1">
               {line.modifiers.map((mod) => (
                 <span key={mod.optionId} className="text-2xs text-ink-3">
-                  {mod.nameSnapshot}
+                  {modifierLabel(mod, currency, locale)}
                 </span>
               ))}
             </div>
