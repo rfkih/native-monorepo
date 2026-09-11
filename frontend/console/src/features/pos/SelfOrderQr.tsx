@@ -17,6 +17,10 @@
  *
  * Strings rule (rule 9): every label is an i18n key. Table labels / the token itself are business
  * data, not UI copy, and cross verbatim.
+ *
+ * PRINT SURFACE — exempt from the type scale (ADR 0085) and pinned to the pre-scale pixel sizes
+ * (text-[14px]/[16px]/[18px], the old text-sm/base/lg): a printed document must not move when the
+ * screen scale moves. Do not "tidy" these back to scale names.
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -53,7 +57,7 @@ export function SelfOrderQr({ session, outletId }: Props) {
   return (
     <div className="border-t border-line">
       <div className="flex items-center justify-between gap-2 px-5 py-4">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+        <h3 className="flex items-center gap-2 text-[14px] font-semibold text-ink">
           <QrCodeIcon className="size-4 text-ink-3" aria-hidden="true" />
           {t('pos.selfOrderQr.title')}
         </h3>
@@ -98,7 +102,7 @@ export function SelfOrderQr({ session, outletId }: Props) {
             {t('pos.selfOrderQr.loadError')}
           </p>
         ) : !hasAnyToken ? (
-          <p className="py-4 text-center text-sm text-ink-3">{t('pos.selfOrderQr.empty')}</p>
+          <p className="py-4 text-center text-[14px] text-ink-3">{t('pos.selfOrderQr.empty')}</p>
         ) : (
           <div id="native-selforder-qr-print">
             {/* Forces black-on-white on paper regardless of the console's light/dark theme —
@@ -190,7 +194,7 @@ function RotateConfirmDialog({
     >
       <div className="w-full max-w-sm rounded-[20px] border border-line bg-surface p-6 shadow-xl">
         <p className="text-[15px] font-semibold text-ink">{t('pos.selfOrderQr.rotateConfirmTitle')}</p>
-        <p className="mt-2 text-sm text-ink-3">{t('pos.selfOrderQr.rotateConfirmBody')}</p>
+        <p className="mt-2 text-[14px] text-ink-3">{t('pos.selfOrderQr.rotateConfirmBody')}</p>
         {error ? (
           <p className="mt-3 text-xs text-loss" role="alert">
             {t('pos.selfOrderQr.rotateError')}

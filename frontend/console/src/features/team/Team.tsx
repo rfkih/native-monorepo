@@ -321,7 +321,7 @@ function InviteDialog({
 
           {/* Temp password — copyable */}
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
               {t('team.inviteDialog.tempPasswordLabel')}
             </p>
             <div className="flex items-center gap-2 rounded-xl border border-line bg-paper px-3.5 py-2.5">

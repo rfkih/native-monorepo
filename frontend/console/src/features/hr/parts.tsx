@@ -738,7 +738,7 @@ export function CompensationDialog({
 
         {/* Current packages — always masked (salary PII never renders). */}
         <div className="rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm">
-          <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+          <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
             {t('hr.compensation.current')}
           </p>
           {(packages.data ?? []).length === 0 ? (
@@ -865,7 +865,7 @@ function CommissionControl({
 
   return (
     <div className="rounded-xl border border-line bg-paper px-3.5 py-3">
-      <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+      <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
         {t('hr.commission.title')}
       </p>
       {open ? (

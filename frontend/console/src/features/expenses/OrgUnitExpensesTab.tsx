@@ -154,7 +154,7 @@ function CountTile({
 }) {
   return (
     <Card className="p-5">
-      <div className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-3 h-7 w-16 animate-pulse rounded bg-ink-100" />
       ) : (

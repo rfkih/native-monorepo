@@ -6,7 +6,10 @@
 # FORBIDDEN in frontend/console/src/**/*.tsx (and .ts):
 #   text-[Npx] / text-[Nrem]           → the type scale: text-2xs … text-3xl
 #   rounded-[Npx] (any side)           → rounded-xl / 2xl / card / t-sheet / 3xl
-#   tracking-[…]                       → tracking-display / tracking-eyebrow
+#   tracking-[…], tracking-tight/wide… → tracking-display / tracking-eyebrow (the only two);
+#                                        and a misspelt tracking-eyebrowX / tracking-displayX,
+#                                        which is a class that does not exist and silently
+#                                        renders at 0 (a sed slip did exactly that once)
 #   bg-black/N                         → bg-scrim (the one modal backdrop)
 #   animate-in, fade-in-0, zoom-in-95  → tailwindcss-animate is NOT installed; these do nothing.
 #                                        Use dialog-in / sheet-up / scrim-in from index.css.
@@ -22,8 +25,10 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+# `src/*.tsx`, not `src/**/*.tsx`: a git pathspec `*` already crosses `/`, and the `**` form
+# skipped the files directly under src/ (main.tsx).
 mapfile -t files < <(
-  git ls-files 'frontend/console/src/**/*.tsx' 'frontend/console/src/**/*.ts' 2>/dev/null \
+  git ls-files 'frontend/console/src/*.tsx' 'frontend/console/src/*.ts' 2>/dev/null \
     | grep -vE '/features/landing/|/(ThermalReceipt|KotView|PayslipPrint|SelfOrderQr)\.tsx$|/components/Wordmark\.tsx$|__tests__/|\.test\.tsx?$' \
     | sort -u
 )
@@ -34,6 +39,8 @@ pattern='(^|[^A-Za-z0-9_-])('
 pattern+='text-\[[0-9.]+(px|rem)\]'
 pattern+='|rounded(-[a-z]{1,2})?-\[[0-9.]+px\]'
 pattern+='|tracking-\['
+pattern+='|tracking-(tighter|tight|wide|wider|widest)([^a-z-]|$)'
+pattern+='|tracking-(eyebrow|display)[a-z]'
 pattern+='|bg-black/[0-9]+'
 pattern+='|animate-in|fade-in-0|zoom-in-95'
 pattern+='|(bg|text|border|ring|outline|from|to|via)-brand-(50|100|200|300|600|700|800|900)([^0-9]|$)'

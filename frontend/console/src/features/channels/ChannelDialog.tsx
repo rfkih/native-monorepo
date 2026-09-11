@@ -90,7 +90,7 @@ export function ChannelDialog({ session, channel, onClose }: Props) {
             disabled={isEdit}
             placeholder={t('channels.dialog.codePlaceholder')}
             onChange={(e) => setCode(normalizeChannelCode(e.target.value))}
-            className="font-mono uppercase tracking-eyebrowr"
+            className="font-mono uppercase tracking-eyebrow"
             maxLength={40}
             autoFocus={!isEdit}
           />

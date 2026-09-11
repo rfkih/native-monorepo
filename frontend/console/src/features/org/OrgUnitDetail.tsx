@@ -444,7 +444,7 @@ function SmartButton({
           {icon}
         </span>
         <span className="min-w-0">
-          <span className="block text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+          <span className="block text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
             {label}
           </span>
           <span className={cn('tnum block truncate font-mono text-lg font-semibold', tone ?? 'text-ink')}>
@@ -474,7 +474,7 @@ function SmartLink({
           {icon}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+          <span className="block text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
             {label}
           </span>
           <span className="block truncate text-lg font-semibold text-ink">{figure}</span>

@@ -18,8 +18,14 @@
           }
           document.documentElement.dataset.theme = t
         } catch (e) {
-          document.documentElement.dataset.theme = 'light'
+          t = 'light'
+          document.documentElement.dataset.theme = t
         }
+        // The status-bar colour follows the RESOLVED theme, not the OS: a `media=` pair on the
+        // meta would track prefers-color-scheme and disagree with a manual toggle. These are
+        // --color-paper's two values (index.css); lib/theme.ts re-reads the token on every toggle.
+        var tc = document.querySelector('meta[name="theme-color"]')
+        if (tc) tc.setAttribute('content', t === 'dark' ? '#101010' : '#fafafa')
         // Route-aware boot skeleton: /pos paths (the Android till's cold start) get the
         // till-shaped ghost instead of the dashboard-shaped one — see the style block below.
         if (location.pathname.indexOf('/pos') === 0) {
@@ -102,10 +108,10 @@
       content="Native unifies point of sale, payroll and real-time financial consolidation across every company you run — multi-entity, multi-currency, one set of books."
     />
     <meta name="robots" content="index, follow, max-image-preview:large" />
-    <!-- The browser/Android status bar takes the PAGE ground (--color-paper), so it meets the
-         app without a seam. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafafa" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#101010" />
+    <!-- The browser/Android status bar takes the PAGE ground (--color-paper) so it meets the app
+         without a seam. ONE meta, no media= pair: the pre-paint script above sets it from the
+         resolved theme and lib/theme.ts keeps it in step with the manual toggle. -->
+    <meta name="theme-color" content="#fafafa" />
     <link rel="canonical" href="https://app.native-app.my.id/" />
     <link rel="alternate" hreflang="en" href="https://app.native-app.my.id/" />
     <link rel="alternate" hreflang="id" href="https://app.native-app.my.id/?lng=id" />

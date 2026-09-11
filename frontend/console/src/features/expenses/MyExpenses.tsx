@@ -377,7 +377,7 @@ function ClaimDetailSheet({
 
               {claim.note ? (
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+                  <div className="text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
                     {t('me.expenses.detail.note')}
                   </div>
                   <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-2">{claim.note}</p>
@@ -386,7 +386,7 @@ function ClaimDetailSheet({
 
               {claim.decisionComment ? (
                 <div className="rounded-xl bg-tint-info px-3.5 py-3 text-sm text-ink-2">
-                  <div className="text-2xs font-semibold uppercase tracking-eyebrowr text-info">
+                  <div className="text-2xs font-semibold uppercase tracking-eyebrow text-info">
                     {t('me.expenses.detail.decisionComment')}
                   </div>
                   <p className="mt-0.5">{claim.decisionComment}</p>
@@ -394,7 +394,7 @@ function ClaimDetailSheet({
               ) : null}
 
               <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
                   {t('me.expenses.detail.receiptTitle')}
                 </div>
                 {receipt.status === 'loading' ? (

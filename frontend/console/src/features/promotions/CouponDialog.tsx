@@ -137,7 +137,7 @@ export function CouponDialog({ session, vertical, coupon, rules, onClose }: Prop
               value={code}
               disabled={isEdit}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              className="font-mono uppercase tracking-eyebrowr"
+              className="font-mono uppercase tracking-eyebrow"
             />
           </Field>
 

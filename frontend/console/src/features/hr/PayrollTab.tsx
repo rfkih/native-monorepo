@@ -545,7 +545,7 @@ function RunDetail({
 
       {/* Payslips — masked; expand per employee */}
       <Card className="p-4">
-        <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+        <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
           {t('hr.payroll.payslips.title')}
         </p>
         <div className="mt-2">
@@ -598,7 +598,7 @@ function RunDetail({
                   ) : (
                     <table className="w-full text-left text-sm">
                       <thead>
-                        <tr className="text-2xs uppercase tracking-eyebrowr text-ink-3">
+                        <tr className="text-2xs uppercase tracking-eyebrow text-ink-3">
                           <th className="py-1 pr-4 font-semibold">
                             {t('hr.payroll.payslips.component')}
                           </th>
@@ -637,7 +637,7 @@ function RunDetail({
 
       {/* Labor cost by outlet — aggregated buckets, contribution bars */}
       <Card className="p-4">
-        <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+        <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
           {t('hr.payroll.labor.title')}
         </p>
         <div className="mt-2 space-y-2">
@@ -817,7 +817,7 @@ function WorkInputsPanel({
 
   return (
     <Card className="p-4">
-      <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+      <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
         {t('hr.payroll.workInputs.title')}
       </p>
       <div className="mt-2 divide-y divide-line">
@@ -914,7 +914,7 @@ function LiabilitiesPanel({
 
   return (
     <Card className="p-4">
-      <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+      <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
         {t('hr.payroll.liabilities.title')}
       </p>
       <div className="mt-2 divide-y divide-line">

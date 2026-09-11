@@ -401,7 +401,7 @@ function BalancesSection({ companyId, actor }: { companyId: string; actor: strin
         <Card className="overflow-x-auto rounded-card p-2.5">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="text-2xs uppercase tracking-eyebrowr text-ink-3">
+              <tr className="text-2xs uppercase tracking-eyebrow text-ink-3">
                 <th className="px-2.5 py-2 font-semibold">{t('attendance.balances.employee')}</th>
                 <th className="px-2.5 py-2 text-right font-semibold">{t('attendance.balances.granted')}</th>
                 <th className="px-2.5 py-2 text-right font-semibold">{t('attendance.balances.adjustment')}</th>
@@ -565,13 +565,13 @@ function CalendarSection({ companyId, actor }: { companyId: string; actor: strin
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl bg-paper p-4">
-            <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+            <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
               {t('attendance.calendar.daysPerWeek')}
             </p>
             <p className="tnum mt-1 text-2xl font-bold text-ink">{query.data.daysPerWeek}</p>
           </div>
           <div className="rounded-xl bg-paper p-4">
-            <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+            <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
               {t('attendance.calendar.monthlyDivisor')}
             </p>
             <p className="tnum mt-1 text-2xl font-bold text-ink">{query.data.monthlyDivisor}</p>

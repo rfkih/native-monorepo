@@ -355,7 +355,7 @@ function HeroValue({
     <span
       className={cn(
         'tnum block font-mono font-bold leading-none tracking-display text-ink',
-        compact ? 'text-2xl' : 'text-2xl',
+        compact ? 'text-xl' : 'text-2xl',
       )}
     >
       {value}

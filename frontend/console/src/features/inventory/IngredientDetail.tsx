@@ -142,7 +142,7 @@ export function IngredientDetail({
           <span
             className={cn(
               'tnum font-mono font-bold leading-none tracking-display',
-              rail ? 'text-2xl' : 'text-2xl',
+              rail ? 'text-xl' : 'text-2xl',
               row.cls === 'zero' ? 'text-loss' : 'text-ink',
             )}
           >

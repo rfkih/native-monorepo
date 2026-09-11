@@ -690,7 +690,7 @@ function Kpi({
     // step — technically neutral, but it stopped saying anything. Ink is the emphasis colour now,
     // so the ring uses it, the same way the hero figure does.
     <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')}>
-      <div className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-2 h-7 w-28 animate-pulse rounded bg-ink-100" />
       ) : (

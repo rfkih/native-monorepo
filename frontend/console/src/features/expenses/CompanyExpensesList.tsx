@@ -306,7 +306,7 @@ function CompanyExpenseDetailSheet({
               </div>
 
               <div>
-                <div className="text-xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+                <div className="text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
                   {t('expenses.company.colDescription')}
                 </div>
                 <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-2">{expense.description}</p>
@@ -314,7 +314,7 @@ function CompanyExpenseDetailSheet({
 
               {expense.kind === 'INVENTORY' && expense.lines.length > 0 ? (
                 <div>
-                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
                     {t('expenses.record.inventory.lines')}
                   </div>
                   <div className="overflow-hidden rounded-xl border border-line">

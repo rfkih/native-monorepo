@@ -69,8 +69,10 @@ components, not tokens, and land in their own changes on top of this scale.
 **Sizes move by a pixel almost everywhere, and by more where a title was off the scale.** `text-sm`
 14 → 13, `text-lg` 18 → 17, `text-xl` 20 → 22, `text-2xl` 24 → 28. The 25 px KPI figures become
 28; the 19 px phone titles become 22. Verified with `scripts/mobile-shots.mjs` (screens + more,
-both themes) and `tsc` / eslint / the 981 unit tests; the print surfaces are untouched because they
-are excluded, so receipts, KOTs and payslips print exactly as before.
+both themes) and `tsc` / eslint / the 981 unit tests. **The re-valued names are global**, so the
+print surfaces — which are exempt from the gate but not from `@theme` — are pinned to their
+pre-scale pixels (`text-[14px]` for the old `text-sm`, etc.) so a payslip, KOT or QR sheet prints
+exactly as before; the landing's five `text-sm` body lines shrink by a pixel and that is accepted.
 
 **A comp measurement that is not on the scale is now a design question, not a CSS one.** If a
 new design needs 14 px, the answer is `text-sm` (13) or `text-base` (15) — or an ADR that adds a

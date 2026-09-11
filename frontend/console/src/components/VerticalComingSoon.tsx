@@ -34,7 +34,7 @@ export function VerticalComingSoon({ vertical }: { vertical: string }) {
           {t('posVertical.body', { vertical: verticalLabel })}
         </p>
         <div className="mt-6 flex flex-col items-center gap-2">
-          <span className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+          <span className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
             {t('posVertical.switchHint')}
           </span>
           <OutletPicker />

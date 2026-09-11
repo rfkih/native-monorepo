@@ -72,7 +72,7 @@ export function KpiTile({
 }) {
   return (
     <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')}>
-      <div className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-3 h-7 w-28 animate-pulse rounded bg-ink-100" />
       ) : (

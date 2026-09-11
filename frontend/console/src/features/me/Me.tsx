@@ -157,7 +157,7 @@ export function Me() {
               {/* Rail */}
               <div className="flex flex-col gap-4">
                 <Card className="p-5">
-                  <h2 className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+                  <h2 className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
                     {t('me.home.personalData')}
                   </h2>
                   <div className="mt-3 flex flex-col gap-2.5">
@@ -188,7 +188,7 @@ export function Me() {
                 </Card>
 
                 <Card className="p-5">
-                  <h2 className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+                  <h2 className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
                     {t('me.assignments.title')}
                   </h2>
                   {profile.data.assignments.length === 0 ? (
@@ -272,7 +272,7 @@ function SalesRailCard({
 
   return (
     <Card className="p-5">
-      <h2 className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+      <h2 className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
         {t('me.sales.title')}
       </h2>
       <p className="tnum mt-2 font-mono text-xl font-bold text-ink">
@@ -319,7 +319,7 @@ function ClaimsCard({
   return (
     <section className="min-w-0">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
+        <h2 className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
           {t('me.expenses.card.title')}
         </h2>
         <Button type="button" variant="outline" onClick={() => navigate('/me/expenses')}>
