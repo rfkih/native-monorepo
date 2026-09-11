@@ -38,15 +38,17 @@
          3 stat cards + panel); on /pos paths the script above sets data-boot="pos" and the
          same DOM renders the PosSkeleton geometry instead (56px header, category chips, tile
          grid, 340px order rail at ≥1024px) — so a till cold start never flips shape mid-boot.
-         Colours are the light/dark theme tokens from index.css; data-theme is set pre-paint
-         by the script above, so there is no flash of the wrong theme. -->
+         Colours are the light/dark theme tokens from index.css (paper / line / surface —
+         ADR 0077's true greys, NOT the old blue-tinted ones, or the page visibly re-tints the
+         moment React paints); data-theme is set pre-paint by the script above, so there is no
+         flash of the wrong theme. Keep these six hex values in step with index.css. -->
     <style>
-      .bsk-root { --bsk-line: #e5e8ec; min-height: 100vh; background: #f6f9fa; font-size: 0; }
-      .bsk { border-radius: 8px; background: #e5e8ec; animation: bsk-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+      .bsk-root { --bsk-line: #e4e4e4; min-height: 100vh; background: #fafafa; font-size: 0; }
+      .bsk { border-radius: 8px; background: #e4e4e4; animation: bsk-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
       .bsk-panel { background: #ffffff; }
-      [data-theme='dark'] .bsk-root { --bsk-line: #2a2f3a; background: #101319; }
-      [data-theme='dark'] .bsk { background: #2a2f3a; }
-      [data-theme='dark'] .bsk-panel { background: #171b22; }
+      [data-theme='dark'] .bsk-root { --bsk-line: #2e2e2e; background: #101010; }
+      [data-theme='dark'] .bsk { background: #2e2e2e; }
+      [data-theme='dark'] .bsk-panel { background: #181818; }
       @keyframes bsk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
       @media (prefers-reduced-motion: reduce) { .bsk { animation: none; } }
       .bsk-side { display: none; }
@@ -100,8 +102,10 @@
       content="Native unifies point of sale, payroll and real-time financial consolidation across every company you run — multi-entity, multi-currency, one set of books."
     />
     <meta name="robots" content="index, follow, max-image-preview:large" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e1116" />
+    <!-- The browser/Android status bar takes the PAGE ground (--color-paper), so it meets the
+         app without a seam. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafafa" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#101010" />
     <link rel="canonical" href="https://app.native-app.my.id/" />
     <link rel="alternate" hreflang="en" href="https://app.native-app.my.id/" />
     <link rel="alternate" hreflang="id" href="https://app.native-app.my.id/?lng=id" />

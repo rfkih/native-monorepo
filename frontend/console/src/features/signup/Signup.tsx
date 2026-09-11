@@ -139,25 +139,27 @@ function StepProgress({
   )
 }
 
-// ── Brand panel (design 5a) — one cyan surface carries all the brand weight ───
+// ── Brand panel (design 5a) — one ink surface carries all the brand weight (ADR 0077) ──
 
 function BrandPanel() {
   const { t } = useTranslation()
   const proofs = [t('signup.proof1'), t('signup.proof2'), t('signup.proof3')]
   return (
-    <aside className="relative hidden w-[512px] shrink-0 flex-col overflow-hidden bg-brand-700 p-12 lg:flex">
+    <aside className="relative hidden w-[512px] shrink-0 flex-col overflow-hidden bg-ink-fixed p-12 lg:flex">
       {/* Photography: barbershop scene as a CSS background (a background inside a display:none
-          ancestor is never fetched, so mobile pays zero bytes), pulled on-brand by a cyan multiply
-          layer plus a bottom-weighted gradient that keeps the copy zone ≥ AA on white text. */}
+          ancestor is never fetched, so mobile pays zero bytes), pulled on-brand by an ink multiply
+          layer plus a bottom-weighted gradient that keeps the copy zone ≥ AA on white text.
+          `ink-fixed`, not `ink-900`: this panel stays dark in BOTH themes (index.css) — an
+          inverting ink would multiply the photo with near-white on dark, i.e. not at all. */}
       <div
         aria-hidden
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: `url(${brandPanelPhoto})` }}
       />
-      <div aria-hidden className="absolute inset-0 bg-brand-800/70 mix-blend-multiply" />
+      <div aria-hidden className="absolute inset-0 bg-ink-fixed/70 mix-blend-multiply" />
       <div
         aria-hidden
-        className="absolute inset-0 bg-gradient-to-t from-brand-900/85 via-brand-800/40 to-brand-700/25"
+        className="absolute inset-0 bg-gradient-to-t from-ink-fixed/85 via-ink-fixed/40 to-ink-fixed/25"
       />
       {/* Soft background shapes */}
       <div
@@ -169,10 +171,11 @@ function BrandPanel() {
         className="absolute -bottom-32 -left-36 size-[360px] rounded-full bg-white/[0.03]"
       />
 
-      {/* Mark — on dark the bright end takes over and the glyph goes dark */}
+      {/* Mark — a white tile with the ink glyph: the in-app Wordmark inverted, because this panel
+          is always dark */}
       <div className="relative flex items-center gap-[11px]">
-        <span className="grid size-9 place-items-center rounded-xl bg-brand-300">
-          <BrandMark size={20} stroke="var(--color-brand-900, #04303a)" strokeWidth={2.6} />
+        <span className="grid size-9 place-items-center rounded-xl bg-white text-ink-fixed">
+          <BrandMark size={20} stroke="currentColor" strokeWidth={2.6} />
         </span>
         <span className="font-display text-lg font-extrabold tracking-[-0.02em] text-white">
           {t('app.name')}
@@ -192,7 +195,7 @@ function BrandPanel() {
           {proofs.map((proof) => (
             <li key={proof} className="flex items-start gap-3">
               <span className="mt-px grid size-[22px] shrink-0 place-items-center rounded-full bg-white/[0.16]">
-                <Check className="size-[13px] text-brand-200" strokeWidth={3} aria-hidden />
+                <Check className="size-[13px] text-profit" strokeWidth={3} aria-hidden />
               </span>
               <span className="text-[15px] leading-normal text-white/90">{proof}</span>
             </li>
@@ -301,7 +304,8 @@ function StrengthMeter({ password }: { password: string }) {
     t('signup.strengthGood'),
     t('signup.strengthStrong'),
   ]
-  const tones = ['bg-loss', 'bg-loss', 'bg-amber', 'bg-brand-500', 'bg-brand-600']
+  // Good is the brand (ink); strong is profit green — green means done, and nothing else.
+  const tones = ['bg-loss', 'bg-loss', 'bg-amber', 'bg-emerald', 'bg-profit']
   return (
     <div className="mt-2" aria-live="polite">
       <div className="flex gap-1">
@@ -525,15 +529,15 @@ export function Signup() {
       <BrandPanel />
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        {/* Phone: the panel folds into a short cyan band that keeps the mark and headline */}
-        <div className="relative overflow-hidden bg-brand-700 px-6 pb-7 pt-5 lg:hidden">
+        {/* Phone: the panel folds into a short ink band that keeps the mark and headline */}
+        <div className="relative overflow-hidden bg-ink-fixed px-6 pb-7 pt-5 lg:hidden">
           <div
             aria-hidden
             className="absolute -top-28 -right-36 size-80 rounded-full bg-white/[0.055]"
           />
           <div className="relative flex items-center gap-2.5">
-            <span className="grid size-8 place-items-center rounded-xl bg-brand-300">
-              <BrandMark size={18} stroke="var(--color-brand-900, #04303a)" strokeWidth={2.6} />
+            <span className="grid size-8 place-items-center rounded-xl bg-white text-ink-fixed">
+              <BrandMark size={18} stroke="currentColor" strokeWidth={2.6} />
             </span>
             <span className="font-display text-[17px] font-extrabold tracking-[-0.02em] text-white">
               {t('app.name')}

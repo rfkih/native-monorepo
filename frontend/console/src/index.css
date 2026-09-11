@@ -134,6 +134,13 @@ body {
   --color-canvas: #ffffff; /* bg-base — deepest layer */
   --color-hover: #f5f5f5; /* row / control hover */
 
+  /* A surface that is ink in BOTH themes — deliberately NOT reassigned under [data-theme=dark].
+     Every other ink token inverts on dark (ADR 0077), which is right for a card but wrong for a
+     photo scrim or a brand panel that must stay dark whatever the theme: a multiply layer that
+     inverts to near-white multiplies to nothing. The signup panel uses it; the landing's dark
+     panel is the same idea written as a literal. Text on it is always `text-white`. */
+  --color-ink-fixed: #0e1116;
+
   /* Semantic — green means profit and nothing else */
   --color-profit: #16b364; /* dots, check fills, funding bar */
   --color-profit-ink: #0a7e3f; /* profit TEXT — 4.6:1 on white */

@@ -340,7 +340,7 @@ function AllCaughtUp() {
   const { t } = useTranslation()
   return (
     <div className="flex flex-col items-center justify-center px-6 py-28 text-center">
-      <div className="mb-5 grid size-20 place-items-center rounded-3xl bg-hover text-brand-500">
+      <div className="mb-5 grid size-20 place-items-center rounded-3xl bg-emerald-tint text-emerald-2">
         <ChefHat className="size-9" aria-hidden="true" />
       </div>
       <h2 className="font-display text-2xl font-bold text-ink">{t('kitchen.emptyTitle')}</h2>
@@ -358,7 +358,7 @@ function NoCompany() {
   return (
     <div className="grid min-h-screen place-items-center bg-paper px-5">
       <div className="w-full max-w-md rounded-card border border-line bg-surface p-10 text-center shadow-sm">
-        <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-hover text-brand-500">
+        <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
           <Utensils className="size-6" aria-hidden="true" />
         </div>
         <h2 className="font-display text-xl font-bold text-ink">{t('dashboard.noCompany')}</h2>
