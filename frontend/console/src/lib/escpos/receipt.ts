@@ -144,7 +144,9 @@ export function renderReceipt(
     for (const mod of item.modifiers) {
       const modText = `+ ${mod.label}`
       if (mod.deltaLabel) {
-        e.line(twoColumns('  ' + modText, mod.deltaLabel, cols))
+        // toAscii, as the product's priceLabel gets above — the formatter's NBSP after "Rp"
+        // must not reach the wire unnormalised on the add-on row either.
+        e.line(twoColumns('  ' + modText, toAscii(mod.deltaLabel), cols))
       } else {
         for (const l of wrap(modText, cols - 2)) e.line('  ' + l)
       }
