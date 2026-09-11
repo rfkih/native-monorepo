@@ -14,6 +14,7 @@ import type { CompanySession } from '@/lib/session'
 import { useIngredients } from './ingredientApi'
 import { useStocktakeHistory } from './ingredientStocktakeApi'
 import { StocktakeHistoryLines, StocktakeHistoryList } from './StocktakeHistory'
+import { SAFE_AREA_BOTTOM } from '@/lib/safeArea'
 
 const ICON_BUTTON =
   'grid size-9 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald'
@@ -51,7 +52,8 @@ export function StocktakeHistorySheet({
       className="p-0"
     >
       {(requestClose) => (
-        <div className="flex max-h-[85dvh] flex-col sm:max-h-[80vh]">
+        // p-0 = this panel owns its edges, the nav-bar inset included (lib/safeArea).
+        <div className="flex max-h-[85dvh] flex-col sm:max-h-[80vh]" style={{ paddingBottom: SAFE_AREA_BOTTOM }}>
           <div className="flex shrink-0 items-center gap-2 border-b border-line px-5 py-4">
             {selected ? (
               <button

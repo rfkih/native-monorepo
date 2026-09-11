@@ -29,6 +29,7 @@ import {
   ROLE_HOME,
 } from '@/lib/rolePreset'
 import { useSession } from '@/lib/session'
+import { SAFE_AREA_TOP } from '@/lib/safeArea'
 
 /**
  * Warms the POS route chunk as soon as a POS-capable login lands ANYWHERE — the lazy() split
@@ -638,7 +639,7 @@ export function App() {
           the dashboard shell (Phase 5 offline mode, ADR 0028). One fixed column so simultaneous
           banners (offline + update available) stack instead of covering each other; each child
           renders nothing when there is nothing to say. */}
-      <div className="fixed inset-x-0 top-0 z-[70] flex flex-col print:hidden">
+      <div className="fixed inset-x-0 top-0 z-[70] flex flex-col print:hidden" style={{ paddingTop: SAFE_AREA_TOP }}>
         <OfflineBanner />
         <AppUpdatePrompt />
       </div>

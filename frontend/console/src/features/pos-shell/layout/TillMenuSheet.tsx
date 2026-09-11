@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { cn } from '@/lib/cn'
+import { SAFE_AREA_TOP } from '@/lib/safeArea'
 
 export interface TillMenuItem {
   key: string
@@ -73,7 +74,9 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
         tabIndex={-1}
         role="menu"
         aria-label={t('posShell.tillMenu')}
-        className="dialog-in absolute right-3 top-[60px] w-64 rounded-2xl border border-line bg-surface p-1.5 shadow-lg outline-none"
+        className="dialog-in absolute right-3 w-64 rounded-2xl border border-line bg-surface p-1.5 shadow-lg outline-none"
+        // Under the 52px header — which the status-bar inset pushes down (lib/safeArea).
+        style={{ top: `calc(60px + ${SAFE_AREA_TOP})` }}
       >
         {items.map((it) =>
           it.to && !it.disabled ? (

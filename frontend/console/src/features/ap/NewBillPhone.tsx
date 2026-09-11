@@ -65,6 +65,7 @@ import {
   type IngredientRef,
   type TaxBp,
 } from './lib/newBillForm'
+import { safeBottom } from '@/lib/safeArea'
 
 const SECTION = 'pl-0.5 text-2xs font-semibold uppercase tracking-eyebrow text-ink-3'
 const FIELD_LABEL = 'block text-2xs font-semibold uppercase tracking-eyebrow text-ink-3'
@@ -76,9 +77,7 @@ const CELL =
   'h-[34px] rounded-xl bg-hover px-2 text-right font-mono text-xs font-semibold text-ink tnum focus:outline-none'
 
 /** Fixed bottom surfaces bypass the body's safe-area padding (index.css) — each pads itself. */
-const SAFE_BOTTOM = (px: number) => ({
-  paddingBottom: `calc(${px}px + var(--safe-area-inset-bottom, 0px))`,
-})
+const SAFE_BOTTOM = safeBottom // lib/safeArea — the one definition of the nav-bar inset rule
 
 /** Today as the LOCAL calendar day — `toISOString()` would be yesterday before 07:00 WIB. */
 function todayIso(): string {
