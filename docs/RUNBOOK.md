@@ -210,8 +210,12 @@ customer display show the image; capture stays "Mark as paid" (Tandai lunas).
 
 **GATEWAY drill** (Midtrans SANDBOX, merchant's own account):
 1. Owner: PUT `/api/v1/payment-settings` `{mode:"GATEWAY", provider:"MIDTRANS",
-   environment:"SANDBOX", serverKey:"SB-Mid-server-…"}` (write-only — reads return `last4` only;
-   ciphertext at rest, verify via psql: `server_key_encrypted` is bytes, never the key).
+   activeEnvironment:"SANDBOX", sandboxServerKey:"SB-Mid-server-…", sandboxClientKey:"SB-Mid-client-…"}`
+   (per-environment slots since V6 — `productionServerKey`/`productionClientKey` are the live pair;
+   activating an environment whose slot is empty is refused 422). Write-only — reads return `last4`
+   only; ciphertext at rest, verify via psql: `sandbox_server_key_encrypted` is bytes, never the key.
+   **The till and the customer display now mark a SANDBOX gateway "Test mode" in red** — that badge
+   disappearing is how you confirm you really switched a merchant to PRODUCTION.
 2. Till: QRIS checkout creates the PENDING payment as usual, then
    `POST /api/v1/payment-charges` (`Idempotency-Key: charge:<paymentId>:1`) → 201 with
    `qrString` — scan with the Midtrans sandbox simulator. Poll `GET /payment-charges/{id}`.
@@ -226,6 +230,19 @@ customer display show the image; capture stays "Mark as paid" (Tandai lunas).
    (sources `payment.psp-webhook.*`), answered 200, NO capture.
 5. Bank payout: reconcile the (net-of-MDR) deposit with category `QRIS_CLEARING` + `feeMinor` →
    `Dr BANK (net) + Dr 5720 (fee) / Cr 1901 (gross)` (finance V52).
+
+**OPS — is the webhook actually alive?** A dead webhook is invisible: the cashier's "Check payment
+status" tap (`/sync`) applies the identical settlement, so charges still succeed and receipts still
+print — a human is just silently doing the callback's job (that is how the 2026-08-22 outage ran for
+months). Read the split at `/actuator/prometheus`:
+`payment_charge_settled_total{source="webhook"}` vs `{source="sync"}`. A healthy fleet settles
+overwhelmingly by webhook; `webhook` pinned at zero while `sync` climbs means Midtrans's callback
+never lands — check that the public origin in `NATIVE_PAYMENT_WEBHOOK_BASE_URL` is reachable from
+the internet (the Funnel node being offline takes it down while Cloudflare stays up), and that it is
+non-blank (blank omits the per-charge callback header entirely). Both series are per-instance,
+start at 0 on boot and reset on every deploy, so right after a rolling deploy 0/0 means nothing —
+read the split over days (`increase(payment_charge_settled_total[7d])` once a Prometheus is
+scraping), not off a fresh container.
 
 **OPS — parked webhook anomalies** (`error_log`, `source LIKE 'payment.psp-webhook.%'`): these are
 "money moved at the PSP with no local capture" cases. `late-settlement` after a cashier cancel =
