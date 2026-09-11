@@ -11,6 +11,9 @@ import id.co.nativeapp.payment.charge.service.WebhookService;
 import id.co.nativeapp.payment.settings.dto.UpsertSettingsRequest;
 import id.co.nativeapp.payment.settings.service.SettingsService;
 import id.co.nativeapp.tenant.TenantContext;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Connection;
@@ -48,6 +51,7 @@ class WebhookAcceptanceTest extends PostgresRlsTestBase {
   @Autowired private WebhookService webhookService;
   @Autowired private ChargeWriter chargeWriter;
   @Autowired private SettingsService settingsService;
+  @Autowired private MeterRegistry meterRegistry;
 
   @BeforeEach
   void resetTablesAndSeedGatewaySettings() throws Exception {
@@ -143,6 +147,65 @@ class WebhookAcceptanceTest extends PostgresRlsTestBase {
         UUID.fromString(TENANT), notification(chargeId, 185_000L, "settlement"));
     assertThat(outboxCount()).isEqualTo(1);
     assertThat(errorLogCount()).isZero();
+  }
+
+  /**
+   * The webhook edge can die silently: the cashier's "Check payment status" tap applies the SAME
+   * transition, so every charge still settles correctly and nothing looks wrong (that is how the
+   * 2026-08-22 outage survived months). The counter is the canary — it only means something if it
+   * actually counts, and only if the two edges stay separable.
+   */
+  @Test
+  void aWebhookSettlementIsCountedApartFromTheSyncFallback() throws Exception {
+    double webhookBefore = settledByWebhookCount();
+    double syncBefore = settledBySyncCount();
+    UUID chargeId = issueCharge(90_000L);
+
+    webhookService.handleMidtrans(
+        UUID.fromString(TENANT), notification(chargeId, 90_000L, "settlement"));
+    assertThat(statusOf(chargeId)).isEqualTo(ChargeStatus.SUCCEEDED);
+    assertThat(settledByWebhookCount() - webhookBefore).isEqualTo(1.0d);
+    // APART FROM: the whole value of this metric is the ratio, so a webhook settle must leave the
+    // other edge untouched. Fold both increments into one shared helper and the signal dies while
+    // the count assertion above still passes green — this is the line that catches that.
+    assertThat(settledBySyncCount() - syncBefore).isEqualTo(0.0d);
+
+    // A duplicate notification settles nothing — it must not inflate the count either, or the
+    // ratio would drift on Midtrans's retries alone.
+    webhookService.handleMidtrans(
+        UUID.fromString(TENANT), notification(chargeId, 90_000L, "settlement"));
+    assertThat(settledByWebhookCount() - webhookBefore).isEqualTo(1.0d);
+  }
+
+  /** HR-6 / ENGINEERING-STANDARDS §5: {@code company_id} is never a metric tag. */
+  @Test
+  void theSettlementCounterCarriesNoTenantTag() throws Exception {
+    UUID chargeId = issueCharge(12_000L);
+    webhookService.handleMidtrans(
+        UUID.fromString(TENANT), notification(chargeId, 12_000L, "settlement"));
+
+    Counter counter = settledByWebhookCounter();
+    assertThat(counter).isNotNull();
+    // `service` is the registry-wide common tag every meter in the fleet carries — the claim here
+    // is narrower and the one that matters: nothing tenant-identifying rides along.
+    assertThat(counter.getId().getTags())
+        .extracting(Tag::getKey)
+        .contains("source")
+        .doesNotContain("company_id", "companyId", "tenant", "tenant_id");
+  }
+
+  private Counter settledByWebhookCounter() {
+    return meterRegistry.find("payment.charge.settled").tag("source", "webhook").counter();
+  }
+
+  private double settledByWebhookCount() {
+    Counter counter = settledByWebhookCounter();
+    return counter == null ? 0d : counter.count();
+  }
+
+  private double settledBySyncCount() {
+    Counter counter = meterRegistry.find("payment.charge.settled").tag("source", "sync").counter();
+    return counter == null ? 0d : counter.count();
   }
 
   @Test
