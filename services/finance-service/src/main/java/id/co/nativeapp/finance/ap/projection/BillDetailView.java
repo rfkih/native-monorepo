@@ -35,4 +35,14 @@ public interface BillDetailView {
   long getPaidMinor();
 
   boolean getUsesIllustrativeRules();
+
+  String getVendorInvoiceNumber();
+
+  Integer getTermDays();
+
+  long getDiscountMinor();
+
+  int getTaxBp();
+
+  String getNote();
 }

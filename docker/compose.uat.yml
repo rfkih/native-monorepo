@@ -240,6 +240,8 @@ services:
       MEDIA_EMPLOYEE_SECRET_KEY: ${MEDIA_EMPLOYEE_SECRET_KEY}
       MEDIA_PAYMENT_ACCESS_KEY: payment-media
       MEDIA_PAYMENT_SECRET_KEY: ${MEDIA_PAYMENT_SECRET_KEY}
+      MEDIA_FINANCE_ACCESS_KEY: finance-media
+      MEDIA_FINANCE_SECRET_KEY: ${MEDIA_FINANCE_SECRET_KEY}
     volumes:
       - ./minio/init.sh:/init.sh:ro
 
@@ -371,11 +373,17 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      # ADR 0084 — AP bill attachments live in the object store under finance/*.
+      minio-init:
+        condition: service_completed_successfully
     environment:
       <<: *java-env
       DB_URL: jdbc:postgresql://postgres:5432/finance_service
       DB_USERNAME: finance_service
       DB_PASSWORD: finance_service
+      MEDIA_ENDPOINT: http://minio:9000
+      MEDIA_ACCESS_KEY: finance-media
+      MEDIA_SECRET_KEY: ${MEDIA_FINANCE_SECRET_KEY}
 
   entitlement-service:
     <<: *java-service

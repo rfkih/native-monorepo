@@ -41,7 +41,9 @@ public class VendorController {
   @Operation(summary = "Create a vendor")
   @PostMapping
   public ResponseEntity<VendorResponse> create(@Valid @RequestBody CreateVendorRequest request) {
-    VendorResponse created = vendorWriter.create(request.name(), request.email(), request.taxId());
+    VendorResponse created =
+        vendorWriter.create(
+            request.name(), request.email(), request.taxId(), request.paymentTermDays());
     return ResponseEntity.created(URI.create("/api/v1/vendors/" + created.id())).body(created);
   }
 
@@ -62,6 +64,11 @@ public class VendorController {
   public VendorResponse update(
       @PathVariable UUID id, @Valid @RequestBody UpdateVendorRequest request) {
     return vendorWriter.update(
-        id, request.name(), request.email(), request.taxId(), request.active());
+        id,
+        request.name(),
+        request.email(),
+        request.taxId(),
+        request.active(),
+        request.paymentTermDays());
   }
 }

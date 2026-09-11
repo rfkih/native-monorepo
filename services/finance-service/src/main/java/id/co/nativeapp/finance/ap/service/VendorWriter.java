@@ -30,7 +30,13 @@ public class VendorWriter {
   /** Creates an active vendor in the bound tenant. Returns the response DTO (never the entity). */
   @Transactional
   public VendorResponse create(String name, String email, String taxId) {
-    Vendor vendor = Vendor.create(name, email, taxId);
+    return create(name, email, taxId, null);
+  }
+
+  /** As {@link #create(String, String, String)} with a default payment term (ADR 0084). */
+  @Transactional
+  public VendorResponse create(String name, String email, String taxId, Integer paymentTermDays) {
+    Vendor vendor = Vendor.create(name, email, taxId, paymentTermDays);
     vendor.setCompanyId(TenantContext.require().companyId());
     return toResponse(vendorRepository.save(vendor));
   }
@@ -44,6 +50,21 @@ public class VendorWriter {
   @Transactional
   public VendorResponse update(
       UUID vendorId, String name, String email, String taxId, Boolean active) {
+    return update(vendorId, name, email, taxId, active, null);
+  }
+
+  /**
+   * As {@link #update(UUID, String, String, String, Boolean)}; a non-null {@code paymentTermDays}
+   * replaces the default term (ADR 0084), null leaves it unchanged.
+   */
+  @Transactional
+  public VendorResponse update(
+      UUID vendorId,
+      String name,
+      String email,
+      String taxId,
+      Boolean active,
+      Integer paymentTermDays) {
     Vendor vendor =
         vendorRepository
             .findById(vendorId)
@@ -52,11 +73,19 @@ public class VendorWriter {
     if (active != null) {
       vendor.setActive(active);
     }
+    if (paymentTermDays != null) {
+      vendor.setPaymentTermDays(paymentTermDays);
+    }
     return toResponse(vendorRepository.save(vendor));
   }
 
   private static VendorResponse toResponse(Vendor vendor) {
     return new VendorResponse(
-        vendor.getId(), vendor.getName(), vendor.getEmail(), vendor.getTaxId(), vendor.isActive());
+        vendor.getId(),
+        vendor.getName(),
+        vendor.getEmail(),
+        vendor.getTaxId(),
+        vendor.isActive(),
+        vendor.getPaymentTermDays());
   }
 }

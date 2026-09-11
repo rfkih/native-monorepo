@@ -45,6 +45,11 @@ public class VendorReader {
 
   private static VendorResponse toResponse(VendorView view) {
     return new VendorResponse(
-        view.getId(), view.getName(), view.getEmail(), view.getTaxId(), view.getActive());
+        view.getId(),
+        view.getName(),
+        view.getEmail(),
+        view.getTaxId(),
+        view.getActive(),
+        view.getPaymentTermDays());
   }
 }

@@ -7,6 +7,8 @@ import id.co.nativeapp.finance.ap.domain.BillLine;
 import id.co.nativeapp.finance.ap.domain.BillNotFoundException;
 import id.co.nativeapp.finance.ap.domain.BillStateException;
 import id.co.nativeapp.finance.ap.domain.BillStatus;
+import id.co.nativeapp.finance.ap.domain.DiscountAllocation;
+import id.co.nativeapp.finance.ap.domain.DuplicateVendorInvoiceException;
 import id.co.nativeapp.finance.ap.domain.Vendor;
 import id.co.nativeapp.finance.ap.domain.VendorNotFoundException;
 import id.co.nativeapp.finance.ap.projection.BillLineIngredientView;
@@ -151,8 +153,35 @@ public class BillWriter {
   @Transactional
   public UUID createDraft(
       UUID vendorId, String currencyCode, boolean taxable, List<BillLineInput> lineInputs) {
-    Objects.requireNonNull(vendorId, "vendorId");
-    Objects.requireNonNull(currencyCode, "currencyCode");
+    return createDraft(
+        new BillDraftInput(
+            vendorId,
+            currencyCode,
+            taxable ? Bill.DEFAULT_TAX_BP : 0,
+            0L,
+            null,
+            null,
+            null,
+            null,
+            lineInputs));
+  }
+
+  /**
+   * Creates a DRAFT bill with the full ADR 0084 arithmetic: {@code net = Σ lines − discount},
+   * {@code tax = net × taxBp}, {@code total = net + tax}. The vendor's invoice number, when given,
+   * must not already be on a live bill of the same vendor. No GL posting yet.
+   *
+   * @throws VendorNotFoundException if the vendor id is not in the bound tenant
+   * @throws DuplicateVendorInvoiceException if the vendor already has a live bill with that number
+   * @throws IllegalArgumentException if there are no lines, the currency or rate is invalid, or the
+   *     discount is not within {@code [0, subtotal]}
+   */
+  @Transactional
+  public UUID createDraft(BillDraftInput draft) {
+    Objects.requireNonNull(draft, "draft");
+    UUID vendorId = Objects.requireNonNull(draft.vendorId(), "vendorId");
+    Objects.requireNonNull(draft.currencyCode(), "currencyCode");
+    List<BillLineInput> lineInputs = draft.lines();
     if (lineInputs == null || lineInputs.isEmpty()) {
       throw new IllegalArgumentException("a bill must have at least one line");
     }
@@ -162,19 +191,45 @@ public class BillWriter {
             .findById(vendorId)
             .orElseThrow(() -> new VendorNotFoundException(vendorId));
 
-    Currency currency = Currency.getInstance(currencyCode);
+    Currency currency = Currency.getInstance(draft.currencyCode());
     String companyId = TenantContext.require().companyId();
 
-    // Compute the subtotal from the raw inputs (Money math — never a float).
+    // The one refusal this form exists to make (ADR 0084): the same vendor's invoice number on a
+    // live bill. Checked here for a typed 409; the partial unique index is the race backstop.
+    String invoiceNumber =
+        draft.vendorInvoiceNumber() == null ? null : draft.vendorInvoiceNumber().strip();
+    if (invoiceNumber != null && !invoiceNumber.isEmpty()) {
+      if (billRepository.existsLiveVendorInvoice(vendor.getId(), invoiceNumber)) {
+        throw new DuplicateVendorInvoiceException(vendor.getId(), invoiceNumber);
+      }
+    }
+
+    // Compute the subtotal from the raw inputs (Money math — never a float), then the net after
+    // the header discount and the tax ON THE NET (the DPP).
     Money subtotal = Money.zero(currency);
     for (BillLineInput input : lineInputs) {
       Money unitPrice = Money.ofMinor(input.unitPriceMinor(), currency);
       subtotal = subtotal.plus(unitPrice.multiply(input.quantity()));
     }
-    Money tax = taxable ? subtotal.applyBasisPoints(INPUT_VAT_BP) : Money.zero(currency);
+    Money discount = Money.ofMinor(draft.discountMinor(), currency);
+    if (discount.isNegative() || discount.compareTo(subtotal) > 0) {
+      throw new IllegalArgumentException(
+          "bill discount must be between zero and the subtotal: " + discount + " of " + subtotal);
+    }
+    Money net = subtotal.minus(discount);
+    Money tax = draft.taxBp() == 0 ? Money.zero(currency) : net.applyBasisPoints(draft.taxBp());
 
-    // VAT is now the official 11% PPN (ADR 0042): a taxable bill is no longer illustrative.
-    Bill bill = Bill.draft(vendor.getId(), subtotal, tax, false);
+    // VAT is the official PPN (ADR 0042): a taxable bill is not illustrative.
+    Bill bill =
+        Bill.draft(
+            vendor.getId(),
+            subtotal,
+            discount,
+            tax,
+            draft.taxBp(),
+            new Bill.InvoiceDetails(
+                invoiceNumber, draft.billDate(), draft.termDays(), draft.note()),
+            false);
     bill.setCompanyId(companyId);
     billRepository.save(bill);
 
@@ -237,8 +292,16 @@ public class BillWriter {
     }
     String companyId = TenantContext.require().companyId();
     Instant now = clock.instant();
-    LocalDate billDate = LocalDate.ofInstant(now, ZoneOffset.UTC);
-    int terms = termDays != null ? termDays : DEFAULT_PAYMENT_TERM_DAYS;
+    // ADR 0084: the invoice date given at draft time is the bill date; a legacy draft without one
+    // is dated on the posting day (unchanged). The term is the post-time override, else the
+    // draft's, else the default. The GL entry is ALWAYS dated on the posting day (below) — the
+    // bill date is the paper's date, the accounting date is when the books recorded it.
+    LocalDate billDate =
+        bill.getBillDate() != null ? bill.getBillDate() : LocalDate.ofInstant(now, ZoneOffset.UTC);
+    int terms =
+        termDays != null
+            ? termDays
+            : bill.getTermDays() != null ? bill.getTermDays() : DEFAULT_PAYMENT_TERM_DAYS;
     LocalDate dueDate = billDate.plusDays(terms);
     String period = LedgerPosting.periodOf(now);
 
@@ -301,11 +364,14 @@ public class BillWriter {
     return bill.getId();
   }
 
-  /** The GROSS/NET/TAX breakdown for a post (or its contra on void). */
+  /**
+   * The GROSS/NET/TAX breakdown for a post (or its contra on void). NET is the taxable net — {@code
+   * subtotal − discount} (ADR 0084) — so the template entry balances: {@code NET + TAX == GROSS}.
+   */
   private static Map<String, Money> postAmounts(Bill bill) {
     Map<String, Money> amounts = new LinkedHashMap<>();
     amounts.put("GROSS", bill.total());
-    amounts.put("NET", bill.subtotal());
+    amounts.put("NET", bill.net());
     amounts.put("TAX", bill.tax());
     return amounts;
   }
@@ -323,7 +389,7 @@ public class BillWriter {
       return buildSplitBillEntry(
           bill, occurredAt, period, description, contra, AccountRole.GRNI_CLEARING);
     }
-    NetSplit split = computeNetSplit(bill.getId(), Currency.getInstance(bill.getCurrency()));
+    NetSplit split = computeNetSplit(bill);
     if (!split.inventoryNet().isZero()) {
       return buildSplitBillEntry(bill, occurredAt, period, description, contra, AccountRole.COGS);
     }
@@ -394,6 +460,14 @@ public class BillWriter {
     if (ingredientLines.isEmpty()) {
       return;
     }
+    // ADR 0084: the value the stock is received at is the line total NET of its share of the
+    // header discount — the same allocation the GL split used.
+    List<BillLineNetView> allLines = billLineRepository.findNetViewsByBillId(bill.getId());
+    long[] nets = discountedLineNets(bill, allLines);
+    Map<UUID, Long> netByLine = new LinkedHashMap<>();
+    for (int i = 0; i < allLines.size(); i++) {
+      netByLine.put(allLines.get(i).getId(), nets[i]);
+    }
     List<InventoryPurchaseRecordedSchema.Line> wireLines = new ArrayList<>(ingredientLines.size());
     for (BillLineIngredientView line : ingredientLines) {
       wireLines.add(
@@ -401,7 +475,7 @@ public class BillWriter {
               line.getId(),
               line.getIngredientId(),
               line.getIngredientQtyBase(),
-              line.getLineTotalMinor()));
+              netByLine.getOrDefault(line.getId(), line.getLineTotalMinor())));
     }
     outboxWriter.write(
         InventoryPurchaseRecordedSchema.AGGREGATE_TYPE,
@@ -448,7 +522,7 @@ public class BillWriter {
     UUID sourceEventId = contra ? UUID.randomUUID() : bill.getId();
     UUID entryId = UUID.randomUUID();
     Currency currency = Currency.getInstance(bill.getCurrency());
-    NetSplit split = computeNetSplit(bill.getId(), currency);
+    NetSplit split = computeNetSplit(bill);
     Money tax = bill.tax();
     Money gross = bill.total();
 
@@ -505,19 +579,44 @@ public class BillWriter {
         lines);
   }
 
-  /** Partitions one bill's persisted lines into {@code EXPENSE_NET} / {@code INVENTORY_NET}. */
-  private NetSplit computeNetSplit(UUID billId, Currency currency) {
+  /**
+   * Partitions one bill's persisted lines into {@code EXPENSE_NET} / {@code INVENTORY_NET}, each
+   * line NET of its share of the header discount (ADR 0084), so {@code expenseNet + inventoryNet ==
+   * bill.net()} exactly and the split entry still balances by construction.
+   */
+  private NetSplit computeNetSplit(Bill bill) {
+    Currency currency = Currency.getInstance(bill.getCurrency());
     Money expenseNet = Money.zero(currency);
     Money inventoryNet = Money.zero(currency);
-    for (BillLineNetView line : billLineRepository.findNetViewsByBillId(billId)) {
-      Money amount = Money.ofMinor(line.getLineTotalMinor(), currency);
-      if (line.getIsInventory()) {
+    List<BillLineNetView> lines = billLineRepository.findNetViewsByBillId(bill.getId());
+    long[] nets = discountedLineNets(bill, lines);
+    for (int i = 0; i < lines.size(); i++) {
+      Money amount = Money.ofMinor(nets[i], currency);
+      if (lines.get(i).getIsInventory()) {
         inventoryNet = inventoryNet.plus(amount);
       } else {
         expenseNet = expenseNet.plus(amount);
       }
     }
     return new NetSplit(expenseNet, inventoryNet);
+  }
+
+  /**
+   * Each line's total net of its largest-remainder share of the header discount, in the lines'
+   * stored order ({@link BillLineRepository#findNetViewsByBillId} orders by line number) — the ONE
+   * allocation both the GL split and the purchase event read, so they can never disagree.
+   */
+  private static long[] discountedLineNets(Bill bill, List<BillLineNetView> lines) {
+    long[] totals = new long[lines.size()];
+    for (int i = 0; i < lines.size(); i++) {
+      totals[i] = lines.get(i).getLineTotalMinor();
+    }
+    long[] shares = DiscountAllocation.allocate(bill.discount().amountMinor(), totals);
+    long[] nets = new long[totals.length];
+    for (int i = 0; i < totals.length; i++) {
+      nets[i] = totals[i] - shares[i];
+    }
+    return nets;
   }
 
   /**

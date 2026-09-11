@@ -2,6 +2,14 @@ spring:
   application:
     name: finance-service
 
+  # AP bill attachments (ADR 0084) — the service's first multipart endpoint. max-file-size bounds
+  # the single attachment part (= BillAttachment.MAX_BYTES / the V69 CHECK; a larger part is
+  # rejected as 413 before the writer runs); max-request-size adds headroom for the envelope.
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   datasource:
     # Connect as the service's own NON-superuser role (no BYPASSRLS) so RLS is
     # genuinely enforced. Overridden per environment; in real deploys the creds
@@ -85,6 +93,16 @@ management:
 # A blank webhook-url (the default) disables all outbound HTTP calls — safe for dev and CI.
 # Set NATIVE_ALERT_WEBHOOK_URL in production to receive push alerts on DLT milestones.
 native:
+  # Object store for AP bill attachments (ADR 0084) — a `finance`-scoped MinIO user whose policy
+  # covers native-media/finance/*; keys are finance/{company}/bill/{sha256}.{ext}. Private only:
+  # no public-base-url (nothing finance stores is ever served anonymously).
+  media:
+    endpoint: ${MEDIA_ENDPOINT:http://localhost:9000}
+    access-key: ${MEDIA_ACCESS_KEY:finance-media}
+    secret-key: ${MEDIA_SECRET_KEY:finance-media-secret}
+    bucket: ${MEDIA_BUCKET:native-media}
+    service-prefix: finance
+
   alert:
     webhook-url: ${NATIVE_ALERT_WEBHOOK_URL:}
     connect-timeout-ms: ${NATIVE_ALERT_CONNECT_TIMEOUT_MS:2000}

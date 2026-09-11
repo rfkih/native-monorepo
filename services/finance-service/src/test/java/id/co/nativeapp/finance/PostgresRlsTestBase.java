@@ -75,7 +75,7 @@ abstract class PostgresRlsTestBase {
               + " intercompany_match, group_membership_pending, processed_event,"
               + " outbox, within_company_close, member_group_index,"
               + " invoice_payment, invoice_line, invoice, customer,"
-              + " bill_payment, bill_line, bill, vendor,"
+              + " bill_attachment, bill_payment, bill_line, bill, vendor,"
               + " bank_statement_line, bank_account, tax_filing,"
               + " budget_line, budget,"
               + " amortization_run_line, amortization_run, deferral, fixed_asset,"

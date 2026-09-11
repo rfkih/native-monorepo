@@ -39,6 +39,9 @@ dependencies {
     implementation(project(":libs:contracts")) // event Avro schemas: single source of truth
     implementation(project(":libs:tenant"))
     implementation(project(":libs:error-inbox"))
+    // ADR 0084 — the vendor invoice as evidence: private photo/PDF attachments on AP bills, stored
+    // in the object store under content-addressed keys (ADR 0048), served privately (ADR 0063).
+    implementation(project(":libs:media-storage"))
 
     // observability — the SHARED logback-native-json.xml (one-object-per-line JSON logs with the
     // trace/correlation MDC fields + a dev console fallback) this service's logback-spring.xml

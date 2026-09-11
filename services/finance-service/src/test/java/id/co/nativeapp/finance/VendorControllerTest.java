@@ -42,8 +42,8 @@ class VendorControllerTest {
 
   @Test
   void createReturns201() throws Exception {
-    when(vendorWriter.create(any(), any(), any()))
-        .thenReturn(new VendorResponse(VENDOR, "Acme Supplies", "ap@acme.test", null, true));
+    when(vendorWriter.create(any(), any(), any(), any()))
+        .thenReturn(new VendorResponse(VENDOR, "Acme Supplies", "ap@acme.test", null, true, null));
 
     mockMvc
         .perform(

@@ -26,7 +26,13 @@ public record BillDetailResponse(
     long outstandingMinor,
     boolean usesIllustrativeRules,
     List<LineResponse> lines,
-    List<PaymentResponse> payments) {
+    List<PaymentResponse> payments,
+    // ADR 0084 — the invoice as the vendor wrote it.
+    String vendorInvoiceNumber,
+    Integer termDays,
+    long discountMinor,
+    int taxBp,
+    String note) {
 
   /**
    * One billed line of the bill. {@code inventory} + the ingredient triple surface the ADR 0072

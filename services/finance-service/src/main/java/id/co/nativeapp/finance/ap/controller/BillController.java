@@ -1,10 +1,12 @@
 package id.co.nativeapp.finance.ap.controller;
 
+import id.co.nativeapp.finance.ap.domain.Bill;
 import id.co.nativeapp.finance.ap.dto.BillDetailResponse;
 import id.co.nativeapp.finance.ap.dto.BillSummaryResponse;
 import id.co.nativeapp.finance.ap.dto.CreateBillRequest;
 import id.co.nativeapp.finance.ap.dto.PostBillRequest;
 import id.co.nativeapp.finance.ap.dto.RecordPaymentRequest;
+import id.co.nativeapp.finance.ap.service.BillDraftInput;
 import id.co.nativeapp.finance.ap.service.BillLineInput;
 import id.co.nativeapp.finance.ap.service.BillPaymentWriter;
 import id.co.nativeapp.finance.ap.service.BillReader;
@@ -71,8 +73,21 @@ public class BillController {
                         l.ingredientName(),
                         l.ingredientQtyBase()))
             .toList();
+    // ADR 0084: an explicit rate wins; an older client's boolean maps to the official 11 % or none.
+    int taxBp =
+        request.taxBp() != null ? request.taxBp() : request.taxable() ? Bill.DEFAULT_TAX_BP : 0;
     UUID id =
-        billWriter.createDraft(request.vendorId(), request.currency(), request.taxable(), lines);
+        billWriter.createDraft(
+            new BillDraftInput(
+                request.vendorId(),
+                request.currency(),
+                taxBp,
+                request.discountMinor() == null ? 0L : request.discountMinor(),
+                request.vendorInvoiceNumber(),
+                request.billDate(),
+                request.termDays(),
+                request.note(),
+                lines));
     BillDetailResponse detail = billReader.detail(id);
     return ResponseEntity.created(URI.create("/api/v1/ap/bills/" + detail.id())).body(detail);
   }

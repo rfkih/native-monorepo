@@ -29,4 +29,6 @@ public interface BillSummaryView {
   long getTotalMinor();
 
   long getPaidMinor();
+
+  String getVendorInvoiceNumber();
 }
