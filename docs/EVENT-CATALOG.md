@@ -2011,7 +2011,11 @@ guarded on the Debezium connector actually running — see `docs/adr/0071-analyt
 Emitted by **finance-service** when a company purchase whose money is posted to the GL carries
 ingredient lines ([ADR 0072](adr/0072-purchase-linked-inventory-and-periodic-cogs-routing.md)) —
 from the **company-expense** writer (an `INVENTORY`-kind submit) and from **`BillWriter.post`**
-(a posted AP bill with ingredient-linked `is_inventory` lines). The outbox row rides the same
+(a posted AP bill with ingredient-linked `is_inventory` lines). Since
+[ADR 0084](adr/0084-a-bill-the-books-can-defend.md) a bill line's `value_minor` is the line total
+**net of its largest-remainder share of the bill's header discount** (identical to the line total
+when there is none) — the same allocation the GL split uses, so the stock is received at what it
+actually cost. Schema unchanged. The outbox row rides the same
 transaction as the money's journal entry: money and the stock instruction commit together or not
 at all (rule 3).
 

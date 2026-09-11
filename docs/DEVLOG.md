@@ -1,5 +1,45 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-11 — a bill the books can defend (ADR 0084)
+
+"Tagihan Baru" (Claude Design) asked one thing of the vendor-bill form: refuse to save a bill the
+books cannot defend — a duplicate invoice number for the same vendor, a line without a price, a
+total that differs from the paper, no evidence. finance-service could not keep that promise: no
+vendor invoice number (the `BILL-00001` is ours, minted on post), dates and terms only at post time,
+VAT a constant boolean, no discount, no note, no vendor terms, no media on AP at all. The owner chose
+the full scope over a layout-only re-fit.
+
+**Finance carries the invoice as the vendor wrote it (V69, expand-only).** `vendor_invoice_number`
+with a partial unique index per vendor among live bills — the writer pre-checks (typed 409
+`bill-duplicate-invoice`) and `ApAdvice` catches the index race too; `bill_date` + `term_days` at
+draft time, the due date from them on post; a header `discount_minor` that taxes the net and is
+spread across lines by the largest-remainder method (`DiscountAllocation` — Σ shares == discount,
+integer minor units) so the expense/inventory split still balances and each purchase-event line is
+received at what it cost; `tax_bp` 0/1100/1200 (the boolean stays for old clients, backfilled to
+1100); `note`; `vendor.payment_term_days`. The GL entry stays dated on the posting day — the bill
+date is the paper's, the accounting date is when the books recorded it. `bill_attachment` mirrors
+the restaurant's (ADR 0063) on finance: `libs/media-storage`, a `finance`-scoped MinIO user, private
+serve with ETag, ≤ 5 MiB, ≤ 10 per bill, VOID bills take no more.
+
+**The phone form is the checklist.** `NewBillPhone` below 640px: vendor card (terms + outstanding
+from aging) opening an inline list, invoice number with the live same-vendor duplicate line, date +
+term chips → due date, line cards whose "akun" menu is the one knob finance has (Beban 5000 /
+Persediaan 5100 — the latter picks an ingredient from the shared `IngredientPickerSheet`, quantity in
+its shown unit), the summary with a discount and PPN chips, the reconciliation card that turns green
+on a match and red on a gap, attachment + note, and the checklist naming every remaining reason
+above a sticky total + Save. Save = create DRAFT → upload → post → the bill; a failure leaves the
+draft locked with a retry. `lib/newBillForm.ts` holds the rules (44 tests with ingredientLink's).
+`/bills/new` leaves the tab bar (the footer owns the bottom). BillDetail shows the new fields and
+the attachments; the vendor dialog takes a term.
+
+**Deploy prerequisite.** finance now depends on `minio-init` and needs `MEDIA_FINANCE_SECRET_KEY`
+in `prod.env` BEFORE the tag (RUNBOOK); an empty secret would fail `minio-init` and roll back.
+
+**Gates.** finance-service 907 tests green (V69, discount split balanced Dr 5000/5100/1300 Cr 2000,
+duplicate 409 + free after void, attachments upload/list/serve/dedupe/tenant-isolated, web slices);
+console `tsc -b`, eslint, vitest 974, `vite build`; `mobile-shots.mjs` gained a `bills` section
+(vendors · duplicate · mismatch · match · checklist · attach → save → detail).
+
 ## 2026-09-11 — the phone menu is a work page, not a catalog (ADR 0083)
 
 "Manajemen Menu" (Claude Design) asked for one thing of `/menu` on a phone: everything an owner does
