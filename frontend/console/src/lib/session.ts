@@ -62,6 +62,16 @@ export interface SessionContextValue {
   companies: CompanySession[]
   /** True while the signed-in user's companies are still being loaded (oidc mode). */
   loading: boolean
+  /**
+   * True when the companies list could not be loaded at all (oidc mode: `/companies/mine` failed
+   * and nothing is cached). This is NOT "no companies": a login whose token carries a company
+   * claim but whose request died — a gateway or org-service mid-restart during a rolling deploy —
+   * must see an error with a retry, never the create-a-company wizard (2026-09-11 incident:
+   * the owner logged in during the v0.1.65 deploy and was asked to make a new company).
+   */
+  loadError: boolean
+  /** Re-run the companies load after a `loadError`. No-op in dev mode. */
+  retryLoad: () => void
   setCompany: (company: CompanySession | null) => void
   /** Switches the active company (an id from `companies`); every query re-fetches under it. */
   setActiveCompany: (companyId: string) => void

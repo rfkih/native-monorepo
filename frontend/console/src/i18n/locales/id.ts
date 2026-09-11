@@ -442,6 +442,11 @@ export const id = {
     yourBusinesses: 'Perusahaan Anda',
     addBusiness: 'Tambah perusahaan',
   },
+  session: {
+    loadFailedTitle: 'Perusahaan Anda belum bisa dimuat',
+    loadFailedBody:
+      'Akun Anda aman — server tidak menjawab barusan (mungkin sedang diperbarui). Coba lagi sebentar lagi.',
+  },
   dashboardPhone: {
     perOutlet: 'Per outlet',
     // ADR 0082 — beranda membaca hari ini, bukan bulan ini.

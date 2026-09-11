@@ -151,6 +151,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     queryKey: ['myCompanies', auth.sub, auth.companyIds.join(',')],
     enabled: oidcEnabled,
     queryFn: async () => (await apiFetch<CompanyDto[]>('/api/v1/companies/mine')) ?? [],
+    // This is the one request the whole console hangs off. A rolling prod deploy takes the
+    // gateway and org-service down for a minute or so; the default three quick retries (~7 s)
+    // gave up inside that window and the login fell through to the wizard. Five with a capped
+    // back-off (~1+2+4+8+8 s) rides most of it out; what is still failing after that becomes
+    // `loadError` below, with a retry — never an empty list.
+    retry: 5,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   })
 
   const toSession = useCallback(
@@ -172,6 +179,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   let companies: CompanySession[]
   let company: CompanySession | null
   let loading = false
+  let loadError = false
   if (AUTH_MODE === 'oidc') {
     companies = (companiesQuery.data ?? []).map(toSession)
     // A just-onboarded company (manual) joins the list until /mine includes it.
@@ -179,6 +187,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       companies = [...companies, manual]
     }
     loading = oidcEnabled && companiesQuery.isLoading && !manual
+    // Failed AND nothing to show: the token says this login has companies (`oidcEnabled`), the
+    // request could not tell us which. An error on a background refetch keeps the cached list and
+    // is not this. A just-onboarded `manual` company is something to show, so it is not this either.
+    loadError =
+      oidcEnabled && companiesQuery.isError && companiesQuery.data == null && manual == null
 
     // Membership can be revoked server-side while the active pointer is still sitting in storage
     // from a previous login. Falling back to companies[0] for THIS render is not enough — without
@@ -290,12 +303,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     reconcileLanguage(indonesia, companyDefaultLanguage)
   }, [companyCurrency, companyDefaultLanguage])
 
+  // `refetch` is referentially stable in TanStack v5; the query object itself is not.
+  const refetchCompanies = companiesQuery.refetch
+  const retryLoad = useCallback(() => {
+    if (AUTH_MODE === 'oidc') void refetchCompanies()
+  }, [refetchCompanies])
+
   return (
     <SessionContext.Provider
       value={{
         company,
         companies,
         loading,
+        loadError,
+        retryLoad,
         setCompany,
         setActiveCompany,
         activeOutletId,

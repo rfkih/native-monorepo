@@ -90,12 +90,37 @@ const COMPANY_2 = {
 
 /** Reads the resolved session (company/companies/outlet) via a probe child, in ONE render pass. */
 function Probe() {
-  const { company, companies, activeOutletId } = useSession()
+  const { company, companies, activeOutletId, loading, loadError } = useSession()
   return createElement('div', {
     'data-company': company?.companyId ?? 'none',
     'data-companies': companies.map((c) => c.companyId).join(','),
     'data-outlet': activeOutletId ?? 'none',
+    'data-loading': String(loading),
+    'data-load-error': String(loadError),
   })
+}
+
+/** Mounts SessionProvider with `/mine` in a FAILED state (retries exhausted, nothing cached — or,
+ * with `cached`, a background refetch that failed after an earlier success). */
+function renderProbeFailed(cached?: (typeof COMPANY_1)[]) {
+  // `retryOnMount: false`: a fresh observer over an errored query otherwise reports an OPTIMISTIC
+  // `pending/fetching` (it is about to retry), and a one-shot static render never gets past that.
+  // The real provider is a root singleton that never remounts, so the flag changes nothing there;
+  // here it makes the seeded error the settled state the app reaches after its retries.
+  const client = new QueryClient({ defaultOptions: { queries: { retryOnMount: false } } })
+  const key = ['myCompanies', 'sub-1', 'company-1']
+  if (cached) client.setQueryData(key, cached)
+  client
+    .getQueryCache()
+    .build(client, { queryKey: key })
+    .setState({ status: 'error', error: new Error('502 Bad Gateway'), fetchStatus: 'idle' })
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(SessionProvider, null, createElement(Probe)),
+    ),
+  )
 }
 
 /** Mounts SessionProvider with the `/mine` response pre-seeded into the query cache (synchronously
@@ -187,4 +212,40 @@ describe('SessionProvider — active-company / active-outlet transition table', 
   it.todo(
     '(d) X→none (same mounted instance, e.g. logout) -> outlet cleared — same limitation as (c)',
   )
+})
+
+describe('SessionProvider — a failed /mine is an error, not an empty company list', () => {
+  // 2026-09-11: the owner logged in while a rolling prod deploy had org-service and the gateway
+  // down; `/mine` failed, the provider resolved `company = null` exactly as for a brand-new
+  // signup, and every route sent them to the create-a-company wizard. The token said they had a
+  // company; the request just died. That state now has its own name.
+  it('(f) /mine failed with nothing cached -> loadError, not loading, and no company', () => {
+    localStorage.setItem(ACTIVE_KEY, 'company-1')
+
+    const html = renderProbeFailed()
+
+    expect(attr(html, 'data-load-error')).toBe('true')
+    expect(attr(html, 'data-loading')).toBe('false')
+    expect(attr(html, 'data-company')).toBe('none')
+    // The stored pointer is NOT evicted by a failure — it is still valid as far as anyone knows.
+    expect(localStorage.getItem(ACTIVE_KEY)).toBe('company-1')
+  })
+
+  it('(g) /mine failed on a refetch with a cached list -> the list stands, no loadError', () => {
+    localStorage.setItem(ACTIVE_KEY, 'company-2')
+
+    const html = renderProbeFailed([COMPANY_1, COMPANY_2])
+
+    expect(attr(html, 'data-load-error')).toBe('false')
+    expect(attr(html, 'data-company')).toBe('company-2')
+    expect(attr(html, 'data-companies')).toBe('company-1,company-2')
+  })
+
+  it('(h) a genuinely empty list (200 []) is still "no company" — the wizard is right for a fresh signup', () => {
+    const html = renderProbe([])
+
+    expect(attr(html, 'data-load-error')).toBe('false')
+    expect(attr(html, 'data-loading')).toBe('false')
+    expect(attr(html, 'data-company')).toBe('none')
+  })
 })
