@@ -60,7 +60,7 @@ export function CouponField({ code, status, onApply, onClear, disabled, classNam
           }}
           placeholder={t('pos.coupon.placeholder')}
           aria-label={t('pos.coupon.label')}
-          className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-sm uppercase tracking-wide text-ink placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+          className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-sm uppercase tracking-eyebrow text-ink placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
         />
         <button
           type="button"

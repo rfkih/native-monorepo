@@ -108,7 +108,7 @@ export function InventoryCatalog({
           <div className="mx-auto mb-3.5 grid size-12 place-items-center rounded-2xl bg-tint-profit text-profit-ink">
             <Package className="size-[22px]" strokeWidth={1.8} aria-hidden="true" />
           </div>
-          <h2 className="font-display text-xl font-bold tracking-[-0.02em] text-ink">
+          <h2 className="font-display text-xl font-bold tracking-display text-ink">
             {t('inventory.emptyTitle')}
           </h2>
           <p className="mt-2 text-xs leading-relaxed text-ink-3 text-pretty">
@@ -201,7 +201,7 @@ export function InventoryCatalog({
 
   const caption = (
     <div className="flex items-center justify-between gap-2.5">
-      <span className="text-2xs font-semibold uppercase tracking-[0.04em] text-ink-3">
+      <span className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
         {order.filter
           ? t('inventory.catalog.captionFiltered', { count: order.ranked.length })
           : t('inventory.catalog.caption', { count: order.ranked.length })}
@@ -308,7 +308,7 @@ export function InventoryCatalog({
       </div>
 
       <div className="mx-6 mt-[18px] flex items-center gap-3.5 border-b border-line px-3 pb-2">
-        <span className="min-w-0 flex-1 text-2xs font-semibold uppercase tracking-[0.04em] text-ink-400">
+        <span className="min-w-0 flex-1 text-2xs font-semibold uppercase tracking-eyebrow text-ink-400">
           {t('inventory.catalog.columns.name')}
         </span>
         <ColumnHead width="w-[108px]">{t('inventory.catalog.columns.stock')}</ColumnHead>
@@ -354,7 +354,7 @@ function HeroValue({
   const figure = (
     <span
       className={cn(
-        'tnum block font-mono font-bold leading-none tracking-[-0.02em] text-ink',
+        'tnum block font-mono font-bold leading-none tracking-display text-ink',
         compact ? 'text-2xl' : 'text-2xl',
       )}
     >
@@ -402,7 +402,7 @@ function ColumnHead({ width, children }: { width: string; children: React.ReactN
   return (
     <span
       className={cn(
-        'shrink-0 text-right text-2xs font-semibold uppercase tracking-[0.04em] text-ink-400',
+        'shrink-0 text-right text-2xs font-semibold uppercase tracking-eyebrow text-ink-400',
         width,
       )}
     >
@@ -476,7 +476,7 @@ function ReceiveButton({
       title={t('inventory.receiveAction')}
       className={cn(
         'grid shrink-0 place-items-center rounded-xl text-profit-ink transition-colors hover:bg-tint-profit active:bg-tint-profit focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald',
-        size === 'row' ? 'w-11' : 'h-9 w-11 rounded-[10px]',
+        size === 'row' ? 'w-11' : 'h-9 w-11 rounded-xl',
       )}
     >
       <ArrowDownToLine
@@ -564,7 +564,7 @@ function DesktopRow({
   return (
     <div
       className={cn(
-        'flex items-center gap-3.5 rounded-[10px] border-b border-line/60 px-3 transition-colors',
+        'flex items-center gap-3.5 rounded-xl border-b border-line/60 px-3 transition-colors',
         selected ? 'bg-surface' : 'hover:bg-hover',
       )}
     >

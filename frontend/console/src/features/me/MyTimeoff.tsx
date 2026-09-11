@@ -64,21 +64,21 @@ export function MyTimeoff({
   return (
     <section className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
-        <h2 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+        <h2 className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
           {t('me.timeoff.title')}
         </h2>
         <div className="flex gap-2">
           <Button
             type="button"
             variant="outline"
-            className="whitespace-nowrap max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-[15px]"
+            className="whitespace-nowrap max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-2xl"
             onClick={() => setDialog({ kind: 'overtime' })}
           >
             {t('me.timeoff.logOvertime')}
           </Button>
           <Button
             type="button"
-            className="whitespace-nowrap max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-[15px]"
+            className="whitespace-nowrap max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-2xl"
             onClick={() => setDialog({ kind: 'leave' })}
           >
             {t('me.timeoff.requestLeave')}
@@ -105,7 +105,7 @@ export function MyTimeoff({
       )}
 
       {/* My leave requests */}
-      <h3 className="mt-4 text-2xs font-semibold uppercase tracking-wider text-ink-3">
+      <h3 className="mt-4 text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
         {t('me.timeoff.myLeaveRequests')}
       </h3>
       {leaveRequests.isLoading ? (
@@ -113,7 +113,7 @@ export function MyTimeoff({
       ) : (leaveRequests.data ?? []).length === 0 ? (
         <p className="mt-2 text-sm text-ink-3">{t('me.timeoff.leaveEmpty')}</p>
       ) : (
-        <Card className="mt-2 rounded-[20px] p-2.5">
+        <Card className="mt-2 rounded-card p-2.5">
           {(leaveRequests.data ?? []).map((row) => (
             <LeaveRow
               key={row.id}
@@ -128,7 +128,7 @@ export function MyTimeoff({
       )}
 
       {/* My overtime entries */}
-      <h3 className="mt-4 text-2xs font-semibold uppercase tracking-wider text-ink-3">
+      <h3 className="mt-4 text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
         {t('me.timeoff.myOvertimeEntries')}
       </h3>
       {overtimeEntries.isLoading ? (
@@ -136,7 +136,7 @@ export function MyTimeoff({
       ) : (overtimeEntries.data ?? []).length === 0 ? (
         <p className="mt-2 text-sm text-ink-3">{t('me.timeoff.overtimeEmpty')}</p>
       ) : (
-        <Card className="mt-2 rounded-[20px] p-2.5">
+        <Card className="mt-2 rounded-card p-2.5">
           {(overtimeEntries.data ?? []).map((row) => (
             <OvertimeRow
               key={row.id}
@@ -174,7 +174,7 @@ export function LeaveBalanceCard({ companyId, actor }: { companyId: string; acto
   const usedFrac = total > 0 ? Math.min(1, used / total) : 0
   return (
     <Card className="p-5">
-      <h2 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+      <h2 className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
         {t('me.timeoff.balanceTitle', { year })}
       </h2>
       <div className="mt-2 flex items-baseline gap-2">
@@ -209,7 +209,7 @@ function BalanceTile({
 }) {
   return (
     <div>
-      <p className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{label}</p>
+      <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">{label}</p>
       <p className={cn('tnum mt-1 text-2xl font-bold', emphatic ? 'text-emerald-2' : 'text-ink')}>
         {loading ? '…' : (value ?? 0)}
       </p>

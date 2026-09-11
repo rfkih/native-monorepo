@@ -49,7 +49,7 @@ export function BillSelectorOverlay({
   const walkInActive = activeBillId === null
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-paper sm:bg-black/40 sm:p-6 sm:backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex flex-col bg-paper sm:bg-scrim sm:p-6 sm:backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('posShell.switcherTitle')}

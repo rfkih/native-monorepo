@@ -213,7 +213,7 @@ export function OrgUnitDetail() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+            <h1 className="font-display text-2xl font-bold tracking-display text-ink">
               {unit.name}
             </h1>
             <OrgUnitTypeBadge type={unit.type} />
@@ -444,7 +444,7 @@ function SmartButton({
           {icon}
         </span>
         <span className="min-w-0">
-          <span className="block text-2xs font-semibold uppercase tracking-wider text-ink-3">
+          <span className="block text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
             {label}
           </span>
           <span className={cn('tnum block truncate font-mono text-lg font-semibold', tone ?? 'text-ink')}>
@@ -474,7 +474,7 @@ function SmartLink({
           {icon}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-2xs font-semibold uppercase tracking-wider text-ink-3">
+          <span className="block text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
             {label}
           </span>
           <span className="block truncate text-lg font-semibold text-ink">{figure}</span>
@@ -573,7 +573,7 @@ function OverviewTab({
 
       {isBu && pnl && pnl.outlets.length > 0 ? (
         <Card className="p-5">
-          <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
+          <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
             {t('orgHub.overview.contribution')}
           </h2>
           <div className="mt-4 flex flex-col gap-3.5">
@@ -664,7 +664,7 @@ function OutletsTab({
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
+        <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
           {t('orgHub.tabs.outlets')}
         </h2>
         <Button type="button" onClick={onAdd}>

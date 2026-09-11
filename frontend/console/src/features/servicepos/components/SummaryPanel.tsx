@@ -125,7 +125,7 @@ export function SummaryPanel({
   return (
     <div className="flex flex-col gap-5 p-5">
       <div>
-        <h2 className="mb-2 text-2xs font-bold uppercase tracking-[.08em] text-ink-3">
+        <h2 className="mb-2 text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
           {t('servicePos.summary.title')}
         </h2>
         {!hasSelection ? (

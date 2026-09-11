@@ -176,7 +176,7 @@ export function ClosedDayTransactionsSheet({
 
       {/* Reprint flow states — the order fetch behind a tapped row. */}
       {selected != null && order.isLoading ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-black/30">
+        <div className="absolute inset-0 z-10 grid place-items-center bg-scrim">
           <Spinner className="text-white" />
         </div>
       ) : null}

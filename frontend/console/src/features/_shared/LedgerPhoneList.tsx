@@ -24,7 +24,7 @@ export interface LedgerPhoneRow {
 
 export function LedgerPhoneList({ rows, locale }: { rows: LedgerPhoneRow[]; locale: string }) {
   return (
-    <Card className="rounded-[20px] p-2.5">
+    <Card className="rounded-card p-2.5">
       {rows.map((r) => (
         <Link
           key={r.id}

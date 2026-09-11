@@ -546,7 +546,7 @@ export function BillDetail({
       {/* Backdrop (only when sheetOpen on tablet+) */}
       {sheetOpen ? (
         <div
-          className="fixed inset-0 z-40 hidden bg-black/20 backdrop-blur-[2px] sm:block"
+          className="fixed inset-0 z-40 hidden bg-scrim backdrop-blur-[2px] sm:block"
           onClick={() => onSheetOpenChange(false)}
           aria-hidden="true"
         />
@@ -616,7 +616,7 @@ export function BillDetail({
       {isTablet ? (
         <div
           className={cn(
-            'fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[28px] bg-surface shadow-[0_-16px_48px_rgba(15,23,42,.18)] transition-transform duration-300 ease-out',
+            'fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-sheet bg-surface shadow-[0_-16px_48px_rgba(15,23,42,.18)] transition-transform duration-300 ease-out',
             sheetOpen ? 'translate-y-0' : 'translate-y-full',
             'max-h-[80dvh]',
           )}

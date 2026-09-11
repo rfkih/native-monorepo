@@ -119,7 +119,7 @@ export function OrgUnitExpensesTab({
         <p className="text-sm text-ink-3">{t('orgHub.expensesTab.noPostings')}</p>
       ) : data && data.byCategory.length > 0 ? (
         <Card className="p-5">
-          <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
+          <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
             {t('orgHub.expensesTab.byCategory')}
           </h2>
           <div className="mt-4 flex flex-col gap-3.5">
@@ -154,7 +154,7 @@ function CountTile({
 }) {
   return (
     <Card className="p-5">
-      <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-3 h-7 w-16 animate-pulse rounded bg-ink-100" />
       ) : (
@@ -220,7 +220,7 @@ function RecentClaimsCard({
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
+      <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
         {t('orgHub.expensesTab.recentTitle')}
       </h2>
       {query.isError ? (

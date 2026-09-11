@@ -125,7 +125,7 @@ export function OnboardingWizard() {
     <div className="mx-auto max-w-[680px]">
       {/* Centered header */}
       <header className="mb-8 text-center">
-        <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+        <h1 className="font-display text-2xl font-bold tracking-display text-ink">
           {t(isAdditional ? 'onboarding.addTitle' : 'onboarding.title')}
         </h1>
         <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-ink-3">
@@ -137,7 +137,7 @@ export function OnboardingWizard() {
       <Stepper steps={steps} current={step} />
 
       {/* Step card */}
-      <Card className="mt-6 rounded-[20px] p-7" key={step}>
+      <Card className="mt-6 rounded-card p-7" key={step}>
         <div className="reveal">
           {step === COMPANY_STEP && (
             <CompanyFields
@@ -273,13 +273,13 @@ function SuccessPanel({
   const { t } = useTranslation()
   return (
     <div className="reveal mx-auto max-w-[680px]">
-      <Card className="rounded-[24px] p-12 text-center">
+      <Card className="rounded-3xl p-12 text-center">
         {/* Check circle */}
         <div className="mx-auto grid size-16 place-items-center rounded-full bg-emerald-tint text-emerald-2">
           <Check className="size-7" />
         </div>
 
-        <h2 className="mt-5 font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+        <h2 className="mt-5 font-display text-2xl font-bold tracking-display text-ink">
           {t('onboarding.createdTitle')}
         </h2>
         <p className="mt-1.5 text-sm text-ink-3">{t('onboarding.createdBody')}</p>

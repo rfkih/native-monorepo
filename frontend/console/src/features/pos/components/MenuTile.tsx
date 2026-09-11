@@ -63,7 +63,7 @@ export function MenuTile({
       aria-disabled={unavailable}
       style={{ animationDelay: `${delayMs}ms` }}
       className={cn(
-        'reveal relative flex h-[133px] flex-col overflow-hidden rounded-[15px] border bg-surface text-left',
+        'reveal relative flex h-[133px] flex-col overflow-hidden rounded-2xl border bg-surface text-left',
         'transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
         unavailable
           ? 'cursor-not-allowed border-line opacity-55'
@@ -85,7 +85,7 @@ export function MenuTile({
         ) : (
           <span
             aria-hidden="true"
-            className="select-none text-lg font-extrabold tracking-[.02em] text-ink-3"
+            className="select-none text-lg font-extrabold tracking-eyebrow text-ink-3"
           >
             {itemInitials(item.name)}
           </span>

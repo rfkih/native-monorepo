@@ -73,7 +73,7 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
         tabIndex={-1}
         role="menu"
         aria-label={t('posShell.tillMenu')}
-        className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 absolute right-3 top-[60px] w-64 rounded-2xl border border-line bg-surface p-1.5 shadow-lg outline-none"
+        className="dialog-in absolute right-3 top-[60px] w-64 rounded-2xl border border-line bg-surface p-1.5 shadow-lg outline-none"
       >
         {items.map((it) =>
           it.to && !it.disabled ? (

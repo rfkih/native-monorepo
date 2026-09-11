@@ -69,7 +69,7 @@ export function ConvertUnitForm({
       )}
     >
       {rail ? (
-        <div className="font-display text-lg font-bold leading-tight tracking-[-0.02em] text-ink">
+        <div className="font-display text-lg font-bold leading-tight tracking-display text-ink">
           {t('inventory.convertUnit.title', { name: ingredient.name })}
         </div>
       ) : null}
@@ -131,7 +131,7 @@ export function ConvertUnitForm({
             to: unitChoice,
           })}
           className={cn(
-            'tnum mt-[7px] h-[52px] w-full rounded-[14px] border-[1.5px] bg-surface px-4 text-right font-mono text-xl font-bold text-ink placeholder:text-ink-400 focus:outline-none focus:ring-4 focus:ring-emerald/15',
+            'tnum mt-[7px] h-[52px] w-full rounded-2xl border-[1.5px] bg-surface px-4 text-right font-mono text-xl font-bold text-ink placeholder:text-ink-400 focus:outline-none focus:ring-4 focus:ring-emerald/15',
             touched && !preview.ok ? 'border-loss' : 'border-ink',
           )}
         />
@@ -155,7 +155,7 @@ export function ConvertUnitForm({
           />
           <span
             className={cn(
-              'tnum font-mono text-xl font-bold tracking-[-0.02em]',
+              'tnum font-mono text-xl font-bold tracking-display',
               preview.ok ? 'text-ink' : 'text-ink-400',
             )}
           >

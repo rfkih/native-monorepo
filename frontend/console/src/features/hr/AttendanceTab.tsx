@@ -131,7 +131,7 @@ function LeaveRequestsSection({ companyId, actor }: { companyId: string; actor: 
       ) : rows.length === 0 ? (
         <EmptyState title={t('attendance.leave.empty')} hint={t('attendance.leave.emptyHint')} />
       ) : (
-        <Card className="rounded-[20px] p-2.5">
+        <Card className="rounded-card p-2.5">
           {rows.map((row) => (
             <LeaveRequestRow
               key={row.id}
@@ -216,7 +216,7 @@ function OvertimeEntriesSection({ companyId, actor }: { companyId: string; actor
       ) : rows.length === 0 ? (
         <EmptyState title={t('attendance.overtime.empty')} hint={t('attendance.overtime.emptyHint')} />
       ) : (
-        <Card className="rounded-[20px] p-2.5">
+        <Card className="rounded-card p-2.5">
           {rows.map((row) => (
             <OvertimeEntryRow
               key={row.id}
@@ -398,10 +398,10 @@ function BalancesSection({ companyId, actor }: { companyId: string; actor: strin
       ) : rows.length === 0 ? (
         <EmptyState title={t('attendance.balances.empty')} hint={t('attendance.balances.emptyHint')} />
       ) : (
-        <Card className="overflow-x-auto rounded-[20px] p-2.5">
+        <Card className="overflow-x-auto rounded-card p-2.5">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="text-2xs uppercase tracking-wider text-ink-3">
+              <tr className="text-2xs uppercase tracking-eyebrowr text-ink-3">
                 <th className="px-2.5 py-2 font-semibold">{t('attendance.balances.employee')}</th>
                 <th className="px-2.5 py-2 text-right font-semibold">{t('attendance.balances.granted')}</th>
                 <th className="px-2.5 py-2 text-right font-semibold">{t('attendance.balances.adjustment')}</th>
@@ -565,13 +565,13 @@ function CalendarSection({ companyId, actor }: { companyId: string; actor: strin
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl bg-paper p-4">
-            <p className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+            <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
               {t('attendance.calendar.daysPerWeek')}
             </p>
             <p className="tnum mt-1 text-2xl font-bold text-ink">{query.data.daysPerWeek}</p>
           </div>
           <div className="rounded-xl bg-paper p-4">
-            <p className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+            <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
               {t('attendance.calendar.monthlyDivisor')}
             </p>
             <p className="tnum mt-1 text-2xl font-bold text-ink">{query.data.monthlyDivisor}</p>

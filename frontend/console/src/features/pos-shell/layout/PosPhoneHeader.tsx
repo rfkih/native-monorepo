@@ -58,7 +58,7 @@ export function PosPhoneHeader({
       {/* Identity — the only shrinkable element; everything right of it is a fixed control, so a
           long business or outlet name must compress rather than push the ⋮ off a 360px screen. */}
       <div className="flex min-w-0 flex-1 flex-col justify-center">
-        <span className="truncate font-display text-base font-bold leading-tight tracking-[-.01em] text-ink">
+        <span className="truncate font-display text-base font-bold leading-tight tracking-display text-ink">
           {businessName}
         </span>
         {/* A div, not a span: the outlet picker slots a positioned <div> in here (its dropdown

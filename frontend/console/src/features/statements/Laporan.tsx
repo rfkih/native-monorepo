@@ -70,7 +70,7 @@ const PATH: Record<ReportTab, string> = {
 const PANEL_ID = 'laporan-panel'
 const TREND_MONTHS = 12
 
-const SECTION_LABEL = 'text-2xs font-semibold uppercase tracking-[0.04em] text-ink-3'
+const SECTION_LABEL = 'text-2xs font-semibold uppercase tracking-eyebrow text-ink-3'
 
 export function Laporan({ tab }: { tab: ReportTab }) {
   const { t, i18n } = useTranslation()
@@ -190,7 +190,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
     <div className="print:hidden">
       <div className="flex items-center justify-between gap-2.5 pt-4">
         <span className={SECTION_LABEL}>{t('statements.phone.trendCaption', { n: TREND_MONTHS })}</span>
-        <div className="flex shrink-0 gap-[3px] rounded-[13px] bg-hover p-[3px]" role="group">
+        <div className="flex shrink-0 gap-[3px] rounded-xl bg-hover p-[3px]" role="group">
           {(['bar', 'line'] as const).map((kind) => {
             const on = chartType === kind
             return (
@@ -201,7 +201,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
                 aria-pressed={on}
                 aria-label={t(`statements.phone.chart.${kind}`)}
                 className={cn(
-                  'grid h-9 w-11 place-items-center rounded-[10px] transition-colors',
+                  'grid h-9 w-11 place-items-center rounded-xl transition-colors',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                   on ? 'bg-surface text-ink shadow-sm' : 'text-ink-3',
                 )}
@@ -252,7 +252,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
           sticky one, and a root tab destination shows no back arrow (DashboardPhone, MorePage). */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="font-display text-xl font-bold leading-tight tracking-[-0.01em] text-ink">
+          <h1 className="font-display text-xl font-bold leading-tight tracking-display text-ink">
             {t('statements.phone.title')}
           </h1>
           <p className="mt-0.5 truncate text-xs text-ink-3">
@@ -307,7 +307,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
             <button
               type="button"
               onClick={() => void active.refetch()}
-              className="mt-5 min-h-12 rounded-[14px] bg-emerald px-5 text-sm font-bold text-on-emerald transition-transform active:scale-[.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+              className="mt-5 min-h-12 rounded-2xl bg-emerald px-5 text-sm font-bold text-on-emerald transition-transform active:scale-[.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
               {t('statements.phone.retry')}
             </button>
@@ -319,7 +319,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
             <Skeleton className="h-[11px] w-[38%] rounded-md" />
             <Skeleton className="h-[30px] w-[66%] rounded-lg" />
           </div>
-          <Skeleton className="h-[132px] rounded-[14px]" />
+          <Skeleton className="h-[132px] rounded-2xl" />
           {[72, 54, 83, 61, 47, 76].map((w, i) => (
             <div key={i} className="flex items-center gap-3">
               <div className="h-3" style={{ width: `${w}%` }}>
@@ -428,7 +428,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
           <button
             type="button"
             onClick={() => setSheet(null)}
-            className="mt-3.5 h-[54px] w-full rounded-[15px] bg-emerald text-base font-bold text-on-emerald transition-transform active:scale-[.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="mt-3.5 h-[54px] w-full rounded-2xl bg-emerald text-base font-bold text-on-emerald transition-transform active:scale-[.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {t('statements.phone.export.close')}
           </button>
@@ -459,7 +459,7 @@ function Hero({
   const color = tone === 'profit' ? 'text-profit-ink' : tone === 'loss' ? 'text-loss' : 'text-ink'
   const body = (
     <>
-      <span className={cn('tnum font-mono text-2xl font-bold leading-none tracking-[-.02em]', color)}>
+      <span className={cn('tnum font-mono text-2xl font-bold leading-none tracking-display', color)}>
         {value}
       </span>
       {note ? (
@@ -525,7 +525,7 @@ function Figure({
     </>
   )
   const cls = cn(
-    'flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 overflow-hidden rounded-[14px] bg-hover py-2.5 text-left',
+    'flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 overflow-hidden rounded-2xl bg-hover py-2.5 text-left',
     small ? 'px-2.5' : 'px-3',
   )
   return onClick ? (

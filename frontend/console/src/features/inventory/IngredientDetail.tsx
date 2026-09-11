@@ -131,7 +131,7 @@ export function IngredientDetail({
     <div className={cn(rail ? 'pb-7' : 'pb-8')}>
       <div className={cn(px, rail ? 'pt-5' : 'pt-3')}>
         {rail ? (
-          <div className="font-display text-lg font-bold leading-tight tracking-[-0.02em] text-ink">
+          <div className="font-display text-lg font-bold leading-tight tracking-display text-ink">
             {ingredient.name}
           </div>
         ) : null}
@@ -141,7 +141,7 @@ export function IngredientDetail({
         <div className="mt-[7px] flex items-baseline gap-2">
           <span
             className={cn(
-              'tnum font-mono font-bold leading-none tracking-[-0.02em]',
+              'tnum font-mono font-bold leading-none tracking-display',
               rail ? 'text-2xl' : 'text-2xl',
               row.cls === 'zero' ? 'text-loss' : 'text-ink',
             )}
@@ -158,7 +158,7 @@ export function IngredientDetail({
           type="button"
           onClick={() => navigate(`/inventory/${ingredient.id}/convert`)}
           className={cn(
-            'mt-4 flex w-[calc(100%-2rem)] items-start gap-2.5 rounded-[14px] border border-warning-line bg-amber-tint p-3.5 text-left transition-transform active:scale-[.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+            'mt-4 flex w-[calc(100%-2rem)] items-start gap-2.5 rounded-2xl border border-warning-line bg-amber-tint p-3.5 text-left transition-transform active:scale-[.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             rail ? 'mx-[22px] w-[calc(100%-44px)]' : 'mx-4',
           )}
         >

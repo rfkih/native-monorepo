@@ -339,7 +339,7 @@ function LoginLauncher() {
         <span className="grid size-14 place-items-center rounded-2xl bg-emerald text-on-emerald shadow-md">
           <BrandMark size={28} stroke="currentColor" strokeWidth={2.4} />
         </span>
-        <span className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">
+        <span className="font-display text-lg font-extrabold tracking-display text-ink">
           {t('app.name')}
         </span>
         <span className="flex items-center gap-2 text-sm text-ink-3">

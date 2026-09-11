@@ -81,7 +81,7 @@ function problemTypeIncludes(err: unknown, needle: string): boolean {
   )
 }
 
-const FIELD = 'tnum h-12 w-full rounded-[14px] px-3.5 font-mono text-base font-semibold'
+const FIELD = 'tnum h-12 w-full rounded-2xl px-3.5 font-mono text-base font-semibold'
 
 export function IngredientForm({
   session,
@@ -271,7 +271,7 @@ export function IngredientForm({
       )}
     >
       {rail ? (
-        <div className="font-display text-lg font-bold leading-tight tracking-[-0.02em] text-ink">
+        <div className="font-display text-lg font-bold leading-tight tracking-display text-ink">
           {isCreate ? t('inventory.addTitle') : t('inventory.editTitle')}
         </div>
       ) : null}
@@ -279,7 +279,7 @@ export function IngredientForm({
       <div>
         <MicroLabel>{t('inventory.nameLabel')}</MicroLabel>
         <TextInput
-          className="mt-[7px] h-12 rounded-[14px] text-base font-medium"
+          className="mt-[7px] h-12 rounded-2xl text-base font-medium"
           autoFocus={!rail}
           value={name}
           aria-invalid={nameError || undefined}
@@ -338,7 +338,7 @@ export function IngredientForm({
 
       {baseUnitChanged && ingredient ? (
         <div
-          className="flex items-start gap-2.5 rounded-[14px] bg-tint-info px-3.5 py-[13px]"
+          className="flex items-start gap-2.5 rounded-2xl bg-tint-info px-3.5 py-[13px]"
           role="status"
         >
           <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden="true" />
@@ -483,7 +483,7 @@ export function IngredientForm({
       </div>
 
       {error ? (
-        <div className="flex flex-col gap-1.5 rounded-[14px] bg-tint-loss p-3.5" role="alert">
+        <div className="flex flex-col gap-1.5 rounded-2xl bg-tint-loss p-3.5" role="alert">
           <div className="flex items-start gap-[9px]">
             <TriangleAlert
               className="mt-0.5 size-4 shrink-0 text-loss"

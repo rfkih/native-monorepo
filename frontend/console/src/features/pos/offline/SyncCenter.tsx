@@ -48,7 +48,7 @@ export function SyncCenter({ locale, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-end bg-scrim backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('offline.syncCenter.title')}

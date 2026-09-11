@@ -117,7 +117,7 @@ export function InventoryMethodSettings() {
             <Boxes className="size-6" strokeWidth={1.8} />
           </span>
           <div>
-            <h1 className="font-display text-2xl font-extrabold tracking-[-0.025em] text-ink">
+            <h1 className="font-display text-2xl font-extrabold tracking-display text-ink">
               {t('settings.inventoryMethod.title')}
             </h1>
             <p className="mt-1.5 max-w-xl text-base leading-relaxed text-ink-3">
@@ -221,7 +221,7 @@ function ActiveStatus({
         </div>
         <div
           className={cn(
-            'tnum mt-[7px] font-mono text-2xl font-bold leading-none tracking-[-0.02em]',
+            'tnum mt-[7px] font-mono text-2xl font-bold leading-none tracking-display',
             negative ? 'text-loss' : 'text-ink',
           )}
         >
@@ -256,7 +256,7 @@ function ActiveStatus({
               key={f.label}
               className="flex items-baseline gap-2.5 border-t border-line/60 py-[9px] sm:block sm:border-0 sm:py-0"
             >
-              <dt className="min-w-0 flex-1 text-xs font-medium text-ink-3 sm:text-2xs sm:font-bold sm:uppercase sm:tracking-[0.06em] sm:text-ink-400">
+              <dt className="min-w-0 flex-1 text-xs font-medium text-ink-3 sm:text-2xs sm:font-bold sm:uppercase sm:tracking-eyebrow sm:text-ink-400">
                 {f.label}
               </dt>
               <dd
@@ -272,7 +272,7 @@ function ActiveStatus({
         </dl>
       </div>
 
-      <p className="rounded-[14px] bg-paper px-3.5 py-3.5 text-xs leading-relaxed text-ink-2">
+      <p className="rounded-2xl bg-paper px-3.5 py-3.5 text-xs leading-relaxed text-ink-2">
         {t('settings.inventoryMethod.status.ownerFootnote')}
       </p>
     </Card>
@@ -333,7 +333,7 @@ function Activation({
     return (
       <Card className="flex flex-col gap-5 p-5 sm:p-6">
         <div>
-          <h2 className="font-display text-xl font-bold tracking-[-0.02em] text-ink">
+          <h2 className="font-display text-xl font-bold tracking-display text-ink">
             {t('settings.inventoryMethod.inactive.heading')}
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-2 text-pretty">
@@ -359,7 +359,7 @@ function Activation({
         </ul>
 
         {catalogValueText ? (
-          <p className="rounded-[14px] bg-tint-profit/40 px-3.5 py-3.5 text-xs leading-relaxed text-ink-2 text-pretty">
+          <p className="rounded-2xl bg-tint-profit/40 px-3.5 py-3.5 text-xs leading-relaxed text-ink-2 text-pretty">
             {t('settings.inventoryMethod.inactive.catalogValue', {
               outlet: catalogValue?.outletName,
               value: catalogValueText,
@@ -389,7 +389,7 @@ function Activation({
             value={cutoverPeriod}
             onChange={(e) => setCutoverPeriod(e.target.value)}
             aria-label={t('settings.inventoryMethod.activate.cutoverLabel')}
-            className="mt-[7px] rounded-[14px] font-semibold"
+            className="mt-[7px] rounded-2xl font-semibold"
             required
           />
           <p className="mt-[7px] text-xs leading-relaxed text-ink-400">
@@ -409,7 +409,7 @@ function Activation({
             onChange={(e) => setOpeningValueInput(e.target.value)}
             placeholder="0"
             aria-label={t('settings.inventoryMethod.activate.openingValueLabel', { currency })}
-            className="tnum mt-[7px] h-[52px] w-full rounded-[14px] border-[1.5px] border-ink bg-surface px-4 text-right font-mono text-xl font-bold text-ink focus:outline-none focus:ring-4 focus:ring-emerald/15"
+            className="tnum mt-[7px] h-[52px] w-full rounded-2xl border-[1.5px] border-ink bg-surface px-4 text-right font-mono text-xl font-bold text-ink focus:outline-none focus:ring-4 focus:ring-emerald/15"
           />
           <p className="mt-[9px] text-xs font-medium leading-relaxed text-ink-3">
             {openingValueMinor != null && openingValueMinor > 0

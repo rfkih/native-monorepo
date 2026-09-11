@@ -258,7 +258,7 @@ export function OrgTree() {
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-display text-ink">
             {t('org.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('org.subtitle')}</p>
@@ -276,11 +276,11 @@ export function OrgTree() {
           {t('org.error')}
         </Card>
       ) : query.isLoading ? (
-        <ListSkeleton rows={6} className="rounded-[20px]" />
+        <ListSkeleton rows={6} className="rounded-card" />
       ) : roots.length === 0 ? (
         <EmptyState title={t('org.empty')} hint={t('org.emptyHint')} />
       ) : (
-        <Card className="rounded-[20px] p-2.5">
+        <Card className="rounded-card p-2.5">
           {roots.map((root) => (
             <OrgNode
               key={root.id}

@@ -113,7 +113,7 @@ export function FeaturesSettings() {
             <Sparkles className="size-6" strokeWidth={1.8} />
           </span>
           <div>
-            <h1 className="font-display text-2xl font-extrabold tracking-[-0.02em] text-ink">
+            <h1 className="font-display text-2xl font-extrabold tracking-display text-ink">
               {t('settings.tier.title')}
             </h1>
             <p className="mt-1.5 max-w-xl text-base leading-relaxed text-ink-3">
@@ -123,12 +123,12 @@ export function FeaturesSettings() {
         </div>
 
         {/* Live price panel — the company's ACTUAL quoted month at its current tier + usage. */}
-        <Card className="flex flex-col gap-5 rounded-[28px] border border-emerald-line bg-emerald-tint/40 p-6 dark:bg-emerald-tint sm:flex-row sm:items-start sm:justify-between sm:p-7">
+        <Card className="flex flex-col gap-5 rounded-3xl border border-emerald-line bg-emerald-tint/40 p-6 dark:bg-emerald-tint sm:flex-row sm:items-start sm:justify-between sm:p-7">
           <div className="min-w-0">
             <Badge tone="info">
               {t('settings.tier.currentPlanBadge')} · {planName(tier)}
             </Badge>
-            <div className="tnum mt-3 font-mono text-3xl font-bold leading-none tracking-[-0.02em] text-ink">
+            <div className="tnum mt-3 font-mono text-3xl font-bold leading-none tracking-display text-ink">
               {tier === 'FREE' ? t('settings.tier.priceFree') : money(price.totalMinor)}
               {tier !== 'FREE' ? (
                 <span className="ml-1 font-sans text-sm font-medium text-ink-3">
@@ -282,21 +282,21 @@ function PlanCard({
       )}
     >
       {current ? (
-        <span className="absolute -top-3 left-6 rounded-full bg-emerald px-3 py-1 text-2xs font-bold uppercase tracking-wide text-on-emerald shadow-sm">
+        <span className="absolute -top-3 left-6 rounded-full bg-emerald px-3 py-1 text-2xs font-bold uppercase tracking-eyebrow text-on-emerald shadow-sm">
           {currentLabel}
         </span>
       ) : null}
 
       <div>
         <h2 className="font-display text-lg font-bold text-ink">{name}</h2>
-        <div className="tnum mt-1.5 font-mono text-xl font-bold tracking-[-0.01em] text-ink">
+        <div className="tnum mt-1.5 font-mono text-xl font-bold tracking-display text-ink">
           {priceLine}
         </div>
         <p className="mt-1.5 text-sm text-ink-3">{tagline}</p>
       </div>
 
       {itemsIntro ? (
-        <p className="text-xs font-bold uppercase tracking-[0.06em] text-ink-3">{itemsIntro}</p>
+        <p className="text-xs font-bold uppercase tracking-eyebrow text-ink-3">{itemsIntro}</p>
       ) : null}
 
       <ul className="flex flex-1 flex-col gap-2.5">

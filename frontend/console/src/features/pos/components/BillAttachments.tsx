@@ -249,7 +249,7 @@ function AttachmentThumb({
           aria-label={t('bills.attach.title')}
         >
           <FileText className="size-6" aria-hidden="true" />
-          <span className="text-2xs font-bold tracking-wide">PDF</span>
+          <span className="text-2xs font-bold tracking-eyebrow">PDF</span>
         </button>
       )}
       <button

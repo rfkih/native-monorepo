@@ -29,7 +29,7 @@ export function SettlementSourceSettings({ session }: { session: CompanySession 
 
   return (
     <Card className="p-6">
-      <h2 className="text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
+      <h2 className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
         {t('platform.sourceConfig.heading')}
       </h2>
       <p className="mt-1.5 max-w-[62ch] text-sm text-ink-3">

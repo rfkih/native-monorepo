@@ -130,7 +130,7 @@ export function TaxReport() {
     <div className="flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-display text-ink">
             {t('tax.report.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('tax.report.subtitle')}</p>
@@ -244,10 +244,10 @@ export function TaxReport() {
         {filings.length === 0 ? (
           <EmptyState title={t('tax.history.empty')} hint={t('tax.history.emptyHint')} />
         ) : (
-          <Card className="overflow-x-auto rounded-[20px]">
+          <Card className="overflow-x-auto rounded-card">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
+                <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                   <th className="px-4 py-3">{t('tax.history.colPeriod')}</th>
                   <th className="px-4 py-3">{t('tax.history.colStatus')}</th>
                   <th className="px-4 py-3 text-right">{t('tax.report.outputVat')}</th>

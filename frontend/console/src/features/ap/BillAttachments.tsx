@@ -76,7 +76,7 @@ export function BillAttachments({
       {items.length === 0 ? (
         <p className="text-sm text-ink-3">{t('ap.detail.noAttachments')}</p>
       ) : (
-        <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+        <div className="overflow-hidden rounded-2xl border border-line bg-surface">
           {items.map((a) => (
             <div
               key={a.id}

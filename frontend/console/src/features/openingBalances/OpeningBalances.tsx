@@ -101,7 +101,7 @@ function OpeningBalancesInner({ company }: { company: CompanySession }) {
   return (
     <div className="mx-auto flex max-w-[820px] flex-col gap-[18px]">
       <div>
-        <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+        <h1 className="font-display text-2xl font-bold tracking-display text-ink">
           {t('openingBalances.title')}
         </h1>
         <p className="mt-1.5 text-sm text-ink-3">{t('openingBalances.subtitle')}</p>
@@ -454,7 +454,7 @@ function OpeningBalanceForm({
 
       {LINE_SECTIONS.map((section) => (
         <Card key={section.titleKey} className="p-6">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-eyebrow text-ink-3">
             {t(`openingBalances.form.${section.titleKey}` as Parameters<typeof t>[0])}
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -479,7 +479,7 @@ function OpeningBalanceForm({
       <Card className="p-6">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
+            <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
               {t('openingBalances.form.sectionAssets')}
             </h2>
             <p className="mt-1 text-xs text-ink-3">{t('openingBalances.form.sectionAssetsHint')}</p>

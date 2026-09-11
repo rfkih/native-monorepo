@@ -90,7 +90,7 @@ export function DailySummary({
   if (loading) {
     return (
       <div
-        className="fixed inset-0 z-[70] grid place-items-center bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[70] grid place-items-center bg-scrim backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label={t('register.summaryTitle')}
@@ -104,7 +104,7 @@ export function DailySummary({
   if (!resolvedId || summaryQuery.isError || !summary) {
     return (
       <div
-        className="fixed inset-0 z-[70] grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+        className="fixed inset-0 z-[70] grid place-items-center bg-scrim p-6 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label={t('register.summaryTitle')}

@@ -192,7 +192,7 @@ export function StocktakeHistoryLines({
       <div className="flex items-baseline gap-2">
         <span
           className={cn(
-            'tnum font-mono text-xl font-bold tracking-[-0.02em]',
+            'tnum font-mono text-xl font-bold tracking-display',
             shrinkTone(stocktake.shrinkageMinor),
           )}
         >

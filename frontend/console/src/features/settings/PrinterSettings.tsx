@@ -166,7 +166,7 @@ export function PrinterSettings() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-[-0.02em] text-ink">
+        <h1 className="font-display text-2xl font-extrabold tracking-display text-ink">
           {t('settings.printer.title')}
         </h1>
         <p className="mt-1.5 text-base text-ink-3">{t('settings.printer.subtitle')}</p>
@@ -243,7 +243,7 @@ export function PrinterSettings() {
         </Card>
       ) : (
         <Card className="p-5">
-          <div className="mb-3 text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
+          <div className="mb-3 text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
             {t('settings.printer.paperWidth')}
           </div>
           <div className="flex gap-2">
@@ -301,7 +301,7 @@ export function PrinterSettings() {
 
       {!printer.connected && nativeDevices !== null ? (
         <Card className="flex flex-col gap-3 p-5">
-          <div className="text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
+          <div className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
             {t('settings.printer.nativePickTitle')}
           </div>
           {nativeDevices.length === 0 ? (

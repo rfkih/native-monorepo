@@ -43,7 +43,7 @@ export function PayoutSection({
     )
   }
   if (query.isLoading) {
-    return <ListSkeleton rows={3} className="rounded-[20px]" />
+    return <ListSkeleton rows={3} className="rounded-card" />
   }
   if (sources.length === 0) {
     return (
@@ -54,7 +54,7 @@ export function PayoutSection({
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-6">
-        <h2 className="text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
+        <h2 className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
           {t('platform.payout.owedHeading')}
         </h2>
         <div className="mt-3 flex flex-col">
@@ -185,7 +185,7 @@ function PayoutForm({
         ) : null}
 
         <div className="flex flex-col">
-          <div className="flex items-baseline gap-3 pb-1 text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
+          <div className="flex items-baseline gap-3 pb-1 text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
             <span className="flex-1">{t('platform.payout.settledHeading')}</span>
             <span>{t('platform.payout.grossHeading')}</span>
           </div>

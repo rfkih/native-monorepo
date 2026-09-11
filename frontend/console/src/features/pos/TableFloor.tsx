@@ -121,7 +121,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-end bg-scrim backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('bills.floorTitle')}
@@ -173,7 +173,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
 
           {/* ── Dine-in floor grid ─────────────────────────────────────────── */}
           <section aria-label={t('bills.dineInSection')}>
-            <p className="mb-3 text-2xs font-bold uppercase tracking-[0.05em] text-ink-3">
+            <p className="mb-3 text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
               {t('bills.dineInSection')}
             </p>
 
@@ -248,7 +248,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
           {/* ── Takeaway / Counter section ────────────────────────────────── */}
           <section aria-label={t('bills.takeawaySection')}>
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-2xs font-bold uppercase tracking-[0.05em] text-ink-3">
+              <p className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                 {t('bills.takeawaySection')}
               </p>
               {takeawayBills.length > 0 ? (

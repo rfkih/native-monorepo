@@ -147,7 +147,7 @@ function DialogOverlay({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       onClick={(e) => {
@@ -157,7 +157,7 @@ function DialogOverlay({
         if (e.key === 'Escape') onClose()
       }}
     >
-      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]">{children}</Card>
+      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet">{children}</Card>
     </div>
   )
 }
@@ -1960,7 +1960,7 @@ function ModifierGroupsPanel({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={t('menu.options.panelLabel', { name: item.name })}
@@ -2444,7 +2444,7 @@ function CategorySection({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1 text-2xs font-bold uppercase tracking-[0.05em] text-ink-3 transition-colors hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1 text-2xs font-bold uppercase tracking-eyebrow text-ink-3 transition-colors hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         aria-expanded={expanded}
       >
         {expanded ? (
@@ -2459,7 +2459,7 @@ function CategorySection({
       </button>
 
       {expanded ? (
-        <Card className="rounded-[20px] p-2.5">
+        <Card className="rounded-card p-2.5">
           {items.map((item) => (
             <ItemRow
               key={item.id}
@@ -2531,7 +2531,7 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
         </BackButton>
 
         <div className="min-w-0 flex-1">
-          <div className="font-display text-lg font-bold leading-tight tracking-[-0.01em] text-ink">
+          <div className="font-display text-lg font-bold leading-tight tracking-display text-ink">
             {t('menu.title')}
           </div>
           <div className="truncate text-xs text-ink-3">{session.name}</div>

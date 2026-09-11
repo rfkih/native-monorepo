@@ -613,7 +613,7 @@ export function StocktakeSheet({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+        className="fixed inset-0 z-50 flex items-end justify-center bg-scrim p-0 backdrop-blur-sm sm:items-center sm:p-4"
         role="dialog"
         aria-modal="true"
         aria-label={t('stocktake.title')}
@@ -748,7 +748,7 @@ function DraftFooterSummary({
         type="button"
         onClick={onShowInvalid}
         data-testid="stocktake-show-invalid"
-        className="mb-2.5 flex min-h-11 w-full items-center justify-between gap-3 rounded-[13px] bg-tint-loss px-3 py-2 text-left text-xs font-semibold leading-snug text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loss"
+        className="mb-2.5 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-tint-loss px-3 py-2 text-left text-xs font-semibold leading-snug text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loss"
       >
         <span>
           {t('stocktake.invalidLines', {
@@ -1233,7 +1233,7 @@ function CountSheet({
                   onKeyDown={(e) => onKeyDown(e, save)}
                   onPaste={onPaste}
                   className={cn(
-                    'tnum w-full min-w-0 flex-1 bg-transparent text-right font-mono text-2xl font-bold leading-none tracking-tight caret-transparent placeholder:text-ink-3/40 focus:outline-none',
+                    'tnum w-full min-w-0 flex-1 bg-transparent text-right font-mono text-2xl font-bold leading-none tracking-display caret-transparent placeholder:text-ink-3/40 focus:outline-none',
                     canSave ? 'text-ink' : 'text-loss',
                   )}
                 />
@@ -1556,9 +1556,9 @@ function StocktakeSummary({
           </div>
 
           <div
-            className={cn('mt-3.5 rounded-[18px] px-4 py-[18px] text-center', TONE_BANNER[tone])}
+            className={cn('mt-3.5 rounded-2xl px-4 py-[18px] text-center', TONE_BANNER[tone])}
           >
-            <div className="text-xs font-bold uppercase tracking-[.06em]">
+            <div className="text-xs font-bold uppercase tracking-eyebrow">
               {tone === 'balanced'
                 ? t('stocktake.resultBalanced')
                 : tone === 'loss'
@@ -1568,7 +1568,7 @@ function StocktakeSummary({
             {/* currency null = no counted line carried a cost — nothing was posted, so showing a
                 zero money figure would imply a valuation that never happened. */}
             {result.currency != null ? (
-              <div className="tnum mt-2 font-mono text-2xl font-bold leading-none tracking-tight">
+              <div className="tnum mt-2 font-mono text-2xl font-bold leading-none tracking-display">
                 {formatMoney(Math.abs(result.shrinkageMinor), result.currency, locale)}
               </div>
             ) : (

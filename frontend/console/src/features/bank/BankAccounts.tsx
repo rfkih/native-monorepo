@@ -40,7 +40,7 @@ export function BankAccounts() {
     <div className="flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-display text-ink">
             {t('bank.accounts.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('bank.accounts.subtitle')}</p>
@@ -61,11 +61,11 @@ export function BankAccounts() {
       ) : accounts.length === 0 ? (
         <EmptyState title={t('bank.accounts.empty')} hint={t('bank.accounts.emptyHint')} />
       ) : (
-        <Card className="overflow-hidden rounded-[20px]">
+        <Card className="overflow-hidden rounded-card">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
+                <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                   <th className="px-4 py-3">{t('bank.accounts.colName')}</th>
                   <th className="px-4 py-3">{t('bank.accounts.colBank')}</th>
                   <th className="px-4 py-3">{t('bank.accounts.colAccountNumber')}</th>

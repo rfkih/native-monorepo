@@ -97,7 +97,7 @@ export function IncomeStatement() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <EntityScope name={company.name} scope={t('statements.scopeAllUnits')} />
-          <h1 className="font-display text-2xl font-extrabold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-extrabold tracking-display text-ink">
             {t('statements.incomeTitle')}
           </h1>
           <p className="mt-1.5 text-base text-ink-3">{t('statements.incomeSubtitle')}</p>
@@ -147,10 +147,10 @@ export function IncomeStatement() {
       ) : query.isLoading && !data ? (
         <>
           <StatCardsSkeleton cards={3} />
-          <ListSkeleton rows={5} className="rounded-[20px]" />
+          <ListSkeleton rows={5} className="rounded-card" />
           <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <ListSkeleton rows={5} className="rounded-[20px]" />
-            <ListSkeleton rows={5} className="rounded-[20px]" />
+            <ListSkeleton rows={5} className="rounded-card" />
+            <ListSkeleton rows={5} className="rounded-card" />
           </div>
         </>
       ) : (
@@ -196,7 +196,7 @@ export function IncomeStatement() {
           {topExpenses.length > 0 && totalExpense > 0 ? (
             <Card className="p-6">
               <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+                <h2 className="font-display text-lg font-semibold tracking-display text-ink">
                   {t('statements.topExpenses')}
                 </h2>
                 <span className="text-xs text-ink-3">{t('statements.topExpensesNote')}</span>

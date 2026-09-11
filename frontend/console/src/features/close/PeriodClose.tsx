@@ -54,7 +54,7 @@ function ConfirmCloseDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"
       onClick={(e) => {
@@ -64,7 +64,7 @@ function ConfirmCloseDialog({
         if (e.key === 'Escape') onClose()
       }}
     >
-      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]">
+      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet">
         <div className="space-y-4">
           <h2 className="font-display text-lg font-semibold text-ink">
             {t('close.confirmDialog.title')}
@@ -124,7 +124,7 @@ export function PeriodClose() {
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-display text-ink">
             {t('close.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('close.subtitle')}</p>
@@ -132,7 +132,7 @@ export function PeriodClose() {
       </div>
 
       {/* Open period banner */}
-      <Card className="bg-gradient-to-br from-surface to-emerald-tint border-emerald-line flex flex-wrap items-center justify-between gap-4 rounded-[20px] border p-7 max-sm:p-5">
+      <Card className="bg-gradient-to-br from-surface to-emerald-tint border-emerald-line flex flex-wrap items-center justify-between gap-4 rounded-card border p-7 max-sm:p-5">
         <div className="space-y-2">
           <span className="inline-flex rounded-full bg-emerald px-2.5 py-1 text-2xs font-bold text-on-emerald">
             {t('close.openPeriod')}
@@ -144,7 +144,7 @@ export function PeriodClose() {
         </div>
         <Button
           type="button"
-          className="max-sm:h-[52px] max-sm:w-full max-sm:rounded-[15px]"
+          className="max-sm:h-[52px] max-sm:w-full max-sm:rounded-2xl"
           onClick={() => setShowConfirm(true)}
         >
           {t('close.closePeriod')}
@@ -221,16 +221,16 @@ export function PeriodClose() {
           <div className="overflow-x-auto">
             {/* Header */}
             <div className="grid grid-cols-[2fr_1.5fr_1.5fr_1.5fr] border-b border-line bg-paper/60 px-5 py-3">
-              <span className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
+              <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                 {t('close.period')}
               </span>
-              <span className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
+              <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                 {t('close.baseCurrency')}
               </span>
-              <span className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
+              <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                 {t('close.reconciled')}
               </span>
-              <span className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
+              <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                 {t('close.firstClose')}
               </span>
             </div>

@@ -123,7 +123,7 @@ export function DashboardPhoneMonthly() {
 
       {/* Header: company + scope, then the period stepper. */}
       <div>
-        <h1 className="font-display text-xl font-bold leading-tight tracking-[-0.01em] text-ink">
+        <h1 className="font-display text-xl font-bold leading-tight tracking-display text-ink">
           {company.name}
         </h1>
         <p className="mt-0.5 text-xs text-ink-3">{t('dashboard.scopeAllUnits')}</p>
@@ -154,8 +154,8 @@ export function DashboardPhoneMonthly() {
       ) : (
         <>
           {/* Hero — monthly net on the inverted card. */}
-          <div className="rounded-[22px] bg-ink-900 p-5 shadow-lg">
-            <div className="font-mono text-2xs font-semibold uppercase tracking-[0.07em] text-paper/55">
+          <div className="rounded-card bg-ink-900 p-5 shadow-lg">
+            <div className="font-mono text-2xs font-semibold uppercase tracking-eyebrow text-paper/55">
               {profit ? t('dashboard.netProfit') : t('dashboard.netLoss')} ·{' '}
               {formatPeriod(period, locale)}
             </div>
@@ -165,7 +165,7 @@ export function DashboardPhoneMonthly() {
             {query.isLoading ? (
               <div className="mt-2 h-9 w-52 max-w-full animate-pulse rounded-lg bg-paper/20" />
             ) : (
-              <div className="tnum mt-2 font-display text-3xl font-extrabold leading-none tracking-[-0.035em] text-paper">
+              <div className="tnum mt-2 font-display text-3xl font-extrabold leading-none tracking-display text-paper">
                 {formatMoney(figures.net, company.baseCurrency, locale)}
               </div>
             )}
@@ -269,7 +269,7 @@ export function DashboardPhoneMonthly() {
                     key={tile.key}
                     to={tile.to}
                     viewTransition
-                    className="flex min-h-[88px] flex-col justify-between rounded-[18px] border border-line bg-surface p-3.5 transition-colors hover:border-emerald-line hover:bg-emerald-tint"
+                    className="flex min-h-[88px] flex-col justify-between rounded-2xl border border-line bg-surface p-3.5 transition-colors hover:border-emerald-line hover:bg-emerald-tint"
                   >
                     <TileIcon className="size-[21px] text-emerald-2" strokeWidth={1.8} aria-hidden />
                     <span className="text-sm font-bold leading-tight text-ink">{tile.label}</span>

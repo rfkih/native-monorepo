@@ -51,7 +51,7 @@ export function PayslipsSection({
 
   return (
     <section>
-      <h2 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+      <h2 className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
         {t('me.payslips.title')}
       </h2>
       {payslips.isLoading ? (
@@ -69,7 +69,7 @@ export function PayslipsSection({
       ) : (
         <>
           <PayslipYtdCard ytd={ytd} locale={locale} />
-          <Card className="mt-2 rounded-[20px] p-2.5">
+          <Card className="mt-2 rounded-card p-2.5">
             {(payslips.data ?? []).map((slip) => (
               <PayslipRow
                 key={slip.runId}
@@ -100,7 +100,7 @@ function PayslipYtdCard({ ytd, locale }: { ytd: MyPayslipsYtdSummary; locale: st
   const fallbackCurrency = ytd.currency ?? company?.baseCurrency ?? 'IDR'
   return (
     <Card className="mt-2 p-4">
-      <p className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+      <p className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">
         {t('me.payslips.ytd.title', { year: ytd.year })}
       </p>
       {ytd.runCount === 0 ? (
@@ -230,7 +230,7 @@ function PayslipRow({
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="text-2xs uppercase tracking-wider text-ink-3">
+                    <tr className="text-2xs uppercase tracking-eyebrowr text-ink-3">
                       <th className="py-1.5 pr-4 font-semibold">{t('me.payslips.component')}</th>
                       <th className="py-1.5 pr-4 font-semibold">{t('me.payslips.kind')}</th>
                       <th className="py-1.5 text-right font-semibold">{t('me.payslips.amount')}</th>

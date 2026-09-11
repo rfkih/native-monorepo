@@ -114,7 +114,7 @@ export function MyExpenses() {
       <main className="mx-auto w-full max-w-[900px] px-5 py-8 max-sm:px-4 max-sm:py-4 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3 max-sm:hidden">
           <div>
-            <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+            <h1 className="font-display text-2xl font-bold tracking-display text-ink">
               {t('me.expenses.title')}
             </h1>
             <p className="text-sm text-ink-3">{t('me.expenses.subtitle')}</p>
@@ -146,7 +146,7 @@ export function MyExpenses() {
             <EmptyState title={t('me.expenses.empty.title')} hint={t('me.expenses.empty.hint')} />
           ) : (
             <>
-              <Card className="rounded-[20px] p-2.5">
+              <Card className="rounded-card p-2.5">
                 {page0.content.map((c) => (
                   <ClaimRow key={c.id} claim={c} locale={locale} onOpen={() => setDetailId(c.id)} />
                 ))}
@@ -377,7 +377,7 @@ function ClaimDetailSheet({
 
               {claim.note ? (
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+                  <div className="text-xs font-semibold uppercase tracking-eyebrowr text-ink-3">
                     {t('me.expenses.detail.note')}
                   </div>
                   <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-2">{claim.note}</p>
@@ -386,7 +386,7 @@ function ClaimDetailSheet({
 
               {claim.decisionComment ? (
                 <div className="rounded-xl bg-tint-info px-3.5 py-3 text-sm text-ink-2">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-info">
+                  <div className="text-2xs font-semibold uppercase tracking-eyebrowr text-info">
                     {t('me.expenses.detail.decisionComment')}
                   </div>
                   <p className="mt-0.5">{claim.decisionComment}</p>
@@ -394,7 +394,7 @@ function ClaimDetailSheet({
               ) : null}
 
               <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-3">
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrowr text-ink-3">
                   {t('me.expenses.detail.receiptTitle')}
                 </div>
                 {receipt.status === 'loading' ? (

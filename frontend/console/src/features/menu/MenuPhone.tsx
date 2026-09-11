@@ -95,10 +95,10 @@ const GLYPHS: Record<string, LucideIcon> = {
   'tpl:specials': Star,
 }
 
-const FIELD_LABEL = 'block text-2xs font-semibold uppercase tracking-[0.04em] text-ink-3'
-const FIELD_CARD = 'block rounded-[13px] border border-line bg-surface px-3 py-2.5'
+const FIELD_LABEL = 'block text-2xs font-semibold uppercase tracking-eyebrow text-ink-3'
+const FIELD_CARD = 'block rounded-xl border border-line bg-surface px-3 py-2.5'
 const PANEL_BUTTON =
-  'h-11 flex-1 rounded-[13px] border border-line bg-surface text-sm font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50'
+  'h-11 flex-1 rounded-xl border border-line bg-surface text-sm font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50'
 const ICON_BUTTON =
   'grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald'
 
@@ -191,7 +191,7 @@ export function MenuPhone({ session }: { session: CompanySession }) {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="mr-1 flex h-9 shrink-0 items-center gap-1.5 rounded-[11px] bg-emerald px-3 text-xs font-bold text-on-emerald shadow-lift transition-transform active:scale-[0.96] motion-reduce:active:scale-100"
+            className="mr-1 flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-emerald px-3 text-xs font-bold text-on-emerald shadow-lift transition-transform active:scale-[0.96] motion-reduce:active:scale-100"
           >
             <Plus className="size-[15px]" strokeWidth={2.2} aria-hidden="true" />
             {t('menu.phone.addItem')}
@@ -255,7 +255,7 @@ export function MenuPhone({ session }: { session: CompanySession }) {
         {menuQuery.isLoading ? (
           <div className="mt-4 flex flex-col gap-2">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-[70px] animate-pulse rounded-[18px] bg-ink-100" />
+              <div key={i} className="h-[70px] animate-pulse rounded-2xl bg-ink-100" />
             ))}
           </div>
         ) : menuQuery.isError ? (
@@ -273,7 +273,7 @@ export function MenuPhone({ session }: { session: CompanySession }) {
                   })
                 : t('menu.phone.summaryNoMargin', { active: sum.active, soldOut: sum.soldOut })}
             </p>
-            <div className="mt-3 overflow-hidden rounded-[18px] border border-line bg-surface">
+            <div className="mt-3 overflow-hidden rounded-2xl border border-line bg-surface">
               {visible.map((item) => (
                 <ItemRow
                   key={item.id}
@@ -386,12 +386,12 @@ function ItemRow({
           open ? 'bg-paper' : 'bg-surface',
         )}
       >
-        <span className="grid size-[42px] shrink-0 place-items-center rounded-[13px] bg-hover text-ink-400">
+        <span className="grid size-[42px] shrink-0 place-items-center rounded-xl bg-hover text-ink-400">
           <Glyph className="size-[21px]" strokeWidth={1.8} aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-[7px]">
-            <span className="min-w-0 truncate text-sm font-semibold leading-snug tracking-[-0.01em] text-ink">
+            <span className="min-w-0 truncate text-sm font-semibold leading-snug tracking-display text-ink">
               {item.name}
             </span>
             {!item.available ? (
@@ -580,7 +580,7 @@ function ItemPanel({
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
             }}
             placeholder={t('menu.createItem.namePlaceholder')}
-            className="mt-1.5 w-full bg-transparent text-base font-semibold leading-tight tracking-[-0.01em] text-ink placeholder:text-ink-400 focus:outline-none"
+            className="mt-1.5 w-full bg-transparent text-base font-semibold leading-tight tracking-display text-ink placeholder:text-ink-400 focus:outline-none"
           />
         </label>
       </div>
@@ -620,7 +620,7 @@ function ItemPanel({
         </div>
       </div>
 
-      <div className="mt-[9px] flex items-center gap-3 rounded-[13px] border border-line bg-surface p-3">
+      <div className="mt-[9px] flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold leading-snug text-ink">
             {t('menu.phone.availableTitle')}
@@ -660,7 +660,7 @@ function ItemPanel({
           {total.minor != null ? formatMoney(total.minor, item.currency, locale) : ''}
         </span>
       </div>
-      <div className="mt-[7px] overflow-hidden rounded-[13px] border border-line bg-surface">
+      <div className="mt-[7px] overflow-hidden rounded-xl border border-line bg-surface">
         {baseLines.map((line) => {
           const cost = lineCostMinor(line)
           const ing = ingredientById.get(line.ingredientId)
@@ -927,7 +927,7 @@ function RecipeQtySheet({
                 press(key)
               }}
               style={{ width: `${Math.max(1, raw.length)}ch` }}
-              className="tnum min-w-[1ch] bg-transparent text-right font-mono text-5xl font-bold leading-none tracking-[-0.03em] text-ink caret-transparent placeholder:text-ink-400 focus:outline-none"
+              className="tnum min-w-[1ch] bg-transparent text-right font-mono text-5xl font-bold leading-none tracking-display text-ink caret-transparent placeholder:text-ink-400 focus:outline-none"
             />
             <span className="text-base font-semibold text-ink-3">{unit}</span>
           </div>
@@ -1154,7 +1154,7 @@ function NewItemSheet({
                 maxLength={64}
                 onChange={(e) => setCategory(e.target.value)}
                 placeholder={t('menu.phone.categoryCustomPlaceholder')}
-                className="mt-2 h-11 w-full rounded-[13px] border border-line bg-surface px-3 text-sm font-medium text-ink placeholder:text-ink-400 focus:outline-none focus-visible:outline-2 focus-visible:outline-emerald"
+                className="mt-2 h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm font-medium text-ink placeholder:text-ink-400 focus:outline-none focus-visible:outline-2 focus-visible:outline-emerald"
               />
             ) : null}
           </div>

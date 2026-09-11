@@ -58,8 +58,8 @@ export function SummaryCard({
   const body = (
     <>
       <div className="flex items-center gap-2">
-        <span className={`size-2.5 rounded-[3px] ${chipClass}`} aria-hidden />
-        <span className="text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
+        <span className={`size-2.5 rounded-sm ${chipClass}`} aria-hidden />
+        <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
           {label}
         </span>
       </div>
@@ -237,7 +237,7 @@ export function LineSection({
     <div>
       {/* Print pagination: the heading keeps its first rows, each row stays whole, and the
           footer total never strands alone on a fresh page (UAT 2026-08-06). */}
-      <div className="text-2xs font-bold uppercase tracking-[0.08em] text-ink-3 print:break-after-avoid">
+      <div className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3 print:break-after-avoid">
         {heading}
       </div>
       <div className="mt-2.5">
@@ -304,7 +304,7 @@ export function EquationRow({
       </span>
       <span
         className={cn(
-          'min-w-0 flex-1 truncate text-2xs font-bold uppercase tracking-[0.08em]',
+          'min-w-0 flex-1 truncate text-2xs font-bold uppercase tracking-eyebrow',
           tone === 'warning' ? 'text-amber-2' : answer ? 'text-emerald-2' : 'text-ink-3',
         )}
       >

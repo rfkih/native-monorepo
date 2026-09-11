@@ -162,7 +162,7 @@ export function BillDock({
           type="button"
           aria-label={t('posShell.dock.collapse')}
           onClick={() => onExpandedChange(false)}
-          className="motion-safe:animate-in motion-safe:fade-in-0 fixed inset-0 z-[29] cursor-default bg-ink-900/40"
+          className="scrim-in fixed inset-0 z-[29] cursor-default bg-scrim"
         />
       ) : null}
 
@@ -177,7 +177,7 @@ export function BillDock({
           // deck shipped at z-[45], which is above z-40 and below z-50 — so it covered the bottom
           // of the Charge modal (its keypad and Finish button) and nothing else, which is exactly
           // how the bug presented. The scrim rides one below the deck, not at the modal tier.
-          'fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-[22px]',
+          'fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-sheet',
           'border-t border-line bg-surface shadow-[0_-14px_34px_rgba(15,23,42,.16)]',
           'pb-[var(--safe-area-inset-bottom,0px)] motion-safe:transition-[height] motion-safe:duration-[260ms]',
           'motion-safe:ease-[cubic-bezier(.16,1,.3,1)]',
@@ -286,7 +286,7 @@ export function BillDock({
                     >
                       <span
                         className={cn(
-                          'grid size-[22px] place-items-center rounded-[7px] border-2 transition-colors',
+                          'grid size-[22px] place-items-center rounded-md border-2 transition-colors',
                           l.selected ? 'border-emerald bg-emerald' : 'border-ink-300',
                         )}
                       >
@@ -404,7 +404,7 @@ export function BillDock({
             <span
               aria-busy={totalPending}
               className={cn(
-                'tnum text-2xl font-extrabold leading-none tracking-[-.035em] text-ink transition-opacity',
+                'tnum text-2xl font-extrabold leading-none tracking-display text-ink transition-opacity',
                 totalPending && 'animate-pulse opacity-50',
               )}
             >

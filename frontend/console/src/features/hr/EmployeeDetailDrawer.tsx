@@ -255,7 +255,7 @@ export function EmployeeDetailDrawer({
           onClick={onEdit}
           aria-label={t('hr.list.actionEdit')}
           title={t('hr.list.actionEdit')}
-          className="grid size-9 shrink-0 place-items-center rounded-[10px] text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+          className="grid size-9 shrink-0 place-items-center rounded-xl text-ink-3 transition-colors hover:bg-hover hover:text-ink"
         >
           <Pencil className="size-4" />
         </button>
@@ -263,7 +263,7 @@ export function EmployeeDetailDrawer({
           type="button"
           onClick={onClose}
           aria-label={t('common.close')}
-          className="grid size-9 shrink-0 place-items-center rounded-[10px] text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+          className="grid size-9 shrink-0 place-items-center rounded-xl text-ink-3 transition-colors hover:bg-hover hover:text-ink"
         >
           <X className="size-[18px]" />
         </button>
@@ -298,7 +298,7 @@ export function EmployeeDetailDrawer({
                 <button
                   type="button"
                   onClick={() => onEndAssignment(row)}
-                  className="h-[30px] shrink-0 rounded-[9px] border border-line px-2.5 text-xs font-semibold text-ink-3 transition-colors hover:border-loss/40 hover:text-loss"
+                  className="h-[30px] shrink-0 rounded-lg border border-line px-2.5 text-xs font-semibold text-ink-3 transition-colors hover:border-loss/40 hover:text-loss"
                 >
                   {t('hr.detail.endAssignment')}
                 </button>
@@ -309,7 +309,7 @@ export function EmployeeDetailDrawer({
             <button
               type="button"
               onClick={onAssign}
-              className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-xs font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
+              className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-line-strong text-xs font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
             >
               <Plus className="size-3.5" />
               {t('hr.detail.assignAnother')}
@@ -319,7 +319,7 @@ export function EmployeeDetailDrawer({
 
         {/* Compensation — masked by design (salary PII): state + action only, never amounts. */}
         <SectionHeading className="mt-6">{t('hr.detail.compensation')}</SectionHeading>
-        <div className="mt-2 rounded-[14px] border border-line bg-paper p-4">
+        <div className="mt-2 rounded-2xl border border-line bg-paper p-4">
           <div className="flex items-center justify-between gap-3">
             {employee.hasCompensation ? (
               <Badge tone="emerald">{t('hr.list.compSet')}</Badge>
@@ -340,7 +340,7 @@ export function EmployeeDetailDrawer({
 
         {/* Login card */}
         <SectionHeading className="mt-6">{t('hr.detail.loginTitle')}</SectionHeading>
-        <div className="mt-2 rounded-[14px] border border-line p-4">
+        <div className="mt-2 rounded-2xl border border-line p-4">
           {!hasLogin ? (
             <div className="space-y-3">
               <p className="text-sm text-ink-3">
@@ -431,7 +431,7 @@ export function EmployeeDetailDrawer({
             above is FREE TEXT and grants nothing; this shows the login's REAL Keycloak access
             role(s) (the Team page) and, on a mismatch, offers a 1-click additive grant. */}
         <SectionHeading className="mt-6">{t('hr.appAccess.title')}</SectionHeading>
-        <div className="mt-2 rounded-[14px] border border-line p-4">
+        <div className="mt-2 rounded-2xl border border-line p-4">
           {!hasLogin ? (
             <p className="text-sm text-ink-3">{t('hr.appAccess.noLogin')}</p>
           ) : !canManageLogins ? (
@@ -492,7 +492,7 @@ export function EmployeeDetailDrawer({
         {/* Operator PIN (ADR 0049 P1) — the till PIN, separate from the console login above. Never
             revealed here (write-only, rule 6): the action always opens a fresh set/reset dialog. */}
         <SectionHeading className="mt-6">{t('hr.detail.operatorPinTitle')}</SectionHeading>
-        <div className="mt-2 rounded-[14px] border border-line p-4">
+        <div className="mt-2 rounded-2xl border border-line p-4">
           <p className="text-sm text-ink-3">{t('hr.detail.operatorPinHint')}</p>
           <Button type="button" variant="outline" className="mt-3" onClick={onSetOperatorPin}>
             <Lock className="size-4" />
@@ -502,14 +502,14 @@ export function EmployeeDetailDrawer({
 
         {/* Profile (PII masked) */}
         <SectionHeading className="mt-6">{t('hr.detail.profile')}</SectionHeading>
-        <div className="mt-2 grid grid-cols-2 gap-3 rounded-[14px] border border-line p-4 text-sm">
+        <div className="mt-2 grid grid-cols-2 gap-3 rounded-2xl border border-line p-4 text-sm">
           <Detail label={t('hr.detail.nik')} value={emp?.maskedNik ?? '—'} />
           <Detail label={t('hr.detail.bank')} value={emp?.maskedBankAccount ?? '—'} />
           <Detail label={t('hr.form.ptkpStatus')} value={employee.rows[0]?.ptkpStatus ?? '—'} />
         </div>
 
         {/* hire_date (Track P Phase P8, ADR 0035) — NOT PII, feeds THR proration. */}
-        <section className="mt-3 rounded-[14px] border border-line p-4">
+        <section className="mt-3 rounded-2xl border border-line p-4">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-semibold text-ink">{t('hr.detail.hireDate')}</h3>
@@ -573,7 +573,7 @@ export function EmployeeDetailDrawer({
 
         {/* npwp (Track P Phase P1/P10, ADR 0031) — PII (rule 6): masked once on file; missing NPWP
             drives the payroll engine's ×120% no-NPWP surcharge, so this nudges completion loudly. */}
-        <section className="mt-3 rounded-[14px] border border-line p-4">
+        <section className="mt-3 rounded-2xl border border-line p-4">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-semibold text-ink">{t('hr.detail.npwp')}</h3>
@@ -670,7 +670,7 @@ function SectionHeading({ children, className }: { children: React.ReactNode; cl
   return (
     <div
       className={cn(
-        'text-2xs font-bold uppercase tracking-[0.08em] text-ink-3',
+        'text-2xs font-bold uppercase tracking-eyebrow text-ink-3',
         className,
       )}
     >

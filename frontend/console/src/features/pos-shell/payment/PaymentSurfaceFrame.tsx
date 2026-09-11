@@ -34,7 +34,7 @@ export function PaymentSurfaceFrame({
   useScrollLock()
   return (
     <div
-      className={cn('fixed inset-0 grid place-items-center bg-black/40 p-4 backdrop-blur-sm', zIndexClass)}
+      className={cn('fixed inset-0 grid place-items-center bg-scrim p-4 backdrop-blur-sm', zIndexClass)}
       role="dialog"
       aria-modal="true"
       aria-label={t('pos.payment.title')}

@@ -82,7 +82,7 @@ const ROW_CLASS =
 
 function MicroHeading({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-3 pb-1.5 pt-4 font-mono text-2xs font-semibold uppercase tracking-[0.09em] text-ink-3">
+    <div className="px-3 pb-1.5 pt-4 font-mono text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
       {children}
     </div>
   )
@@ -186,7 +186,7 @@ export function MorePage({ home }: { home: string }) {
     // the tile grid back to the phone gutter Shell's `px-5` would otherwise double.
     <div className="-mx-1">
       <div className="pb-2">
-        <h1 className="px-1 pb-3 font-display text-2xl font-extrabold tracking-[-0.035em] text-ink">
+        <h1 className="px-1 pb-3 font-display text-2xl font-extrabold tracking-display text-ink">
           {t('mobile.more.title')}
         </h1>
 

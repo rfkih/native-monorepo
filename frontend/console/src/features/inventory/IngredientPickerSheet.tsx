@@ -79,7 +79,7 @@ export function IngredientPickerSheet({
                 {t('inventoryPicker.sheet.empty')}
               </p>
             ) : (
-              <div className="overflow-hidden rounded-[13px] border border-line bg-surface">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface">
                 {shown.map((ing) => (
                   <button
                     key={ing.id}

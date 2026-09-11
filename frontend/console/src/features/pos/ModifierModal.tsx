@@ -136,7 +136,7 @@ export function ModifierModal({ item, locale, onConfirm, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-scrim p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('pos.modifiers.modalLabel', { name: item.name })}

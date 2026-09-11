@@ -69,7 +69,7 @@ export function CashFlow() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <EntityScope name={company.name} scope={t('statements.scopeAllUnits')} />
-          <h1 className="font-display text-2xl font-extrabold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-extrabold tracking-display text-ink">
             {t('statements.cashFlow.title')}
           </h1>
           <p className="mt-1.5 text-base text-ink-3">{t('statements.cashFlow.subtitle')}</p>
@@ -116,10 +116,10 @@ export function CashFlow() {
         <>
           <StatCardsSkeleton cards={4} />
           <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <ListSkeleton rows={5} className="rounded-[20px]" />
+            <ListSkeleton rows={5} className="rounded-card" />
             <div className="flex flex-col gap-5">
-              <ListSkeleton rows={3} className="rounded-[20px]" />
-              <ListSkeleton rows={3} className="rounded-[20px]" />
+              <ListSkeleton rows={3} className="rounded-card" />
+              <ListSkeleton rows={3} className="rounded-card" />
             </div>
           </div>
         </>

@@ -151,7 +151,7 @@ export function Dashboard() {
       {/* Header — the ACTIVE business by name, then the scope of every figure below. */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-display text-ink">
             {company.name}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('dashboard.scopeAllUnits')}</p>
@@ -224,7 +224,7 @@ export function Dashboard() {
       ) : effectiveView === 'overview' ? (
         <div className="flex flex-col gap-[18px]">
           {/* Hero: net + sparkline */}
-          <Card className="grid items-center gap-8 rounded-[28px] p-7 lg:grid-cols-2 lg:p-9">
+          <Card className="grid items-center gap-8 rounded-3xl p-7 lg:grid-cols-2 lg:p-9">
             <div>
               <div className="inline-flex items-center gap-2 text-xs font-medium text-ink-3">
                 <span className="size-[7px] rounded-full bg-profit [animation:pulse-dot_2s_infinite]" />
@@ -237,7 +237,7 @@ export function Dashboard() {
               ) : (
                 <div
                   className={cn(
-                    'tnum my-4 font-mono text-[clamp(2.2rem,5.4vw,3rem)] font-bold leading-none tracking-[-0.03em]',
+                    'tnum my-4 font-mono text-[clamp(2.2rem,5.4vw,3rem)] font-bold leading-none tracking-display',
                     profit ? 'text-profit-ink' : 'text-loss',
                   )}
                 >
@@ -381,7 +381,7 @@ export function Dashboard() {
 
               {/* Ready to close — flat cyan tint, one leading button (no gradient, no pill). */}
               <Card className="border-emerald-line bg-emerald-tint p-6 shadow-none">
-                <div className="text-2xs font-bold uppercase tracking-[0.08em] text-emerald-2">
+                <div className="text-2xs font-bold uppercase tracking-eyebrow text-emerald-2">
                   {t('dashboard.readyToClose')}
                 </div>
                 <div className="mt-2 font-display text-lg font-bold text-ink">
@@ -690,12 +690,12 @@ function Kpi({
     // step — technically neutral, but it stopped saying anything. Ink is the emphasis colour now,
     // so the ring uses it, the same way the hero figure does.
     <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')}>
-      <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-eyebrowr text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-2 h-7 w-28 animate-pulse rounded bg-ink-100" />
       ) : (
         // A summary figure, not a column — display face at 800 (ADR 0077).
-        <div className={cn('tnum mt-2 font-display text-2xl font-extrabold tracking-[-0.035em]', valueClass ?? 'text-ink')}>
+        <div className={cn('tnum mt-2 font-display text-2xl font-extrabold tracking-display', valueClass ?? 'text-ink')}>
           {value}
         </div>
       )}
@@ -744,7 +744,7 @@ function AllocationBar({
         {segments.map((s) => (
           <div key={s.label} className="flex items-center justify-between py-1.5">
             <span className="inline-flex items-center gap-2 text-sm text-ink-2">
-              <span className="size-2.5 rounded-[3px]" style={{ backgroundColor: s.color }} aria-hidden />
+              <span className="size-2.5 rounded-sm" style={{ backgroundColor: s.color }} aria-hidden />
               {s.label}
             </span>
             <span className="tnum font-mono text-sm font-semibold text-ink-3">

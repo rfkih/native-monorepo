@@ -70,7 +70,7 @@ export function ClosingHistorySheet({
   if (!canView) {
     return (
       <div
-        className="fixed inset-0 z-[70] grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+        className="fixed inset-0 z-[70] grid place-items-center bg-scrim p-6 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label={t('pos.closingHistory.title')}

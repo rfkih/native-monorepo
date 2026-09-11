@@ -91,7 +91,7 @@ const StandaloneStocktake = lazy(() =>
 const OUTLET_ZONE = 'Asia/Jakarta'
 
 const SECTION_LABEL = 'pl-1 text-xs font-semibold text-ink-3'
-const LIST_CARD = 'mt-2 overflow-hidden rounded-[18px] border border-line bg-surface'
+const LIST_CARD = 'mt-2 overflow-hidden rounded-2xl border border-line bg-surface'
 const TILE_CLASS =
   'flex min-h-[60px] items-center gap-[11px] rounded-2xl border border-line bg-surface px-3.5 py-3 text-left text-sm font-semibold leading-tight text-ink transition-[background-color,border-color,transform] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.98] motion-reduce:active:scale-100'
 
@@ -391,12 +391,12 @@ function TodayHome({ company }: { company: CompanySession }) {
       <div className="flex items-center gap-3">
         <div
           aria-hidden="true"
-          className="grid size-11 shrink-0 place-items-center rounded-[15px] bg-ink-900 font-display text-base font-extrabold tracking-[-0.02em] text-paper"
+          className="grid size-11 shrink-0 place-items-center rounded-2xl bg-ink-900 font-display text-base font-extrabold tracking-display text-paper"
         >
           {initials(company.name)}
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-xl font-extrabold leading-tight tracking-[-0.025em] text-ink">
+          <h1 className="truncate font-display text-xl font-extrabold leading-tight tracking-display text-ink">
             {company.name}
           </h1>
           <p className="mt-0.5 text-xs font-medium text-ink-3">{dateLine}</p>
@@ -435,11 +435,11 @@ function TodayHome({ company }: { company: CompanySession }) {
         <>
           {/* Hero — today's net on the inverted card, against the same weekday last week. */}
           <div
-            className="rise-in rounded-[22px] bg-ink-900 px-5 pb-[18px] pt-5 shadow-lg"
+            className="rise-in rounded-card bg-ink-900 px-5 pb-[18px] pt-5 shadow-lg"
             style={{ animationDelay: '0.05s' }}
           >
             <div className="flex items-center gap-2.5">
-              <span className="flex-1 text-xs font-semibold tracking-[0.02em] text-paper/60">
+              <span className="flex-1 text-xs font-semibold tracking-eyebrow text-paper/60">
                 {t('dashboardPhone.todayRevenue')}
               </span>
               {delta ? (
@@ -454,7 +454,7 @@ function TodayHome({ company }: { company: CompanySession }) {
               <div className="mt-2 h-[33px] w-56 max-w-full animate-pulse rounded-lg bg-paper/20" />
             ) : (
               <div
-                className="num-rise tnum mt-2 font-display text-3xl font-extrabold leading-none tracking-[-0.04em] text-paper"
+                className="num-rise tnum mt-2 font-display text-3xl font-extrabold leading-none tracking-display text-paper"
                 style={{ animationDelay: '0.18s' }}
               >
                 {formatMoney(today.net, currency, locale)}
@@ -487,7 +487,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                   <div className="flex min-h-0 w-full flex-1 items-end">
                     <div
                       className={cn(
-                        'bar-up w-full rounded-[6px]',
+                        'bar-up w-full rounded-md',
                         b.isToday ? 'bg-paper' : 'bg-paper/25',
                       )}
                       style={{
@@ -528,13 +528,13 @@ function TodayHome({ company }: { company: CompanySession }) {
             {stats.map((s) => (
               <div
                 key={s.key}
-                className="rounded-[18px] border border-line bg-surface px-3.5 pb-3 pt-[13px]"
+                className="rounded-2xl border border-line bg-surface px-3.5 pb-3 pt-[13px]"
               >
                 <div className="text-xs font-semibold text-ink-3">{s.label}</div>
                 {s.value == null ? (
                   <div className="mt-1.5 h-[19px] w-16 animate-pulse rounded-md bg-ink-100" />
                 ) : (
-                  <div className="tnum mt-1.5 truncate font-mono text-xl font-bold leading-none tracking-[-0.02em] text-ink">
+                  <div className="tnum mt-1.5 truncate font-mono text-xl font-bold leading-none tracking-display text-ink">
                     {s.value}
                   </div>
                 )}
@@ -593,7 +593,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                         <TaskIcon className="size-[18px]" strokeWidth={1.8} aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold leading-snug tracking-[-0.01em] text-ink">
+                        <span className="block text-sm font-semibold leading-snug tracking-display text-ink">
                           {task.label}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-ink-3">
@@ -626,7 +626,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                   {t('dashboardPhone.today')}
                 </span>
               </div>
-              <div className="mt-2 rounded-[18px] border border-line bg-surface px-4 pb-1 pt-4">
+              <div className="mt-2 rounded-2xl border border-line bg-surface px-4 pb-1 pt-4">
                 {shares.map((o) => (
                   <div key={o.id} className="mb-3.5">
                     <div className="flex items-baseline gap-2.5">
@@ -660,7 +660,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                     key={item.rank}
                     className="flex min-h-[58px] items-center gap-3 border-b border-line/60 px-[15px] py-[11px] last:border-b-0"
                   >
-                    <span className="tnum grid size-[22px] shrink-0 place-items-center rounded-[7px] bg-ink-50 font-mono text-2xs font-bold text-ink-2">
+                    <span className="tnum grid size-[22px] shrink-0 place-items-center rounded-md bg-ink-50 font-mono text-2xs font-bold text-ink-2">
                       {item.rank}
                     </span>
                     <span className="min-w-0 flex-1">

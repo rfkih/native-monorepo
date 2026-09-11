@@ -66,14 +66,14 @@ import {
   type TaxBp,
 } from './lib/newBillForm'
 
-const SECTION = 'pl-0.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3'
-const FIELD_LABEL = 'block text-2xs font-semibold uppercase tracking-[0.04em] text-ink-3'
+const SECTION = 'pl-0.5 text-2xs font-semibold uppercase tracking-eyebrow text-ink-3'
+const FIELD_LABEL = 'block text-2xs font-semibold uppercase tracking-eyebrow text-ink-3'
 const CARD = 'rounded-2xl border border-line bg-surface'
 const CHIP = 'h-[30px] rounded-full border px-3 text-xs font-semibold transition-colors'
 const CHIP_ON = 'border-emerald bg-emerald text-on-emerald'
 const CHIP_OFF = 'border-line bg-surface text-ink-3 hover:bg-hover'
 const CELL =
-  'h-[34px] rounded-[10px] bg-hover px-2 text-right font-mono text-xs font-semibold text-ink tnum focus:outline-none'
+  'h-[34px] rounded-xl bg-hover px-2 text-right font-mono text-xs font-semibold text-ink tnum focus:outline-none'
 
 /** Fixed bottom surfaces bypass the body's safe-area padding (index.css) — each pads itself. */
 const SAFE_BOTTOM = (px: number) => ({
@@ -330,7 +330,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
           fallback="/bills"
           className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-hover"
         />
-        <span className="min-w-0 flex-1 truncate font-display text-xl font-bold tracking-[-0.02em] text-ink">
+        <span className="min-w-0 flex-1 truncate font-display text-xl font-bold tracking-display text-ink">
           {t('ap.newBill.title')}
         </span>
         <span className="mr-2 grid h-6 shrink-0 place-items-center rounded-full border border-line px-2.5 text-2xs font-semibold text-ink-3">
@@ -351,11 +351,11 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
               'mt-2 flex min-h-[70px] w-full items-center gap-3 px-3.5 py-[13px] text-left hover:bg-paper',
             )}
           >
-            <span className="grid size-[42px] shrink-0 place-items-center rounded-[13px] bg-hover text-sm font-bold text-ink-2">
+            <span className="grid size-[42px] shrink-0 place-items-center rounded-xl bg-hover text-sm font-bold text-ink-2">
               {vendor ? vendorInitials(vendor.name) : '—'}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-base font-semibold leading-snug tracking-[-0.01em] text-ink">
+              <span className="block truncate text-base font-semibold leading-snug tracking-display text-ink">
                 {vendor ? vendor.name : t('ap.newBill.phone.pickVendor')}
               </span>
               <span className="mt-1 block truncate text-xs text-ink-3">
@@ -428,7 +428,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
           <div className={SECTION}>{t('ap.newBill.phone.invoiceSection')}</div>
           <label
             className={cn(
-              'mt-2 block rounded-[14px] border bg-surface px-3 py-2.5 transition-colors',
+              'mt-2 block rounded-2xl border bg-surface px-3 py-2.5 transition-colors',
               duplicate ? 'border-loss-line' : 'border-line',
             )}
           >
@@ -457,7 +457,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
           ) : null}
 
           <div className="mt-[9px] flex gap-[9px]">
-            <label className="relative block min-w-0 flex-1 cursor-pointer rounded-[14px] border border-line bg-surface px-3 py-2.5">
+            <label className="relative block min-w-0 flex-1 cursor-pointer rounded-2xl border border-line bg-surface px-3 py-2.5">
               <span className={FIELD_LABEL}>{t('ap.newBill.phone.invoiceDate')}</span>
               <span className="mt-1.5 flex items-center gap-1.5">
                 <span className="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-ink">
@@ -478,7 +478,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
                 className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
               />
             </label>
-            <div className="min-w-0 flex-1 rounded-[14px] bg-hover px-3 py-2.5">
+            <div className="min-w-0 flex-1 rounded-2xl bg-hover px-3 py-2.5">
               <span className={FIELD_LABEL}>{t('ap.newBill.phone.dueDate')}</span>
               <span className="mt-1.5 block truncate font-mono text-sm font-semibold text-ink">
                 {fmtDate(dueDate)}
@@ -542,7 +542,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
                         type="button"
                         onClick={() => setPickerFor(line.key)}
                         className={cn(
-                          'min-w-0 flex-1 truncate text-left text-sm font-semibold leading-snug tracking-[-0.01em]',
+                          'min-w-0 flex-1 truncate text-left text-sm font-semibold leading-snug tracking-display',
                           ing ? 'text-ink' : 'text-ink-400',
                         )}
                       >
@@ -554,7 +554,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
                         value={line.description}
                         onChange={(e) => patchLine(line.key, { description: e.target.value })}
                         placeholder={t('ap.newBill.phone.linePlaceholder')}
-                        className="min-w-0 flex-1 bg-transparent text-sm font-semibold leading-snug tracking-[-0.01em] text-ink placeholder:text-ink-400 focus:outline-none"
+                        className="min-w-0 flex-1 bg-transparent text-sm font-semibold leading-snug tracking-display text-ink placeholder:text-ink-400 focus:outline-none"
                       />
                     )}
                     <button
@@ -586,12 +586,12 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
                       className={cn(CELL, 'w-[52px] shrink-0')}
                     />
                     {unit ? (
-                      <span className="grid h-[34px] shrink-0 place-items-center rounded-[10px] bg-hover px-2.5 text-xs font-medium text-ink-2">
+                      <span className="grid h-[34px] shrink-0 place-items-center rounded-xl bg-hover px-2.5 text-xs font-medium text-ink-2">
                         {unit}
                       </span>
                     ) : null}
                     <span className="shrink-0 text-xs font-medium text-ink-400">×</span>
-                    <span className="flex h-[34px] min-w-0 flex-1 items-center gap-1 rounded-[10px] bg-hover px-2.5">
+                    <span className="flex h-[34px] min-w-0 flex-1 items-center gap-1 rounded-xl bg-hover px-2.5">
                       <span className="shrink-0 font-mono text-2xs font-medium text-ink-3">
                         {currencySymbol(currency, locale)}
                       </span>
@@ -644,10 +644,10 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
                             aria-hidden="true"
                           />
                           <span
-                            className="absolute bottom-[calc(100%+6px)] -left-[7px] z-20 block w-[246px] overflow-hidden rounded-[13px] border border-line bg-surface shadow-lg"
+                            className="absolute bottom-[calc(100%+6px)] -left-[7px] z-20 block w-[246px] overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
                             style={{ transformOrigin: 'bottom left' }}
                           >
-                            <span className="block px-3 pb-[7px] pt-[11px] text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">
+                            <span className="block px-3 pb-[7px] pt-[11px] text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
                               {t('ap.newBill.phone.accountLabel')}
                             </span>
                             {(['expense', 'inventory'] as const).map((kind) => {
@@ -712,7 +712,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
           <button
             type="button"
             onClick={addLine}
-            className="mt-[9px] flex min-h-[46px] w-full items-center justify-center gap-2 rounded-[14px] border border-dashed border-line-strong bg-surface text-xs font-semibold text-ink hover:bg-paper"
+            className="mt-[9px] flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-line-strong bg-surface text-xs font-semibold text-ink hover:bg-paper"
           >
             <Plus className="size-[15px]" strokeWidth={2.2} aria-hidden="true" />
             {t('ap.newBill.phone.addLine')}
@@ -728,7 +728,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
               <span className="flex-1 text-xs text-ink-2">
                 {t('ap.newBill.phone.discount')}
               </span>
-              <span className="flex h-[30px] shrink-0 items-center gap-1 rounded-[9px] bg-hover px-2.5">
+              <span className="flex h-[30px] shrink-0 items-center gap-1 rounded-lg bg-hover px-2.5">
                 <span className="font-mono text-2xs font-medium text-ink-3">
                   {currencySymbol(currency, locale)}
                 </span>
@@ -772,10 +772,10 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
               </span>
             </div>
             <div className="mt-[9px] flex items-baseline gap-2.5 border-t border-line pt-[11px]">
-              <span className="flex-1 text-sm font-bold tracking-[-0.01em] text-ink">
+              <span className="flex-1 text-sm font-bold tracking-display text-ink">
                 {t('ap.newBill.phone.total')}
               </span>
-              <span className="tnum shrink-0 font-mono text-xl font-extrabold tracking-[-0.02em] text-ink">
+              <span className="tnum shrink-0 font-mono text-xl font-extrabold tracking-display text-ink">
                 {money(sum.totalMinor)}
               </span>
             </div>
@@ -798,7 +798,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
               <span className="min-w-0 flex-1 text-xs font-semibold leading-snug text-ink">
                 {t('ap.newBill.phone.printedTitle')}
               </span>
-              <span className="flex h-8 shrink-0 items-center gap-1 rounded-[10px] border border-line bg-surface px-2.5">
+              <span className="flex h-8 shrink-0 items-center gap-1 rounded-xl border border-line bg-surface px-2.5">
                 <span className="font-mono text-2xs font-medium text-ink-3">
                   {currencySymbol(currency, locale)}
                 </span>
@@ -979,10 +979,10 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
         style={SAFE_BOTTOM(30)}
       >
         <div className="min-w-0 flex-1">
-          <div className="text-2xs font-medium uppercase tracking-[0.04em] text-ink-3">
+          <div className="text-2xs font-medium uppercase tracking-eyebrow text-ink-3">
             {t('ap.newBill.phone.footerTotal')}
           </div>
-          <div className="tnum mt-1 truncate font-mono text-lg font-extrabold tracking-[-0.02em] text-ink">
+          <div className="tnum mt-1 truncate font-mono text-lg font-extrabold tracking-display text-ink">
             {money(sum.totalMinor)}
           </div>
         </div>
@@ -991,7 +991,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
           disabled={issues.length > 0 || saving}
           onClick={() => void save()}
           className={cn(
-            'h-[50px] shrink-0 rounded-[15px] px-[22px] text-sm font-bold tracking-[-0.01em] transition-[transform,background-color] duration-150 active:scale-[0.97] motion-reduce:active:scale-100',
+            'h-[50px] shrink-0 rounded-2xl px-[22px] text-sm font-bold tracking-display transition-[transform,background-color] duration-150 active:scale-[0.97] motion-reduce:active:scale-100',
             issues.length > 0 || saving
               ? 'bg-ink-100 text-ink-400'
               : 'bg-emerald text-on-emerald shadow-lift',

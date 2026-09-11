@@ -132,7 +132,7 @@ export function DialogOverlay({
         aria-hidden="true"
         onClick={requestClose}
         className={cn(
-          'absolute inset-0 bg-black/40 backdrop-blur-sm',
+          'absolute inset-0 bg-scrim backdrop-blur-sm',
           exiting ? 'scrim-out' : 'scrim-in',
         )}
       />
@@ -148,7 +148,7 @@ export function DialogOverlay({
           'relative w-full p-6 shadow-lg outline-none',
           size === 'lg' ? 'max-w-2xl' : 'max-w-md',
           // Phone: a bottom sheet flush to the edge. Tablet+: a centred card.
-          'max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]',
+          'max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet',
           exiting ? 'max-sm:sheet-down sm:dialog-out' : 'max-sm:sheet-up sm:dialog-in',
           className,
         )}

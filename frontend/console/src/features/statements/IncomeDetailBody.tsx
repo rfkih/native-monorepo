@@ -70,7 +70,7 @@ export function IncomeDetailBody({
   return (
     <>
       <div className="mb-3 flex items-baseline justify-between">
-        <span className="text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
+        <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
           {isRevenue ? t('statements.revenueAccounts') : t('statements.expenseAccounts')}
         </span>
         <span className="text-xs text-ink-3">{t('statements.detailShareNote')}</span>

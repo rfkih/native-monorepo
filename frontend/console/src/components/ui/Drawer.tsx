@@ -31,7 +31,7 @@ export function Drawer({
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={ariaLabel}>
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-scrim" onClick={onClose} aria-hidden="true" />
       <div className="animate-drawer-in absolute inset-y-0 right-0 flex w-full max-w-[420px] flex-col border-l border-line bg-surface shadow-lg">
         {children}
       </div>

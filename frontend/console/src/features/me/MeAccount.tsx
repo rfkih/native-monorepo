@@ -68,7 +68,7 @@ export function MeAccount() {
 
       <main className="mx-auto w-full max-w-[640px] px-5 py-8 max-sm:px-4 max-sm:py-4 lg:px-8">
         <div className="max-sm:hidden">
-          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-display text-ink">
             {t('me.account.title')}
           </h1>
           <p className="text-sm text-ink-3">{t('me.account.subtitle')}</p>

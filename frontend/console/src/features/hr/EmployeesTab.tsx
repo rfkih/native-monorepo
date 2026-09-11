@@ -204,7 +204,7 @@ export function EmployeesTab({
       ) : filtered.length === 0 ? (
         <p className="px-2 py-8 text-center text-sm text-ink-3">{t('hr.list.noMatch')}</p>
       ) : (
-        <Card className="rounded-[20px] p-2.5">
+        <Card className="rounded-card p-2.5">
           {filtered.map((employee) => (
             <EmployeeRow
               key={employee.employeeId}
@@ -466,7 +466,7 @@ function EmployeeRow({
           <button
             type="button"
             onClick={onCreateLogin}
-            className="h-[34px] rounded-[10px] border border-emerald-line bg-emerald-tint px-3 text-xs font-semibold text-emerald-2 transition-colors hover:bg-line-strong focus-visible:outline-2 focus-visible:outline-emerald"
+            className="h-[34px] rounded-xl border border-emerald-line bg-emerald-tint px-3 text-xs font-semibold text-emerald-2 transition-colors hover:bg-line-strong focus-visible:outline-2 focus-visible:outline-emerald"
           >
             {t('hr.list.actionCreateLogin')}
           </button>
@@ -474,7 +474,7 @@ function EmployeeRow({
         <button
           type="button"
           onClick={onManage}
-          className="h-[34px] rounded-[10px] border border-line bg-surface px-3.5 text-xs font-semibold text-ink-2 transition-colors hover:border-line-strong hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald"
+          className="h-[34px] rounded-xl border border-line bg-surface px-3.5 text-xs font-semibold text-ink-2 transition-colors hover:border-line-strong hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald"
         >
           {t('hr.list.manage')}
         </button>
