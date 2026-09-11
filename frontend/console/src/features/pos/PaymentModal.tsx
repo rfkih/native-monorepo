@@ -37,7 +37,7 @@ import { usePaymentAttempt } from '@/features/pos-shell/payment/usePaymentAttemp
 import { useSalesChannels, type SalesChannel } from '@/features/channels/channelsApi'
 import { Spinner } from '@/components/ui/Spinner'
 import { useQrisEffective, useStaticQrImageUrl, type QrisMode } from '@/features/payments/api'
-import { effectiveQrisMode } from '@/features/payments/effectiveMode'
+import { effectiveQrisMode, isSandboxGateway } from '@/features/payments/effectiveMode'
 import { useGatewayQris } from '@/features/payments/useGatewayQris'
 import { OfflineHint } from './offline/OfflineHint'
 import { enqueueSale } from './offline/queue'
@@ -150,6 +150,9 @@ export function PaymentModal({
     enabled: !offline,
   })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
+  // ADR 0045: a SANDBOX gateway still resolves to GATEWAY and still reports "connected", so the
+  // mode alone cannot reveal it — the panel says so explicitly instead of rendering an unpayable QR.
+  const gatewaySandbox = isSandboxGateway(qrisEffectiveQuery.data ?? undefined)
   // ADR 0045 amendment: the company's CONFIGURED mode is GATEWAY but the till resolved to MANUAL
   // (effective query erroring/offline/disconnected/non-IDR) — surface an honest "gateway
   // unavailable, confirm manually" badge instead of the demo "pending provider" copy. TanStack
@@ -325,6 +328,7 @@ export function PaymentModal({
               tenderType={tender}
               qrisMode={qrisMode}
               degradedFromGateway={degradedFromGateway}
+              gatewaySandbox={gatewaySandbox}
               displayPublisher={displayPublisher}
               registerGatewayCancel={registerGatewayCancel}
             />
@@ -482,6 +486,7 @@ function RestaurantDigitalAttempt({
   tenderType,
   qrisMode,
   degradedFromGateway = false,
+  gatewaySandbox = false,
   displayPublisher,
   registerGatewayCancel,
 }: {
@@ -495,6 +500,8 @@ function RestaurantDigitalAttempt({
   /** ADR 0045 amendment: configured GATEWAY degraded to MANUAL — show the honest "gateway
    *  unavailable" badge/hint instead of the demo "pending provider" copy. */
   degradedFromGateway?: boolean
+  /** ADR 0045: the gateway is live but pointed at SANDBOX — the QR it mints cannot be paid. */
+  gatewaySandbox?: boolean
   /** Phase 6 (ADR 0029): forwarded so a QR becoming visible here (STATIC or GATEWAY) mirrors to the
    *  customer display, same as PaymentModal's own PAYMENT_STARTED effect. */
   displayPublisher?: DisplayPublisher
@@ -676,6 +683,7 @@ function RestaurantDigitalAttempt({
         kind: 'GATEWAY',
         qrString: gateway.charge.qrString,
         expiresAt: gateway.charge.expiresAt,
+        sandbox: gatewaySandbox,
       })
     } else if (showGatewayQris) {
       displayPublisher.publishPaymentStarted(due)
@@ -690,6 +698,7 @@ function RestaurantDigitalAttempt({
     gateway.phase,
     gateway.charge?.qrString,
     gateway.charge?.expiresAt,
+    gatewaySandbox,
   ])
 
   if (!pendingPayment) {
@@ -720,6 +729,7 @@ function RestaurantDigitalAttempt({
         qrString={gateway.charge?.qrString ?? null}
         expiresAtMs={gateway.charge?.expiresAt ? new Date(gateway.charge.expiresAt).getTime() : null}
         phase={gateway.phase}
+        sandbox={gatewaySandbox}
         errorSlot={
           gateway.phase !== 'error' && receiptQuery.isError ? (
             <p className="mb-3 text-xs text-loss" role="alert">

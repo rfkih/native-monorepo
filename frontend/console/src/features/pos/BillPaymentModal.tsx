@@ -35,7 +35,7 @@ import { CheckoutErrorText } from '@/features/pos-shell/payment/CheckoutErrorTex
 import { useSalesChannels } from '@/features/channels/channelsApi'
 import { Spinner } from '@/components/ui/Spinner'
 import { useQrisEffective, useStaticQrImageUrl } from '@/features/payments/api'
-import { effectiveQrisMode } from '@/features/payments/effectiveMode'
+import { effectiveQrisMode, isSandboxGateway } from '@/features/payments/effectiveMode'
 import { useGatewayQris } from '@/features/payments/useGatewayQris'
 import { shouldUseBillGatewayFlow } from './lib/billGatewayQris'
 import { isCaptureObserved, isCleanCancel } from './lib/billGatewayCapture'
@@ -91,6 +91,9 @@ export function BillPaymentModal({
   // always fetched while mounted (see PaymentModal's twin doc for the fetch/degrade rules). ADR
   const qrisEffectiveQuery = useQrisEffective(session, session.businessId)
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, false, currency)
+  // ADR 0045: a SANDBOX gateway still resolves to GATEWAY and still reports "connected", so the
+  // mode alone cannot reveal it — the panel says so explicitly instead of rendering an unpayable QR.
+  const gatewaySandbox = isSandboxGateway(qrisEffectiveQuery.data ?? undefined)
   // ADR 0045 extension (bills): a full-bill QRIS tender resolving to GATEWAY drives the SAME
   // two-step dynamic-QR flow the order modal has (BillGatewayDigitalAttempt, below) instead of the
   // one-step Pay every other tender/mode keeps. Split checks are explicitly out of scope this pass.
@@ -227,6 +230,7 @@ export function BillPaymentModal({
           locale={locale}
           onSuccess={onSuccess}
           onClose={onClose}
+          gatewaySandbox={gatewaySandbox}
           registerGatewayCancel={registerGatewayCancel}
         />
       ) : (
@@ -277,6 +281,7 @@ function BillGatewayDigitalAttempt({
   locale,
   onSuccess,
   onClose,
+  gatewaySandbox = false,
   registerGatewayCancel,
 }: {
   session: CompanySession
@@ -289,6 +294,8 @@ function BillGatewayDigitalAttempt({
   locale: string
   onSuccess: (paid: BillPaidInfo) => void
   onClose: () => void
+  /** ADR 0045: gateway live but pointed at SANDBOX — see PaymentModal's twin doc. */
+  gatewaySandbox?: boolean
   /** ADR 0045: lets this attempt register its live gateway-cancel function with the modal frame —
    *  see BillPaymentModal's `handleFrameClose` doc. */
   registerGatewayCancel: (fn: (() => Promise<boolean>) | null) => void
@@ -398,6 +405,7 @@ function BillGatewayDigitalAttempt({
       qrString={gateway.charge?.qrString ?? null}
       expiresAtMs={gateway.charge?.expiresAt ? new Date(gateway.charge.expiresAt).getTime() : null}
       phase={gateway.phase}
+      sandbox={gatewaySandbox}
       errorSlot={
         gateway.phase !== 'error' && receiptQuery.isError ? (
           <p className="mb-3 text-xs text-loss" role="alert">

@@ -55,6 +55,7 @@ export function GatewayQrisPendingView({
   qrString,
   expiresAtMs,
   phase,
+  sandbox,
   errorSlot,
   onCancel,
   onNewQr,
@@ -68,6 +69,10 @@ export function GatewayQrisPendingView({
   qrString: string | null
   expiresAtMs: number | null
   phase: ChargePhaseLike
+  /** ADR 0045: the gateway's ACTIVE environment is SANDBOX — this QR is a test code no real
+   *  customer can ever pay. A prod company has been found live in this state before, and the till
+   *  gave the cashier no sign at all; say so loudly rather than rendering it as a normal QR. */
+  sandbox?: boolean
   errorSlot?: React.ReactNode
   onCancel: () => void
   onNewQr: () => void
@@ -125,18 +130,37 @@ export function GatewayQrisPendingView({
 
   return (
     <div className="px-5 pb-5">
-      <div className="mb-4 rounded-lg border border-amber/30 bg-amber-tint px-4 py-3 text-sm text-amber-2">
+      <div
+        className={cn(
+          'mb-4 rounded-lg border px-4 py-3 text-sm',
+          // `loss-ink` rather than `loss` here: this line is the one the cashier most needs to read
+          // on a glare-lit till, and the darker ink passes on the red tint. (Error paragraphs on a
+          // white ground use `text-loss` throughout the console; that is fine there.)
+          sandbox
+            ? 'border-loss/30 bg-tint-loss text-loss-ink'
+            : 'border-amber/30 bg-amber-tint text-amber-2',
+        )}
+      >
         <div className="flex items-center justify-between gap-2">
-          <Badge tone="amber">{t('pos.payment.tenderQris')}</Badge>
+          <Badge tone={sandbox ? 'loss' : 'amber'}>
+            {sandbox ? t('pos.payment.qris.sandboxBadge') : t('pos.payment.tenderQris')}
+          </Badge>
           {expired ? (
             <span className="text-xs font-semibold text-loss">{t('pos.payment.qris.expired')}</span>
           ) : (
-            <span className="tnum font-mono text-xs font-semibold text-amber-2">
+            <span
+              className={cn(
+                'tnum font-mono text-xs font-semibold',
+                sandbox ? 'text-loss-ink' : 'text-amber-2',
+              )}
+            >
               {t('pos.payment.qris.expiresIn', { time: formatCountdown(remainingMs) })}
             </span>
           )}
         </div>
-        <p className="mt-1 leading-relaxed">{t('pos.payment.qris.gatewayInitiateHint')}</p>
+        <p className="mt-1 leading-relaxed">
+          {sandbox ? t('pos.payment.qris.sandboxHint') : t('pos.payment.qris.gatewayInitiateHint')}
+        </p>
       </div>
 
       {errorSlot}

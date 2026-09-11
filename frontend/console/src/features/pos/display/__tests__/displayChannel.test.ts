@@ -61,6 +61,20 @@ describe('displayChannel — isDisplayMessage', () => {
     ).toBe(true)
   })
 
+  it('accepts an optional sandbox flag on a GATEWAY qr, and an older publisher that omits it', () => {
+    const base = {
+      type: 'PAYMENT_QR',
+      due: { amountMinor: 60_500, currency: 'IDR' },
+      qr: { kind: 'GATEWAY', qrString: '00020101021226...', expiresAt: '2026-08-07T10:15:00Z' },
+    }
+    expect(isDisplayMessage({ ...base, qr: { ...base.qr, sandbox: true } })).toBe(true)
+    expect(isDisplayMessage({ ...base, qr: { ...base.qr, sandbox: false } })).toBe(true)
+    // A publisher tab from before the flag existed must keep validating (it reads as not-sandbox).
+    expect(isDisplayMessage(base)).toBe(true)
+    // ...but a present-and-wrong-typed flag is a malformed message, not a truthy one.
+    expect(isDisplayMessage({ ...base, qr: { ...base.qr, sandbox: 'yes' } })).toBe(false)
+  })
+
   it('rejects PAYMENT_QR with a malformed due or an unrecognised/incomplete qr', () => {
     expect(isDisplayMessage({ type: 'PAYMENT_QR', due: { amountMinor: '100', currency: 'IDR' }, qr: { kind: 'STATIC' } })).toBe(false)
     expect(

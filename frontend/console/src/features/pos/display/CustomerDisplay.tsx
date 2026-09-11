@@ -305,6 +305,11 @@ function PaymentQrScreen({
         <p className="tnum font-mono text-4xl font-bold sm:text-5xl">
           {formatMoney(due.amountMinor, due.currency, locale)}
         </p>
+        {qr.kind === 'GATEWAY' && qr.sandbox ? (
+          <p className="text-sm font-semibold text-amber-300">
+            {t('posDisplay.qr.sandbox', { lng: displayLocale })}
+          </p>
+        ) : null}
         {qr.kind === 'GATEWAY' ? (
           <PaymentQrCountdown expiresAt={qr.expiresAt} displayLocale={displayLocale} />
         ) : null}

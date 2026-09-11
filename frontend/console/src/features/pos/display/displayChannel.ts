@@ -49,7 +49,10 @@ export interface DisplayBreakdown {
  */
 export type PaymentQrKind =
   | { kind: 'STATIC' }
-  | { kind: 'GATEWAY'; qrString: string; expiresAt: string }
+  /** `sandbox` marks a test-environment QR no real customer can pay (ADR 0045) — optional so an
+   *  older publisher tab still validates against a newer display (it simply reads as not-sandbox,
+   *  which is the pre-existing behavior). */
+  | { kind: 'GATEWAY'; qrString: string; expiresAt: string; sandbox?: boolean }
 
 export type DisplayMessage =
   | { type: 'CART_UPDATED'; lines: DisplayLine[]; breakdown: DisplayBreakdown | null }
@@ -100,7 +103,13 @@ function isPaymentQrKind(value: unknown): value is PaymentQrKind {
   if (typeof value !== 'object' || value === null) return false
   const v = value as Record<string, unknown>
   if (v.kind === 'STATIC') return true
-  if (v.kind === 'GATEWAY') return typeof v.qrString === 'string' && typeof v.expiresAt === 'string'
+  if (v.kind === 'GATEWAY') {
+    return (
+      typeof v.qrString === 'string' &&
+      typeof v.expiresAt === 'string' &&
+      (v.sandbox === undefined || typeof v.sandbox === 'boolean')
+    )
+  }
   return false
 }
 
