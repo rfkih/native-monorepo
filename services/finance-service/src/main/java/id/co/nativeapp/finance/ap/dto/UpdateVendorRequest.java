@@ -1,7 +1,9 @@
 package id.co.nativeapp.finance.ap.dto;
 
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -12,4 +14,5 @@ public record UpdateVendorRequest(
     @NotBlank @Size(max = 255) String name,
     @Email @Size(max = 320) String email,
     @Size(max = 64) String taxId,
-    Boolean active) {}
+    Boolean active,
+    @PositiveOrZero @Max(3650) Integer paymentTermDays) {}

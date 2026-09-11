@@ -47,7 +47,8 @@ public class BillReader {
                     v.getCurrency().strip(),
                     v.getTotalMinor(),
                     v.getPaidMinor(),
-                    v.getTotalMinor() - v.getPaidMinor()))
+                    v.getTotalMinor() - v.getPaidMinor(),
+                    v.getVendorInvoiceNumber()))
         .toList();
   }
 
@@ -105,6 +106,11 @@ public class BillReader {
         header.getTotalMinor() - header.getPaidMinor(),
         header.getUsesIllustrativeRules(),
         lines,
-        payments);
+        payments,
+        header.getVendorInvoiceNumber(),
+        header.getTermDays(),
+        header.getDiscountMinor(),
+        header.getTaxBp(),
+        header.getNote());
   }
 }

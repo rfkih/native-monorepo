@@ -41,6 +41,10 @@ public class Vendor extends Auditable {
   @Column(name = "active", nullable = false)
   private boolean active;
 
+  /** The default payment term in days the bill form preselects for this vendor (ADR 0084). */
+  @Column(name = "payment_term_days")
+  private Integer paymentTermDays;
+
   protected Vendor() {
     // for JPA
   }
@@ -50,12 +54,18 @@ public class Vendor extends Auditable {
    * {@code null}); {@code name} is required.
    */
   public static Vendor create(String name, String email, String taxId) {
+    return create(name, email, taxId, null);
+  }
+
+  /** As {@link #create(String, String, String)} with a default payment term (ADR 0084). */
+  public static Vendor create(String name, String email, String taxId, Integer paymentTermDays) {
     Vendor vendor = new Vendor();
     vendor.id = UUID.randomUUID();
     vendor.name = requireName(name);
     vendor.email = blankToNull(email);
     vendor.taxId = blankToNull(taxId);
     vendor.active = true;
+    vendor.paymentTermDays = requireTerm(paymentTermDays);
     return vendor;
   }
 
@@ -64,6 +74,18 @@ public class Vendor extends Auditable {
     this.name = requireName(name);
     this.email = blankToNull(email);
     this.taxId = blankToNull(taxId);
+  }
+
+  /** Sets (or clears, with null) the default payment term (ADR 0084). */
+  public void setPaymentTermDays(Integer paymentTermDays) {
+    this.paymentTermDays = requireTerm(paymentTermDays);
+  }
+
+  private static Integer requireTerm(Integer paymentTermDays) {
+    if (paymentTermDays != null && paymentTermDays < 0) {
+      throw new IllegalArgumentException("vendor payment term must not be negative");
+    }
+    return paymentTermDays;
   }
 
   /** Sets the active flag (a deactivated vendor is hidden from the default list but retained). */
@@ -106,5 +128,9 @@ public class Vendor extends Auditable {
 
   public boolean isActive() {
     return active;
+  }
+
+  public Integer getPaymentTermDays() {
+    return paymentTermDays;
   }
 }

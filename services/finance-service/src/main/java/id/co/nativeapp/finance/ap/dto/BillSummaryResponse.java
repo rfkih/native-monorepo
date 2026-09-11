@@ -18,4 +18,5 @@ public record BillSummaryResponse(
     String currency,
     long totalMinor,
     long paidMinor,
-    long outstandingMinor) {}
+    long outstandingMinor,
+    String vendorInvoiceNumber) {}

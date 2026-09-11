@@ -1,5 +1,7 @@
 package id.co.nativeapp.finance.ap.projection;
 
+import java.util.UUID;
+
 /**
  * Read projection for the ADR 0067 Phase B, §3 net-split: one bill line's extended total plus
  * whether it is inventory-flagged. {@code BillWriter} partitions an already-fetched, small per-bill
@@ -8,6 +10,8 @@ package id.co.nativeapp.finance.ap.projection;
  * repository layers.
  */
 public interface BillLineNetView {
+
+  UUID getId();
 
   long getLineTotalMinor();
 

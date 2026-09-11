@@ -100,4 +100,50 @@ class BillDomainTest {
     bill.voidBill();
     assertThat(bill.getStatus()).isEqualTo(BillStatus.VOID);
   }
+
+  // ---- ADR 0084: discount, rate, the invoice as the vendor wrote it -------------------------
+
+  @Test
+  void draftWithDiscountTaxesTheNetAndTotalsAccordingly() {
+    Bill bill =
+        Bill.draft(
+            VENDOR,
+            idr(1_000_000L),
+            idr(100_000L),
+            idr(108_000L),
+            1_200,
+            new Bill.InvoiceDetails(" INV/09/2214 ", LocalDate.parse("2026-09-11"), 14, "  "),
+            false);
+    assertThat(bill.subtotal()).isEqualTo(idr(1_000_000L));
+    assertThat(bill.discount()).isEqualTo(idr(100_000L));
+    assertThat(bill.net()).isEqualTo(idr(900_000L));
+    assertThat(bill.total()).isEqualTo(idr(1_008_000L));
+    assertThat(bill.getTaxBp()).isEqualTo(1_200);
+    assertThat(bill.getVendorInvoiceNumber()).as("stripped").isEqualTo("INV/09/2214");
+    assertThat(bill.getBillDate()).isEqualTo(LocalDate.parse("2026-09-11"));
+    assertThat(bill.getTermDays()).isEqualTo(14);
+    assertThat(bill.getNote()).as("a blank note is no note").isNull();
+  }
+
+  @Test
+  void theLegacyFactoryReadsAsAnElevenPercentBillWithNoDiscount() {
+    Bill bill = draft(1_000_000L, 110_000L);
+    assertThat(bill.discount()).isEqualTo(idr(0L));
+    assertThat(bill.net()).isEqualTo(idr(1_000_000L));
+    assertThat(bill.getTaxBp()).isEqualTo(1_100);
+    assertThat(draft(1_000_000L, 0L).getTaxBp()).isEqualTo(0);
+  }
+
+  @Test
+  void aDiscountBeyondTheSubtotalOrEatingTheWholeNetIsRefused() {
+    Bill.InvoiceDetails none = new Bill.InvoiceDetails(null, null, null, null);
+    assertThatThrownBy(() -> Bill.draft(VENDOR, idr(100L), idr(101L), idr(0L), 0, none, false))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> Bill.draft(VENDOR, idr(100L), idr(100L), idr(0L), 0, none, false))
+        .as("a net of zero is not a bill")
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> Bill.draft(VENDOR, idr(100L), idr(0L), idr(0L), 500, none, false))
+        .as("only 0 / 1100 / 1200 bp")
+        .isInstanceOf(IllegalArgumentException.class);
+  }
 }

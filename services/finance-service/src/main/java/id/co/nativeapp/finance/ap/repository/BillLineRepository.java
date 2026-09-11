@@ -18,8 +18,8 @@ public interface BillLineRepository extends JpaRepository<BillLine, UUID> {
    */
   @Query(
       value =
-          "SELECT line_total_minor AS line_total_minor, is_inventory AS is_inventory"
-              + " FROM bill_line WHERE bill_id = :billId",
+          "SELECT id AS id, line_total_minor AS line_total_minor, is_inventory AS is_inventory"
+              + " FROM bill_line WHERE bill_id = :billId ORDER BY line_no",
       nativeQuery = true)
   List<BillLineNetView> findNetViewsByBillId(UUID billId);
 

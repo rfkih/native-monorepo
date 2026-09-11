@@ -22,13 +22,17 @@ public interface VendorRepository extends JpaRepository<Vendor, UUID> {
    * envelope is a tracked follow-up.
    */
   @Query(
-      value = "SELECT id, name, email, tax_id, active FROM vendor ORDER BY name LIMIT 500",
+      value =
+          "SELECT id, name, email, tax_id, active, payment_term_days FROM vendor"
+              + " ORDER BY name LIMIT 500",
       nativeQuery = true)
   List<VendorView> findAllView();
 
   /** One vendor by id in the bound tenant (RLS-scoped) — the vendor detail read. */
   @Query(
-      value = "SELECT id, name, email, tax_id, active FROM vendor WHERE id = :id",
+      value =
+          "SELECT id, name, email, tax_id, active, payment_term_days FROM vendor"
+              + " WHERE id = :id",
       nativeQuery = true)
   Optional<VendorView> findViewById(UUID id);
 }

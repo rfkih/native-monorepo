@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch as apiFetchBase, type RequestOptions } from '@/lib/api'
+import { apiFetch as apiFetchBase, apiUpload, type RequestOptions } from '@/lib/api'
 
 /**
  * ADR 0049 P3b — every call in this module targets a DASHBOARD_ROLES-gated back-office route
@@ -29,6 +29,8 @@ export interface Vendor {
   email: string | null
   taxId: string | null
   active: boolean
+  /** The default payment term the bill form preselects (ADR 0084); null = none recorded. */
+  paymentTermDays: number | null
 }
 
 /** POST /api/v1/vendors body. */
@@ -36,6 +38,7 @@ export interface CreateVendorBody {
   name: string
   email?: string
   taxId?: string
+  paymentTermDays?: number
 }
 
 /** GET /api/v1/vendors — every vendor for the bound company. */
@@ -89,6 +92,8 @@ export interface BillSummary {
   totalMinor: number
   paidMinor: number
   outstandingMinor: number
+  /** The vendor's own invoice number (ADR 0084); null for legacy bills. */
+  vendorInvoiceNumber: string | null
 }
 
 /** GET /api/v1/ap/bills?status=&vendorId=&period= — filterable bill list. */
@@ -155,6 +160,13 @@ export interface BillDetail {
   usesIllustrativeRules: boolean
   lines: BillLine[]
   payments: BillPayment[]
+  // ADR 0084 — the invoice as the vendor wrote it.
+  vendorInvoiceNumber: string | null
+  termDays: number | null
+  discountMinor: number
+  /** The PPN rate applied to the net, basis points: 0 | 1100 | 1200. */
+  taxBp: number
+  note: string | null
 }
 
 /** GET /api/v1/ap/bills/{id}. */
@@ -206,6 +218,14 @@ export interface CreateBillBody {
   currency: string
   taxable: boolean
   lines: CreateBillLineBody[]
+  // ADR 0084 — all optional; the server derives taxBp from `taxable` when absent.
+  vendorInvoiceNumber?: string
+  /** ISO date (YYYY-MM-DD) — the invoice date; absent = the posting day. */
+  billDate?: string
+  termDays?: number
+  discountMinor?: number
+  taxBp?: 0 | 1100 | 1200
+  note?: string
 }
 
 /** POST /api/v1/ap/bills — create a DRAFT bill. */
@@ -254,6 +274,101 @@ export function usePostBill(params: { companyId: string; actor: string; id: stri
       }),
     onSuccess: () => invalidateBill(queryClient, companyId, id),
   })
+}
+
+/**
+ * POST /api/v1/ap/bills/{id}/post with the id in the VARIABLES — for a flow that only learns the
+ * id after creating the draft (the phone "Tagihan baru" save: create → attach → post, ADR 0084).
+ */
+export function usePostBillById(params: { companyId: string; actor: string }) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: PostBillBody & { id: string }) =>
+      apiFetch<BillDetail>(`/api/v1/ap/bills/${id}/post`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body,
+      }),
+    onSuccess: (_data, vars) => invalidateBill(queryClient, companyId, vars.id),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Attachments (ADR 0084) — the vendor invoice as evidence, private
+// ---------------------------------------------------------------------------
+
+export interface ApBillAttachment {
+  id: string
+  contentType: string
+  byteSize: number
+  sha256: string
+  originalFilename: string | null
+  uploadedAt: string
+}
+
+function billAttachmentsKey(companyId: string, billId: string) {
+  return ['apBillAttachments', companyId, billId] as const
+}
+
+/** GET /api/v1/ap/bills/{id}/attachments — metadata only. */
+export function useBillAttachments(params: {
+  companyId: string
+  actor: string
+  id: string | null
+}) {
+  const { companyId, actor, id } = params
+  return useQuery({
+    enabled: id != null,
+    queryKey: billAttachmentsKey(companyId, id ?? ''),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const result = await apiFetch<ApBillAttachment[]>(`/api/v1/ap/bills/${id}/attachments`, {
+        tenant: { companyId, actor },
+      })
+      return result ?? []
+    },
+  })
+}
+
+/** POST /api/v1/ap/bills/{id}/attachments (multipart `file`) — the id rides the variables. */
+export function useUploadBillAttachment(params: { companyId: string; actor: string }) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return apiUpload<ApBillAttachment>(`/api/v1/ap/bills/${id}/attachments`, formData, {
+        tenant: { companyId, actor },
+        auth: 'personal',
+      })
+    },
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({ queryKey: billAttachmentsKey(companyId, vars.id) })
+    },
+  })
+}
+
+/** DELETE /api/v1/ap/bills/{id}/attachments/{attachmentId}. */
+export function useDeleteBillAttachment(params: { companyId: string; actor: string; id: string }) {
+  const { companyId, actor, id } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      apiFetch<void>(`/api/v1/ap/bills/${id}/attachments/${attachmentId}`, {
+        method: 'DELETE',
+        tenant: { companyId, actor },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: billAttachmentsKey(companyId, id) })
+    },
+  })
+}
+
+/** The authenticated path of one attachment's bytes — fetched as a blob for a private preview. */
+export function billAttachmentPath(id: string, attachmentId: string): string {
+  return `/api/v1/ap/bills/${id}/attachments/${attachmentId}`
 }
 
 /** POST /api/v1/ap/bills/{id}/void — DRAFT/POSTED (unpaid) → VOID. */

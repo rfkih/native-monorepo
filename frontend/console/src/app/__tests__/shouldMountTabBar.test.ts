@@ -14,6 +14,12 @@ describe('shouldMountTabBar', () => {
     expect(shouldMountTabBar('/inventory/5f1c/edit')).toBe(false)
   })
 
+  it('never mounts on the phone bill form — its footer owns the bottom (ADR 0084)', () => {
+    expect(shouldMountTabBar('/bills/new')).toBe(false)
+    expect(shouldMountTabBar('/bills')).toBe(true)
+    expect(shouldMountTabBar('/bills/5f1c')).toBe(true)
+  })
+
   it('never mounts inside the onboarding wizard', () => {
     expect(shouldMountTabBar('/onboarding')).toBe(false)
     expect(shouldMountTabBar('/onboarding/company')).toBe(false)

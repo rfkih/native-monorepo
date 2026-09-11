@@ -1,5 +1,6 @@
 package id.co.nativeapp.finance;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -15,7 +16,9 @@ import id.co.nativeapp.finance.ap.controller.ApAdvice;
 import id.co.nativeapp.finance.ap.controller.BillController;
 import id.co.nativeapp.finance.ap.domain.BillNotFoundException;
 import id.co.nativeapp.finance.ap.domain.BillStateException;
+import id.co.nativeapp.finance.ap.domain.DuplicateVendorInvoiceException;
 import id.co.nativeapp.finance.ap.dto.BillDetailResponse;
+import id.co.nativeapp.finance.ap.service.BillDraftInput;
 import id.co.nativeapp.finance.ap.service.BillPaymentWriter;
 import id.co.nativeapp.finance.ap.service.BillReader;
 import id.co.nativeapp.finance.ap.service.BillWriter;
@@ -70,12 +73,17 @@ class BillControllerTest {
         1_110_000L,
         true,
         List.of(),
-        List.of());
+        List.of(),
+        "INV/2026/06/0042",
+        30,
+        0L,
+        1_100,
+        null);
   }
 
   @Test
   void createReturns201WithTheBillDetail() throws Exception {
-    when(billWriter.createDraft(eq(VENDOR), eq("IDR"), eq(true), any())).thenReturn(BILL);
+    when(billWriter.createDraft(any(BillDraftInput.class))).thenReturn(BILL);
     when(billReader.detail(BILL)).thenReturn(sampleDetail());
 
     mockMvc
@@ -164,6 +172,98 @@ class BillControllerTest {
             post("/api/v1/ap/bills/{id}/payments", BILL)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amountMinor\":100000}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  // ---- ADR 0084: the invoice as the vendor wrote it ----------------------------------------
+
+  @Test
+  void createCarriesTheInvoiceFieldsToTheWriter() throws Exception {
+    org.mockito.ArgumentCaptor<BillDraftInput> captor =
+        org.mockito.ArgumentCaptor.forClass(BillDraftInput.class);
+    when(billWriter.createDraft(captor.capture())).thenReturn(BILL);
+    when(billReader.detail(BILL)).thenReturn(sampleDetail());
+
+    mockMvc
+        .perform(
+            post("/api/v1/ap/bills")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"vendorId\":\""
+                        + VENDOR
+                        + "\",\"currency\":\"IDR\",\"taxable\":false,\"taxBp\":1200,"
+                        + "\"vendorInvoiceNumber\":\" INV/2026/09/2214 \",\"billDate\":\"2026-09-11\","
+                        + "\"termDays\":14,\"discountMinor\":50000,\"note\":\"kurang 1 dus\","
+                        + "\"lines\":[{\"description\":\"Ayam\",\"quantity\":2,"
+                        + "\"unitPriceMinor\":100000}]}"))
+        .andExpect(status().isCreated());
+
+    BillDraftInput draft = captor.getValue();
+    assertThat(draft.taxBp()).as("an explicit rate wins over the boolean").isEqualTo(1_200);
+    assertThat(draft.discountMinor()).isEqualTo(50_000L);
+    assertThat(draft.vendorInvoiceNumber()).isEqualTo(" INV/2026/09/2214 ");
+    assertThat(draft.billDate()).isEqualTo(LocalDate.parse("2026-09-11"));
+    assertThat(draft.termDays()).isEqualTo(14);
+    assertThat(draft.note()).isEqualTo("kurang 1 dus");
+  }
+
+  @Test
+  void anOldClientBooleanStillMapsToTheOfficialRate() throws Exception {
+    org.mockito.ArgumentCaptor<BillDraftInput> captor =
+        org.mockito.ArgumentCaptor.forClass(BillDraftInput.class);
+    when(billWriter.createDraft(captor.capture())).thenReturn(BILL);
+    when(billReader.detail(BILL)).thenReturn(sampleDetail());
+
+    mockMvc
+        .perform(
+            post("/api/v1/ap/bills")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"vendorId\":\""
+                        + VENDOR
+                        + "\",\"currency\":\"IDR\",\"taxable\":true,"
+                        + "\"lines\":[{\"description\":\"Ayam\",\"quantity\":1,"
+                        + "\"unitPriceMinor\":100000}]}"))
+        .andExpect(status().isCreated());
+
+    assertThat(captor.getValue().taxBp()).isEqualTo(1_100);
+    assertThat(captor.getValue().discountMinor()).isZero();
+    assertThat(captor.getValue().vendorInvoiceNumber()).isNull();
+  }
+
+  @Test
+  void aDuplicateVendorInvoiceIsA409WithItsOwnType() throws Exception {
+    when(billWriter.createDraft(any(BillDraftInput.class)))
+        .thenThrow(new DuplicateVendorInvoiceException(VENDOR, "INV/2026/08/2214"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/ap/bills")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"vendorId\":\""
+                        + VENDOR
+                        + "\",\"currency\":\"IDR\",\"taxable\":false,"
+                        + "\"vendorInvoiceNumber\":\"INV/2026/08/2214\","
+                        + "\"lines\":[{\"description\":\"Ayam\",\"quantity\":1,"
+                        + "\"unitPriceMinor\":100000}]}"))
+        .andExpect(status().isConflict())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/bill-duplicate-invoice"));
+  }
+
+  @Test
+  void aNegativeDiscountOrOversizedInvoiceNumberIsA400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/ap/bills")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"vendorId\":\""
+                        + VENDOR
+                        + "\",\"currency\":\"IDR\",\"taxable\":false,\"discountMinor\":-1,"
+                        + "\"lines\":[{\"description\":\"Ayam\",\"quantity\":1,"
+                        + "\"unitPriceMinor\":100000}]}"))
         .andExpect(status().isBadRequest());
   }
 }

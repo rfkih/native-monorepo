@@ -1,12 +1,15 @@
 package id.co.nativeapp.finance.ap.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,7 +23,22 @@ public record CreateBillRequest(
     @NotNull UUID vendorId,
     @NotBlank @Pattern(regexp = "[A-Z]{3}", message = "currency must be a 3-letter ISO-4217 code") String currency,
     boolean taxable,
-    @NotEmpty @Valid List<LineRequest> lines) {
+    @NotEmpty @Valid List<LineRequest> lines,
+    // ADR 0084 — the invoice as the vendor wrote it. Every field optional so an older client's
+    // body (the four fields above) still parses; the server derives taxBp from `taxable` when
+    // absent and dates/terms fall back to the post-time rules.
+    @Size(max = 64) String vendorInvoiceNumber,
+    LocalDate billDate,
+    @PositiveOrZero @Max(3650) Integer termDays,
+    @PositiveOrZero Long discountMinor,
+    Integer taxBp,
+    @Size(max = 1000) String note) {
+
+  /** The pre-ADR-0084 shape — existing call sites and tests unchanged. */
+  public CreateBillRequest(
+      UUID vendorId, String currency, boolean taxable, List<LineRequest> lines) {
+    this(vendorId, currency, taxable, lines, null, null, null, null, null, null);
+  }
 
   /**
    * One requested bill line.

@@ -19,4 +19,6 @@ public interface VendorView {
   String getTaxId();
 
   boolean getActive();
+
+  Integer getPaymentTermDays();
 }

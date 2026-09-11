@@ -236,8 +236,9 @@ blind.
 ## Object store (MinIO) — media drill + operations (ADR 0048)
 
 The dev stack's MinIO holds all binary media: menu images (`restaurant/…`, the only
-anonymous-readable prefix), expense receipts (`employee/…`) and static QRIS (`payment/…`),
-content-addressed as `{service}/{companyId}/{domain}/{sha256}.{ext}` in bucket `native-media`.
+anonymous-readable prefix), expense receipts (`employee/…`), static QRIS (`payment/…`) and AP bill
+attachments (`finance/…`, ADR 0084 — private), content-addressed as
+`{service}/{companyId}/{domain}/{sha256}.{ext}` in bucket `native-media`.
 `minio-init` (docker/minio/init.sh) provisions the bucket + versioning + one prefix-scoped user
 per service on every stack start — idempotent, safe to re-run. The community image has NO web
 console: administer with `mc` one-liners, e.g.
@@ -262,6 +263,12 @@ docker run --rm --network native-dev_default minio/mc:RELEASE.2025-08-13T08-35-4
   Versioning is on; mirror with
   `mc mirror --overwrite n/native-media /backup/native-media` (or a second S3 target) on a
   schedule. Restore = mirror back + restart nothing (keys are content-addressed).
+- **Adding a service to the store** (finance was added in ADR 0084): `create_scoped_user <svc>` in
+  `docker/minio/init.sh`, `MEDIA_<SVC>_ACCESS_KEY/SECRET_KEY` on `minio-init` in every compose file,
+  `MEDIA_ENDPOINT/ACCESS_KEY/SECRET_KEY` + `depends_on: minio-init` on the service, the secret in
+  `prod.env.example` — **and the real secret appended to the VPS `prod.env` (and the UAT env) BEFORE
+  the release is tagged**: an empty secret makes `minio-init` exit non-zero, the service never starts,
+  and the health gate rolls the deploy back.
 - **Troubleshooting**: images 404 after a redeploy → did `minio-init` exit 0? (`docker logs
   native[-uat]-minio-init`). Menu images broken but receipts fine → the anonymous policy on
   `restaurant/` is missing (re-run minio-init) or the gateway `MEDIA_URI` is wrong. Upload 500s →

@@ -32,7 +32,7 @@ public interface BillRepository extends JpaRepository<Bill, UUID> {
           "SELECT b.id AS id, b.bill_number AS bill_number, b.vendor_id AS vendor_id,"
               + " v.name AS vendor_name, b.status AS status, b.bill_date AS bill_date,"
               + " b.due_date AS due_date, b.currency AS currency, b.total_minor AS total_minor,"
-              + " b.paid_minor AS paid_minor"
+              + " b.paid_minor AS paid_minor, b.vendor_invoice_number AS vendor_invoice_number"
               + " FROM bill b JOIN vendor v ON v.id = b.vendor_id"
               + " WHERE (:status IS NULL OR b.status = :status)"
               + " AND (CAST(:vendorId AS uuid) IS NULL OR b.vendor_id = CAST(:vendorId AS uuid))"
@@ -50,10 +50,27 @@ public interface BillRepository extends JpaRepository<Bill, UUID> {
               + " v.name AS vendor_name, b.status AS status, b.bill_date AS bill_date,"
               + " b.due_date AS due_date, b.currency AS currency, b.subtotal_minor AS"
               + " subtotal_minor, b.tax_minor AS tax_minor, b.total_minor AS total_minor,"
-              + " b.paid_minor AS paid_minor, b.uses_illustrative_rules AS uses_illustrative_rules"
+              + " b.paid_minor AS paid_minor, b.uses_illustrative_rules AS uses_illustrative_rules,"
+              + " b.vendor_invoice_number AS vendor_invoice_number, b.term_days AS term_days,"
+              + " b.discount_minor AS discount_minor, b.tax_bp AS tax_bp, b.note AS note"
               + " FROM bill b JOIN vendor v ON v.id = b.vendor_id WHERE b.id = :id",
       nativeQuery = true)
   Optional<BillDetailView> findDetail(UUID id);
+
+  /**
+   * Whether a LIVE (non-void) bill of this vendor already carries the vendor's invoice number (ADR
+   * 0084) — case-insensitive, the same predicate as the {@code uq_bill_company_vendor_invoice}
+   * partial index, so the writer can answer with a typed 409 before the index ever fires. Scalar
+   * exists, RLS-scoped.
+   */
+  @Query(
+      value =
+          "SELECT EXISTS(SELECT 1 FROM bill b WHERE b.vendor_id = :vendorId"
+              + " AND b.vendor_invoice_number IS NOT NULL"
+              + " AND lower(b.vendor_invoice_number) = lower(:number)"
+              + " AND b.status <> 'VOID')",
+      nativeQuery = true)
+  boolean existsLiveVendorInvoice(UUID vendorId, String number);
 
   /** The lines of one bill, ordered by line number. */
   @Query(

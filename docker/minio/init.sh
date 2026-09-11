@@ -98,5 +98,7 @@ POLICY
 create_scoped_user restaurant "$MEDIA_RESTAURANT_ACCESS_KEY" "$MEDIA_RESTAURANT_SECRET_KEY"
 create_scoped_user employee "$MEDIA_EMPLOYEE_ACCESS_KEY" "$MEDIA_EMPLOYEE_SECRET_KEY"
 create_scoped_user payment "$MEDIA_PAYMENT_ACCESS_KEY" "$MEDIA_PAYMENT_SECRET_KEY"
+# ADR 0084 — AP bill attachments (the vendor invoice as evidence), private, finance/* only.
+create_scoped_user finance "$MEDIA_FINANCE_ACCESS_KEY" "$MEDIA_FINANCE_SECRET_KEY"
 
 echo "minio-init: done"
