@@ -130,7 +130,9 @@ export function BillAttachments({
 
       {lightbox ? (
         <div
-          className="fixed inset-0 z-[80] grid place-items-center bg-black/85 p-4 print:hidden"
+          // A photo viewer, not a scrim: a near-black ground in BOTH themes (`ink-fixed`), so the image
+          // reads the same whichever theme the page is in.
+          className="fixed inset-0 z-[80] grid place-items-center bg-ink-fixed/85 p-4 print:hidden"
           role="dialog"
           aria-modal="true"
           aria-label={t('ap.detail.attachments')}
