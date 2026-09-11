@@ -82,6 +82,7 @@ import {
   withLine,
   withoutLine,
 } from './lib/menuView'
+import { safeBottom } from '@/lib/safeArea'
 
 /** Glyph per category template (`categoryCanon` keys); anything custom gets the plain fork. */
 const GLYPHS: Record<string, LucideIcon> = {
@@ -103,9 +104,7 @@ const ICON_BUTTON =
   'grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald'
 
 /** Fixed bottom surfaces bypass the body's safe-area padding (index.css) — each pads itself. */
-const SAFE_BOTTOM = (px: number) => ({
-  paddingBottom: `calc(${px}px + var(--safe-area-inset-bottom, 0px))`,
-})
+const SAFE_BOTTOM = safeBottom // lib/safeArea — the one definition of the nav-bar inset rule
 
 function problemDetail(err: unknown): string | null {
   return err instanceof ApiError ? (err.problem?.detail ?? null) : null

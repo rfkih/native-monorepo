@@ -86,7 +86,7 @@ import {
   type AutoLinkResult,
   type HppSummaryRow,
 } from './recipeApi'
-import { FULL_HEIGHT_BETWEEN_BARS, SAFE_AREA_BOTTOM } from '@/lib/safeArea'
+import { FULL_HEIGHT_BETWEEN_BARS } from '@/lib/safeArea'
 
 // ---------------------------------------------------------------------------
 // Entry guard
@@ -159,8 +159,7 @@ function DialogOverlay({
       }}
     >
       <Card
-        className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet"
-        style={{ paddingBottom: `calc(1.5rem + ${SAFE_AREA_BOTTOM})` }}
+        className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet max-sm:pb-[calc(1.5rem+var(--safe-area-inset-bottom,0px))]"
       >
         {children}
       </Card>
@@ -1978,8 +1977,7 @@ function ModifierGroupsPanel({
       }}
     >
       <div
-        className="flex w-full max-w-lg flex-col rounded-t-2xl bg-surface shadow-xl sm:rounded-2xl"
-        style={{ paddingBottom: SAFE_AREA_BOTTOM }}
+        className="flex w-full max-w-lg flex-col rounded-t-2xl bg-surface shadow-xl sm:rounded-2xl max-sm:pb-[var(--safe-area-inset-bottom,0px)]"
       >
         {/* Panel header */}
         <div className="flex items-start justify-between border-b border-line px-5 py-4">

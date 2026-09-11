@@ -13,7 +13,6 @@ import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { currentPeriod, formatPeriod } from '@/lib/period'
 import { useCloseHistory, useClosePeriod, type CloseResponse } from './api'
-import { SAFE_AREA_BOTTOM } from '@/lib/safeArea'
 
 /**
  * Close-period confirmation dialog.
@@ -66,8 +65,7 @@ function ConfirmCloseDialog({
       }}
     >
       <Card
-        className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet"
-        style={{ paddingBottom: `calc(1.5rem + ${SAFE_AREA_BOTTOM})` }}
+        className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet max-sm:pb-[calc(1.5rem+var(--safe-area-inset-bottom,0px))]"
       >
         <div className="space-y-4">
           <h2 className="font-display text-lg font-semibold text-ink">

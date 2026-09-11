@@ -129,7 +129,9 @@ export function DialogOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-[var(--z-overlay)] flex items-end justify-center sm:items-center sm:p-4"
+      // Tablet+: a centred card inside 1rem gutters that grow by the Android bars, so a tall
+      // dialog ends above the nav bar there too. Phone: the sheet pads itself (spacer below).
+      className="fixed inset-0 z-[var(--z-overlay)] flex items-end justify-center sm:items-center sm:px-4 sm:pt-[calc(1rem+var(--safe-area-inset-top,0px))] sm:pb-[calc(1rem+var(--safe-area-inset-bottom,0px))]"
       onKeyDown={onKeyDown}
       role="presentation"
     >
