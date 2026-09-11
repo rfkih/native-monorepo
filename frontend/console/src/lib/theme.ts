@@ -28,7 +28,20 @@ export function setTheme(theme: Theme): void {
   } catch {
     /* ignore — storage may be unavailable */
   }
+  syncThemeColor()
   window.dispatchEvent(new CustomEvent(EVENT))
+}
+
+/**
+ * The browser / Android status bar (`<meta name="theme-color">`) follows the theme the user
+ * chose, not the OS: index.html sets it before first paint, and this re-reads `--color-paper` —
+ * the page ground — from the token itself once `data-theme` has flipped, so the two can't drift.
+ */
+function syncThemeColor(): void {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+  if (!meta) return
+  const paper = getComputedStyle(document.documentElement).getPropertyValue('--color-paper').trim()
+  if (paper) meta.content = paper
 }
 
 export function toggleTheme(): void {

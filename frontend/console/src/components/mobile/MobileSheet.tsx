@@ -52,7 +52,9 @@ export function MobileSheet({
         type="button"
         aria-label={t('common.close')}
         onClick={onClose}
-        className="motion-safe:animate-in motion-safe:fade-in-0 absolute inset-0 cursor-default bg-[rgba(14,17,22,0.42)]"
+        // `scrim-in` (index.css), not tailwindcss-animate's `animate-in fade-in-0`: that package
+        // was never installed, so the backdrop had cut in with no fade since the day it was written.
+        className="scrim-in absolute inset-0 cursor-default bg-scrim"
       />
       <div
         ref={panelRef}
@@ -61,7 +63,7 @@ export function MobileSheet({
         aria-modal="true"
         aria-label={ariaLabel}
         className={cn(
-          'sheet-up absolute inset-x-0 bottom-0 flex min-h-0 flex-col rounded-t-[26px] bg-surface shadow-lg outline-none',
+          'sheet-up absolute inset-x-0 bottom-0 flex min-h-0 flex-col rounded-t-sheet bg-surface shadow-lg outline-none',
           height === 'full' ? 'h-[calc(100dvh-110px)]' : 'max-h-[85dvh]',
         )}
         style={{ paddingBottom: 'var(--safe-area-inset-bottom, 0px)' }}

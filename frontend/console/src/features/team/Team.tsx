@@ -85,7 +85,7 @@ function DialogOverlay({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"
       onClick={(e) => {
@@ -95,7 +95,7 @@ function DialogOverlay({
         if (e.key === 'Escape') onClose()
       }}
     >
-      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]">
+      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet">
         {children}
       </Card>
     </div>
@@ -182,7 +182,7 @@ function RoleCheckboxGroup({
               <span className="block text-sm font-semibold text-ink">{t(`team.role.${r}`)}</span>
               <span className="block text-xs text-ink-3">{t(`team.roleHint.${r}`)}</span>
               {tierLocked ? (
-                <span className="mt-0.5 block text-[11px] font-medium text-warning">
+                <span className="mt-0.5 block text-2xs font-medium text-warning">
                   {t('team.roleTierLocked')}
                 </span>
               ) : null}
@@ -201,7 +201,7 @@ function StatusDot({ enabled }: { enabled: boolean }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 text-[13px] font-semibold',
+        'inline-flex items-center gap-1.5 text-sm font-semibold',
         enabled ? 'text-profit-ink' : 'text-ink-3',
       )}
     >
@@ -321,7 +321,7 @@ function InviteDialog({
 
           {/* Temp password — copyable */}
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-3">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
               {t('team.inviteDialog.tempPasswordLabel')}
             </p>
             <div className="flex items-center gap-2 rounded-xl border border-line bg-paper px-3.5 py-2.5">
@@ -758,7 +758,7 @@ function MemberRow({
       <div className="flex min-w-0 items-center gap-3">
         <span
           className={cn(
-            'grid size-[38px] shrink-0 place-items-center rounded-full text-[13px] font-bold',
+            'grid size-[38px] shrink-0 place-items-center rounded-full text-sm font-bold',
             primaryRole === 'owner' ? 'bg-emerald-tint text-emerald-2' : 'bg-ink-50 text-ink-2',
           )}
           aria-hidden
@@ -783,7 +783,7 @@ function MemberRow({
         {/* Outlets */}
         <span
           className={cn(
-            'truncate text-[13px]',
+            'truncate text-sm',
             cashierUnassigned ? 'font-semibold text-amber-2' : 'text-ink-2',
           )}
         >
@@ -893,10 +893,10 @@ export function Team() {
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-extrabold tracking-display text-ink">
             {t('team.title')}
           </h1>
-          <p className="mt-1.5 text-[15px] text-ink-3">{t('team.subtitle')}</p>
+          <p className="mt-1.5 text-base text-ink-3">{t('team.subtitle')}</p>
         </div>
         <Button type="button" size="md" onClick={() => setDialog({ kind: 'invite' })}>
           <Plus className="size-4" />
@@ -949,16 +949,16 @@ export function Team() {
         <Card className="overflow-hidden p-0">
           {/* Header row */}
           <div className="grid grid-cols-[minmax(0,2fr)_minmax(80px,1fr)_minmax(100px,1fr)_minmax(80px,1fr)_auto] gap-4 border-b border-line bg-paper px-6 py-3.5 max-sm:hidden">
-            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+            <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
               {t('team.colPerson')}
             </span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+            <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
               {t('team.colRole')}
             </span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+            <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
               {t('team.colOutlets')}
             </span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+            <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
               {t('team.colStatus')}
             </span>
             <span aria-hidden />

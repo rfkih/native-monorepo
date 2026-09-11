@@ -60,13 +60,13 @@ export function CouponField({ code, status, onApply, onClear, disabled, classNam
           }}
           placeholder={t('pos.coupon.placeholder')}
           aria-label={t('pos.coupon.label')}
-          className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-[13px] uppercase tracking-wide text-ink placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+          className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-sm uppercase tracking-eyebrow text-ink placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
         />
         <button
           type="button"
           onClick={submit}
           disabled={disabled || draft.trim() === ''}
-          className="h-10 shrink-0 rounded-xl border border-emerald-line bg-emerald-tint px-3.5 text-[13px] font-bold text-emerald-2 transition-colors hover:bg-line-strong disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          className="h-10 shrink-0 rounded-xl border border-emerald-line bg-emerald-tint px-3.5 text-sm font-bold text-emerald-2 transition-colors hover:bg-line-strong disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           {t('pos.coupon.apply')}
         </button>
@@ -79,7 +79,7 @@ export function CouponField({ code, status, onApply, onClear, disabled, classNam
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
       <div className="flex items-center gap-2">
-        <Badge tone={tone} className="flex-1 justify-between px-3 py-1.5 text-[13px]">
+        <Badge tone={tone} className="flex-1 justify-between px-3 py-1.5 text-sm">
           <span className="flex min-w-0 items-center gap-1.5">
             {status === 'APPLIED' ? (
               <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />

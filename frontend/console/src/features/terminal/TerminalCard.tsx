@@ -147,7 +147,7 @@ function DeviceLoginCard({
     <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
             {t('terminal.device.title')}
           </h2>
           <p className="mt-1 text-sm text-ink-3">{t('terminal.device.subtitle')}</p>
@@ -346,7 +346,7 @@ function RequirePinCard({
 
   return (
     <Card className="p-5">
-      <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+      <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
         {t('terminal.pin.title')}
       </h2>
 

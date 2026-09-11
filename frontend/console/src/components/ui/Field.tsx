@@ -40,7 +40,7 @@ export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInput
   return (
     <input
       className={cn(
-        'h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-[15px] text-ink',
+        'h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-base text-ink',
         'transition-colors placeholder:text-ink-3/70',
         'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15',
         className,

@@ -70,7 +70,7 @@ const PATH: Record<ReportTab, string> = {
 const PANEL_ID = 'laporan-panel'
 const TREND_MONTHS = 12
 
-const SECTION_LABEL = 'text-[10.5px] font-semibold uppercase tracking-[0.04em] text-ink-3'
+const SECTION_LABEL = 'text-2xs font-semibold uppercase tracking-eyebrow text-ink-3'
 
 export function Laporan({ tab }: { tab: ReportTab }) {
   const { t, i18n } = useTranslation()
@@ -190,7 +190,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
     <div className="print:hidden">
       <div className="flex items-center justify-between gap-2.5 pt-4">
         <span className={SECTION_LABEL}>{t('statements.phone.trendCaption', { n: TREND_MONTHS })}</span>
-        <div className="flex shrink-0 gap-[3px] rounded-[13px] bg-hover p-[3px]" role="group">
+        <div className="flex shrink-0 gap-[3px] rounded-xl bg-hover p-[3px]" role="group">
           {(['bar', 'line'] as const).map((kind) => {
             const on = chartType === kind
             return (
@@ -201,7 +201,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
                 aria-pressed={on}
                 aria-label={t(`statements.phone.chart.${kind}`)}
                 className={cn(
-                  'grid h-9 w-11 place-items-center rounded-[10px] transition-colors',
+                  'grid h-9 w-11 place-items-center rounded-xl transition-colors',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                   on ? 'bg-surface text-ink shadow-sm' : 'text-ink-3',
                 )}
@@ -227,7 +227,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
         />
       </div>
       {failedCount > 0 ? (
-        <div className="flex items-center gap-2 pt-2 text-[11.5px] font-medium text-amber">
+        <div className="flex items-center gap-2 pt-2 text-xs font-medium text-amber">
           <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1">
             {failedCount === 1
@@ -252,10 +252,10 @@ export function Laporan({ tab }: { tab: ReportTab }) {
           sticky one, and a root tab destination shows no back arrow (DashboardPhone, MorePage). */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="font-display text-[19px] font-bold leading-tight tracking-[-0.01em] text-ink">
+          <h1 className="font-display text-xl font-bold leading-tight tracking-display text-ink">
             {t('statements.phone.title')}
           </h1>
-          <p className="mt-0.5 truncate text-[12.5px] text-ink-3">
+          <p className="mt-0.5 truncate text-xs text-ink-3">
             {company.name} · {t('statements.scopeAllUnits')}
           </p>
         </div>
@@ -287,7 +287,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
               aria-controls={PANEL_ID}
               onClick={() => goTab(key)}
               className={cn(
-                'h-10 shrink-0 whitespace-nowrap rounded-full px-3.5 text-[12px] transition-colors',
+                'h-10 shrink-0 whitespace-nowrap rounded-full px-3.5 text-xs transition-colors',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                 on ? 'bg-emerald font-bold text-on-emerald' : 'bg-hover font-semibold text-ink-2',
               )}
@@ -303,11 +303,11 @@ export function Laporan({ tab }: { tab: ReportTab }) {
         <div className="grid flex-1 place-items-center px-8 py-10 text-center">
           <div>
             <TriangleAlert className="mx-auto mb-2.5 size-[26px] text-loss" aria-hidden="true" />
-            <div className="text-[14px] font-semibold text-loss">{t('statements.error')}</div>
+            <div className="text-sm font-semibold text-loss">{t('statements.error')}</div>
             <button
               type="button"
               onClick={() => void active.refetch()}
-              className="mt-5 min-h-12 rounded-[14px] bg-emerald px-5 text-[14px] font-bold text-on-emerald transition-transform active:scale-[.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+              className="mt-5 min-h-12 rounded-2xl bg-emerald px-5 text-sm font-bold text-on-emerald transition-transform active:scale-[.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
               {t('statements.phone.retry')}
             </button>
@@ -319,7 +319,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
             <Skeleton className="h-[11px] w-[38%] rounded-md" />
             <Skeleton className="h-[30px] w-[66%] rounded-lg" />
           </div>
-          <Skeleton className="h-[132px] rounded-[14px]" />
+          <Skeleton className="h-[132px] rounded-2xl" />
           {[72, 54, 83, 61, 47, 76].map((w, i) => (
             <div key={i} className="flex items-center gap-3">
               <div className="h-3" style={{ width: `${w}%` }}>
@@ -334,10 +334,10 @@ export function Laporan({ tab }: { tab: ReportTab }) {
           {chart}
           <div className="grid place-items-center px-8 py-12 text-center">
             <div>
-              <div className="text-[14px] font-semibold text-ink">
+              <div className="text-sm font-semibold text-ink">
                 {t('statements.phone.emptyFor', { period: periodText })}
               </div>
-              <div className="mt-2 text-[12px] font-medium text-ink-3">{t('statements.phone.emptyTap')}</div>
+              <div className="mt-2 text-xs font-medium text-ink-3">{t('statements.phone.emptyTap')}</div>
             </div>
           </div>
         </div>
@@ -377,8 +377,8 @@ export function Laporan({ tab }: { tab: ReportTab }) {
       {sheet && sheet !== 'export' && income.data ? (
         <DialogOverlay onClose={() => setSheet(null)} ariaLabel={incomeDetailTitle(sheet, t)}>
           <div className="border-b border-line pb-3">
-            <div className="text-[16px] font-bold leading-tight text-ink">{incomeDetailTitle(sheet, t)}</div>
-            <div className="mt-0.5 font-mono text-[12px] text-ink-3">{periodText}</div>
+            <div className="text-base font-bold leading-tight text-ink">{incomeDetailTitle(sheet, t)}</div>
+            <div className="mt-0.5 font-mono text-xs text-ink-3">{periodText}</div>
           </div>
           <div className="pt-3.5">
             <IncomeDetailBody kind={sheet} data={income.data} names={names} currency={currency} locale={locale} size="sm" />
@@ -389,7 +389,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
       {/* Export sheet. */}
       {sheet === 'export' && exportFile ? (
         <DialogOverlay onClose={() => setSheet(null)} ariaLabel={t('statements.phone.export.title', { report: reportName })}>
-          <div className="pb-2 text-[16px] font-bold text-ink">
+          <div className="pb-2 text-base font-bold text-ink">
             {t('statements.phone.export.title', { report: reportName })}
           </div>
           <div className="-mx-1 flex flex-col gap-0.5">
@@ -403,8 +403,8 @@ export function Laporan({ tab }: { tab: ReportTab }) {
             >
               <FileText className="size-[19px] shrink-0 text-ink-2" aria-hidden="true" />
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-semibold text-ink">{t('statements.phone.export.csv')}</span>
-                <span className="mt-0.5 block font-mono text-[12px] text-ink-3">{exportFile.filename}</span>
+                <span className="block text-sm font-semibold text-ink">{t('statements.phone.export.csv')}</span>
+                <span className="mt-0.5 block font-mono text-xs text-ink-3">{exportFile.filename}</span>
               </span>
             </button>
             <button
@@ -420,15 +420,15 @@ export function Laporan({ tab }: { tab: ReportTab }) {
             >
               <Printer className="size-[19px] shrink-0 text-ink-2" aria-hidden="true" />
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-semibold text-ink">{t('statements.phone.export.print')}</span>
-                <span className="mt-0.5 block text-[12px] text-ink-3">{t('statements.phone.export.printNote')}</span>
+                <span className="block text-sm font-semibold text-ink">{t('statements.phone.export.print')}</span>
+                <span className="mt-0.5 block text-xs text-ink-3">{t('statements.phone.export.printNote')}</span>
               </span>
             </button>
           </div>
           <button
             type="button"
             onClick={() => setSheet(null)}
-            className="mt-3.5 h-[54px] w-full rounded-[15px] bg-emerald text-[16px] font-bold text-on-emerald transition-transform active:scale-[.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="mt-3.5 h-[54px] w-full rounded-2xl bg-emerald text-base font-bold text-on-emerald transition-transform active:scale-[.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {t('statements.phone.export.close')}
           </button>
@@ -459,11 +459,11 @@ function Hero({
   const color = tone === 'profit' ? 'text-profit-ink' : tone === 'loss' ? 'text-loss' : 'text-ink'
   const body = (
     <>
-      <span className={cn('tnum font-mono text-[30px] font-bold leading-none tracking-[-.02em]', color)}>
+      <span className={cn('tnum font-mono text-2xl font-bold leading-none tracking-display', color)}>
         {value}
       </span>
       {note ? (
-        <span className={cn('flex items-center gap-1.5 text-[12px] font-semibold', tone === 'ink' ? 'text-ink-3' : color)}>
+        <span className={cn('flex items-center gap-1.5 text-xs font-semibold', tone === 'ink' ? 'text-ink-3' : color)}>
           {note}
           {onTap ? <ChevronRight className="size-[13px]" aria-hidden="true" /> : null}
         </span>
@@ -473,9 +473,9 @@ function Hero({
   return (
     <div className="pt-1.5">
       <div className="flex items-center gap-2">
-        <span className="text-[12px] font-semibold text-ink-3">{label}</span>
+        <span className="text-xs font-semibold text-ink-3">{label}</span>
         {illustrative ? (
-          <span className="flex h-[19px] items-center gap-1 rounded-full border border-warning-line px-1.5 text-[10.5px] font-bold text-amber">
+          <span className="flex h-[19px] items-center gap-1 rounded-full border border-warning-line px-1.5 text-2xs font-bold text-amber">
             <TriangleAlert className="size-2.5" aria-hidden="true" />
             {t('statements.illustrative')}
           </span>
@@ -518,14 +518,14 @@ function Figure({
   const inner = (
     <>
       <span className={SECTION_LABEL}>{label}</span>
-      <span className={cn('tnum whitespace-nowrap font-mono font-bold leading-tight', small ? 'text-[12px]' : 'text-[14px]', color)}>
+      <span className={cn('tnum whitespace-nowrap font-mono font-bold leading-tight', small ? 'text-xs' : 'text-sm', color)}>
         {value}
       </span>
-      {note ? <span className="text-[10.5px] font-medium leading-tight text-ink-3">{note}</span> : null}
+      {note ? <span className="text-2xs font-medium leading-tight text-ink-3">{note}</span> : null}
     </>
   )
   const cls = cn(
-    'flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 overflow-hidden rounded-[14px] bg-hover py-2.5 text-left',
+    'flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 overflow-hidden rounded-2xl bg-hover py-2.5 text-left',
     small ? 'px-2.5' : 'px-3',
   )
   return onClick ? (
@@ -556,10 +556,10 @@ function Banner({
         {tone === 'profit' ? <Check className="size-[18px]" strokeWidth={2.6} aria-hidden="true" /> : <TriangleAlert className="size-[18px]" aria-hidden="true" />}
       </span>
       <div className="min-w-0 flex-1">
-        <div className={cn('text-[13px] font-bold leading-[1.35]', ink)}>{title}</div>
-        {body ? <div className="mt-1 text-[12px] leading-[1.5] text-ink-2">{body}</div> : null}
+        <div className={cn('text-sm font-bold leading-[1.35]', ink)}>{title}</div>
+        {body ? <div className="mt-1 text-xs leading-[1.5] text-ink-2">{body}</div> : null}
       </div>
-      {amount ? <span className={cn('tnum shrink-0 font-mono text-[13px] font-bold', ink)}>{amount}</span> : null}
+      {amount ? <span className={cn('tnum shrink-0 font-mono text-sm font-bold', ink)}>{amount}</span> : null}
     </div>
   )
 }
@@ -619,7 +619,7 @@ function IncomeView({
         <Section>
           <div className="flex items-baseline justify-between gap-2.5">
             <span className={SECTION_LABEL}>{t('statements.phone.expenseTab.title')}</span>
-            <span className="text-[10.5px] text-ink-3">{t('statements.phone.expenseTab.note')}</span>
+            <span className="text-2xs text-ink-3">{t('statements.phone.expenseTab.note')}</span>
           </div>
           <ShareBars size="sm" className="mt-3.5" rows={rows} currency={data.currency} locale={locale} tone="loss" />
         </Section>
@@ -659,7 +659,7 @@ function IncomeView({
         <Section>
           <div className="flex items-baseline justify-between gap-2.5">
             <span className={SECTION_LABEL}>{t('statements.topExpenses')}</span>
-            <span className="text-[10.5px] text-ink-3">{t('statements.topExpensesNote')}</span>
+            <span className="text-2xs text-ink-3">{t('statements.topExpensesNote')}</span>
           </div>
           <ShareBars size="sm" className="mt-3.5" rows={top} currency={data.currency} locale={locale} tone="loss" />
         </Section>
@@ -732,7 +732,7 @@ function BalanceView({
   /** "n accounts worth nothing are hidden · Show" — the sentence tracks the state. */
   const zeroFootnote = (hidden: number) =>
     hidden === 0 ? undefined : (
-      <p className="text-[10.5px] leading-[1.5] text-ink-3 print:hidden">
+      <p className="text-2xs leading-[1.5] text-ink-3 print:hidden">
         {showZeros
           ? hidden === 1
             ? t('statements.zeroShownOne')
@@ -788,7 +788,7 @@ function BalanceView({
           <EquationRow op="=" label={t('statements.plain.equity')} value={money(totalEquity)} answer />
         </div>
         {balanced ? (
-          <span className="mt-3 inline-flex h-6 items-center gap-1.5 rounded-full bg-tint-profit px-2.5 text-[11px] font-bold text-profit-ink">
+          <span className="mt-3 inline-flex h-6 items-center gap-1.5 rounded-full bg-tint-profit px-2.5 text-2xs font-bold text-profit-ink">
             <Check className="size-[11px]" strokeWidth={3.2} aria-hidden="true" />
             {t('statements.checksOut')}
           </span>

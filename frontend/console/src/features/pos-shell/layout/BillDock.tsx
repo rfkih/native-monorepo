@@ -162,7 +162,7 @@ export function BillDock({
           type="button"
           aria-label={t('posShell.dock.collapse')}
           onClick={() => onExpandedChange(false)}
-          className="motion-safe:animate-in motion-safe:fade-in-0 fixed inset-0 z-[29] cursor-default bg-ink-900/40"
+          className="scrim-in fixed inset-0 z-[29] cursor-default bg-scrim"
         />
       ) : null}
 
@@ -177,7 +177,7 @@ export function BillDock({
           // deck shipped at z-[45], which is above z-40 and below z-50 — so it covered the bottom
           // of the Charge modal (its keypad and Finish button) and nothing else, which is exactly
           // how the bug presented. The scrim rides one below the deck, not at the modal tier.
-          'fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-[22px]',
+          'fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-sheet',
           'border-t border-line bg-surface shadow-[0_-14px_34px_rgba(15,23,42,.16)]',
           'pb-[var(--safe-area-inset-bottom,0px)] motion-safe:transition-[height] motion-safe:duration-[260ms]',
           'motion-safe:ease-[cubic-bezier(.16,1,.3,1)]',
@@ -207,11 +207,11 @@ export function BillDock({
           >
             <span className="h-1 w-10 rounded-full bg-ink-300" aria-hidden="true" />
             <span className="flex w-full items-baseline gap-1.5">
-              <span className="truncate text-[14px] font-bold leading-none text-ink">{title}</span>
-              <span className="truncate text-[12px] font-medium leading-none text-ink-3">{meta}</span>
+              <span className="truncate text-sm font-bold leading-none text-ink">{title}</span>
+              <span className="truncate text-xs font-medium leading-none text-ink-3">{meta}</span>
               <span className="flex-1" />
               {hasPaidLines ? (
-                <span className="grid h-[19px] shrink-0 place-items-center self-center rounded-full border border-profit-line px-1.5 text-[10px] font-bold text-profit-ink">
+                <span className="grid h-[19px] shrink-0 place-items-center self-center rounded-full border border-profit-line px-1.5 text-2xs font-bold text-profit-ink">
                   {t('posShell.dock.partiallyPaid')}
                 </span>
               ) : null}
@@ -232,7 +232,7 @@ export function BillDock({
                 aria-pressed={a.active}
                 title={a.disabled ? (a.disabledTitle ?? a.label) : undefined}
                 className={cn(
-                  'flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-[12.5px] font-semibold transition-colors',
+                  'flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-xs font-semibold transition-colors',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                   a.active
                     ? 'border-emerald bg-emerald text-on-emerald'
@@ -249,7 +249,7 @@ export function BillDock({
 
         {/* Split explainer — the mode is not obvious from ticked boxes alone. */}
         {expanded && splitMode && splitHint ? (
-          <p className="shrink-0 border-b border-line bg-paper px-4 py-2.5 text-[12.5px] leading-[1.45] text-ink-2">
+          <p className="shrink-0 border-b border-line bg-paper px-4 py-2.5 text-xs leading-[1.45] text-ink-2">
             {splitHint}
           </p>
         ) : null}
@@ -264,7 +264,7 @@ export function BillDock({
           )}
         >
           {lines.length === 0 ? (
-            <p className="px-4 py-6 text-center text-[13px] text-ink-3">{emptyHint}</p>
+            <p className="px-4 py-6 text-center text-sm text-ink-3">{emptyHint}</p>
           ) : (
             <ul>
               {lines.map((l) => (
@@ -286,7 +286,7 @@ export function BillDock({
                     >
                       <span
                         className={cn(
-                          'grid size-[22px] place-items-center rounded-[7px] border-2 transition-colors',
+                          'grid size-[22px] place-items-center rounded-md border-2 transition-colors',
                           l.selected ? 'border-emerald bg-emerald' : 'border-ink-300',
                         )}
                       >
@@ -301,19 +301,19 @@ export function BillDock({
                     <div className="flex items-center gap-1.5">
                       <span
                         className={cn(
-                          'truncate text-[14px] font-medium leading-[1.35]',
+                          'truncate text-sm font-medium leading-[1.35]',
                           l.paid ? 'text-ink-3' : 'text-ink',
                         )}
                       >
                         {l.name}
                       </span>
                       {l.paid ? (
-                        <span className="grid h-[18px] shrink-0 place-items-center rounded-full border border-profit-line px-1.5 text-[10px] font-bold text-profit-ink">
+                        <span className="grid h-[18px] shrink-0 place-items-center rounded-full border border-profit-line px-1.5 text-2xs font-bold text-profit-ink">
                           {t('posShell.dock.linePaid')}
                         </span>
                       ) : null}
                     </div>
-                    <div className="tnum mt-0.5 font-mono text-[12px] leading-[1.3] text-ink-3">
+                    <div className="tnum mt-0.5 font-mono text-xs leading-[1.3] text-ink-3">
                       {l.unitLabel}
                     </div>
                   </div>
@@ -334,7 +334,7 @@ export function BillDock({
                           <Minus className="size-4" strokeWidth={2.4} aria-hidden="true" />
                         </button>
                       ) : null}
-                      <span className="tnum min-w-[30px] text-center font-mono text-[14px] font-semibold text-ink">
+                      <span className="tnum min-w-[30px] text-center font-mono text-sm font-semibold text-ink">
                         {l.qty}
                       </span>
                       <button
@@ -351,7 +351,7 @@ export function BillDock({
 
                   <div
                     className={cn(
-                      'tnum min-w-[76px] shrink-0 text-right font-mono text-[14px] leading-[1.35]',
+                      'tnum min-w-[76px] shrink-0 text-right font-mono text-sm leading-[1.35]',
                       l.paid ? 'text-ink-3' : 'text-ink',
                     )}
                   >
@@ -400,11 +400,11 @@ export function BillDock({
             exists, and it must never scroll out of reach. */}
         <div className="shrink-0 border-t border-line bg-surface px-3.5 pb-4 pt-2.5">
           <div className="flex items-baseline justify-between px-0.5 pb-2.5">
-            <span className="text-[14px] font-bold leading-none text-ink">{dueLabel}</span>
+            <span className="text-sm font-bold leading-none text-ink">{dueLabel}</span>
             <span
               aria-busy={totalPending}
               className={cn(
-                'tnum text-[24px] font-extrabold leading-none tracking-[-.035em] text-ink transition-opacity',
+                'tnum text-2xl font-extrabold leading-none tracking-display text-ink transition-opacity',
                 totalPending && 'animate-pulse opacity-50',
               )}
             >
@@ -418,7 +418,7 @@ export function BillDock({
                 data-testid="pos-send"
                 onClick={onSend}
                 disabled={busy}
-                className="flex h-14 shrink-0 items-center gap-2 rounded-2xl border border-line bg-surface px-4 text-[13.5px] font-bold text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
+                className="flex h-14 shrink-0 items-center gap-2 rounded-2xl border border-line bg-surface px-4 text-sm font-bold text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
               >
                 <Send className="size-[17px]" aria-hidden="true" />
                 {sendLabel}
@@ -430,7 +430,7 @@ export function BillDock({
               onClick={onPay}
               disabled={payDisabled}
               className={cn(
-                'h-14 flex-1 rounded-2xl bg-emerald px-4 text-[15.5px] font-bold text-on-emerald',
+                'h-14 flex-1 rounded-2xl bg-emerald px-4 text-base font-bold text-on-emerald',
                 'transition-transform active:scale-[.985] disabled:opacity-40 disabled:active:scale-100',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
               )}
@@ -447,13 +447,13 @@ export function BillDock({
                   type="button"
                   onClick={cancel.onCancel}
                   disabled={busy}
-                  className="min-h-11 rounded-xl px-3.5 text-[12.5px] font-semibold text-loss-ink transition-colors hover:bg-tint-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
+                  className="min-h-11 rounded-xl px-3.5 text-xs font-semibold text-loss-ink transition-colors hover:bg-tint-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
                 >
                   {cancel.label}
                 </button>
               ) : cancel.hintVisible ? (
                 // Touch screens have no tooltips — the lockdown explains itself in-line.
-                <p className="px-2 text-[11.5px] leading-[1.45] text-ink-3">{cancel.hint}</p>
+                <p className="px-2 text-xs leading-[1.45] text-ink-3">{cancel.hint}</p>
               ) : null}
             </div>
           ) : null}
@@ -477,15 +477,15 @@ function BreakdownRow({
   const { t } = useTranslation()
   return (
     <div className="flex items-center justify-between gap-2.5">
-      <span className="flex items-center gap-1.5 text-[13px] font-medium leading-[1.3] text-ink-3">
+      <span className="flex items-center gap-1.5 text-sm font-medium leading-[1.3] text-ink-3">
         {label}
         {estimated ? (
-          <span className="grid h-[18px] place-items-center rounded-full border border-warning-line px-1.5 text-[10px] font-bold text-amber">
+          <span className="grid h-[18px] place-items-center rounded-full border border-warning-line px-1.5 text-2xs font-bold text-amber">
             {t('posShell.dock.estimated')}
           </span>
         ) : null}
       </span>
-      <span className={cn('tnum font-mono text-[13px] font-semibold', tone === 'loss' ? 'text-loss' : 'text-ink')}>
+      <span className={cn('tnum font-mono text-sm font-semibold', tone === 'loss' ? 'text-loss' : 'text-ink')}>
         {value}
       </span>
     </div>

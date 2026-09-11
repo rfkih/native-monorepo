@@ -107,7 +107,7 @@ export function CouponDialog({ session, vertical, coupon, rules, onClose }: Prop
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={isEdit ? t('promotions.editCoupon') : t('promotions.newCoupon')}
@@ -137,7 +137,7 @@ export function CouponDialog({ session, vertical, coupon, rules, onClose }: Prop
               value={code}
               disabled={isEdit}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              className="font-mono uppercase tracking-wider"
+              className="font-mono uppercase tracking-eyebrow"
             />
           </Field>
 

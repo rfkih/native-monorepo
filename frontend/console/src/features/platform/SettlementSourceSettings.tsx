@@ -29,10 +29,10 @@ export function SettlementSourceSettings({ session }: { session: CompanySession 
 
   return (
     <Card className="p-6">
-      <h2 className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+      <h2 className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
         {t('platform.sourceConfig.heading')}
       </h2>
-      <p className="mt-1.5 max-w-[62ch] text-[13px] text-ink-3">
+      <p className="mt-1.5 max-w-[62ch] text-sm text-ink-3">
         {t('platform.sourceConfig.hint')}
       </p>
 
@@ -42,7 +42,7 @@ export function SettlementSourceSettings({ session }: { session: CompanySession 
       </div>
 
       {(sourcesQuery.data ?? []).every((s) => !s.lines.some((l) => l.sourceKind === 'MARKETPLACE')) ? (
-        <p className="mt-3 text-[13px] text-ink-3">{t('platform.sourceConfig.noPayers')}</p>
+        <p className="mt-3 text-sm text-ink-3">{t('platform.sourceConfig.noPayers')}</p>
       ) : null}
     </Card>
   )
@@ -99,7 +99,7 @@ function PayerPicker({ session, kind }: { session: CompanySession; kind: 'QRIS' 
           {t('platform.sourceConfig.save')}
         </Button>
       {save.isError ? (
-        <p className="mt-2 w-full text-[13px] text-loss">{t('platform.sourceConfig.saveFailed')}</p>
+        <p className="mt-2 w-full text-sm text-loss">{t('platform.sourceConfig.saveFailed')}</p>
       ) : null}
     </div>
   )

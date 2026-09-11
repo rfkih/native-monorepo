@@ -133,13 +133,13 @@ export function MemberField({
             }}
             placeholder={t('pos.loyalty.member.phonePlaceholder')}
             aria-label={t('pos.loyalty.member.phoneLabel')}
-            className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-[13px] text-ink placeholder:font-sans placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
           />
           <button
             type="button"
             onClick={submitLookup}
             disabled={disabled || phone.trim() === '' || lookup.isPending}
-            className="h-10 shrink-0 rounded-xl border border-emerald-line bg-emerald-tint px-3.5 text-[13px] font-bold text-emerald-2 transition-colors hover:bg-line-strong disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="h-10 shrink-0 rounded-xl border border-emerald-line bg-emerald-tint px-3.5 text-sm font-bold text-emerald-2 transition-colors hover:bg-line-strong disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {lookup.isPending ? <Spinner className="size-3.5" /> : t('pos.loyalty.member.lookUp')}
           </button>
@@ -156,13 +156,13 @@ export function MemberField({
                 onChange={(e) => setEnrollName(e.target.value)}
                 placeholder={t('pos.loyalty.member.namePlaceholder')}
                 aria-label={t('pos.loyalty.member.nameLabel')}
-                className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 text-[13px] text-ink placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+                className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
               />
               <button
                 type="button"
                 onClick={submitEnroll}
                 disabled={disabled || enroll.isPending}
-                className="h-10 shrink-0 rounded-xl bg-emerald px-3.5 text-[13px] font-bold text-on-emerald transition-colors hover:bg-emerald-2 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+                className="h-10 shrink-0 rounded-xl bg-emerald px-3.5 text-sm font-bold text-on-emerald transition-colors hover:bg-emerald-2 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
               >
                 {enroll.isPending ? <Spinner className="size-3.5" /> : t('pos.loyalty.member.enroll')}
               </button>
@@ -182,13 +182,13 @@ export function MemberField({
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       <div className="flex items-center gap-2">
-        <Badge tone="profit" className="flex-1 justify-between px-3 py-1.5 text-[13px]">
+        <Badge tone="profit" className="flex-1 justify-between px-3 py-1.5 text-sm">
           <span className="flex min-w-0 items-center gap-1.5">
             <User className="size-3.5 shrink-0" aria-hidden />
             <span className="truncate font-semibold">{member.displayName}</span>
-            <span className="tnum shrink-0 font-mono text-[11px] opacity-80">{member.phoneTail}</span>
+            <span className="tnum shrink-0 font-mono text-2xs opacity-80">{member.phoneTail}</span>
           </span>
-          <span className="tnum shrink-0 font-mono text-[11px] font-semibold">
+          <span className="tnum shrink-0 font-mono text-2xs font-semibold">
             {t('pos.loyalty.member.pointsBadge', { amount: formatMoney(member.pointsBalance, currency, locale) })}
           </span>
         </Badge>
@@ -219,18 +219,18 @@ export function MemberField({
             disabled={disabled}
             onChange={(e) => onRedeemChange(clampRedeem(Number(e.target.value)))}
             placeholder="0"
-            className="h-9 w-28 rounded-xl border border-line bg-surface px-2.5 text-right font-mono text-[13px] text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+            className="h-9 w-28 rounded-xl border border-line bg-surface px-2.5 text-right font-mono text-sm text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
           />
           <button
             type="button"
             disabled={disabled}
             onClick={() => onRedeemChange(maxRedeemable)}
-            className="h-9 shrink-0 rounded-xl border border-line bg-surface px-2.5 text-[12px] font-semibold text-ink-2 transition-colors hover:bg-hover disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="h-9 shrink-0 rounded-xl border border-line bg-surface px-2.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-hover disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {t('pos.loyalty.member.useMax')}
           </button>
           {redeemPoints > 0 ? (
-            <span className="tnum flex items-center gap-1 text-[11px] font-semibold text-emerald-2">
+            <span className="tnum flex items-center gap-1 text-2xs font-semibold text-emerald-2">
               <CheckCircle2 className="size-3 shrink-0" aria-hidden />
               − {formatMoney(redeemPoints, currency, locale)}
             </span>

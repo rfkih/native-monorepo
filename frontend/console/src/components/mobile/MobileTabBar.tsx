@@ -42,7 +42,7 @@ function TabInner({ tab, active }: { tab: MobileTab; active: boolean }) {
       </span>
       <span
         className={cn(
-          'text-[11.5px] leading-none',
+          'text-xs leading-none',
           active ? 'font-bold text-emerald-2' : 'font-medium text-ink-3',
         )}
       >

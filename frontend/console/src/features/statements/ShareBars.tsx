@@ -53,12 +53,12 @@ export function ShareBars({
               <span
                 className={cn(
                   'min-w-0 flex-1 truncate',
-                  sm ? 'text-[12px] font-semibold leading-[1.3] text-ink' : 'text-sm text-ink-2',
+                  sm ? 'text-xs font-semibold leading-[1.3] text-ink' : 'text-sm text-ink-2',
                 )}
               >
                 {r.name}
                 {r.code ? (
-                  <span className={cn('ml-1.5 font-mono font-normal text-ink-3', sm ? 'text-[10.5px]' : 'text-[11px]')}>
+                  <span className={cn('ml-1.5 font-mono font-normal text-ink-3', sm ? 'text-2xs' : 'text-2xs')}>
                     {r.code}
                   </span>
                 ) : null}
@@ -66,7 +66,7 @@ export function ShareBars({
               <span
                 className={cn(
                   'tnum shrink-0 font-mono font-semibold text-ink',
-                  sm ? 'text-[12px] leading-[1.3]' : 'text-[13.5px]',
+                  sm ? 'text-xs leading-[1.3]' : 'text-sm',
                 )}
               >
                 {formatAmount(r.amountMinor, currency, locale)}
@@ -74,7 +74,7 @@ export function ShareBars({
               <span
                 className={cn(
                   'tnum shrink-0 text-right font-mono text-ink-3',
-                  sm ? 'w-[38px] text-[10.5px] leading-[1.3]' : 'w-[42px] text-xs',
+                  sm ? 'w-[38px] text-2xs leading-[1.3]' : 'w-[42px] text-xs',
                 )}
               >
                 {formatPercent(r.share, locale)}

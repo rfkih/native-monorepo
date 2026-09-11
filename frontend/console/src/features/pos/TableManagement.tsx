@@ -45,7 +45,7 @@ export function TableManagement({ session, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-end bg-scrim backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('pos.table.management')}
@@ -132,12 +132,12 @@ function TableRow({
         <div className="flex items-center gap-2">
           <span className="font-medium text-ink">{table.label}</span>
           {table.occupied ? (
-            <Badge tone="amber" className="text-[10px] px-1.5 py-0">
+            <Badge tone="amber" className="text-2xs px-1.5 py-0">
               {t('pos.table.occupied')}
             </Badge>
           ) : null}
           {!table.active ? (
-            <Badge tone="neutral" className="text-[10px] px-1.5 py-0">
+            <Badge tone="neutral" className="text-2xs px-1.5 py-0">
               {t('pos.table.inactive')}
             </Badge>
           ) : null}

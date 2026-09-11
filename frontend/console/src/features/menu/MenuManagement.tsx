@@ -147,7 +147,7 @@ function DialogOverlay({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       onClick={(e) => {
@@ -157,7 +157,7 @@ function DialogOverlay({
         if (e.key === 'Escape') onClose()
       }}
     >
-      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]">{children}</Card>
+      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-sheet">{children}</Card>
     </div>
   )
 }
@@ -286,7 +286,7 @@ function ImagePicker({
 // report: 'Main Course' vs 'Menu Utama' split — canonical grouping fixes it read-side).
 
 const SELECT_CLASS =
-  'h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-[15px] text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
+  'h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-base text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
 
 
 /** A category dropdown: the business's managed categories first, then starter templates. */
@@ -1748,7 +1748,7 @@ function StockControl({
               <button
                 type="button"
                 onClick={() => setDialog('add')}
-                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
+                className="rounded-md px-1.5 py-0.5 text-2xs font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
                 aria-label={t('menu.stock.addStock')}
               >
                 {t('menu.stock.addStock')}
@@ -1756,7 +1756,7 @@ function StockControl({
               <button
                 type="button"
                 onClick={() => setDialog('set')}
-                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
+                className="rounded-md px-1.5 py-0.5 text-2xs font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
                 aria-label={t('menu.stock.setStock')}
               >
                 {t('menu.stock.setStock')}
@@ -1767,7 +1767,7 @@ function StockControl({
                   setStock.mutate({ itemId: item.id, quantity: null })
                 }
                 disabled={setStock.isPending}
-                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md px-1.5 py-0.5 text-2xs font-semibold text-ink-3 transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label={t('menu.stock.makeInfinite')}
               >
                 {setStock.isPending ? <Spinner /> : t('menu.stock.makeInfinite')}
@@ -1777,7 +1777,7 @@ function StockControl({
             <button
               type="button"
               onClick={() => setDialog('set')}
-              className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
+              className="rounded-md px-1.5 py-0.5 text-2xs font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
               aria-label={t('menu.stock.trackAction')}
             >
               {t('menu.stock.trackAction')}
@@ -1960,7 +1960,7 @@ function ModifierGroupsPanel({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={t('menu.options.panelLabel', { name: item.name })}
@@ -2101,7 +2101,7 @@ function GroupBlock({
               <ChevronRight className="size-4 shrink-0 text-ink-3" aria-hidden="true" />
             )}
             <span className="flex-1 font-medium text-ink">{group.name}</span>
-            <Badge tone={reqTone} className="text-[11px]">
+            <Badge tone={reqTone} className="text-2xs">
               {group.required ? t('pos.modifiers.required') : t('pos.modifiers.optional')}
             </Badge>
             <span className="text-xs text-ink-3">{selLabel}</span>
@@ -2257,7 +2257,7 @@ function ItemRow({
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold text-ink">{item.name}</span>
             {!item.available ? (
-              <Badge tone="neutral" className="text-[11px]">
+              <Badge tone="neutral" className="text-2xs">
                 {t('pos.soldOut')}
               </Badge>
             ) : null}
@@ -2294,7 +2294,7 @@ function ItemRow({
             <BookOpen className="size-3.5" aria-hidden="true" />
             {t('menu.item.options')}
             {item.modifierGroups.length > 0 ? (
-              <span className="tnum grid h-[17px] min-w-[17px] place-items-center rounded-full bg-ink-50 px-1 text-[10px] font-bold text-ink-2">
+              <span className="tnum grid h-[17px] min-w-[17px] place-items-center rounded-full bg-ink-50 px-1 text-2xs font-bold text-ink-2">
                 {item.modifierGroups.length}
               </span>
             ) : null}
@@ -2405,7 +2405,7 @@ function HppChip({
       ? computeMarginRatio(item.priceMinor, item.currency, hppRow.unitHppMinor, hppRow.hppCurrency)
       : null
   return (
-    <Badge tone={hppRow.completeness === 'COMPLETE' ? 'profit' : 'amber'} className="mt-1 text-[11px]">
+    <Badge tone={hppRow.completeness === 'COMPLETE' ? 'profit' : 'amber'} className="mt-1 text-2xs">
       {hppRow.unitHppMinor != null && hppRow.hppCurrency != null
         ? t('recipe.chipLabel', {
             hpp: formatMoney(hppRow.unitHppMinor, hppRow.hppCurrency, locale),
@@ -2444,7 +2444,7 @@ function CategorySection({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1 text-[11px] font-bold uppercase tracking-[0.05em] text-ink-3 transition-colors hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1 text-2xs font-bold uppercase tracking-eyebrow text-ink-3 transition-colors hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         aria-expanded={expanded}
       >
         {expanded ? (
@@ -2453,13 +2453,13 @@ function CategorySection({
           <ChevronRight className="size-3.5" aria-hidden="true" />
         )}
         {categoryName}
-        <span className="tnum ml-1 rounded-full bg-ink-50 px-1.5 py-0.5 text-[10px] font-bold text-ink-3">
+        <span className="tnum ml-1 rounded-full bg-ink-50 px-1.5 py-0.5 text-2xs font-bold text-ink-3">
           {items.length}
         </span>
       </button>
 
       {expanded ? (
-        <Card className="rounded-[20px] p-2.5">
+        <Card className="rounded-card p-2.5">
           {items.map((item) => (
             <ItemRow
               key={item.id}
@@ -2531,7 +2531,7 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
         </BackButton>
 
         <div className="min-w-0 flex-1">
-          <div className="font-display text-[17px] font-bold leading-tight tracking-[-0.01em] text-ink">
+          <div className="font-display text-lg font-bold leading-tight tracking-display text-ink">
             {t('menu.title')}
           </div>
           <div className="truncate text-xs text-ink-3">{session.name}</div>

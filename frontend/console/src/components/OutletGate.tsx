@@ -49,8 +49,8 @@ export function OutletGate({
   if (status === 'error') {
     return (
       <div className="grid min-h-[60vh] place-items-center p-6">
-        <div className="w-full max-w-sm rounded-[20px] border border-line bg-surface p-8 text-center shadow-sm">
-          <p className="text-[15px] font-semibold text-ink">{t('outletGate.errorTitle')}</p>
+        <div className="w-full max-w-sm rounded-card border border-line bg-surface p-8 text-center shadow-sm">
+          <p className="text-base font-semibold text-ink">{t('outletGate.errorTitle')}</p>
           <p className="mt-2 text-sm text-ink-3">{t('outletGate.errorBody')}</p>
           <button
             type="button"
@@ -67,11 +67,11 @@ export function OutletGate({
   if (status === 'empty' || !effectiveOutletId) {
     return (
       <div className="grid min-h-[60vh] place-items-center p-6">
-        <div className="w-full max-w-sm rounded-[20px] border border-line bg-surface p-8 text-center shadow-sm">
+        <div className="w-full max-w-sm rounded-card border border-line bg-surface p-8 text-center shadow-sm">
           <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-emerald-tint">
             <Store className="size-6 text-emerald-2" aria-hidden="true" />
           </span>
-          <p className="mt-4 text-[15px] font-semibold text-ink">{t('outletGate.title')}</p>
+          <p className="mt-4 text-base font-semibold text-ink">{t('outletGate.title')}</p>
           <p className="mt-2 text-sm leading-relaxed text-ink-3">{t('outletGate.body')}</p>
           <Link
             to="/org"

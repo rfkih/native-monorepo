@@ -218,7 +218,7 @@ export function PeriodChart({
                       aria-hidden="true"
                       className={cn(
                         'absolute left-1/2 -translate-x-1/2 transition-colors duration-200',
-                        geo.anchor === 'bottom' ? 'rounded-t-[4px]' : 'rounded-b-[4px]',
+                        geo.anchor === 'bottom' ? 'rounded-t-sm' : 'rounded-b-sm',
                         sel ? TONE_FILL[tone(v as number)] : 'bg-ink-200',
                       )}
                       style={{
@@ -242,7 +242,7 @@ export function PeriodChart({
               <span
                 key={p}
                 className={cn(
-                  'shrink-0 text-center text-[10.5px] leading-none',
+                  'shrink-0 text-center text-2xs leading-none',
                   sel ? 'font-bold text-ink' : 'font-medium text-ink-3',
                 )}
                 style={{ width: track.colW }}

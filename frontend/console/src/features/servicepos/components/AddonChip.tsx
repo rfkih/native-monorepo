@@ -41,14 +41,14 @@ export function AddonChip({
           : t(`${config.i18nNs}.selectAddonLabel`, { name: item.name })
       }
       className={cn(
-        'flex h-10 shrink-0 items-center gap-2 rounded-full border-[1.5px] px-4 text-[13px] font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+        'flex h-10 shrink-0 items-center gap-2 rounded-full border-[1.5px] px-4 text-sm font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
         selected
           ? 'border-emerald bg-emerald text-on-emerald'
           : 'border-line bg-surface text-ink-2 hover:border-emerald-line hover:bg-emerald-tint',
       )}
     >
       <span>{item.name}</span>
-      <span className="tnum font-mono text-[11px] opacity-80">
+      <span className="tnum font-mono text-2xs opacity-80">
         {formatMoney(item.priceMinor, item.currency, locale)}
       </span>
     </button>

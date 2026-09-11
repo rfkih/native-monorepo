@@ -49,8 +49,8 @@ export function AgingPhoneList({
         return (
           <Card key={r.id} className="p-3.5">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0 truncate text-[14px] font-bold text-ink">{r.name}</span>
-              <span className="tnum shrink-0 font-mono text-[14.5px] font-bold text-ink">
+              <span className="min-w-0 truncate text-sm font-bold text-ink">{r.name}</span>
+              <span className="tnum shrink-0 font-mono text-base font-bold text-ink">
                 {formatMoney(r.outstandingMinor, currency, locale)}
               </span>
             </div>
@@ -73,7 +73,7 @@ export function AgingPhoneList({
                   <span
                     key={labels[i]}
                     className={cn(
-                      'tnum inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11.5px] font-semibold',
+                      'tnum inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-xs font-semibold',
                       chipClass(i),
                     )}
                   >

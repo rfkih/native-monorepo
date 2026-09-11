@@ -181,7 +181,7 @@ function IdleScreen({ businessName, displayLocale }: { businessName: string; dis
           <Store className="size-10 text-white" aria-hidden="true" />
         </span>
         <div>
-          <p className="font-display text-4xl font-bold tracking-tight sm:text-5xl">{businessName}</p>
+          <p className="font-display text-4xl font-bold tracking-display sm:text-5xl">{businessName}</p>
           <p className="mt-4 text-lg text-white/60">{t('posDisplay.idle.welcome', { lng: displayLocale })}</p>
         </div>
       </div>
@@ -203,7 +203,7 @@ function CartScreen({
   return (
     <div className="reveal flex flex-1 flex-col">
       <div className="flex-1 overflow-y-auto px-6 py-8 sm:px-16">
-        <p className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-white/50">
+        <p className="mb-6 text-sm font-semibold uppercase tracking-eyebrow text-white/50">
           {t('posDisplay.cart.yourOrder', { lng: displayLocale })}
         </p>
         {lines.length > 0 ? (

@@ -33,7 +33,7 @@ import { isNotLinked, useMyLeaveBalance, useMyProfile, useMySales } from './api'
 
 function MicroLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+    <div className="font-mono text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
       {children}
     </div>
   )
@@ -52,11 +52,11 @@ function StatCard({
   unit: string
 }) {
   return (
-    <Link to={to} viewTransition className="block rounded-[18px] border border-line bg-surface p-4 shadow-sm">
+    <Link to={to} viewTransition className="block rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <MicroLabel>{label}</MicroLabel>
       <div className="mt-1.5 flex items-baseline gap-1.5">
-        <span className="tnum font-mono text-[27px] font-bold leading-none text-ink">{value}</span>
-        <span className="text-[13px] font-medium text-ink-3">{unit}</span>
+        <span className="tnum font-mono text-2xl font-bold leading-none text-ink">{value}</span>
+        <span className="text-sm font-medium text-ink-3">{unit}</span>
       </div>
     </Link>
   )
@@ -143,7 +143,7 @@ export function MeHomePhone() {
       {profile.isLoading ? (
         <>
           <div className="flex items-center gap-3 border-b border-line bg-surface px-5 pb-4 pt-3.5">
-            <Skeleton className="size-[52px] shrink-0 rounded-[18px]" />
+            <Skeleton className="size-[52px] shrink-0 rounded-2xl" />
             <div className="min-w-0 flex-1">
               <Skeleton className="h-5 w-36" />
               <Skeleton className="mt-1.5 h-3.5 w-24" />
@@ -151,17 +151,17 @@ export function MeHomePhone() {
           </div>
           <div className="flex flex-col gap-3.5 px-4 pt-4">
             <div className="grid grid-cols-2 gap-2.5">
-              <Skeleton className="h-[88px] rounded-[18px]" />
-              <Skeleton className="h-[88px] rounded-[18px]" />
+              <Skeleton className="h-[88px] rounded-2xl" />
+              <Skeleton className="h-[88px] rounded-2xl" />
             </div>
-            <Skeleton className="h-32 rounded-[18px]" />
+            <Skeleton className="h-32 rounded-2xl" />
             <div className="grid grid-cols-2 gap-2.5">
               <Skeleton className="h-[60px] rounded-2xl" />
               <Skeleton className="h-[60px] rounded-2xl" />
               <Skeleton className="h-[60px] rounded-2xl" />
               <Skeleton className="h-[60px] rounded-2xl" />
             </div>
-            <Skeleton className="h-52 rounded-[18px]" />
+            <Skeleton className="h-52 rounded-2xl" />
           </div>
         </>
       ) : notLinked ? (
@@ -178,14 +178,14 @@ export function MeHomePhone() {
           {/* Profile header */}
           <div className="border-b border-line bg-surface px-5 pb-4 pt-3.5">
             <div className="flex items-center gap-3">
-              <span className="grid size-[52px] shrink-0 place-items-center rounded-[18px] bg-emerald-tint text-emerald-2">
+              <span className="grid size-[52px] shrink-0 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
                 <UserRound className="size-[26px]" aria-hidden />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[19px] font-bold leading-tight tracking-[-0.01em] text-ink">
+                <div className="truncate text-xl font-bold leading-tight tracking-display text-ink">
                   {profile.data.fullName}
                 </div>
-                <div className="mt-0.5 truncate text-[13px] font-medium text-ink-3">
+                <div className="mt-0.5 truncate text-sm font-medium text-ink-3">
                   {profile.data.assignments.length > 0
                     ? profile.data.assignments.map((a) => a.role).join(' · ')
                     : t('me.assignments.empty')}
@@ -219,28 +219,28 @@ export function MeHomePhone() {
             (sales.data.salesMinor !== 0 || sales.data.commissionBasisPoints !== null) ? (
               <Card className="p-[18px]">
                 <MicroLabel>{t('me.sales.title')}</MicroLabel>
-                <div className="tnum mt-1.5 font-mono text-[26px] font-bold leading-none tracking-[-0.02em] text-ink">
+                <div className="tnum mt-1.5 font-mono text-2xl font-bold leading-none tracking-display text-ink">
                   {formatMoney(sales.data.salesMinor, sales.data.currency, locale)}
                 </div>
                 {sales.data.commissionBasisPoints !== null ? (
                   <>
                     <div className="mt-3.5 flex gap-2.5">
-                      <div className="flex-1 rounded-[14px] bg-paper px-3.5 py-3">
-                        <div className="text-[11px] font-medium text-ink-3">{t('me.sales.rate')}</div>
-                        <div className="tnum mt-1 font-mono text-[16px] font-bold leading-none text-ink">
+                      <div className="flex-1 rounded-2xl bg-paper px-3.5 py-3">
+                        <div className="text-2xs font-medium text-ink-3">{t('me.sales.rate')}</div>
+                        <div className="tnum mt-1 font-mono text-base font-bold leading-none text-ink">
                           {formatPercent(sales.data.commissionBasisPoints / 10000, locale)}
                         </div>
                       </div>
-                      <div className="flex-1 rounded-[14px] bg-tint-profit px-3.5 py-3">
-                        <div className="text-[11px] font-medium text-profit-ink">
+                      <div className="flex-1 rounded-2xl bg-tint-profit px-3.5 py-3">
+                        <div className="text-2xs font-medium text-profit-ink">
                           {t('me.sales.estimate')}
                         </div>
-                        <div className="tnum mt-1 font-mono text-[16px] font-bold leading-none text-profit-ink">
+                        <div className="tnum mt-1 font-mono text-base font-bold leading-none text-profit-ink">
                           {formatMoney(sales.data.commissionEstimateMinor ?? 0, sales.data.currency, locale)}
                         </div>
                       </div>
                     </div>
-                    <p className="mt-2.5 text-[11.5px] leading-snug text-ink-3">
+                    <p className="mt-2.5 text-xs leading-snug text-ink-3">
                       {t('me.sales.estimateHint')}
                     </p>
                   </>
@@ -257,7 +257,7 @@ export function MeHomePhone() {
                     key={a.key}
                     to={a.to}
                     viewTransition
-                    className="flex min-h-[60px] items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3 text-[13.5px] font-semibold leading-tight text-ink transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
+                    className="flex min-h-[60px] items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3 text-sm font-semibold leading-tight text-ink transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
                   >
                     <ActionIcon className="size-5 shrink-0 text-emerald-2" strokeWidth={1.9} aria-hidden />
                     {a.label}
@@ -271,7 +271,7 @@ export function MeHomePhone() {
               <div className="pl-1">
                 <MicroLabel>{t('me.home.personalData')}</MicroLabel>
               </div>
-              <Card className="mt-2 overflow-hidden rounded-[18px] p-0">
+              <Card className="mt-2 overflow-hidden rounded-2xl p-0">
                 {[
                   { key: 'nik', label: t('me.profile.nik'), value: profile.data.maskedNik, amber: false },
                   { key: 'bank', label: t('me.profile.bank'), value: profile.data.maskedBankAccount, amber: false },
@@ -284,12 +284,12 @@ export function MeHomePhone() {
                     key={row.key}
                     className="flex min-h-[52px] items-center justify-between gap-3 border-b border-line/60 px-4 py-3 last:border-b-0"
                   >
-                    <span className="text-[13.5px] font-medium text-ink-3">{row.label}</span>
+                    <span className="text-sm font-medium text-ink-3">{row.label}</span>
                     <span
                       className={
                         row.amber
-                          ? 'text-[13.5px] font-semibold text-amber-2'
-                          : 'font-mono text-[13.5px] font-semibold text-ink'
+                          ? 'text-sm font-semibold text-amber-2'
+                          : 'font-mono text-sm font-semibold text-ink'
                       }
                     >
                       {row.value}
@@ -297,7 +297,7 @@ export function MeHomePhone() {
                   </div>
                 ))}
               </Card>
-              <p className="mt-2 pl-1 text-[11.5px] leading-snug text-ink-3">{t('me.home.piiHint')}</p>
+              <p className="mt-2 pl-1 text-xs leading-snug text-ink-3">{t('me.home.piiHint')}</p>
             </section>
           </div>
         </>

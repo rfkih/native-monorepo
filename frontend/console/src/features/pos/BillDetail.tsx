@@ -546,7 +546,7 @@ export function BillDetail({
       {/* Backdrop (only when sheetOpen on tablet+) */}
       {sheetOpen ? (
         <div
-          className="fixed inset-0 z-40 hidden bg-black/20 backdrop-blur-[2px] sm:block"
+          className="fixed inset-0 z-40 hidden bg-scrim backdrop-blur-[2px] sm:block"
           onClick={() => onSheetOpenChange(false)}
           aria-hidden="true"
         />
@@ -616,7 +616,7 @@ export function BillDetail({
       {isTablet ? (
         <div
           className={cn(
-            'fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[28px] bg-surface shadow-[0_-16px_48px_rgba(15,23,42,.18)] transition-transform duration-300 ease-out',
+            'fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-sheet bg-surface shadow-[0_-16px_48px_rgba(15,23,42,.18)] transition-transform duration-300 ease-out',
             sheetOpen ? 'translate-y-0' : 'translate-y-full',
             'max-h-[80dvh]',
           )}
@@ -797,7 +797,7 @@ export function BillDetail({
               <button
                 type="button"
                 onClick={() => setShowKot(true)}
-                className="flex h-[60px] shrink-0 items-center gap-2 rounded-xl border border-emerald-line bg-emerald-tint px-5 text-[15px] font-bold text-emerald-2 transition-all hover:bg-emerald-tint/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+                className="flex h-[60px] shrink-0 items-center gap-2 rounded-xl border border-emerald-line bg-emerald-tint px-5 text-base font-bold text-emerald-2 transition-all hover:bg-emerald-tint/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
               >
                 <Send className="size-[17px]" aria-hidden="true" />
                 {t('bills.sendToKitchen', { n: unsentCount })}
@@ -811,7 +811,7 @@ export function BillDetail({
                 data-testid="bill-pay-split"
                 disabled={selectedLines.length === 0 || billQuery.isFetching}
                 onClick={openPayModal}
-                className="tnum h-[60px] flex-1 rounded-xl bg-emerald px-6 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
+                className="tnum h-[60px] flex-1 rounded-xl bg-emerald px-6 font-mono text-base font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
               >
                 {t('bills.paySplit', { n: selectedLines.length })} ·{' '}
                 {formatMoney(selectedTotal, currency, locale)}
@@ -822,7 +822,7 @@ export function BillDetail({
                 data-testid="bill-pay"
                 disabled={unpaidLines.length === 0 || billQuery.isFetching}
                 onClick={openPayModal}
-                className="tnum h-[60px] flex-1 rounded-xl bg-emerald px-6 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
+                className="tnum h-[60px] flex-1 rounded-xl bg-emerald px-6 font-mono text-base font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
               >
                 {allLinesPaid
                   ? t('bills.allPaid')
@@ -844,7 +844,7 @@ export function BillDetail({
                 {t('bills.cancelBill')}
               </button>
             ) : cancelHintVisible ? (
-              <p className="px-5 text-[11px] text-ink-3">{t('bills.cancelNeedsManager')}</p>
+              <p className="px-5 text-2xs text-ink-3">{t('bills.cancelNeedsManager')}</p>
             ) : null}
           </div>
 

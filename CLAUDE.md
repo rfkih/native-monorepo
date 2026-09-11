@@ -13,6 +13,7 @@
 - Build order and tasks: **CLAUDE-CODE-BUILD-PLAN.md**.
 - **Engineering standards** (API/RFC-7807, persistence, testing, resilience, observability, security, config): **docs/ENGINEERING-STANDARDS.md**.
 - **Code structure & layering** (controller → service → repository → domain, package-by-feature with layer sub-packages, ArchUnit-enforced): **docs/CODE-STRUCTURE.md** — consult before writing a controller, repository, test, or migration.
+- **Design system** (tokens, the type/radius scale, colour roles; gate-enforced — no `text-[Npx]`, no bracket radius, no hex): **docs/DESIGN-SYSTEM.md** — read before any console UI.
 - **Decisions (ADRs)**: **docs/adr/** — the append-only log of cross-cutting/hard-to-reverse choices and their *why*. Add one for any such change; read `docs/adr/README.md` first.
 - **Repo automation**: project slash commands in **.claude/commands/** — `/new-service`, `/new-feature`, `/new-event`, `/new-migration`, `/native-check`. Prefer them over re-deriving a workflow from prose.
 

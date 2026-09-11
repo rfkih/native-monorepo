@@ -43,7 +43,7 @@ export function CategoryCell({
       <span className={active ? 'text-emerald-2' : 'text-ink-3'}>{icon}</span>
       <span
         className={cn(
-          'text-[11px] leading-tight',
+          'text-2xs leading-tight',
           active ? 'font-bold text-emerald-2' : 'font-semibold text-ink-3',
         )}
       >

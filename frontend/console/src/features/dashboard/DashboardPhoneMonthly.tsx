@@ -123,10 +123,10 @@ export function DashboardPhoneMonthly() {
 
       {/* Header: company + scope, then the period stepper. */}
       <div>
-        <h1 className="font-display text-[19px] font-bold leading-tight tracking-[-0.01em] text-ink">
+        <h1 className="font-display text-xl font-bold leading-tight tracking-display text-ink">
           {company.name}
         </h1>
-        <p className="mt-0.5 text-[12.5px] text-ink-3">{t('dashboard.scopeAllUnits')}</p>
+        <p className="mt-0.5 text-xs text-ink-3">{t('dashboard.scopeAllUnits')}</p>
       </div>
       <PeriodNav
         period={period}
@@ -154,8 +154,8 @@ export function DashboardPhoneMonthly() {
       ) : (
         <>
           {/* Hero — monthly net on the inverted card. */}
-          <div className="rounded-[22px] bg-ink-900 p-5 shadow-lg">
-            <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.07em] text-paper/55">
+          <div className="rounded-card bg-ink-900 p-5 shadow-lg">
+            <div className="font-mono text-2xs font-semibold uppercase tracking-eyebrow text-paper/55">
               {profit ? t('dashboard.netProfit') : t('dashboard.netLoss')} ·{' '}
               {formatPeriod(period, locale)}
             </div>
@@ -165,14 +165,14 @@ export function DashboardPhoneMonthly() {
             {query.isLoading ? (
               <div className="mt-2 h-9 w-52 max-w-full animate-pulse rounded-lg bg-paper/20" />
             ) : (
-              <div className="tnum mt-2 font-display text-[32px] font-extrabold leading-none tracking-[-0.035em] text-paper">
+              <div className="tnum mt-2 font-display text-3xl font-extrabold leading-none tracking-display text-paper">
                 {formatMoney(figures.net, company.baseCurrency, locale)}
               </div>
             )}
             {prev && prev.fig.revenue > 0 ? (
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 <DeltaPill value={revDelta} locale={locale} />
-                <span className="text-[12px] text-paper/55">
+                <span className="text-xs text-paper/55">
                   {t('dashboard.revenueVsPrev', { month: prevMonthLabel })}
                 </span>
               </div>
@@ -186,8 +186,8 @@ export function DashboardPhoneMonthly() {
                 { key: 'margin', label: t('dashboard.margin'), value: marginLabel },
               ].map((s) => (
                 <div key={s.key} className="min-w-0 flex-1">
-                  <div className="text-[11px] text-paper/50">{s.label}</div>
-                  <div className="tnum mt-0.5 pr-2 font-mono text-[13.5px] font-bold text-paper">
+                  <div className="text-2xs text-paper/50">{s.label}</div>
+                  <div className="tnum mt-0.5 pr-2 font-mono text-sm font-bold text-paper">
                     {s.value}
                   </div>
                 </div>
@@ -203,7 +203,7 @@ export function DashboardPhoneMonthly() {
               </span>
               <div>
                 <div className="text-sm font-semibold text-ink">{t('dashboard.noSalesYet')}</div>
-                <div className="mt-1 text-[13px] text-ink-3">{t('dashboard.noSalesYetHint')}</div>
+                <div className="mt-1 text-sm text-ink-3">{t('dashboard.noSalesYetHint')}</div>
               </div>
               <Link
                 to="/pos"
@@ -216,7 +216,7 @@ export function DashboardPhoneMonthly() {
                 <Link
                   to="/opening-balances"
                   viewTransition
-                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-2 hover:underline"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-2 hover:underline"
                 >
                   <BookOpen className="size-4" aria-hidden="true" />
                   {t('dashboard.openingShortcut')}
@@ -229,19 +229,19 @@ export function DashboardPhoneMonthly() {
           {outlets.length > 0 ? (
             <Card className="p-[18px]">
               <div className="flex items-baseline justify-between">
-                <span className="text-[14.5px] font-bold text-ink">
+                <span className="text-base font-bold text-ink">
                   {t('dashboardPhone.perOutlet')}
                 </span>
-                <span className="text-[11.5px] text-ink-3">{formatPeriod(period, locale)}</span>
+                <span className="text-xs text-ink-3">{formatPeriod(period, locale)}</span>
               </div>
               <div className="mt-3.5 flex flex-col gap-3">
                 {outlets.map((o) => (
                   <div key={o.businessId}>
                     <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                      <span className="truncate text-[13px] font-semibold text-ink-2">
+                      <span className="truncate text-sm font-semibold text-ink-2">
                         {o.outletName}
                       </span>
-                      <span className="tnum shrink-0 font-mono text-[13px] font-semibold text-ink">
+                      <span className="tnum shrink-0 font-mono text-sm font-semibold text-ink">
                         {formatMoney(o.revenueMinor, outletCurrency, locale)}
                       </span>
                     </div>
@@ -269,10 +269,10 @@ export function DashboardPhoneMonthly() {
                     key={tile.key}
                     to={tile.to}
                     viewTransition
-                    className="flex min-h-[88px] flex-col justify-between rounded-[18px] border border-line bg-surface p-3.5 transition-colors hover:border-emerald-line hover:bg-emerald-tint"
+                    className="flex min-h-[88px] flex-col justify-between rounded-2xl border border-line bg-surface p-3.5 transition-colors hover:border-emerald-line hover:bg-emerald-tint"
                   >
                     <TileIcon className="size-[21px] text-emerald-2" strokeWidth={1.8} aria-hidden />
-                    <span className="text-[13.5px] font-bold leading-tight text-ink">{tile.label}</span>
+                    <span className="text-sm font-bold leading-tight text-ink">{tile.label}</span>
                   </Link>
                 )
               })}

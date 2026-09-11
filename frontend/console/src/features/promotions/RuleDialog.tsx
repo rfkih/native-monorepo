@@ -168,7 +168,7 @@ export function RuleDialog({ session, vertical, rule, itemOptions, categoryOptio
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={isEdit ? t('promotions.editRule') : t('promotions.newRule')}
@@ -297,7 +297,7 @@ export function RuleDialog({ session, vertical, rule, itemOptions, categoryOptio
                     aria-pressed={on}
                     onClick={() => toggleDay(d)}
                     className={cn(
-                      'h-9 min-w-9 rounded-lg border-[1.5px] px-2.5 text-[13px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+                      'h-9 min-w-9 rounded-lg border-[1.5px] px-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                       on
                         ? 'border-emerald bg-emerald text-on-emerald'
                         : 'border-line bg-surface text-ink-2 hover:border-emerald-line hover:bg-emerald-tint',

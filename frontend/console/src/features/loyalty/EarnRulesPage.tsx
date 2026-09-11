@@ -70,7 +70,7 @@ function EarnRulesPageInner({ company }: { company: CompanySession }) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">{t('loyalty.title')}</h1>
+        <h1 className="font-display text-2xl font-bold tracking-display text-ink">{t('loyalty.title')}</h1>
         <p className="mt-1.5 text-sm text-ink-3">{t('loyalty.subtitle')}</p>
       </div>
 
@@ -252,7 +252,7 @@ function EarnRuleDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('loyalty.earnRules.newRule')}
@@ -481,7 +481,7 @@ function GiftCardLookupSection({ session, locale }: { session: CompanySession; l
           }}
           placeholder={t('pos.loyalty.giftCard.codePlaceholder')}
           aria-label={t('pos.loyalty.giftCard.codeLabel')}
-          className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-sm uppercase tracking-wide text-ink placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+          className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-sm uppercase tracking-eyebrow text-ink placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
         />
         <Button type="button" onClick={submit} disabled={code.trim() === '' || lookup.isPending}>
           {lookup.isPending ? <Spinner /> : <Search className="size-4" />}

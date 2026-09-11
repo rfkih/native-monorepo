@@ -4,6 +4,10 @@
  * Items + modifiers + qty + table + guest label + time. NO prices (kitchen
  * does not need money figures).
  *
+ * PRINT SURFACE — exempt from the type scale (ADR 0085) and pinned to the pre-scale pixel sizes
+ * (text-[14px]/[16px]/[18px], the old text-sm/base/lg): a printed document must not move when the
+ * screen scale moves. Do not "tidy" these back to scale names.
+ *
  * Print isolation: triggers window.print() targeting #native-kot-print.
  * The customer receipt uses #native-thermal-receipt-paper — the two ids never collide.
  * The @media print rule hides every other element so only the KOT prints.
@@ -53,7 +57,7 @@ export function KotView({ bill, lines, locale, tableLabel, onClose }: Props) {
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <div className="flex items-center gap-2">
               <ChefHat className="size-5 text-ink-2" aria-hidden="true" />
-              <h2 className="font-display text-lg font-semibold text-ink">{t('kot.title')}</h2>
+              <h2 className="font-display text-[18px] font-semibold text-ink">{t('kot.title')}</h2>
             </div>
             <button
               type="button"
@@ -66,7 +70,7 @@ export function KotView({ bill, lines, locale, tableLabel, onClose }: Props) {
           </div>
 
           {/* Meta */}
-          <div className="border-b border-line px-5 py-3 text-sm">
+          <div className="border-b border-line px-5 py-3 text-[14px]">
             <div className="flex items-baseline justify-between">
               <span className="text-ink-3">{t('kot.guest')}</span>
               <span className="font-medium text-ink">{bill.guestLabel}</span>
@@ -88,14 +92,14 @@ export function KotView({ bill, lines, locale, tableLabel, onClose }: Props) {
           {/* Item list */}
           <div className="min-h-0 max-h-[50vh] overflow-y-auto">
             {lines.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-ink-3">{t('kot.noItems')}</p>
+              <p className="px-5 py-8 text-center text-[14px] text-ink-3">{t('kot.noItems')}</p>
             ) : (
               <ul className="divide-y divide-line">
                 {lines.map((line) => (
                   <li key={line.id} className="px-5 py-3">
                     <div className="flex items-center gap-3">
                       {/* Checkbox-style qty badge */}
-                      <span className="tnum grid size-8 shrink-0 place-items-center rounded-lg border-2 border-ink-200 font-mono text-sm font-bold text-ink">
+                      <span className="tnum grid size-8 shrink-0 place-items-center rounded-lg border-2 border-ink-200 font-mono text-[14px] font-bold text-ink">
                         {line.qty}
                       </span>
                       <div className="min-w-0 flex-1">

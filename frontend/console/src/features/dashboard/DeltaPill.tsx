@@ -10,7 +10,7 @@ export function DeltaPill({ value, locale }: { value: number; locale: string }) 
   return (
     <span
       className={cn(
-        'tnum inline-flex items-center gap-1 rounded-full px-3 py-1.5 font-mono text-[13px] font-bold',
+        'tnum inline-flex items-center gap-1 rounded-full px-3 py-1.5 font-mono text-sm font-bold',
         up ? 'bg-tint-profit text-profit-ink' : 'bg-tint-loss text-loss-ink',
       )}
     >

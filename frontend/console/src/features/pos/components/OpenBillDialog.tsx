@@ -65,12 +65,12 @@ export function OpenBillDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[60] grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] grid place-items-center bg-scrim p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('bills.openBillTitle')}
     >
-      <div className="max-h-full w-full max-w-sm overflow-y-auto overscroll-contain rounded-[20px] border border-line bg-surface shadow-xl">
+      <div className="max-h-full w-full max-w-sm overflow-y-auto overscroll-contain rounded-card border border-line bg-surface shadow-xl">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <h3 className="font-display text-lg font-semibold text-ink">{t('bills.openBillTitle')}</h3>
           <button
@@ -125,7 +125,7 @@ export function OpenBillDialog({
                   )}
                 >
                   <div className={cn('text-sm font-bold', selectedTableId === null ? 'text-on-emerald' : 'text-ink')}>—</div>
-                  <div className={cn('text-[10px]', selectedTableId === null ? 'text-on-emerald/80' : 'text-ink-3')}>
+                  <div className={cn('text-2xs', selectedTableId === null ? 'text-on-emerald/80' : 'text-ink-3')}>
                     {t('bills.noTable')}
                   </div>
                 </button>
@@ -146,7 +146,7 @@ export function OpenBillDialog({
                       )}
                     >
                       <div className={cn('text-sm font-bold', selected ? 'text-on-emerald' : 'text-ink')}>{tbl.label}</div>
-                      <div className={cn('text-[10px]', selected ? 'text-on-emerald/80' : 'text-ink-3')}>
+                      <div className={cn('text-2xs', selected ? 'text-on-emerald/80' : 'text-ink-3')}>
                         {t('pos.table.capacity', { n: tbl.capacity })}
                       </div>
                     </button>

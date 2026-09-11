@@ -157,7 +157,7 @@ export function ErrorDiagnostics({ message, pathPrefix, onRecovered }: Props) {
       </div>
 
       {open && failure ? (
-        <pre className="mt-4 max-h-64 overflow-auto rounded-xl border border-line bg-paper p-4 text-left font-mono text-[11px] leading-relaxed text-ink-2">
+        <pre className="mt-4 max-h-64 overflow-auto rounded-xl border border-line bg-paper p-4 text-left font-mono text-2xs leading-relaxed text-ink-2">
           {JSON.stringify(failure, null, 2)}
         </pre>
       ) : null}

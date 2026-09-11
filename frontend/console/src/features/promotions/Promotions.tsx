@@ -126,7 +126,7 @@ function PromotionsInner({ company }: { company: CompanySession }) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">{t('promotions.title')}</h1>
+          <h1 className="font-display text-2xl font-bold tracking-display text-ink">{t('promotions.title')}</h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('promotions.subtitle')}</p>
         </div>
         <Segmented options={verticalOptions} value={vertical} onChange={setVertical} ariaLabel={t('promotions.vertical.label')} />
@@ -222,10 +222,10 @@ function PromotionsInner({ company }: { company: CompanySession }) {
         ) : coupons.length === 0 ? (
           <EmptyState title={t('promotions.emptyCoupons')} hint={t('promotions.emptyCouponsHint')} />
         ) : (
-          <Card className="overflow-x-auto rounded-[20px]">
+          <Card className="overflow-x-auto rounded-card">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                   <th className="px-4 py-3">{t('promotions.colCode')}</th>
                   <th className="px-4 py-3">{t('promotions.colLinkedRule')}</th>
                   <th className="px-4 py-3 text-right">{t('promotions.colRedemptions')}</th>

@@ -90,7 +90,7 @@ export function DailySummary({
   if (loading) {
     return (
       <div
-        className="fixed inset-0 z-[70] grid place-items-center bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[70] grid place-items-center bg-scrim backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label={t('register.summaryTitle')}
@@ -104,14 +104,14 @@ export function DailySummary({
   if (!resolvedId || summaryQuery.isError || !summary) {
     return (
       <div
-        className="fixed inset-0 z-[70] grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+        className="fixed inset-0 z-[70] grid place-items-center bg-scrim p-6 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label={t('register.summaryTitle')}
       >
         <div className="w-full max-w-sm rounded-card border border-line bg-surface px-6 py-6 text-center">
           <p className="text-sm font-semibold text-ink">{t('register.summaryTitle')}</p>
-          <p className="mt-1.5 text-[13px] text-ink-3">
+          <p className="mt-1.5 text-sm text-ink-3">
             {summaryQuery.isError ? t('register.summaryError') : t('register.summaryEmpty')}
           </p>
           <button

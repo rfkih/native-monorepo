@@ -213,7 +213,7 @@ export function OrgUnitDetail() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+            <h1 className="font-display text-2xl font-bold tracking-display text-ink">
               {unit.name}
             </h1>
             <OrgUnitTypeBadge type={unit.type} />
@@ -226,7 +226,7 @@ export function OrgUnitDetail() {
                 )}
                 aria-hidden="true"
               />
-              <span className="text-[12px] text-ink-3">
+              <span className="text-xs text-ink-3">
                 {unit.active ? t('org.active') : t('org.inactive')}
               </span>
             </span>
@@ -444,7 +444,7 @@ function SmartButton({
           {icon}
         </span>
         <span className="min-w-0">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+          <span className="block text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
             {label}
           </span>
           <span className={cn('tnum block truncate font-mono text-lg font-semibold', tone ?? 'text-ink')}>
@@ -474,7 +474,7 @@ function SmartLink({
           {icon}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+          <span className="block text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
             {label}
           </span>
           <span className="block truncate text-lg font-semibold text-ink">{figure}</span>
@@ -573,7 +573,7 @@ function OverviewTab({
 
       {isBu && pnl && pnl.outlets.length > 0 ? (
         <Card className="p-5">
-          <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
             {t('orgHub.overview.contribution')}
           </h2>
           <div className="mt-4 flex flex-col gap-3.5">
@@ -618,7 +618,7 @@ function ContributionRow({
         </Link>
         <span className="tnum shrink-0 font-mono text-sm font-semibold text-ink">
           {formatMoney(row.revenueMinor, currency, locale)}
-          <span className="ml-2 text-[11px] font-normal text-ink-3">
+          <span className="ml-2 text-2xs font-normal text-ink-3">
             {t('orgHub.overview.shareOfRevenue', {
               percent: formatPercent(share, locale),
             })}
@@ -664,7 +664,7 @@ function OutletsTab({
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+        <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
           {t('orgHub.tabs.outlets')}
         </h2>
         <Button type="button" onClick={onAdd}>
@@ -687,7 +687,7 @@ function OutletsTab({
             >
               <Link
                 to={`/org/${outlet.id}`}
-                className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-ink hover:text-emerald-2 hover:underline"
+                className="min-w-0 flex-1 truncate text-base font-semibold text-ink hover:text-emerald-2 hover:underline"
               >
                 {outlet.name}
               </Link>
@@ -699,7 +699,7 @@ function OutletsTab({
                   )}
                   aria-hidden="true"
                 />
-                <span className="hidden text-[11px] text-ink-3 sm:block">
+                <span className="hidden text-2xs text-ink-3 sm:block">
                   {outlet.active ? t('org.active') : t('org.inactive')}
                 </span>
               </span>
@@ -823,7 +823,7 @@ function PeopleTab({
                 {entry.outlets.map((name) => (
                   <span
                     key={name}
-                    className="rounded-full bg-ink-50 px-2.5 py-0.5 text-[11px] font-semibold text-ink-500"
+                    className="rounded-full bg-ink-50 px-2.5 py-0.5 text-2xs font-semibold text-ink-500"
                   >
                     {name}
                   </span>

@@ -18,7 +18,7 @@ import { accountLabel } from './accountLabels'
  */
 export function EntityScope({ name, scope }: { name: string; scope: string }) {
   return (
-    <div className="mb-1 text-[13px] font-semibold text-ink-2">
+    <div className="mb-1 text-sm font-semibold text-ink-2">
       {name} <span className="font-normal text-ink-3">· {scope}</span>
     </div>
   )
@@ -58,13 +58,13 @@ export function SummaryCard({
   const body = (
     <>
       <div className="flex items-center gap-2">
-        <span className={`size-2.5 rounded-[3px] ${chipClass}`} aria-hidden />
-        <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+        <span className={`size-2.5 rounded-sm ${chipClass}`} aria-hidden />
+        <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
           {label}
         </span>
       </div>
       <div
-        className={`tnum mt-2.5 font-mono text-[26px] leading-tight print:text-xl ${
+        className={`tnum mt-2.5 font-mono text-2xl leading-tight print:text-xl ${
           emphatic ? 'font-bold' : 'font-semibold'
         } ${valueClass ?? 'text-ink'}`}
       >
@@ -90,7 +90,7 @@ export function SummaryCard({
       >
         {body}
         {detailLabel ? (
-          <span className="mt-2.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-2 print:hidden">
+          <span className="mt-2.5 inline-flex items-center gap-0.5 text-2xs font-semibold text-emerald-2 print:hidden">
             {detailLabel}
             <ChevronRight className="size-3.5" aria-hidden />
           </span>
@@ -168,7 +168,7 @@ function AccountRow({
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 sm:flex-nowrap">
         <span className="text-sm text-ink-2 sm:truncate">{name ?? line.accountCode}</span>
         {name && line.accountCode ? (
-          <span className="font-mono text-[11px] text-ink-3 sm:shrink-0">{line.accountCode}</span>
+          <span className="font-mono text-2xs text-ink-3 sm:shrink-0">{line.accountCode}</span>
         ) : null}
       </span>
       <span
@@ -237,7 +237,7 @@ export function LineSection({
     <div>
       {/* Print pagination: the heading keeps its first rows, each row stays whole, and the
           footer total never strands alone on a fresh page (UAT 2026-08-06). */}
-      <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 print:break-after-avoid">
+      <div className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3 print:break-after-avoid">
         {heading}
       </div>
       <div className="mt-2.5">
@@ -246,7 +246,7 @@ export function LineSection({
         ) : groups ? (
           groups.map((group, index) => (
             <div key={group.label} className={index > 0 ? 'mt-3.5' : undefined}>
-              <div className="flex items-baseline gap-3 pb-1 text-[12px] text-ink-3">
+              <div className="flex items-baseline gap-3 pb-1 text-xs text-ink-3">
                 <span className="min-w-0 flex-1 truncate font-semibold">{group.label}</span>
                 <span className="tnum shrink-0 font-mono">
                   {format(group.subtotalMinor, currency, locale)}
@@ -304,7 +304,7 @@ export function EquationRow({
       </span>
       <span
         className={cn(
-          'min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.08em]',
+          'min-w-0 flex-1 truncate text-2xs font-bold uppercase tracking-eyebrow',
           tone === 'warning' ? 'text-amber-2' : answer ? 'text-emerald-2' : 'text-ink-3',
         )}
       >
@@ -312,7 +312,7 @@ export function EquationRow({
       </span>
       <span
         className={cn(
-          'tnum shrink-0 font-mono text-[15px]',
+          'tnum shrink-0 font-mono text-base',
           tone === 'warning' ? 'text-amber-2' : 'text-ink',
           answer ? 'font-bold' : 'font-semibold',
         )}

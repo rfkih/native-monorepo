@@ -81,7 +81,7 @@ function problemTypeIncludes(err: unknown, needle: string): boolean {
   )
 }
 
-const FIELD = 'tnum h-12 w-full rounded-[14px] px-3.5 font-mono text-base font-semibold'
+const FIELD = 'tnum h-12 w-full rounded-2xl px-3.5 font-mono text-base font-semibold'
 
 export function IngredientForm({
   session,
@@ -271,7 +271,7 @@ export function IngredientForm({
       )}
     >
       {rail ? (
-        <div className="font-display text-lg font-bold leading-tight tracking-[-0.02em] text-ink">
+        <div className="font-display text-lg font-bold leading-tight tracking-display text-ink">
           {isCreate ? t('inventory.addTitle') : t('inventory.editTitle')}
         </div>
       ) : null}
@@ -279,7 +279,7 @@ export function IngredientForm({
       <div>
         <MicroLabel>{t('inventory.nameLabel')}</MicroLabel>
         <TextInput
-          className="mt-[7px] h-12 rounded-[14px] text-base font-medium"
+          className="mt-[7px] h-12 rounded-2xl text-base font-medium"
           autoFocus={!rail}
           value={name}
           aria-invalid={nameError || undefined}
@@ -303,7 +303,7 @@ export function IngredientForm({
         >
           {INGREDIENT_UNIT_GROUPS.map((group) => (
             <div key={group.key} className="flex items-center gap-2.5">
-              <span className="w-14 shrink-0 text-[11px] font-semibold text-ink-3">
+              <span className="w-14 shrink-0 text-2xs font-semibold text-ink-3">
                 {t(`inventory.unitGroup.${group.key}`)}
               </span>
               <div className="flex flex-1 flex-wrap gap-[7px]">
@@ -331,14 +331,14 @@ export function IngredientForm({
             </div>
           ))}
         </div>
-        <p className="mt-[9px] text-[11.5px] leading-relaxed text-ink-400 text-pretty">
+        <p className="mt-[9px] text-xs leading-relaxed text-ink-400 text-pretty">
           {t('inventory.form.unitNote')}
         </p>
       </div>
 
       {baseUnitChanged && ingredient ? (
         <div
-          className="flex items-start gap-2.5 rounded-[14px] bg-tint-info px-3.5 py-[13px]"
+          className="flex items-start gap-2.5 rounded-2xl bg-tint-info px-3.5 py-[13px]"
           role="status"
         >
           <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden="true" />
@@ -422,7 +422,7 @@ export function IngredientForm({
         </div>
         <p
           className={cn(
-            'mt-[7px] text-[11.5px] font-medium leading-relaxed text-pretty',
+            'mt-[7px] text-xs font-medium leading-relaxed text-pretty',
             costError
               ? 'text-loss'
               : useTotalMode && derivedShownCostMinor != null
@@ -474,7 +474,7 @@ export function IngredientForm({
         </div>
         <p
           className={cn(
-            'mt-[7px] text-[11.5px] leading-relaxed text-pretty',
+            'mt-[7px] text-xs leading-relaxed text-pretty',
             packSizeError ? 'text-loss' : 'text-ink-400',
           )}
         >
@@ -483,7 +483,7 @@ export function IngredientForm({
       </div>
 
       {error ? (
-        <div className="flex flex-col gap-1.5 rounded-[14px] bg-tint-loss p-3.5" role="alert">
+        <div className="flex flex-col gap-1.5 rounded-2xl bg-tint-loss p-3.5" role="alert">
           <div className="flex items-start gap-[9px]">
             <TriangleAlert
               className="mt-0.5 size-4 shrink-0 text-loss"

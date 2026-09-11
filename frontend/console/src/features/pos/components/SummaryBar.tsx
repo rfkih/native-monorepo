@@ -112,7 +112,7 @@ export function SummaryBar({
   return (
     <div
       id="pos-summary-dock"
-      className="fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-[28px] bg-surface pb-[var(--safe-area-inset-bottom,0px)] shadow-[0_-12px_32px_rgba(15,23,42,.10)]"
+      className="fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-sheet bg-surface pb-[var(--safe-area-inset-bottom,0px)] shadow-[0_-12px_32px_rgba(15,23,42,.10)]"
       style={{ boxSizing: 'border-box' }}
     >
       {/* Drag handle */}
@@ -195,10 +195,10 @@ export function SummaryBar({
             <ShoppingBag className="size-4 shrink-0 text-ink-2" aria-hidden="true" />
           )}
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-[13px] font-bold leading-tight text-ink">
+            <span className="truncate text-sm font-bold leading-tight text-ink">
               {activeBill ? displayName : t('posShell.walkInSale')}
             </span>
-            <span className="text-[11px] leading-tight text-ink-3">
+            <span className="text-2xs leading-tight text-ink-3">
               {displayCount > 0 ? t('bills.lineCount', { n: displayCount }) : t('bills.noBillsHint')}
             </span>
           </span>
@@ -210,7 +210,7 @@ export function SummaryBar({
         <div className="min-w-0 flex-1 text-right sm:pr-1">
           <div
             aria-busy={totalPending}
-            className={`tnum truncate font-mono text-[20px] font-bold leading-tight text-ink transition-opacity ${totalPending ? 'animate-pulse opacity-50' : ''}`}
+            className={`tnum truncate font-mono text-xl font-bold leading-tight text-ink transition-opacity ${totalPending ? 'animate-pulse opacity-50' : ''}`}
           >
             {displayTotal}
           </div>
@@ -237,7 +237,7 @@ export function SummaryBar({
                 type="button"
                 data-testid="pos-send"
                 onClick={onSend}
-                className="flex h-14 shrink-0 items-center gap-2 rounded-xl border border-emerald-line bg-emerald-tint px-4 text-[15px] font-bold text-emerald-2 transition-all hover:bg-emerald-tint/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+                className="flex h-14 shrink-0 items-center gap-2 rounded-xl border border-emerald-line bg-emerald-tint px-4 text-base font-bold text-emerald-2 transition-all hover:bg-emerald-tint/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
               >
                 <Send className="size-[17px]" aria-hidden="true" />
                 {t('bills.sendN', { n: unsentCount })}
@@ -247,7 +247,7 @@ export function SummaryBar({
               type="button"
               data-testid="pos-pay"
               onClick={onPay}
-              className="tnum h-14 shrink-0 rounded-xl bg-emerald px-5 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+              className="tnum h-14 shrink-0 rounded-xl bg-emerald px-5 font-mono text-base font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
               <span className={totalPending ? 'animate-pulse opacity-70' : undefined}>
                 {t('bills.payTotal', { total: displayTotal })}
@@ -260,7 +260,7 @@ export function SummaryBar({
             data-testid="pos-pay"
             onClick={onPay}
             disabled={displayCount === 0}
-            className="tnum h-14 shrink-0 rounded-xl bg-emerald px-5 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
+            className="tnum h-14 shrink-0 rounded-xl bg-emerald px-5 font-mono text-base font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
           >
             <span className={totalPending ? 'animate-pulse opacity-70' : undefined}>
               {t('posShell.chargeAmount', { amount: displayTotal })}

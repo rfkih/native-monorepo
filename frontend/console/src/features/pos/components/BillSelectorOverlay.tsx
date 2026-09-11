@@ -49,7 +49,7 @@ export function BillSelectorOverlay({
   const walkInActive = activeBillId === null
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-paper sm:bg-black/40 sm:p-6 sm:backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex flex-col bg-paper sm:bg-scrim sm:p-6 sm:backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('posShell.switcherTitle')}
@@ -131,7 +131,7 @@ export function BillSelectorOverlay({
                 <button
                   type="button"
                   onClick={onOpenFloor}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-line bg-surface py-2.5 text-[13px] font-semibold text-ink-2 hover:border-emerald-line hover:bg-emerald-tint/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-line bg-surface py-2.5 text-sm font-semibold text-ink-2 hover:border-emerald-line hover:bg-emerald-tint/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
                 >
                   <Table2 className="size-4" aria-hidden="true" />
                   {t('posShell.switcherFloor')}
@@ -141,7 +141,7 @@ export function BillSelectorOverlay({
                 <button
                   type="button"
                   onClick={onOpenParked}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-line bg-surface py-2.5 text-[13px] font-semibold text-ink-2 hover:border-emerald-line hover:bg-emerald-tint/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-line bg-surface py-2.5 text-sm font-semibold text-ink-2 hover:border-emerald-line hover:bg-emerald-tint/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
                 >
                   <ClipboardList className="size-4" aria-hidden="true" />
                   {t('posShell.switcherParked')}
@@ -152,7 +152,7 @@ export function BillSelectorOverlay({
           <button
             type="button"
             onClick={onNewBill}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-emerald-line bg-surface py-3 text-[15px] font-semibold text-emerald-2 hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-emerald-line bg-surface py-3 text-base font-semibold text-emerald-2 hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <Plus className="size-5" aria-hidden="true" />
             {t('bills.newBill')}

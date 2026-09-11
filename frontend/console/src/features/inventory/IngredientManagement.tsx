@@ -223,7 +223,7 @@ function InventoryPages({
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t('inventory.catalog.searchPlaceholder')}
               aria-label={t('inventory.catalog.searchPlaceholder')}
-              className="h-[38px] w-[250px] rounded-[11px] border border-line bg-surface pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-400 focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+              className="h-[38px] w-[250px] rounded-xl border border-line bg-surface pl-9 pr-3 text-sm text-ink placeholder:text-ink-400 focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
             />
           </label>
           <Button variant="outline" onClick={() => navigate('/inventory/history')}>

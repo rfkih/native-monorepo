@@ -48,7 +48,7 @@ export function SyncCenter({ locale, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-end bg-scrim backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('offline.syncCenter.title')}
@@ -194,35 +194,35 @@ function StatusChip({ status }: { status: SaleQueueStatus }) {
   switch (status) {
     case 'QUEUED':
       return (
-        <Badge tone="neutral" className="text-[10px] px-1.5 py-0">
+        <Badge tone="neutral" className="text-2xs px-1.5 py-0">
           <Clock className="size-3" aria-hidden="true" />
           {t('offline.status.queued')}
         </Badge>
       )
     case 'SYNCING':
       return (
-        <Badge tone="info" className="text-[10px] px-1.5 py-0">
+        <Badge tone="info" className="text-2xs px-1.5 py-0">
           <RotateCw className="size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           {t('offline.status.syncing')}
         </Badge>
       )
     case 'SYNCED':
       return (
-        <Badge tone="profit" className="text-[10px] px-1.5 py-0">
+        <Badge tone="profit" className="text-2xs px-1.5 py-0">
           <CheckCircle2 className="size-3" aria-hidden="true" />
           {t('offline.status.synced')}
         </Badge>
       )
     case 'SYNCED_WITH_MISMATCH':
       return (
-        <Badge tone="amber" className="text-[10px] px-1.5 py-0">
+        <Badge tone="amber" className="text-2xs px-1.5 py-0">
           <TriangleAlert className="size-3" aria-hidden="true" />
           {t('offline.status.mismatch')}
         </Badge>
       )
     case 'REJECTED':
       return (
-        <Badge tone="loss" className="text-[10px] px-1.5 py-0">
+        <Badge tone="loss" className="text-2xs px-1.5 py-0">
           <XCircle className="size-3" aria-hidden="true" />
           {t('offline.status.rejected')}
         </Badge>

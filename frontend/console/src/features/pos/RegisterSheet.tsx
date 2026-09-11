@@ -208,7 +208,7 @@ export function RegisterSheet({
   return (
     <>
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-scrim p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -250,7 +250,7 @@ export function RegisterSheet({
                     : 'bg-tint-loss text-loss',
               )}
             >
-              <div className="text-[12px] font-semibold uppercase tracking-[.06em]">
+              <div className="text-xs font-semibold uppercase tracking-eyebrow">
                 {(closed.overShortMinor ?? 0) === 0
                   ? t('register.resultBalanced')
                   : (closed.overShortMinor ?? 0) > 0
@@ -315,7 +315,7 @@ export function RegisterSheet({
                 className="rounded-xl border border-line bg-surface px-4 py-3"
                 data-testid="register-expected-breakdown"
               >
-                <div className="mb-2 text-[12px] font-semibold uppercase tracking-[.06em] text-ink-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
                   {t('register.expectedByTender')}
                 </div>
                 <dl className="space-y-2">
@@ -469,7 +469,7 @@ export function RegisterSheet({
         server still records whatever is submitted as the authoritative over/short). */}
     {confirmMismatch && expectedCashMinor != null ? (
       <div
-        className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4 backdrop-blur-sm"
+        className="fixed inset-0 z-[60] grid place-items-center bg-scrim p-4 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label={t('register.confirmMismatchTitle')}

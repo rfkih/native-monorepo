@@ -163,7 +163,7 @@ export function PayrollTab({
       ) : !setup.data?.seeded ? (
         /* Setup gate — payroll needs the pay-component catalog + statutory rules first. */
         <Card className="p-8 text-center">
-          <p className="text-[15px] font-semibold text-ink">{t('hr.payroll.setup.title')}</p>
+          <p className="text-base font-semibold text-ink">{t('hr.payroll.setup.title')}</p>
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-3">
             {t('hr.payroll.setup.body')}
           </p>
@@ -301,7 +301,7 @@ export function PayrollTab({
                       ariaLabel={t('hr.payroll.history.filterLabel')}
                     />
                   ) : null}
-                  <Card className="rounded-[20px] p-2.5">
+                  <Card className="rounded-card p-2.5">
                     {runs.map((run) => (
                       <button
                         key={run.id}
@@ -312,7 +312,7 @@ export function PayrollTab({
                           selectedRun?.id === run.id && 'bg-emerald-tint/50',
                         )}
                       >
-                        <span className="text-[14px] font-semibold text-ink">
+                        <span className="text-sm font-semibold text-ink">
                           {t('hr.payroll.history.runLabel', { seq: run.runSeq })}
                         </span>
                         {run.runType === 'THR' ? (
@@ -463,7 +463,7 @@ function RunDetail({
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[15px] font-semibold text-ink">
+            <span className="text-base font-semibold text-ink">
               {t('hr.payroll.history.runLabel', { seq: run.runSeq })}
             </span>
             {run.runType === 'THR' ? (
@@ -545,7 +545,7 @@ function RunDetail({
 
       {/* Payslips — masked; expand per employee */}
       <Card className="p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
           {t('hr.payroll.payslips.title')}
         </p>
         <div className="mt-2">
@@ -598,7 +598,7 @@ function RunDetail({
                   ) : (
                     <table className="w-full text-left text-sm">
                       <thead>
-                        <tr className="text-[11px] uppercase tracking-wider text-ink-3">
+                        <tr className="text-2xs uppercase tracking-eyebrow text-ink-3">
                           <th className="py-1 pr-4 font-semibold">
                             {t('hr.payroll.payslips.component')}
                           </th>
@@ -637,7 +637,7 @@ function RunDetail({
 
       {/* Labor cost by outlet — aggregated buckets, contribution bars */}
       <Card className="p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
           {t('hr.payroll.labor.title')}
         </p>
         <div className="mt-2 space-y-2">
@@ -650,7 +650,7 @@ function RunDetail({
                     {a.unallocated
                       ? t('hr.payroll.labor.unallocated')
                       : (unitName(a.outletOrgUnitId) ?? a.glAccount)}
-                    <span className="ml-1.5 font-mono text-[11px] text-ink-3">{a.glAccount}</span>
+                    <span className="ml-1.5 font-mono text-2xs text-ink-3">{a.glAccount}</span>
                   </span>
                   <span className="tnum shrink-0 font-mono text-xs font-semibold text-ink">
                     {formatMoney(a.amountMinor, a.currency, locale)}
@@ -774,7 +774,7 @@ function RunStatusTimeline({ status }: { status: string }) {
           <span
             role="listitem"
             className={cn(
-              'rounded-full px-2.5 py-1 text-[11px] font-semibold',
+              'rounded-full px-2.5 py-1 text-2xs font-semibold',
               // Reaching POSTED is the only truly "done" state — green (profit) is reserved for
               // it, matching the design system rule; every earlier-or-current step reads as brand
               // (emerald), never green (P10 review S1: both used to be the same emerald tokens
@@ -817,7 +817,7 @@ function WorkInputsPanel({
 
   return (
     <Card className="p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+      <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
         {t('hr.payroll.workInputs.title')}
       </p>
       <div className="mt-2 divide-y divide-line">
@@ -914,7 +914,7 @@ function LiabilitiesPanel({
 
   return (
     <Card className="p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+      <p className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
         {t('hr.payroll.liabilities.title')}
       </p>
       <div className="mt-2 divide-y divide-line">

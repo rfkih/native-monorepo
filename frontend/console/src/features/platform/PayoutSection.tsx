@@ -43,7 +43,7 @@ export function PayoutSection({
     )
   }
   if (query.isLoading) {
-    return <ListSkeleton rows={3} className="rounded-[20px]" />
+    return <ListSkeleton rows={3} className="rounded-card" />
   }
   if (sources.length === 0) {
     return (
@@ -54,7 +54,7 @@ export function PayoutSection({
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-6">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+        <h2 className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
           {t('platform.payout.owedHeading')}
         </h2>
         <div className="mt-3 flex flex-col">
@@ -72,7 +72,7 @@ export function PayoutSection({
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-ink">{s.sourceCode}</span>
-                <span className="block truncate text-[12px] text-ink-3">
+                <span className="block truncate text-xs text-ink-3">
                   {s.lines.map((l) => kindLabel(t, l.sourceKind)).join(' · ')}
                 </span>
               </span>
@@ -175,17 +175,17 @@ function PayoutForm({
           <h2 className="font-display text-lg font-semibold text-ink">
             {t('platform.payout.formTitle', { source: source.sourceCode })}
           </h2>
-          <p className="mt-1 text-[13px] text-ink-3">{t('platform.payout.formHint')}</p>
+          <p className="mt-1 text-sm text-ink-3">{t('platform.payout.formHint')}</p>
         </div>
 
         {/* A payer holding only card money has nothing to tick — say why, rather than showing an
             empty list above a permanently disabled button. */}
         {settleable.length === 0 ? (
-          <p className="text-[13px] text-ink-2">{t('platform.payout.nothingSettleable')}</p>
+          <p className="text-sm text-ink-2">{t('platform.payout.nothingSettleable')}</p>
         ) : null}
 
         <div className="flex flex-col">
-          <div className="flex items-baseline gap-3 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          <div className="flex items-baseline gap-3 pb-1 text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
             <span className="flex-1">{t('platform.payout.settledHeading')}</span>
             <span>{t('platform.payout.grossHeading')}</span>
           </div>
@@ -206,7 +206,7 @@ function PayoutForm({
                   <span className="block truncate text-sm text-ink-2">
                     {kindLabel(t, line.sourceKind)}
                   </span>
-                  <span className="block truncate font-mono text-[11px] text-ink-3">
+                  <span className="block truncate font-mono text-2xs text-ink-3">
                     {line.channelCode}
                   </span>
                 </span>
@@ -255,19 +255,19 @@ function PayoutForm({
           </span>
         </div>
         {feeMinor != null && feeMinor < 0 ? (
-          <p className="flex items-start gap-2 text-[13px] text-loss">
+          <p className="flex items-start gap-2 text-sm text-loss">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
             {t('platform.payout.netExceedsGross')}
           </p>
         ) : null}
         {nothingReceived ? (
-          <p className="flex items-start gap-2 text-[13px] text-loss">
+          <p className="flex items-start gap-2 text-sm text-loss">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
             {t('platform.payout.nothingReceived')}
           </p>
         ) : null}
         {feeLooksWrong ? (
-          <p className="flex items-start gap-2 text-[13px] text-amber-2">
+          <p className="flex items-start gap-2 text-sm text-amber-2">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
             {t('platform.payout.feeLooksHigh', {
               pct: `${Math.round(feeShare * 100)}%`,
@@ -354,16 +354,16 @@ function ConfirmPayout({
           </h2>
           {/* Says "recorded as settled", not "in the bank": the money reaches 1000 Bank only once
               the statement line is reconciled (ADR 0016 keeps that the single Dr-BANK writer). */}
-          <p className="mt-1 text-[13px] text-ink-2">{t('platform.payout.confirmBody')}</p>
+          <p className="mt-1 text-sm text-ink-2">{t('platform.payout.confirmBody')}</p>
           {/* The old habit — reconciling the deposit under the QRIS category — would credit 1901 a
               SECOND time and double the MDR expense. Name the right category here, where the
               decision is about to be made. */}
-          <p className="mt-1.5 text-[12.5px] text-amber-2">{t('platform.payout.reconcileWarning')}</p>
+          <p className="mt-1.5 text-xs text-amber-2">{t('platform.payout.reconcileWarning')}</p>
         </div>
 
         <div className="flex flex-col gap-1.5 rounded-lg border border-line p-3.5">
           {lines.map((l) => (
-            <div key={`${l.sourceKind}:${l.channelCode}`} className="flex items-baseline gap-3 text-[13px]">
+            <div key={`${l.sourceKind}:${l.channelCode}`} className="flex items-baseline gap-3 text-sm">
               <span className="min-w-0 flex-1 truncate text-ink-2">
                 {t(`platform.payout.kind.${l.sourceKind}`)}
               </span>
@@ -372,13 +372,13 @@ function ConfirmPayout({
               </span>
             </div>
           ))}
-          <div className="mt-1 flex items-baseline gap-3 border-t border-line pt-2 text-[13px]">
+          <div className="mt-1 flex items-baseline gap-3 border-t border-line pt-2 text-sm">
             <span className="flex-1 font-semibold text-ink">{t('platform.payout.netLabel')}</span>
             <span className="tnum font-mono font-semibold text-ink">
               {formatMoney(netMinor, source.currency, locale)}
             </span>
           </div>
-          <div className="flex items-baseline gap-3 text-[13px]">
+          <div className="flex items-baseline gap-3 text-sm">
             <span className="flex-1 text-ink-3">{t('platform.payout.feeLabel')}</span>
             <span className="tnum font-mono text-ink-3">
               {formatMoney(feeMinor, source.currency, locale)}
@@ -387,7 +387,7 @@ function ConfirmPayout({
         </div>
 
         {failed ? (
-          <p className="text-[13px] text-loss">{t('platform.payout.submitFailed')}</p>
+          <p className="text-sm text-loss">{t('platform.payout.submitFailed')}</p>
         ) : null}
 
         <div className="flex justify-end gap-2.5">

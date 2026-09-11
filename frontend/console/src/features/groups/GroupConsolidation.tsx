@@ -52,7 +52,7 @@ function DialogOverlay({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
@@ -351,7 +351,7 @@ function GroupDetail({
       {/* LEFT column */}
       <div className="flex flex-col gap-[18px]">
         {/* Group header card */}
-        <Card className="rounded-[20px] p-5">
+        <Card className="rounded-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="font-display text-xl font-bold text-ink">{group.name}</h2>
@@ -381,7 +381,7 @@ function GroupDetail({
             <>
               {/* Period nav */}
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                <span className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                   {t('groups.consolidation')}
                 </span>
                 <PeriodNav
@@ -419,9 +419,9 @@ function GroupDetail({
         </Card>
 
         {/* Members card */}
-        <Card className="rounded-[20px] p-5">
+        <Card className="rounded-card p-5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+            <p className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
               {t('groups.members')}
             </p>
             <button
@@ -503,32 +503,32 @@ function GroupDetail({
       {/* RIGHT column */}
       <div className="flex flex-col gap-[18px]">
         {!canViewConsolidation ? (
-          <Card className="rounded-[20px] p-10 text-center">
+          <Card className="rounded-card p-10 text-center">
             <h3 className="font-display text-lg font-semibold text-ink">
               {t('groups.financeOnly')}
             </h3>
             <p className="mt-2 text-sm text-ink-3">{t('groups.financeOnlyHint')}</p>
           </Card>
         ) : consolidationQuery.isError ? (
-          <Card className="rounded-[20px] p-8 text-center text-sm text-loss">
+          <Card className="rounded-card p-8 text-center text-sm text-loss">
             {t('groups.consolidationError')}
           </Card>
         ) : consolidationQuery.isLoading ? (
           <>
-            <Skeleton className="h-40 rounded-[20px]" />
-            <Skeleton className="h-32 rounded-[20px]" />
-            <Skeleton className="h-24 rounded-[20px]" />
+            <Skeleton className="h-40 rounded-card" />
+            <Skeleton className="h-32 rounded-card" />
+            <Skeleton className="h-24 rounded-card" />
           </>
         ) : data == null ? (
-          <Card className="rounded-[20px] p-10 text-center">
+          <Card className="rounded-card p-10 text-center">
             <h3 className="font-display text-lg font-semibold text-ink">{t('groups.noClose')}</h3>
             <p className="mt-2 text-sm text-ink-3">{t('groups.noCloseHint')}</p>
           </Card>
         ) : (
           <>
             {/* Consolidated figures card */}
-            <Card className="rounded-[20px] p-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+            <Card className="rounded-card p-5">
+              <p className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                 {t('groups.consolidation')} · {currency}
               </p>
               <div className="mt-4 space-y-3">
@@ -546,7 +546,7 @@ function GroupDetail({
                 </div>
               </div>
               {/* Net box */}
-              <div className="mt-4 rounded-[12px] bg-emerald-tint px-4 py-3.5">
+              <div className="mt-4 rounded-xl bg-emerald-tint px-4 py-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-emerald-2">{t('groups.net')}</span>
                   <span
@@ -562,8 +562,8 @@ function GroupDetail({
             </Card>
 
             {/* Eliminations card */}
-            <Card className="rounded-[20px] p-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+            <Card className="rounded-card p-5">
+              <p className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                 {t('groups.eliminations')}
               </p>
               <div className="mt-4 grid grid-cols-2 gap-4">
@@ -609,10 +609,10 @@ function GroupDetail({
             </Card>
 
             {/* Close state card */}
-            <Card className="rounded-[20px] p-5">
+            <Card className="rounded-card p-5">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                  <p className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                     {t('groups.state')}
                   </p>
                   <div className="mt-2">
@@ -620,7 +620,7 @@ function GroupDetail({
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                  <p className="text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                     {t('groups.closeRunSeq')}
                   </p>
                   <p className="tnum mt-2 font-mono text-sm text-ink">#{data.closeRunSeq}</p>
@@ -670,7 +670,7 @@ export function GroupConsolidation() {
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-display text-ink">
             {t('groups.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('groups.subtitle')}</p>
@@ -685,20 +685,20 @@ export function GroupConsolidation() {
       </div>
 
       {groupsQuery.isError ? (
-        <Card className="rounded-[20px] p-8 text-center text-sm text-loss">
+        <Card className="rounded-card p-8 text-center text-sm text-loss">
           {t('groups.error')}
         </Card>
       ) : groupsQuery.isLoading ? (
         <div className="grid gap-[18px] md:grid-cols-[260px_1fr]">
-          <ListSkeleton rows={4} className="rounded-[20px]" />
-          <ListSkeleton rows={3} className="rounded-[20px]" />
+          <ListSkeleton rows={4} className="rounded-card" />
+          <ListSkeleton rows={3} className="rounded-card" />
         </div>
       ) : groups.length === 0 ? (
         <EmptyState title={t('groups.empty')} hint={t('groups.emptyHint')} />
       ) : (
         <div className="grid gap-[18px] md:grid-cols-[260px_1fr]">
           {/* Group list (left pane) */}
-          <Card className="h-fit rounded-[20px] p-2.5">
+          <Card className="h-fit rounded-card p-2.5">
             {groups.map((g) => (
               <button
                 key={g.id}
@@ -736,7 +736,7 @@ export function GroupConsolidation() {
                 onDialog={setDialog}
               />
             ) : (
-              <Card className="rounded-[20px] p-10 text-center">
+              <Card className="rounded-card p-10 text-center">
                 <p className="text-sm text-ink-3">{t('groups.selectPrompt')}</p>
               </Card>
             )}

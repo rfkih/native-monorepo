@@ -179,7 +179,7 @@ export function BillDetail() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+            <h1 className="font-display text-2xl font-bold tracking-display text-ink">
               {bill.billNumber}
             </h1>
             <BillStatusBadge status={bill.status} />
@@ -273,7 +273,7 @@ export function BillDetail() {
 
       {/* Line items */}
       <Card className="p-6">
-        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-eyebrow text-ink-3">
           {t('ap.detail.lines')}
         </h2>
 
@@ -309,7 +309,7 @@ export function BillDetail() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              <tr className="border-b border-line text-left text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                 <th className="py-2">{t('ap.detail.colDescription')}</th>
                 <th className="py-2 text-right">{t('ap.detail.colQuantity')}</th>
                 <th className="py-2 text-right">{t('ap.detail.colUnitPrice')}</th>
@@ -373,7 +373,7 @@ export function BillDetail() {
 
       {/* Attachments — ADR 0084 */}
       <Card className="p-6">
-        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-eyebrow text-ink-3">
           {t('ap.detail.attachments')}
         </h2>
         <BillAttachments
@@ -387,7 +387,7 @@ export function BillDetail() {
 
       {/* Payments */}
       <Card className="p-6">
-        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-eyebrow text-ink-3">
           {t('ap.detail.payments')}
         </h2>
         {bill.payments.length === 0 ? (
@@ -395,7 +395,7 @@ export function BillDetail() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              <tr className="border-b border-line text-left text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                 <th className="py-2">{t('ap.detail.colPaymentDate')}</th>
                 <th className="py-2">{t('ap.detail.colPaymentMethod')}</th>
                 <th className="py-2 text-right">{t('ap.detail.colPaymentAmount')}</th>

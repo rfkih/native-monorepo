@@ -64,6 +64,14 @@ fi
 # --- Console: ESLint, scoped to the staged console sources (errors block; warnings pass) ---
 console_files=$(printf '%s\n' "$staged" | grep -E '^frontend/console/.*\.(ts|tsx)$' | sed 's#^frontend/console/##')
 if [ -n "$console_files" ]; then
+  # Design tokens first (ADR 0085): no text-[Npx] / rounded-[Npx] / tracking-[…] / bg-black/N /
+  # brand-* action colours. The script scans the whole console tree (fast), so a staged violation
+  # anywhere is caught — the same shape as the SELECT * gate above.
+  if ! bash scripts/check-design-tokens.sh >/dev/null 2>&1; then
+    echo "BLOCKED: a console source uses an arbitrary design value — use the tokens (docs/DESIGN-SYSTEM.md)." >&2
+    bash scripts/check-design-tokens.sh 2>&1 | grep -E "^frontend/" >&2
+    exit 2
+  fi
   if ! (cd frontend/console && npx eslint $console_files) >&2; then
     echo "BLOCKED: ESLint errors in staged console files — fix them, re-stage, and commit again." >&2
     exit 2

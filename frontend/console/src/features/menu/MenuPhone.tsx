@@ -95,10 +95,10 @@ const GLYPHS: Record<string, LucideIcon> = {
   'tpl:specials': Star,
 }
 
-const FIELD_LABEL = 'block text-[10.5px] font-semibold uppercase tracking-[0.04em] text-ink-3'
-const FIELD_CARD = 'block rounded-[13px] border border-line bg-surface px-3 py-2.5'
+const FIELD_LABEL = 'block text-2xs font-semibold uppercase tracking-eyebrow text-ink-3'
+const FIELD_CARD = 'block rounded-xl border border-line bg-surface px-3 py-2.5'
 const PANEL_BUTTON =
-  'h-11 flex-1 rounded-[13px] border border-line bg-surface text-[13px] font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50'
+  'h-11 flex-1 rounded-xl border border-line bg-surface text-sm font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50'
 const ICON_BUTTON =
   'grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald'
 
@@ -191,7 +191,7 @@ export function MenuPhone({ session }: { session: CompanySession }) {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="mr-1 flex h-9 shrink-0 items-center gap-1.5 rounded-[11px] bg-emerald px-3 text-[12.5px] font-bold text-on-emerald shadow-lift transition-transform active:scale-[0.96] motion-reduce:active:scale-100"
+            className="mr-1 flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-emerald px-3 text-xs font-bold text-on-emerald shadow-lift transition-transform active:scale-[0.96] motion-reduce:active:scale-100"
           >
             <Plus className="size-[15px]" strokeWidth={2.2} aria-hidden="true" />
             {t('menu.phone.addItem')}
@@ -209,7 +209,7 @@ export function MenuPhone({ session }: { session: CompanySession }) {
             onChange={(e) => setParam('q', e.target.value)}
             placeholder={t('menu.phone.searchPlaceholder')}
             aria-label={t('menu.phone.searchPlaceholder')}
-            className="min-w-0 flex-1 bg-transparent text-[13.5px] font-medium text-ink placeholder:text-ink-400 focus:outline-none [&::-webkit-search-cancel-button]:appearance-none"
+            className="min-w-0 flex-1 bg-transparent text-sm font-medium text-ink placeholder:text-ink-400 focus:outline-none [&::-webkit-search-cancel-button]:appearance-none"
           />
           {q !== '' ? (
             <button
@@ -235,14 +235,14 @@ export function MenuPhone({ session }: { session: CompanySession }) {
                   setOpenId(null)
                 }}
                 className={cn(
-                  'flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-[13px] text-[12.5px] font-semibold transition-colors',
+                  'flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-[13px] text-xs font-semibold transition-colors',
                   on
                     ? 'border-emerald bg-emerald text-on-emerald'
                     : 'border-line bg-surface text-ink-3 hover:bg-hover',
                 )}
               >
                 {c.key === ALL_CHIP ? t('menu.phone.all') : c.label}
-                <span className="tnum font-mono text-[11px] font-semibold opacity-60">
+                <span className="tnum font-mono text-2xs font-semibold opacity-60">
                   {c.count}
                 </span>
               </button>
@@ -255,16 +255,16 @@ export function MenuPhone({ session }: { session: CompanySession }) {
         {menuQuery.isLoading ? (
           <div className="mt-4 flex flex-col gap-2">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-[70px] animate-pulse rounded-[18px] bg-ink-100" />
+              <div key={i} className="h-[70px] animate-pulse rounded-2xl bg-ink-100" />
             ))}
           </div>
         ) : menuQuery.isError ? (
-          <p className="mt-6 text-center text-[13px] text-loss" role="alert">
+          <p className="mt-6 text-center text-sm text-loss" role="alert">
             {t('menu.loadError')}
           </p>
         ) : (
           <>
-            <p className="pt-[13px] text-[12px] text-ink-3">
+            <p className="pt-[13px] text-xs text-ink-3">
               {sum.avgMargin != null
                 ? t('menu.phone.summary', {
                     active: sum.active,
@@ -273,7 +273,7 @@ export function MenuPhone({ session }: { session: CompanySession }) {
                   })
                 : t('menu.phone.summaryNoMargin', { active: sum.active, soldOut: sum.soldOut })}
             </p>
-            <div className="mt-3 overflow-hidden rounded-[18px] border border-line bg-surface">
+            <div className="mt-3 overflow-hidden rounded-2xl border border-line bg-surface">
               {visible.map((item) => (
                 <ItemRow
                   key={item.id}
@@ -289,7 +289,7 @@ export function MenuPhone({ session }: { session: CompanySession }) {
                 />
               ))}
               {visible.length === 0 ? (
-                <p className="px-5 py-[34px] text-center text-[13px] font-medium text-ink-3">
+                <p className="px-5 py-[34px] text-center text-sm font-medium text-ink-3">
                   {items.length === 0 ? t('menu.phone.empty') : t('menu.phone.noMatch')}
                 </p>
               ) : null}
@@ -386,23 +386,23 @@ function ItemRow({
           open ? 'bg-paper' : 'bg-surface',
         )}
       >
-        <span className="grid size-[42px] shrink-0 place-items-center rounded-[13px] bg-hover text-ink-400">
+        <span className="grid size-[42px] shrink-0 place-items-center rounded-xl bg-hover text-ink-400">
           <Glyph className="size-[21px]" strokeWidth={1.8} aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-[7px]">
-            <span className="min-w-0 truncate text-[14px] font-semibold leading-snug tracking-[-0.01em] text-ink">
+            <span className="min-w-0 truncate text-sm font-semibold leading-snug tracking-display text-ink">
               {item.name}
             </span>
             {!item.available ? (
-              <span className="grid h-[18px] shrink-0 place-items-center rounded-full bg-emerald px-[7px] text-[9.5px] font-bold text-on-emerald">
+              <span className="grid h-[18px] shrink-0 place-items-center rounded-full bg-emerald px-[7px] text-2xs font-bold text-on-emerald">
                 {t('pos.soldOut')}
               </span>
             ) : null}
           </span>
           <span
             className={cn(
-              'mt-1 block truncate text-[11.5px] leading-snug text-ink-3',
+              'mt-1 block truncate text-xs leading-snug text-ink-3',
               stock.kind === 'low' || stock.kind === 'zero' ? 'font-semibold' : 'font-normal',
             )}
           >
@@ -410,10 +410,10 @@ function ItemRow({
           </span>
         </span>
         <span className="shrink-0 text-right">
-          <span className="tnum block font-mono text-[13.5px] font-semibold leading-none text-ink">
+          <span className="tnum block font-mono text-sm font-semibold leading-none text-ink">
             {formatMoney(item.priceMinor, item.currency, locale)}
           </span>
-          <span className="tnum mt-[5px] block font-mono text-[11px] font-medium leading-none text-ink-3">
+          <span className="tnum mt-[5px] block font-mono text-2xs font-medium leading-none text-ink-3">
             {margin != null
               ? t('menu.phone.margin', { margin: formatPercent(margin, locale) })
               : t('menu.phone.marginNone')}
@@ -580,7 +580,7 @@ function ItemPanel({
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
             }}
             placeholder={t('menu.createItem.namePlaceholder')}
-            className="mt-1.5 w-full bg-transparent text-[14.5px] font-semibold leading-tight tracking-[-0.01em] text-ink placeholder:text-ink-400 focus:outline-none"
+            className="mt-1.5 w-full bg-transparent text-base font-semibold leading-tight tracking-display text-ink placeholder:text-ink-400 focus:outline-none"
           />
         </label>
       </div>
@@ -589,7 +589,7 @@ function ItemPanel({
         <label className={cn(FIELD_CARD, 'min-w-0 flex-1')}>
           <span className={FIELD_LABEL}>{t('menu.phone.priceLabel')}</span>
           <span className="mt-1.5 flex items-baseline gap-1.5">
-            <span className="font-mono text-[12px] font-semibold text-ink-3">
+            <span className="font-mono text-xs font-semibold text-ink-3">
               {currencySymbol(item.currency, locale)}
             </span>
             <input
@@ -602,7 +602,7 @@ function ItemPanel({
                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
               }}
               aria-label={t('menu.phone.priceLabel')}
-              className="tnum min-w-0 flex-1 bg-transparent font-mono text-[16px] font-semibold leading-tight text-ink focus:outline-none"
+              className="tnum min-w-0 flex-1 bg-transparent font-mono text-base font-semibold leading-tight text-ink focus:outline-none"
             />
           </span>
         </label>
@@ -611,7 +611,7 @@ function ItemPanel({
           {recipeQuery.isLoading ? (
             <span className="mt-1.5 block h-[18px] w-20 animate-pulse rounded-md bg-ink-100" />
           ) : (
-            <span className="tnum mt-1.5 block truncate font-mono text-[16px] font-semibold leading-tight text-ink">
+            <span className="tnum mt-1.5 block truncate font-mono text-base font-semibold leading-tight text-ink">
               {total.minor != null
                 ? formatMoney(total.minor, item.currency, locale)
                 : t('menu.phone.costNone')}
@@ -620,12 +620,12 @@ function ItemPanel({
         </div>
       </div>
 
-      <div className="mt-[9px] flex items-center gap-3 rounded-[13px] border border-line bg-surface p-3">
+      <div className="mt-[9px] flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
         <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-semibold leading-snug text-ink">
+          <span className="block text-sm font-semibold leading-snug text-ink">
             {t('menu.phone.availableTitle')}
           </span>
-          <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-3">
+          <span className="mt-0.5 block text-xs leading-snug text-ink-3">
             {item.available ? t('menu.phone.availableOn') : t('menu.phone.availableOff')}
           </span>
         </span>
@@ -656,11 +656,11 @@ function ItemPanel({
           {t('menu.phone.recipeHeading')} ·{' '}
           {t('menu.phone.ingredients', { count: baseLines.length })}
         </span>
-        <span className="tnum font-mono text-[11px] font-medium text-ink-3">
+        <span className="tnum font-mono text-2xs font-medium text-ink-3">
           {total.minor != null ? formatMoney(total.minor, item.currency, locale) : ''}
         </span>
       </div>
-      <div className="mt-[7px] overflow-hidden rounded-[13px] border border-line bg-surface">
+      <div className="mt-[7px] overflow-hidden rounded-xl border border-line bg-surface">
         {baseLines.map((line) => {
           const cost = lineCostMinor(line)
           const ing = ingredientById.get(line.ingredientId)
@@ -669,7 +669,7 @@ function ItemPanel({
               key={line.id}
               className="flex min-h-[46px] items-center gap-2.5 border-b border-line/60 py-[9px] pl-3 pr-2"
             >
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
                 {line.ingredientName}
               </span>
               <button
@@ -677,11 +677,11 @@ function ItemPanel({
                 disabled={!ing || busy}
                 onClick={() => ing && setQtyFor({ ingredient: ing, baseQty: line.qtyPerPortion })}
                 aria-label={t('menu.phone.qtyTitle')}
-                className="tnum shrink-0 rounded-md px-1.5 py-1 font-mono text-[11.5px] font-medium text-ink-3 hover:bg-hover disabled:hover:bg-transparent"
+                className="tnum shrink-0 rounded-md px-1.5 py-1 font-mono text-xs font-medium text-ink-3 hover:bg-hover disabled:hover:bg-transparent"
               >
                 {qtyText(line)}
               </button>
-              <span className="tnum w-[76px] shrink-0 text-right font-mono text-[11.5px] font-semibold text-ink">
+              <span className="tnum w-[76px] shrink-0 text-right font-mono text-xs font-semibold text-ink">
                 {cost != null
                   ? formatMoney(cost, line.costCurrency ?? item.currency, locale)
                   : t('menu.phone.costNone')}
@@ -702,17 +702,17 @@ function ItemPanel({
           type="button"
           disabled={busy}
           onClick={() => setPicker(true)}
-          className="flex min-h-[46px] w-full items-center gap-2 px-3 py-[9px] text-left text-[12.5px] font-semibold text-ink transition-colors hover:bg-paper"
+          className="flex min-h-[46px] w-full items-center gap-2 px-3 py-[9px] text-left text-xs font-semibold text-ink transition-colors hover:bg-paper"
         >
           <Plus className="size-[15px]" strokeWidth={2.2} aria-hidden="true" />
           {t('recipe.addLine')}
         </button>
       </div>
       {total.partial ? (
-        <p className="mt-1.5 px-0.5 text-[11px] text-ink-3">{t('menu.phone.costPartial')}</p>
+        <p className="mt-1.5 px-0.5 text-2xs text-ink-3">{t('menu.phone.costPartial')}</p>
       ) : null}
       {recipeQuery.isError ? (
-        <p className="mt-1.5 px-0.5 text-[11.5px] text-loss" role="alert">
+        <p className="mt-1.5 px-0.5 text-xs text-loss" role="alert">
           {t('recipe.loadError')}{' '}
           <button
             type="button"
@@ -743,11 +743,11 @@ function ItemPanel({
         </button>
       </div>
       {error ? (
-        <p className="mt-2.5 text-[11.5px] text-loss" role="alert">
+        <p className="mt-2.5 text-xs text-loss" role="alert">
           {error}
         </p>
       ) : null}
-      <p className="mt-2.5 text-[11px] leading-[1.45] text-ink-3">
+      <p className="mt-2.5 text-2xs leading-[1.45] text-ink-3">
         {t('menu.phone.appliesNote')} {t('menu.phone.duplicateNote')}
       </p>
 
@@ -927,7 +927,7 @@ function RecipeQtySheet({
                 press(key)
               }}
               style={{ width: `${Math.max(1, raw.length)}ch` }}
-              className="tnum min-w-[1ch] bg-transparent text-right font-mono text-[44px] font-bold leading-none tracking-[-0.03em] text-ink caret-transparent placeholder:text-ink-400 focus:outline-none"
+              className="tnum min-w-[1ch] bg-transparent text-right font-mono text-5xl font-bold leading-none tracking-display text-ink caret-transparent placeholder:text-ink-400 focus:outline-none"
             />
             <span className="text-base font-semibold text-ink-3">{unit}</span>
           </div>
@@ -982,7 +982,7 @@ function DeleteConfirmSheet({
       {(requestClose) => (
         <div className="flex flex-col" style={SAFE_BOTTOM(8)}>
           <div className="text-base font-bold leading-tight text-ink">{t('menu.delete.title')}</div>
-          <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">
+          <p className="mt-2 text-sm leading-relaxed text-ink-2">
             {t('menu.delete.body', { name })}
           </p>
           <div className="mt-5 flex gap-2">
@@ -1102,7 +1102,7 @@ function NewItemSheet({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('menu.createItem.namePlaceholder')}
-              className="mt-1.5 w-full bg-transparent text-[14.5px] font-semibold leading-tight text-ink placeholder:text-ink-400 focus:outline-none"
+              className="mt-1.5 w-full bg-transparent text-base font-semibold leading-tight text-ink placeholder:text-ink-400 focus:outline-none"
             />
           </label>
           <div className="mt-2.5">
@@ -1120,7 +1120,7 @@ function NewItemSheet({
                       setCategory(o.value)
                     }}
                     className={cn(
-                      'h-8 rounded-full border px-3 text-[12.5px] font-semibold transition-colors',
+                      'h-8 rounded-full border px-3 text-xs font-semibold transition-colors',
                       on
                         ? 'border-emerald bg-emerald text-on-emerald'
                         : 'border-line bg-surface text-ink-3 hover:bg-hover',
@@ -1138,7 +1138,7 @@ function NewItemSheet({
                   setCategory('')
                 }}
                 className={cn(
-                  'h-8 rounded-full border px-3 text-[12.5px] font-semibold transition-colors',
+                  'h-8 rounded-full border px-3 text-xs font-semibold transition-colors',
                   custom
                     ? 'border-emerald bg-emerald text-on-emerald'
                     : 'border-line bg-surface text-ink-3 hover:bg-hover',
@@ -1154,14 +1154,14 @@ function NewItemSheet({
                 maxLength={64}
                 onChange={(e) => setCategory(e.target.value)}
                 placeholder={t('menu.phone.categoryCustomPlaceholder')}
-                className="mt-2 h-11 w-full rounded-[13px] border border-line bg-surface px-3 text-[13.5px] font-medium text-ink placeholder:text-ink-400 focus:outline-none focus-visible:outline-2 focus-visible:outline-emerald"
+                className="mt-2 h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm font-medium text-ink placeholder:text-ink-400 focus:outline-none focus-visible:outline-2 focus-visible:outline-emerald"
               />
             ) : null}
           </div>
           <label className={cn(FIELD_CARD, 'mt-2.5')}>
             <span className={FIELD_LABEL}>{t('menu.phone.priceLabel')}</span>
             <span className="mt-1.5 flex items-baseline gap-1.5">
-              <span className="font-mono text-[12px] font-semibold text-ink-3">
+              <span className="font-mono text-xs font-semibold text-ink-3">
                 {currencySymbol(session.baseCurrency, locale)}
               </span>
               <input
@@ -1174,12 +1174,12 @@ function NewItemSheet({
                 }}
                 placeholder="0"
                 aria-label={t('menu.phone.priceLabel')}
-                className="tnum min-w-0 flex-1 bg-transparent font-mono text-[16px] font-semibold leading-tight text-ink placeholder:text-ink-400 focus:outline-none"
+                className="tnum min-w-0 flex-1 bg-transparent font-mono text-base font-semibold leading-tight text-ink placeholder:text-ink-400 focus:outline-none"
               />
             </span>
           </label>
           {error ? (
-            <p className="mt-2 text-[11.5px] text-loss" role="alert">
+            <p className="mt-2 text-xs text-loss" role="alert">
               {error}
             </p>
           ) : null}

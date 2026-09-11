@@ -73,7 +73,7 @@ export function Shell({ children }: { children: ReactNode }) {
       {drawerOpen ? (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-scrim"
             onClick={() => setDrawerOpen(false)}
             aria-hidden="true"
           />
@@ -112,7 +112,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <Wordmark className="lg:hidden" />
 
           {/* desktop breadcrumb */}
-          <div className="hidden text-[13px] text-ink-3 lg:block">
+          <div className="hidden text-sm text-ink-3 lg:block">
             {active ? (
               <>
                 {active.group} · <b className="font-semibold text-ink-2">{active.label}</b>
@@ -213,7 +213,7 @@ function Sidebar({
               aria-expanded={open}
               onClick={() => setOpenKey(open ? null : group.key)}
               className={cn(
-                'flex h-[38px] w-full items-center gap-2.5 rounded-[11px] px-3 text-left text-[13px] font-semibold text-ink transition-colors focus-visible:outline-2 focus-visible:outline-emerald',
+                'flex h-[38px] w-full items-center gap-2.5 rounded-xl px-3 text-left text-sm font-semibold text-ink transition-colors focus-visible:outline-2 focus-visible:outline-emerald',
                 open ? 'bg-paper' : 'hover:bg-hover',
               )}
             >
@@ -228,7 +228,7 @@ function Sidebar({
               {!open && holdsActive ? (
                 <span className="size-1.5 shrink-0 rounded-full bg-emerald" aria-hidden="true" />
               ) : null}
-              <span className="font-mono text-[10px] font-semibold text-ink-3">
+              <span className="font-mono text-2xs font-semibold text-ink-3">
                 {group.items.length}
               </span>
               <ChevronDown
@@ -250,7 +250,7 @@ function Sidebar({
                       onClick={onNavigate}
                       aria-current={activeItem ? 'page' : undefined}
                       className={cn(
-                        'flex h-[34px] items-center rounded-[10px] pl-[38px] pr-3 text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-emerald',
+                        'flex h-[34px] items-center rounded-xl pl-[38px] pr-3 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-emerald',
                         activeItem
                           ? 'bg-emerald-tint font-bold text-emerald-2'
                           : 'font-medium text-ink-3 hover:bg-hover hover:text-ink',
@@ -271,7 +271,7 @@ function Sidebar({
             to="/pos"
             viewTransition
             onClick={onNavigate}
-            className="flex h-14 items-center gap-[11px] rounded-[20px] border border-emerald-line bg-emerald-tint px-3.5 text-sm font-bold text-emerald-2 transition-colors hover:bg-line-strong"
+            className="flex h-14 items-center gap-[11px] rounded-card border border-emerald-line bg-emerald-tint px-3.5 text-sm font-bold text-emerald-2 transition-colors hover:bg-line-strong"
           >
             <Store className="size-[18px] shrink-0" strokeWidth={1.9} />
             {openPosLabel}
@@ -292,7 +292,7 @@ function Avatar() {
     .map((p) => p[0]?.toUpperCase())
     .join('')
   return (
-    <div className="grid size-10 place-items-center rounded-full bg-emerald-tint text-[13px] font-bold text-emerald-2">
+    <div className="grid size-10 place-items-center rounded-full bg-emerald-tint text-sm font-bold text-emerald-2">
       {initials || 'NA'}
     </div>
   )
@@ -338,7 +338,7 @@ function CompanySwitcher() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t('shell.switchCompany')}
-        className="flex h-9 items-center gap-2 rounded-full bg-ink-50 px-3.5 text-[13px] font-semibold text-ink transition-colors hover:bg-hover"
+        className="flex h-9 items-center gap-2 rounded-full bg-ink-50 px-3.5 text-sm font-semibold text-ink transition-colors hover:bg-hover"
       >
         <span className="size-[7px] rounded-full bg-profit" />
         {company.name}
@@ -350,7 +350,7 @@ function CompanySwitcher() {
           role="menu"
           className="absolute right-0 top-11 z-50 min-w-[220px] rounded-2xl border border-line bg-surface p-1.5 shadow-lg"
         >
-          <div className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          <div className="px-3 pb-1 pt-2 text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
             {t('shell.yourBusinesses')}
           </div>
           {companies.map((c) => (
@@ -362,7 +362,7 @@ function CompanySwitcher() {
                 setOpen(false)
                 if (c.companyId !== company.companyId) setActiveCompany(c.companyId)
               }}
-              className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-ink transition-colors hover:bg-hover"
+              className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-ink transition-colors hover:bg-hover"
             >
               <span className="truncate">{c.name}</span>
               {c.companyId === company.companyId ? (
@@ -378,7 +378,7 @@ function CompanySwitcher() {
               setOpen(false)
               navigate('/onboarding')
             }}
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-emerald-2 transition-colors hover:bg-hover"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-emerald-2 transition-colors hover:bg-hover"
           >
             <Plus className="size-4 shrink-0" />
             {t('shell.addBusiness')}

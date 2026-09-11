@@ -114,11 +114,11 @@ export function CompanyExpensesList() {
       ) : rows.length === 0 ? (
         <EmptyState title={t('expenses.company.empty')} hint={t('expenses.company.emptyHint')} />
       ) : (
-        <Card className="overflow-hidden rounded-[20px]">
+        <Card className="overflow-hidden rounded-card">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                   <th className="px-4 py-3">{t('expenses.company.colNo')}</th>
                   <th className="px-4 py-3">{t('expenses.company.colDate')}</th>
                   <th className="px-4 py-3">{t('expenses.company.colKind')}</th>
@@ -306,7 +306,7 @@ function CompanyExpenseDetailSheet({
               </div>
 
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+                <div className="text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
                   {t('expenses.company.colDescription')}
                 </div>
                 <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-2">{expense.description}</p>
@@ -314,13 +314,13 @@ function CompanyExpenseDetailSheet({
 
               {expense.kind === 'INVENTORY' && expense.lines.length > 0 ? (
                 <div>
-                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-3">
+                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
                     {t('expenses.record.inventory.lines')}
                   </div>
                   <div className="overflow-hidden rounded-xl border border-line">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                        <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
                           <th className="px-3 py-2">{t('expenses.record.inventory.ingredientLabel')}</th>
                           <th className="px-3 py-2 text-right">{t('expenses.company.detail.lineQty')}</th>
                           <th className="px-3 py-2 text-right">{t('expenses.record.inventory.lineValue')}</th>

@@ -165,7 +165,7 @@ export function ReviewPanel({
             <dt className="text-sm text-ink-3">{row.label}</dt>
             <dd className="flex items-center gap-2 text-right text-sm font-medium text-ink">
               {row.secret ? (
-                <span className="font-mono tracking-widest text-ink-3">{'•'.repeat(8)}</span>
+                <span className="font-mono tracking-eyebrow text-ink-3">{'•'.repeat(8)}</span>
               ) : (
                 row.value || '—'
               )}

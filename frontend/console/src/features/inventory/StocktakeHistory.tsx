@@ -192,7 +192,7 @@ export function StocktakeHistoryLines({
       <div className="flex items-baseline gap-2">
         <span
           className={cn(
-            'tnum font-mono text-xl font-bold tracking-[-0.02em]',
+            'tnum font-mono text-xl font-bold tracking-display',
             shrinkTone(stocktake.shrinkageMinor),
           )}
         >
@@ -222,7 +222,7 @@ export function StocktakeHistoryLines({
             >
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="truncate text-xs font-semibold text-ink">{line.name}</div>
-                <div className="tnum font-mono text-[10.5px] text-ink-3">
+                <div className="tnum font-mono text-2xs text-ink-3">
                   {t('inventory.detail.countLine', {
                     system: formatShownQty(line.systemQty, bearing, locale),
                     counted: formatShownQty(line.countedQty, bearing, locale),
@@ -230,7 +230,7 @@ export function StocktakeHistoryLines({
                   })}
                 </div>
                 {used > 0 ? (
-                  <div className="text-[10.5px] font-medium text-ink-400">
+                  <div className="text-2xs font-medium text-ink-400">
                     {t('inventory.history.usedThatDay', {
                       qty: formatShownQty(used, bearing, locale),
                       unit,
@@ -243,7 +243,7 @@ export function StocktakeHistoryLines({
                   {formatSignedShownQty(v, bearing, locale)} {unit}
                 </div>
                 {line.unitCostMinor != null && v !== 0 ? (
-                  <div className={cn('tnum font-mono text-[10.5px]', tone)}>
+                  <div className={cn('tnum font-mono text-2xs', tone)}>
                     {formatSignedMoney(line.varianceValueMinor, money, locale)}
                   </div>
                 ) : null}

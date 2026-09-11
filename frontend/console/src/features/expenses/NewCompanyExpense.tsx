@@ -270,7 +270,7 @@ export function NewCompanyExpense() {
   return (
     <div className="mx-auto flex max-w-[820px] flex-col gap-[18px]">
       <div>
-        <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+        <h1 className="font-display text-2xl font-bold tracking-display text-ink">
           {t('expenses.record.title')}
         </h1>
         <p className="mt-1.5 text-sm text-ink-3">{t('expenses.record.subtitle')}</p>
@@ -414,7 +414,7 @@ export function NewCompanyExpense() {
 
             <Card className="p-6">
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                <h2 className="text-sm font-bold uppercase tracking-eyebrow text-ink-3">
                   {t('expenses.record.inventory.lines')}
                 </h2>
               </div>

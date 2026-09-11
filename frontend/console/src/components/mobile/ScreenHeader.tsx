@@ -59,7 +59,7 @@ export function ScreenHeader({
       ) : null}
       {subtitle != null ? (
         <div className="flex min-w-0 flex-1 flex-col pl-1">
-          <h1 className="truncate text-[16px] font-bold leading-tight text-ink">{title}</h1>
+          <h1 className="truncate text-base font-bold leading-tight text-ink">{title}</h1>
           {typeof subtitle === 'string' ? (
             <p className="truncate text-xs font-medium leading-tight text-ink-3">{subtitle}</p>
           ) : (
@@ -69,7 +69,7 @@ export function ScreenHeader({
           )}
         </div>
       ) : (
-        <h1 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-bold text-ink">{title}</h1>
+        <h1 className="min-w-0 flex-1 truncate pl-1 text-lg font-bold text-ink">{title}</h1>
       )}
       {trailing != null ? (
         <div className="flex shrink-0 items-center gap-1 pr-1">{trailing}</div>

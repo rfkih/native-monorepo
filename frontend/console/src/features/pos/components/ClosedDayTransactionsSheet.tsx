@@ -86,9 +86,9 @@ export function ClosedDayTransactionsSheet({
     >
       <header className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface px-4">
         <ReceiptText className="size-[18px] text-emerald-2" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-[16px] font-bold text-ink">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-base font-bold text-ink">{title}</span>
         {capped ? (
-          <span className="text-[11.5px] font-semibold text-amber-2">{t('pos.history.capNote')}</span>
+          <span className="text-xs font-semibold text-amber-2">{t('pos.history.capNote')}</span>
         ) : null}
         <button
           type="button"
@@ -112,7 +112,7 @@ export function ClosedDayTransactionsSheet({
           <div className="mx-auto mt-14 max-w-sm text-center">
             <ReceiptText className="mx-auto mb-3 size-8 text-ink-3/50" aria-hidden />
             <p className="text-sm font-semibold text-ink">{t('pos.history.emptyTitle')}</p>
-            <p className="mt-1 text-[13px] text-ink-3">{t('pos.closingHistory.txnEmptyHint')}</p>
+            <p className="mt-1 text-sm text-ink-3">{t('pos.closingHistory.txnEmptyHint')}</p>
           </div>
         ) : (
           <div className="mx-auto flex max-w-[640px] flex-col gap-1.5">
@@ -136,15 +136,15 @@ export function ClosedDayTransactionsSheet({
                       : 'opacity-60',
                   )}
                 >
-                  <span className="tnum w-[52px] shrink-0 font-mono text-[13.5px] font-bold text-ink">
+                  <span className="tnum w-[52px] shrink-0 font-mono text-sm font-bold text-ink">
                     {timeFormat.format(new Date(row.occurredAt))}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-ink-2">
+                    <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-ink-2">
                       <span className="truncate">{tenderLabel(t, row)}</span>
                       {reversalKey ? <Badge tone="loss">{t(reversalKey)}</Badge> : null}
                     </span>
-                    <span className="tnum mt-0.5 block font-mono text-[11px] text-ink-3">
+                    <span className="tnum mt-0.5 block font-mono text-2xs text-ink-3">
                       {row.orderId != null
                         ? row.orderId.slice(-8).toUpperCase()
                         : t('pos.history.noReceipt')}
@@ -153,7 +153,7 @@ export function ClosedDayTransactionsSheet({
                   <span className="flex shrink-0 flex-col items-end">
                     <span
                       className={cn(
-                        'tnum font-mono text-[14px] font-bold text-ink',
+                        'tnum font-mono text-sm font-bold text-ink',
                         fullReversal && 'line-through text-ink-3',
                       )}
                     >
@@ -162,7 +162,7 @@ export function ClosedDayTransactionsSheet({
                     {/* A partial refund keeps its gross line — show the refunded delta so the rows
                         read consistently with the live-day sheet. */}
                     {row.paymentStatus === 'PARTIALLY_REFUNDED' && (row.refundedMinor ?? 0) > 0 ? (
-                      <span className="tnum font-mono text-[11px] font-semibold text-loss">
+                      <span className="tnum font-mono text-2xs font-semibold text-loss">
                         {formatMoney(-(row.refundedMinor ?? 0), row.currency, locale)}
                       </span>
                     ) : null}
@@ -176,7 +176,7 @@ export function ClosedDayTransactionsSheet({
 
       {/* Reprint flow states — the order fetch behind a tapped row. */}
       {selected != null && order.isLoading ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-black/30">
+        <div className="absolute inset-0 z-10 grid place-items-center bg-scrim">
           <Spinner className="text-white" />
         </div>
       ) : null}

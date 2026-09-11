@@ -37,7 +37,7 @@ export function ParkedTray({ session, locale, onResume, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-end bg-scrim backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('pos.parked.trayTitle')}
@@ -134,7 +134,7 @@ function ParkedEntry({
             {t(orderTypeKey)}
           </span>
           {order.tableLabel ? (
-            <Badge tone="neutral" className="text-[10px] px-1.5 py-0">
+            <Badge tone="neutral" className="text-2xs px-1.5 py-0">
               {order.tableLabel}
             </Badge>
           ) : null}
@@ -143,7 +143,7 @@ function ParkedEntry({
               walk-in. Missing `source` (a response from before this field existed) reads as POS —
               no badge, the pre-existing look. */}
           {order.source === 'SELF_ORDER' ? (
-            <Badge tone="info" className="text-[10px] px-1.5 py-0">
+            <Badge tone="info" className="text-2xs px-1.5 py-0">
               <Smartphone className="size-3" aria-hidden="true" />
               {t('pos.parked.sourceSelfOrder')}
             </Badge>

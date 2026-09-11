@@ -204,7 +204,7 @@ export function EmployeesTab({
       ) : filtered.length === 0 ? (
         <p className="px-2 py-8 text-center text-sm text-ink-3">{t('hr.list.noMatch')}</p>
       ) : (
-        <Card className="rounded-[20px] p-2.5">
+        <Card className="rounded-card p-2.5">
           {filtered.map((employee) => (
             <EmployeeRow
               key={employee.employeeId}
@@ -378,7 +378,7 @@ function EmployeeRow({
 
   return (
     <div className="flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-hover">
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-tint text-[13px] font-semibold text-emerald-2">
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-tint text-sm font-semibold text-emerald-2">
         {initials}
       </span>
 
@@ -388,7 +388,7 @@ function EmployeeRow({
             type="button"
             onClick={onManage}
             className={cn(
-              'rounded text-left text-[14.5px] font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-emerald',
+              'rounded text-left text-base font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-emerald',
               active ? 'text-ink' : 'text-ink-3',
             )}
           >
@@ -412,7 +412,7 @@ function EmployeeRow({
               }}
               aria-label={t('hr.list.copyUsername', { username })}
               title={t('hr.list.copyUsername', { username })}
-              className="inline-flex items-center gap-1 rounded-full bg-emerald-tint py-0.5 pl-2 pr-1.5 font-mono text-[11px] font-semibold text-emerald-2 transition-colors hover:bg-line-strong focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-tint py-0.5 pl-2 pr-1.5 font-mono text-2xs font-semibold text-emerald-2 transition-colors hover:bg-line-strong focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
             >
               {username}
               {copied ? (
@@ -450,7 +450,7 @@ function EmployeeRow({
               .map((r) => (
                 <span
                   key={r.assignmentId}
-                  className="rounded-full bg-paper px-2 py-0.5 text-[11px] text-ink-2"
+                  className="rounded-full bg-paper px-2 py-0.5 text-2xs text-ink-2"
                 >
                   {r.role} · {unitName(r.orgUnitId)}
                 </span>
@@ -466,7 +466,7 @@ function EmployeeRow({
           <button
             type="button"
             onClick={onCreateLogin}
-            className="h-[34px] rounded-[10px] border border-emerald-line bg-emerald-tint px-3 text-[12.5px] font-semibold text-emerald-2 transition-colors hover:bg-line-strong focus-visible:outline-2 focus-visible:outline-emerald"
+            className="h-[34px] rounded-xl border border-emerald-line bg-emerald-tint px-3 text-xs font-semibold text-emerald-2 transition-colors hover:bg-line-strong focus-visible:outline-2 focus-visible:outline-emerald"
           >
             {t('hr.list.actionCreateLogin')}
           </button>
@@ -474,7 +474,7 @@ function EmployeeRow({
         <button
           type="button"
           onClick={onManage}
-          className="h-[34px] rounded-[10px] border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:border-line-strong hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald"
+          className="h-[34px] rounded-xl border border-line bg-surface px-3.5 text-xs font-semibold text-ink-2 transition-colors hover:border-line-strong hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-emerald"
         >
           {t('hr.list.manage')}
         </button>

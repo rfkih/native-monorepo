@@ -20,7 +20,7 @@ export function NoCompany() {
   const { t } = useTranslation()
   return (
     <div className="grid min-h-screen place-items-center bg-paper px-5">
-      <div className="w-full max-w-md rounded-[20px] border border-line bg-surface p-10 text-center shadow-sm">
+      <div className="w-full max-w-md rounded-card border border-line bg-surface p-10 text-center shadow-sm">
         <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
           <Utensils className="size-6" aria-hidden="true" />
         </div>

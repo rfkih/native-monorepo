@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { crashed:
     if (!this.state.crashed) return this.props.children
     return (
       <div className="grid min-h-[100dvh] place-items-center bg-paper p-6">
-        <div className="w-full max-w-sm rounded-[20px] border border-line bg-surface p-6 text-center shadow-sm">
+        <div className="w-full max-w-sm rounded-card border border-line bg-surface p-6 text-center shadow-sm">
           <h1 className="font-display text-lg font-semibold text-ink">{i18n.t('appCrash.title')}</h1>
           <p className="mt-2 text-sm text-ink-3">{i18n.t('appCrash.body')}</p>
           <button

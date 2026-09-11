@@ -113,10 +113,10 @@ export function PaymentSettings() {
             <QrCode className="size-6" strokeWidth={1.8} />
           </span>
           <div>
-            <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
+            <h1 className="font-display text-2xl font-extrabold tracking-display text-ink">
               {t('settings.payments.title')}
             </h1>
-            <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-ink-3">
+            <p className="mt-1.5 max-w-xl text-base leading-relaxed text-ink-3">
               {t('settings.payments.subtitle')}
             </p>
           </div>

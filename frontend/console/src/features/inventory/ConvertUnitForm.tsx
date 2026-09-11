@@ -69,11 +69,11 @@ export function ConvertUnitForm({
       )}
     >
       {rail ? (
-        <div className="font-display text-lg font-bold leading-tight tracking-[-0.02em] text-ink">
+        <div className="font-display text-lg font-bold leading-tight tracking-display text-ink">
           {t('inventory.convertUnit.title', { name: ingredient.name })}
         </div>
       ) : null}
-      <p className="text-[13px] leading-relaxed text-ink-2 text-pretty">
+      <p className="text-sm leading-relaxed text-ink-2 text-pretty">
         {t('inventory.convertUnit.intro', { unit: ingredient.unit })}
       </p>
 
@@ -86,7 +86,7 @@ export function ConvertUnitForm({
         >
           {INGREDIENT_UNIT_GROUPS.map((group) => (
             <div key={group.key} className="flex items-center gap-2.5">
-              <span className="w-14 shrink-0 text-[11px] font-semibold text-ink-3">
+              <span className="w-14 shrink-0 text-2xs font-semibold text-ink-3">
                 {t(`inventory.unitGroup.${group.key}`)}
               </span>
               <div className="flex flex-1 flex-wrap gap-[7px]">
@@ -131,7 +131,7 @@ export function ConvertUnitForm({
             to: unitChoice,
           })}
           className={cn(
-            'tnum mt-[7px] h-[52px] w-full rounded-[14px] border-[1.5px] bg-surface px-4 text-right font-mono text-xl font-bold text-ink placeholder:text-ink-400 focus:outline-none focus:ring-4 focus:ring-emerald/15',
+            'tnum mt-[7px] h-[52px] w-full rounded-2xl border-[1.5px] bg-surface px-4 text-right font-mono text-xl font-bold text-ink placeholder:text-ink-400 focus:outline-none focus:ring-4 focus:ring-emerald/15',
             touched && !preview.ok ? 'border-loss' : 'border-ink',
           )}
         />
@@ -155,7 +155,7 @@ export function ConvertUnitForm({
           />
           <span
             className={cn(
-              'tnum font-mono text-xl font-bold tracking-[-0.02em]',
+              'tnum font-mono text-xl font-bold tracking-display',
               preview.ok ? 'text-ink' : 'text-ink-400',
             )}
           >

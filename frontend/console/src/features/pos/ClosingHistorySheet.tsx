@@ -70,14 +70,14 @@ export function ClosingHistorySheet({
   if (!canView) {
     return (
       <div
-        className="fixed inset-0 z-[70] grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+        className="fixed inset-0 z-[70] grid place-items-center bg-scrim p-6 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label={t('pos.closingHistory.title')}
       >
         <div className="w-full max-w-sm rounded-card border border-line bg-surface px-6 py-6 text-center">
           <p className="text-sm font-semibold text-ink">{t('pos.closingHistory.title')}</p>
-          <p className="mt-1.5 text-[13px] text-ink-3">{t('pos.closingHistory.denied')}</p>
+          <p className="mt-1.5 text-sm text-ink-3">{t('pos.closingHistory.denied')}</p>
           <button
             type="button"
             onClick={onClose}
@@ -99,7 +99,7 @@ export function ClosingHistorySheet({
     >
       <header className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface px-4">
         <CalendarClock className="size-[18px] text-emerald-2" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-[16px] font-bold text-ink">
+        <span className="min-w-0 flex-1 truncate text-base font-bold text-ink">
           {t('pos.closingHistory.title')}
         </span>
         <button
@@ -124,7 +124,7 @@ export function ClosingHistorySheet({
           <div className="mx-auto mt-14 max-w-sm text-center">
             <ReceiptText className="mx-auto mb-3 size-8 text-ink-3/50" aria-hidden />
             <p className="text-sm font-semibold text-ink">{t('pos.closingHistory.emptyTitle')}</p>
-            <p className="mt-1 text-[13px] text-ink-3">{t('pos.closingHistory.emptyHint')}</p>
+            <p className="mt-1 text-sm text-ink-3">{t('pos.closingHistory.emptyHint')}</p>
           </div>
         ) : (
           <div className="mx-auto flex max-w-[640px] flex-col gap-1.5">
@@ -139,19 +139,19 @@ export function ClosingHistorySheet({
                   className="flex min-w-0 flex-1 items-center gap-3 rounded-l-2xl px-3.5 py-3 text-left hover:bg-emerald-tint/40"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-semibold text-ink">
+                    <span className="block truncate text-sm font-semibold text-ink">
                       {dateFmt.format(new Date(row.businessDate))}
                     </span>
-                    <span className="mt-0.5 block text-[11.5px] text-ink-3">
+                    <span className="mt-0.5 block text-xs text-ink-3">
                       {timeFmt.format(new Date(row.openedAt))}
                       {row.closedAt ? `–${timeFmt.format(new Date(row.closedAt))}` : ''}
                     </span>
                   </span>
                   <span className="shrink-0 text-right">
-                    <span className="tnum block font-mono text-[14px] font-bold text-ink">
+                    <span className="tnum block font-mono text-sm font-bold text-ink">
                       {formatMoney(row.netSalesMinor, row.currency, locale)}
                     </span>
-                    <span className="mt-0.5 block text-[11px] text-ink-3">
+                    <span className="mt-0.5 block text-2xs text-ink-3">
                       {t('pos.closingHistory.txnCount', {
                         formatted: new Intl.NumberFormat(locale).format(row.transactionCount),
                       })}
@@ -162,7 +162,7 @@ export function ClosingHistorySheet({
                 <button
                   type="button"
                   onClick={() => setCorrect(row)}
-                  className="shrink-0 rounded-r-2xl border-l border-line px-3 text-[12px] font-semibold text-ink-2 hover:bg-hover hover:text-ink"
+                  className="shrink-0 rounded-r-2xl border-l border-line px-3 text-xs font-semibold text-ink-2 hover:bg-hover hover:text-ink"
                 >
                   {t('pos.closingHistory.correctAction')}
                 </button>

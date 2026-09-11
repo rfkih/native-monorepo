@@ -85,7 +85,7 @@ function SalesIntegrityInner({ session }: { session: CompanySession }) {
     <div className="flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-display text-ink">
             {t('salesIntegrity.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('salesIntegrity.subtitle')}</p>
@@ -164,12 +164,12 @@ function HeadlineCard({
   const isRange = high > low
   return (
     <Card className="p-5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-ink-3">
+      <p className="text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
         {t('salesIntegrity.headline.label')}
       </p>
       <p
         className={cn(
-          'mt-2 font-display text-[32px] font-bold leading-tight tracking-[-0.02em]',
+          'mt-2 font-display text-3xl font-bold leading-tight tracking-display',
           high > 0 ? 'text-loss' : 'text-ink',
         )}
       >
@@ -292,7 +292,7 @@ function SignalCard({
             </h2>
             <span
               className={cn(
-                'rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide',
+                'rounded-full border px-2 py-0.5 text-2xs font-semibold uppercase tracking-eyebrow',
                 SEVERITY_CLASS[signal.severity],
               )}
             >

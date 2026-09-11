@@ -3,6 +3,10 @@
  * the "Statutory outputs" plan note: Odoo l10n_id ships a payslip PDF, so this is the ONE statutory
  * output that must genuinely match, not just exceed, parity).
  *
+ * PRINT SURFACE — exempt from the type scale (ADR 0085) and pinned to the pre-scale pixel sizes
+ * (text-[14px]/[16px]/[18px], the old text-sm/base/lg): a printed document must not move when the
+ * screen scale moves. Do not "tidy" these back to scale names.
+ *
  * Print isolation follows the SelfOrderQr precedent (not ThermalReceipt/KotView's hidden-duplicate-
  * layout trick): the payslip document renders ONCE, visible on screen inside the modal AND as the
  * print target — #native-payslip-print is registered in the global index.css print-isolation list
@@ -110,7 +114,7 @@ export function PayslipPrint({
       <Card className="reveal flex w-full max-w-2xl flex-col overflow-hidden">
         {/* Header — screen only */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4 print:hidden">
-          <h2 className="font-display text-lg font-semibold text-ink">{t('payslip.print.title')}</h2>
+          <h2 className="font-display text-[18px] font-semibold text-ink">{t('payslip.print.title')}</h2>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" onClick={() => printCurrentPage('payslip')}>
               <Printer className="size-4" />
@@ -142,14 +146,14 @@ export function PayslipPrint({
           {/* Company + document header */}
           <div className="flex items-start justify-between border-b border-ink-200 pb-4">
             <div>
-              <div className="text-lg font-bold text-ink">{companyName}</div>
-              <div className="mt-1 text-sm text-ink-2">{employeeName}</div>
+              <div className="text-[18px] font-bold text-ink">{companyName}</div>
+              <div className="mt-1 text-[14px] text-ink-2">{employeeName}</div>
             </div>
             <div className="text-right">
-              <div className="text-sm font-semibold uppercase tracking-wider text-ink-3">
+              <div className="text-[14px] font-semibold uppercase tracking-wider text-ink-3">
                 {t('payslip.print.title')}
               </div>
-              <div className="mt-1 text-sm text-ink">
+              <div className="mt-1 text-[14px] text-ink">
                 {periodLabel}
                 {runSeq > 1 ? ` · ${t('payslip.print.runLabel', { seq: runSeq })}` : ''}
               </div>
@@ -174,7 +178,7 @@ export function PayslipPrint({
           </div>
 
           {lines.length === 0 ? (
-            <p className="mt-6 text-sm text-ink-3">{t('payslip.print.noLines')}</p>
+            <p className="mt-6 text-[14px] text-ink-3">{t('payslip.print.noLines')}</p>
           ) : (
             <>
               {/* Earnings */}
@@ -246,7 +250,7 @@ function PayslipLineRow({
   t: ReturnType<typeof useTranslation>['t']
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
+    <div className="flex items-center justify-between gap-3 py-1.5 text-[14px]">
       <span className="text-ink-2">
         {componentLabel(t, line.componentKey)}
         {line.bearer === 'EMPLOYER' ? (
@@ -258,7 +262,7 @@ function PayslipLineRow({
           </span>
         ) : null}
       </span>
-      <span className="tnum font-mono text-sm font-medium text-ink">
+      <span className="tnum font-mono text-[14px] font-medium text-ink">
         {formatMoney(line.amountMinor, line.currency, locale)}
       </span>
     </div>
@@ -280,14 +284,14 @@ function TotalRow({
 }) {
   return (
     <div className="flex items-center justify-between py-1">
-      <span className={emphatic ? 'text-sm font-semibold text-ink' : 'text-sm text-ink-2'}>
+      <span className={emphatic ? 'text-[14px] font-semibold text-ink' : 'text-[14px] text-ink-2'}>
         {label}
       </span>
       <span
         className={
           emphatic
-            ? 'tnum font-mono text-base font-bold text-ink'
-            : 'tnum font-mono text-sm font-medium text-ink'
+            ? 'tnum font-mono text-[16px] font-bold text-ink'
+            : 'tnum font-mono text-[14px] font-medium text-ink'
         }
       >
         {formatMoney(minor, currency, locale)}

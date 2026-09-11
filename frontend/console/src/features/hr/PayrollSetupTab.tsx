@@ -55,7 +55,7 @@ export function PayrollSetupTab({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[15px] font-semibold text-ink">{t('payrollSetup.title')}</p>
+          <p className="text-base font-semibold text-ink">{t('payrollSetup.title')}</p>
           <p className="mt-0.5 text-sm text-ink-3">{t('payrollSetup.subtitle')}</p>
         </div>
         <Button type="button" onClick={() => setConfirmActivate(true)}>
@@ -89,10 +89,10 @@ export function PayrollSetupTab({
           hint={t('payrollSetup.table.emptyHint')}
         />
       ) : (
-        <Card className="overflow-x-auto rounded-[20px] p-2.5">
+        <Card className="overflow-x-auto rounded-card p-2.5">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-ink-3">
+              <tr className="text-2xs uppercase tracking-eyebrow text-ink-3">
                 <th className="px-3 py-2 font-semibold">{t('payrollSetup.table.ruleKey')}</th>
                 <th className="px-3 py-2 font-semibold">{t('payrollSetup.table.version')}</th>
                 <th className="px-3 py-2 font-semibold">{t('payrollSetup.table.calcType')}</th>
@@ -178,7 +178,7 @@ function RuleRow({
       <td className="px-3 py-2.5">
         <ProvenanceBadge provenance={rule.provenance} />
         {!rule.active ? (
-          <span className="ml-1.5 text-[11px] text-ink-3">
+          <span className="ml-1.5 text-2xs text-ink-3">
             {t('payrollSetup.table.superseded')}
           </span>
         ) : null}
@@ -280,14 +280,14 @@ function RuleDetailDrawer({
             </dl>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+              <p className="text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
                 {t('payrollSetup.detail.sourceNote')}
               </p>
               <p className="mt-1 text-sm leading-relaxed text-ink-2">{detail.sourceNote}</p>
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+              <p className="text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
                 {t('payrollSetup.detail.params')}
               </p>
               <pre className="mt-1 max-h-64 overflow-auto rounded-xl border border-line bg-paper p-3 font-mono text-xs text-ink-2">

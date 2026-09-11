@@ -115,13 +115,13 @@ export function GiftCardField({
             }}
             placeholder={t('pos.loyalty.giftCard.codePlaceholder')}
             aria-label={t('pos.loyalty.giftCard.codeLabel')}
-            className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-[13px] uppercase tracking-wide text-ink placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 font-mono text-sm uppercase tracking-eyebrow text-ink placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-3/70 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
           />
           <button
             type="button"
             onClick={submit}
             disabled={disabled || code.trim() === '' || lookup.isPending}
-            className="h-10 shrink-0 rounded-xl border border-emerald-line bg-emerald-tint px-3.5 text-[13px] font-bold text-emerald-2 transition-colors hover:bg-line-strong disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="h-10 shrink-0 rounded-xl border border-emerald-line bg-emerald-tint px-3.5 text-sm font-bold text-emerald-2 transition-colors hover:bg-line-strong disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {lookup.isPending ? <Spinner className="size-3.5" /> : t('pos.loyalty.giftCard.apply')}
           </button>
@@ -147,12 +147,12 @@ export function GiftCardField({
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       <div className="flex items-center gap-2">
-        <Badge tone="emerald" className="flex-1 justify-between px-3 py-1.5 text-[13px]">
+        <Badge tone="emerald" className="flex-1 justify-between px-3 py-1.5 text-sm">
           <span className="flex min-w-0 items-center gap-1.5">
             <CreditCard className="size-3.5 shrink-0" aria-hidden />
             <span className="truncate font-mono font-semibold">{card.code}</span>
           </span>
-          <span className="tnum shrink-0 font-mono text-[11px] font-semibold">
+          <span className="tnum shrink-0 font-mono text-2xs font-semibold">
             {t('pos.loyalty.giftCard.balanceBadge', { amount: formatMoney(card.balanceMinor, card.currency, locale) })}
           </span>
         </Badge>
@@ -181,9 +181,9 @@ export function GiftCardField({
           disabled={disabled}
           onChange={(e) => onRedeemChange(clampRedeem(Number(e.target.value)))}
           placeholder="0"
-          className="h-9 w-32 rounded-xl border border-line bg-surface px-2.5 text-right font-mono text-[13px] text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+          className="h-9 w-32 rounded-xl border border-line bg-surface px-2.5 text-right font-mono text-sm text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
         />
-        <span className="tnum text-[11px] font-semibold text-emerald-2">
+        <span className="tnum text-2xs font-semibold text-emerald-2">
           − {formatMoney(redeemMinor, card.currency, locale)}
         </span>
       </div>

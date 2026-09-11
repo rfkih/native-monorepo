@@ -97,10 +97,10 @@ export function IncomeStatement() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <EntityScope name={company.name} scope={t('statements.scopeAllUnits')} />
-          <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-extrabold tracking-display text-ink">
             {t('statements.incomeTitle')}
           </h1>
-          <p className="mt-1.5 text-[15px] text-ink-3">{t('statements.incomeSubtitle')}</p>
+          <p className="mt-1.5 text-base text-ink-3">{t('statements.incomeSubtitle')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5 print:hidden max-sm:w-full max-sm:justify-end">
           <div className="max-sm:w-full">
@@ -147,10 +147,10 @@ export function IncomeStatement() {
       ) : query.isLoading && !data ? (
         <>
           <StatCardsSkeleton cards={3} />
-          <ListSkeleton rows={5} className="rounded-[20px]" />
+          <ListSkeleton rows={5} className="rounded-card" />
           <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <ListSkeleton rows={5} className="rounded-[20px]" />
-            <ListSkeleton rows={5} className="rounded-[20px]" />
+            <ListSkeleton rows={5} className="rounded-card" />
+            <ListSkeleton rows={5} className="rounded-card" />
           </div>
         </>
       ) : (
@@ -196,10 +196,10 @@ export function IncomeStatement() {
           {topExpenses.length > 0 && totalExpense > 0 ? (
             <Card className="p-6">
               <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+                <h2 className="font-display text-lg font-semibold tracking-display text-ink">
                   {t('statements.topExpenses')}
                 </h2>
-                <span className="text-[12.5px] text-ink-3">{t('statements.topExpensesNote')}</span>
+                <span className="text-xs text-ink-3">{t('statements.topExpensesNote')}</span>
               </div>
               <div className="mt-[18px] flex flex-col gap-[15px]">
                 {topExpenses.map((line) => {
@@ -211,16 +211,16 @@ export function IncomeStatement() {
                       <div className="mb-1.5 flex items-baseline justify-between gap-3">
                         {/* Name leads; the code trails as a quiet chip so the row is still
                             traceable back to the ledger. An unnamed account shows its code alone. */}
-                        <span className="min-w-0 truncate text-[13px] font-semibold text-ink">
+                        <span className="min-w-0 truncate text-sm font-semibold text-ink">
                           {name ?? line.accountCode}
                           {name ? (
-                            <span className="ml-1.5 font-mono text-[11px] font-normal text-ink-3">
+                            <span className="ml-1.5 font-mono text-2xs font-normal text-ink-3">
                               {line.accountCode}
                             </span>
                           ) : null}
                         </span>
                         <span className="flex shrink-0 items-baseline gap-3">
-                          <span className="tnum font-mono text-[13.5px] font-semibold text-ink">
+                          <span className="tnum font-mono text-sm font-semibold text-ink">
                             {formatAmount(line.netMinor, currency, locale)}
                           </span>
                           <span className="tnum w-[42px] text-right font-mono text-xs text-ink-3">

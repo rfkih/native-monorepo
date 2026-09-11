@@ -290,6 +290,19 @@ jobs:
       - name: Forbid SELECT * in production queries
         run: bash scripts/check-no-select-star.sh
 
+  # Fast, always-on: the console's classes name roles, not pixels (ADR 0085 / DESIGN-SYSTEM.md) —
+  # no text-[Npx], bracket radius, arbitrary tracking, bg-black scrim, dead animate-in class, or
+  # brand-ramp action colour. Costs seconds.
+  design_tokens:
+    name: design tokens
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Forbid arbitrary design values in console sources
+        run: bash scripts/check-design-tokens.sh
+
   # Fast, always-on: every NEW Flyway migration must be expand/contract (backward-compatible) and
   # applied migrations are immutable — the release invariant that keeps prod's app-tier rollback
   # safe (ADR 0057 §3: an image rollback never triggers a DB rollback). Scans only the diff vs the
@@ -312,7 +325,7 @@ jobs:
   # filtering) count as success; any failure or cancellation turns the gate red.
   gate:
     name: gate
-    needs: [changes, backend, console, employee, self_order, doc_drift, no_select_star, migration_safety]
+    needs: [changes, backend, console, employee, self_order, doc_drift, no_select_star, design_tokens, migration_safety]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -320,7 +333,7 @@ jobs:
       - name: Fail if any upstream job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |
-          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} employee=${{ needs.employee.result }} self_order=${{ needs.self_order.result }} doc_drift=${{ needs.doc_drift.result }} no_select_star=${{ needs.no_select_star.result }} migration_safety=${{ needs.migration_safety.result }}"
+          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} employee=${{ needs.employee.result }} self_order=${{ needs.self_order.result }} doc_drift=${{ needs.doc_drift.result }} no_select_star=${{ needs.no_select_star.result }} design_tokens=${{ needs.design_tokens.result }} migration_safety=${{ needs.migration_safety.result }}"
           exit 1
       - name: All required jobs passed
         run: echo "gate green"

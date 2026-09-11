@@ -79,7 +79,7 @@ export function ExpenseInbox() {
         <EmptyState title={t('expenses.inbox.empty.title')} hint={t('expenses.inbox.empty.hint')} />
       ) : (
         <>
-          <Card className="rounded-[20px] p-2.5">
+          <Card className="rounded-card p-2.5">
             {page0.content.map((c) => (
               <InboxRow key={c.id} claim={c} locale={locale} onOpen={() => setSelectedId(c.id)} />
             ))}
@@ -235,7 +235,7 @@ function DecisionBody({
 
       {claim.note ? (
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+          <div className="text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
             {t('me.expenses.detail.note')}
           </div>
           <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-2">{claim.note}</p>
@@ -243,7 +243,7 @@ function DecisionBody({
       ) : null}
 
       <div>
-        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-3">
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrow text-ink-3">
           {t('me.expenses.detail.receiptTitle')}
         </div>
         {receipt.status === 'loading' ? (
@@ -319,7 +319,7 @@ function DecisionDrawer({
           <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-7 pt-2">{activeForm}</div>
         ) : (
           <>
-            <div className="shrink-0 border-b border-line px-5 pb-3.5 pt-1 text-[17px] font-bold text-ink">
+            <div className="shrink-0 border-b border-line px-5 pb-3.5 pt-1 text-lg font-bold text-ink">
               {t('expenses.inbox.decision.title')}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -330,7 +330,7 @@ function DecisionDrawer({
                 type="button"
                 disabled={!claim}
                 onClick={() => setDialog('refuse')}
-                className="h-14 flex-1 rounded-2xl border border-loss/30 bg-surface text-[14.5px] font-bold text-loss transition-colors hover:bg-tint-loss disabled:opacity-50"
+                className="h-14 flex-1 rounded-2xl border border-loss/30 bg-surface text-base font-bold text-loss transition-colors hover:bg-tint-loss disabled:opacity-50"
               >
                 {t('expenses.actions.refuse')}
               </button>
@@ -338,7 +338,7 @@ function DecisionDrawer({
                 type="button"
                 disabled={!claim}
                 onClick={() => setDialog('approve')}
-                className="h-14 flex-1 rounded-2xl bg-emerald text-[14.5px] font-bold text-on-emerald transition-colors hover:bg-emerald-2 disabled:opacity-50"
+                className="h-14 flex-1 rounded-2xl bg-emerald text-base font-bold text-on-emerald transition-colors hover:bg-emerald-2 disabled:opacity-50"
               >
                 {t('expenses.actions.approve')}
               </button>
@@ -416,7 +416,7 @@ function ApproveDialog({
       <p className="text-sm text-ink-2">{t('expenses.actions.approveDialog.body')}</p>
 
       <div className="rounded-xl bg-tint-info px-3.5 py-3 text-sm text-ink-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-info">
+        <div className="text-2xs font-semibold uppercase tracking-eyebrow text-info">
           {t('expenses.actions.approveDialog.methodLabel')}
         </div>
         <p className="mt-0.5 font-semibold">

@@ -123,11 +123,11 @@ export function OutletPicker({ variant = 'pill' }: { variant?: 'pill' | 'subtitl
               ? // Native Till Android v2: on the phone till the picker IS the header's identity
                 // line, so it carries no chrome of its own — just the outlet name, a chevron, and
                 // the 11.5px muted weight the rest of that line uses.
-                'gap-1 rounded-md text-[11.5px] font-medium text-ink-3 transition-opacity active:opacity-60'
+                'gap-1 rounded-md text-xs font-medium text-ink-3 transition-opacity active:opacity-60'
               : cn(
                   'h-[40px] max-w-[200px] gap-2 rounded-xl',
                   'border-[1.5px] border-emerald-line bg-emerald-tint px-3',
-                  'text-[13px] font-semibold text-emerald-2',
+                  'text-sm font-semibold text-emerald-2',
                   'transition-all hover:bg-emerald-tint/70',
                 ),
           )}
@@ -154,7 +154,9 @@ export function OutletPicker({ variant = 'pill' }: { variant?: 'pill' | 'subtitl
             className={cn(
               'absolute left-0 top-[calc(100%+6px)] z-50 min-w-[200px] overflow-hidden',
               'rounded-xl border border-line bg-surface shadow-xl',
-              'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95',
+              // The Dialog's entrance (index.css) — the tailwindcss-animate classes this used to
+              // name were never installed, so the popover had been popping in with no motion.
+              'dialog-in',
             )}
           >
             {outlets.map((outlet) => {
@@ -169,7 +171,7 @@ export function OutletPicker({ variant = 'pill' }: { variant?: 'pill' | 'subtitl
                     requestSwitch(outlet.id)
                   }}
                   className={cn(
-                    'flex h-11 w-full items-center gap-3 px-4 text-left text-[14px] transition-colors',
+                    'flex h-11 w-full items-center gap-3 px-4 text-left text-sm transition-colors',
                     'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald',
                     isActive
                       ? 'bg-emerald-tint font-semibold text-emerald-2'
@@ -190,13 +192,13 @@ export function OutletPicker({ variant = 'pill' }: { variant?: 'pill' | 'subtitl
       {/* Confirm-switch dialog — shown without coupling to POS cart internals */}
       {pendingId ? (
         <div
-          className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[70] grid place-items-center bg-scrim p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label={t('pos.switchOutletConfirmTitle')}
         >
-          <div className="w-full max-w-xs rounded-[20px] border border-line bg-surface p-6 shadow-xl">
-            <p className="text-[15px] font-semibold text-ink">
+          <div className="w-full max-w-xs rounded-card border border-line bg-surface p-6 shadow-xl">
+            <p className="text-base font-semibold text-ink">
               {t('pos.switchOutletConfirmTitle')}
             </p>
             <p className="mt-2 text-sm text-ink-3">

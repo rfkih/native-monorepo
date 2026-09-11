@@ -66,7 +66,7 @@ const StandaloneRegister = lazy(() =>
 )
 
 const TILE_CLASS =
-  'flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-[12px] font-semibold text-ink-2 transition-[background-color,border-color,color,transform] duration-150 hover:border-line-strong hover:bg-hover hover:text-ink active:scale-[0.97] motion-reduce:active:scale-100'
+  'flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-xs font-semibold text-ink-2 transition-[background-color,border-color,color,transform] duration-150 hover:border-line-strong hover:bg-hover hover:text-ink active:scale-[0.97] motion-reduce:active:scale-100'
 
 function Tile({ to, icon: TileIcon, label }: { to: string; icon: Icon; label: string }) {
   return (
@@ -78,11 +78,11 @@ function Tile({ to, icon: TileIcon, label }: { to: string; icon: Icon; label: st
 }
 
 const ROW_CLASS =
-  'flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-medium text-ink transition-colors hover:bg-hover'
+  'flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-ink transition-colors hover:bg-hover'
 
 function MicroHeading({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-3 pb-1.5 pt-4 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-ink-3">
+    <div className="px-3 pb-1.5 pt-4 font-mono text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
       {children}
     </div>
   )
@@ -186,7 +186,7 @@ export function MorePage({ home }: { home: string }) {
     // the tile grid back to the phone gutter Shell's `px-5` would otherwise double.
     <div className="-mx-1">
       <div className="pb-2">
-        <h1 className="px-1 pb-3 font-display text-[26px] font-extrabold tracking-[-0.035em] text-ink">
+        <h1 className="px-1 pb-3 font-display text-2xl font-extrabold tracking-display text-ink">
           {t('mobile.more.title')}
         </h1>
 
@@ -221,7 +221,7 @@ export function MorePage({ home }: { home: string }) {
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('mobile.more.searchPages')}
               aria-label={t('mobile.more.searchPages')}
-              className="min-w-0 flex-1 self-stretch border-0 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3"
+              className="min-w-0 flex-1 self-stretch border-0 bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
             />
             {filtering ? (
               <button
@@ -238,8 +238,8 @@ export function MorePage({ home }: { home: string }) {
 
         {filtering && arranged.length === 0 ? (
           <div className="px-2 py-8 text-center">
-            <div className="text-[15px] font-semibold text-ink">{t('mobile.more.noMatches')}</div>
-            <div className="mt-1 text-[13.5px] text-ink-3">{t('mobile.more.noMatchesHint')}</div>
+            <div className="text-base font-semibold text-ink">{t('mobile.more.noMatches')}</div>
+            <div className="mt-1 text-sm text-ink-3">{t('mobile.more.noMatchesHint')}</div>
           </div>
         ) : null}
 
@@ -318,7 +318,7 @@ export function MorePage({ home }: { home: string }) {
           <button
             type="button"
             onClick={() => auth.logout()}
-            className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-medium text-loss-ink transition-colors hover:bg-tint-loss"
+            className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-loss-ink transition-colors hover:bg-tint-loss"
           >
             <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-tint-loss text-loss-ink">
               <LogOut className="size-[17px]" aria-hidden />

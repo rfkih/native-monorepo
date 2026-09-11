@@ -24,7 +24,7 @@ export interface LedgerPhoneRow {
 
 export function LedgerPhoneList({ rows, locale }: { rows: LedgerPhoneRow[]; locale: string }) {
   return (
-    <Card className="rounded-[20px] p-2.5">
+    <Card className="rounded-card p-2.5">
       {rows.map((r) => (
         <Link
           key={r.id}
@@ -37,13 +37,13 @@ export function LedgerPhoneList({ rows, locale }: { rows: LedgerPhoneRow[]; loca
               <span className="truncate text-sm font-bold text-ink">{r.party}</span>
               {r.badge}
             </div>
-            <p className="tnum mt-1 truncate font-mono text-[11.5px] text-ink-3">{r.meta}</p>
+            <p className="tnum mt-1 truncate font-mono text-xs text-ink-3">{r.meta}</p>
           </div>
           <div className="shrink-0 text-right">
             <div className="tnum font-mono text-sm font-bold text-ink">
               {formatMoney(r.outstandingMinor, r.currency, locale)}
             </div>
-            <div className="mt-0.5 text-[11px] font-medium text-ink-3">{r.due}</div>
+            <div className="mt-0.5 text-2xs font-medium text-ink-3">{r.due}</div>
           </div>
         </Link>
       ))}
