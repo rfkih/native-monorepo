@@ -951,14 +951,15 @@ for (const pass of [
   await page.screenshot({ path: `${dir}/pos-deck-emptied.png` })
   console.log(`[${pass.name}] pos-deck-emptied ok (due reads "${dueAfterEmpty}")`)
 
-  // Ring the three again for the bill shots below, then collapse.
+  // Collapse the (still expanded) deck — its scrim covers the catalog — then ring the three again
+  // for the bill shots below.
+  await page.getByTestId('pos-dock-toggle').click({ timeout: 8000 })
+  await page.waitForTimeout(500)
   for (const item of ['Nasi Goreng Spesial', 'Es Teh Manis', 'Kopi Susu Gula Aren']) {
     await page.getByRole('button', { name: new RegExp(item) }).first().click({ timeout: 8000 })
     await page.waitForTimeout(350)
   }
   await page.waitForTimeout(1200)
-  await page.getByTestId('pos-dock-toggle').click({ timeout: 8000 })
-  await page.waitForTimeout(500)
 
   // Same component, other data owner: a partially-paid open bill (BillDetail renders the deck).
   // The switcher lives in the till menu now (and, in bill mode, as the deck's first chip).
