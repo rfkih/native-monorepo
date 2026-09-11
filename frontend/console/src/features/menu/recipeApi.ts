@@ -64,12 +64,17 @@ export function useRecipe(session: CompanySession, itemId: string | null) {
   return useQuery({
     queryKey: RECIPE_KEY(session, itemId ?? ''),
     enabled: itemId != null,
-    queryFn: () =>
-      apiFetch<Recipe>(`/api/v1/menu/${itemId}/recipe`, {
-        tenant: tenantOf(session),
-      }),
+    queryFn: () => fetchRecipe(session, itemId ?? ''),
   })
 }
+
+/** The one recipe read, shared by `useRecipe` and the phone menu's search fan-out (ADR 0083). */
+export function fetchRecipe(session: CompanySession, itemId: string) {
+  return apiFetch<Recipe>(`/api/v1/menu/${itemId}/recipe`, { tenant: tenantOf(session) })
+}
+
+/** The recipe query key — exported so a `useQueries` fan-out shares `useRecipe`'s cache entries. */
+export const recipeKey = RECIPE_KEY
 
 /**
  * PUT /api/v1/menu/{itemId}/recipe — FULL REPLACE; invalidates both the recipe query (so the

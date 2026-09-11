@@ -429,11 +429,16 @@ body {
     transform-origin: left;
     animation: bar-wide 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
+  /* The phone menu's row panel dropping open under its row (ADR 0083). */
+  .panel-in {
+    animation: panel-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
   @media (prefers-reduced-motion: reduce) {
     .rise-in,
     .num-rise,
     .bar-up,
-    .bar-wide {
+    .bar-wide,
+    .panel-in {
       animation: none;
     }
   }
@@ -493,6 +498,16 @@ body {
   }
   to {
     transform: scaleY(1);
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 @keyframes bar-wide {
