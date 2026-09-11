@@ -25,6 +25,7 @@ import {
   type BillLine,
 } from './api'
 import { formatDate, billErrorKey } from './format'
+import { BillAttachments } from './BillAttachments'
 import { DialogOverlay } from '@/components/ui/Dialog'
 import { BillStatusBadge, SELECT_CLASSES } from './parts'
 
@@ -191,6 +192,32 @@ export function BillDetail() {
             {formatDate(bill.billDate, locale)} · {t('ap.detail.dueDate')}:{' '}
             {formatDate(bill.dueDate, locale)}
           </p>
+          {/* ADR 0084 — the invoice as the vendor wrote it. */}
+          <p className="mt-1 text-sm text-ink-3">
+            {bill.vendorInvoiceNumber ? (
+              <>
+                {t('ap.detail.invoiceNumber')}:{' '}
+                <span className="font-mono font-semibold text-ink">{bill.vendorInvoiceNumber}</span>
+                {' · '}
+              </>
+            ) : null}
+            {bill.discountMinor > 0 ? (
+              <>
+                {t('ap.detail.discount')}: {formatMoney(bill.discountMinor, bill.currency, locale)}
+                {' · '}
+              </>
+            ) : null}
+            {t('ap.detail.taxRate', {
+              rate: new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(
+                bill.taxBp / 10_000,
+              ),
+            })}
+          </p>
+          {bill.note ? (
+            <p className="mt-1 text-sm text-ink-2">
+              {t('ap.detail.note')}: {bill.note}
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {canPost ? (
@@ -342,6 +369,20 @@ export function BillDetail() {
             </tfoot>
           </table>
         )}
+      </Card>
+
+      {/* Attachments — ADR 0084 */}
+      <Card className="p-6">
+        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          {t('ap.detail.attachments')}
+        </h2>
+        <BillAttachments
+          companyId={company.companyId}
+          actor={company.actor}
+          billId={bill.id}
+          locale={locale}
+          canRemove={bill.status !== 'VOID'}
+        />
       </Card>
 
       {/* Payments */}

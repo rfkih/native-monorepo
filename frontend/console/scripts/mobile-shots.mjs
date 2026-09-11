@@ -9,7 +9,7 @@
  *   npm run dev        (terminal 1)
  *   node scripts/mobile-shots.mjs [outDir]   (terminal 2)
  *
- * SHOT_ONLY=screens,more,pos,stocktake,laporan,inventory,menu (comma list) restricts the walk to those sections — the
+ * SHOT_ONLY=screens,more,pos,stocktake,laporan,inventory,menu,bills (comma list) restricts the walk to those sections — the
  * whole pass is a couple of minutes, and a redesign of one screen only needs its own section.
  * SHOT_FULL=1 makes the `screens` pass capture full scroll height (review a long screen whole).
  *
@@ -481,7 +481,28 @@ const BILLS = INVOICES.map((i, n) => ({
   status: n === 0 ? 'POSTED' : i.status === 'ISSUED' ? 'POSTED' : i.status,
   billDate: i.issueDate, dueDate: i.dueDate, currency: 'IDR',
   totalMinor: i.totalMinor, paidMinor: i.paidMinor, outstandingMinor: i.outstandingMinor,
+  vendorInvoiceNumber: ['INV/2026/08/2214', 'KP-0931', 'TJ/0455', 'GAS/2026/08/77'][n],
 }))
+
+// ADR 0084 — the phone "Tagihan baru" form: vendors with their default terms (the chips
+// preselect them), and one full bill detail for /bills/:id.
+const VENDORS = [
+  { id: 'v1', name: 'CV Sumber Pangan Jaya', email: null, taxId: '01.234.567.8-011.000', active: true, paymentTermDays: 30 },
+  { id: 'v2', name: 'PT Aneka Boga Nusantara', email: null, taxId: '02.887.101.4-046.000', active: true, paymentTermDays: 14 },
+  { id: 'v3', name: 'UD Tirta Jaya', email: null, taxId: null, active: true, paymentTermDays: 7 },
+  { id: 'v4', name: 'PT Gas Nusantara', email: null, taxId: '03.551.902.7-013.000', active: true, paymentTermDays: 0 },
+]
+const BILL_DETAIL = (id) => {
+  const b = BILLS.find((x) => x.id === id) ?? BILLS[0]
+  return {
+    ...b, subtotalMinor: Math.round(b.totalMinor / 1.11), taxMinor: b.totalMinor - Math.round(b.totalMinor / 1.11),
+    usesIllustrativeRules: false, payments: [], termDays: 30, discountMinor: 0, taxBp: 1100, note: null,
+    lines: [
+      { lineNo: 1, description: 'Ayam broiler segar', quantity: 1, unitPriceMinor: Math.round(b.totalMinor / 1.11), lineTotalMinor: Math.round(b.totalMinor / 1.11), inventory: true, ingredientId: 'ayam-fillet', ingredientName: 'Ayam Fillet Dada', ingredientQtyBase: 24000 },
+    ],
+  }
+}
+const NEW_BILL = { ...BILL_DETAIL('b1'), id: 'b-new', billNumber: null, status: 'DRAFT', billDate: '2026-09-11', dueDate: null, paidMinor: 0 }
 
 const TEAM = [
   { id: 'u1', username: 'budi', email: 'budi@kemang.id', roles: ['owner'], enabled: true, outletCount: 0 },
@@ -520,7 +541,13 @@ const ROUTES = [
   ['/api/v1/ar/aging', (u) => AR_AGING(u.searchParams.get('asOf') ?? '2026-08-07')],
   ['/api/v1/ap/aging', (u) => AP_AGING(u.searchParams.get('asOf') ?? '2026-08-07')],
   ['/api/v1/invoices', () => INVOICES],
-  ['/api/v1/ap/bills', () => BILLS],
+  [/\/api\/v1\/ap\/bills\/([^/]+)\/attachments$/, (u, m, req) => (req?.method() === 'POST'
+    ? { id: 'att1', contentType: 'application/pdf', byteSize: 1_400_000, sha256: 'ab'.repeat(32), originalFilename: 'faktur-sumber-pangan-0911.pdf', uploadedAt: '2026-09-11T03:00:00Z' }
+    : [])],
+  [/\/api\/v1\/ap\/bills\/([^/]+)\/post$/, (u, m) => ({ ...NEW_BILL, id: m[1], status: 'POSTED', billNumber: 'BILL-00042', dueDate: '2026-10-11' })],
+  [/\/api\/v1\/ap\/bills\/([^/]+)$/, (u, m) => (m[1] === 'b-new' ? NEW_BILL : BILL_DETAIL(m[1]))],
+  ['/api/v1/ap/bills', (u, m, req) => (req?.method() === 'POST' ? NEW_BILL : BILLS)],
+  ['/api/v1/vendors', () => VENDORS],
   // POS (Native Till Android v2). `/api/v1/bills/b1` must precede `/api/v1/bills`.
   ['/api/v1/menu/categories', () => MENU_CATEGORIES],
   ['/api/v1/menu/hpp-summary', () => HPP_SUMMARY()],
@@ -925,6 +952,59 @@ for (const pass of [
   await page.waitForTimeout(700)
   await page.screenshot({ path: `${dir}/pos-bill-expanded.png` })
   console.log(`[${pass.name}] pos-bill-expanded ok`)
+  }
+
+  if (want('bills')) {
+    // ADR 0084 — the phone "Tagihan baru" form refuses a bill the books cannot defend.
+    const shot = async (name) => {
+      await page.screenshot({ path: `${dir}/${name}.png` })
+      console.log(`[${pass.name}] ${name} ok`)
+    }
+    await page.goto(`${BASE}/bills/new`, { waitUntil: 'load' })
+    await page.waitForTimeout(1400)
+    await shot('bills-new')
+    // Vendor list → pick Sumber Pangan (terms 30 preselect).
+    await page.getByRole('button', { name: /(Pilih vendor|Choose a vendor)/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    await shot('bills-new-vendors')
+    await page.getByRole('button', { name: /CV Sumber Pangan Jaya/ }).first().click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    // A duplicate number for that vendor lights the red line.
+    const invoice = page.getByPlaceholder('INV/2026/09/…')
+    await invoice.fill('INV/2026/08/2214')
+    await page.waitForTimeout(700)
+    await shot('bills-new-duplicate')
+    await invoice.fill('INV/2026/09/2290')
+    // A line: name, qty 24, price 34.500 → the amount reads on the card.
+    await page.getByPlaceholder(/^(Nama barang atau jasa|Item or service name)$/).first().fill('Ayam broiler segar')
+    const qty = page.getByRole('textbox', { name: /^(Jml|Qty)$/ }).first()
+    await qty.fill('24')
+    await page.getByRole('textbox', { name: /^(Harga satuan|Unit price)$/ }).first().fill('34500')
+    await page.waitForTimeout(400)
+    // Printed total that does NOT match → red reconciliation, then the exact figure → green.
+    const printed = page.getByRole('textbox', { name: /^(Nilai tercetak di faktur|Amount printed on the invoice)$/ })
+    await printed.fill('900000')
+    await page.waitForTimeout(500)
+    await page.mouse.wheel(0, 700)
+    await page.waitForTimeout(500)
+    await shot('bills-new-mismatch')
+    await printed.fill('919080')
+    await page.waitForTimeout(500)
+    await shot('bills-new-match')
+    await page.mouse.wheel(0, 900)
+    await page.waitForTimeout(500)
+    await shot('bills-new-checklist')
+    // The evidence: a PDF staged through the hidden file input → the checklist turns green and
+    // Save opens. Save = create → upload → post → the bill's own page.
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'faktur-sumber-pangan-0911.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 mock'),
+    })
+    await page.waitForTimeout(600)
+    await shot('bills-new-ready')
+    await page.getByRole('button', { name: /^(Simpan tagihan|Save bill)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(1500)
+    if (!page.url().endsWith('/bills/b-new')) throw new Error(`save must open the bill, got ${page.url()}`)
+    await shot('bills-detail')
   }
 
   if (want('menu')) {

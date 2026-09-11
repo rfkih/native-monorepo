@@ -113,6 +113,7 @@ function NewVendorDialog({
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [taxId, setTaxId] = useState('')
+  const [terms, setTerms] = useState('')
   const mutation = useCreateVendor({ companyId, actor })
 
   function handleSubmit(e: React.FormEvent) {
@@ -122,6 +123,8 @@ function NewVendorDialog({
         name: name.trim(),
         email: email.trim() || undefined,
         taxId: taxId.trim() || undefined,
+        // ADR 0084 — the default term the phone bill form preselects for this vendor.
+        paymentTermDays: /^\d+$/.test(terms.trim()) ? Number(terms.trim()) : undefined,
       },
       { onSuccess: () => onClose() },
     )
@@ -155,6 +158,16 @@ function NewVendorDialog({
 
         <Field label={t('ap.vendors.createDialog.taxIdLabel')} htmlFor="vend-taxid">
           <TextInput id="vend-taxid" value={taxId} onChange={(e) => setTaxId(e.target.value)} />
+        </Field>
+        <Field label={t('ap.vendors.createDialog.termsLabel')} htmlFor="vend-terms">
+          <TextInput
+            id="vend-terms"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={terms}
+            onChange={(e) => setTerms(e.target.value)}
+          />
         </Field>
 
         {mutation.isError ? (

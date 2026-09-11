@@ -16,7 +16,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQueries } from '@tanstack/react-query'
 import {
   ChevronDown,
@@ -51,6 +51,7 @@ import {
   displayCategoryName,
 } from '@/features/pos/lib/categoryCanon'
 import { useIngredients, type Ingredient } from '@/features/inventory/ingredientApi'
+import { IngredientPickerSheet } from '@/features/inventory/IngredientPickerSheet'
 import { QtyKeypad } from '@/features/inventory/QtyKeypad'
 import {
   applyCountKey,
@@ -820,97 +821,6 @@ function currencySymbol(currency: string, locale: string): string {
 // Sheets — every overlay through the one Dialog primitive (ADR 0075 N3)
 // ---------------------------------------------------------------------------
 
-function IngredientPickerSheet({
-  ingredients,
-  locale,
-  onPick,
-  onClose,
-}: {
-  ingredients: Ingredient[]
-  locale: string
-  onPick: (ingredient: Ingredient) => void
-  onClose: () => void
-}) {
-  const { t } = useTranslation()
-  const [q, setQ] = useState('')
-  const needle = q.trim().toLocaleLowerCase(locale)
-  const shown = ingredients
-    .filter((i) => i.active && (needle === '' || i.name.toLocaleLowerCase(locale).includes(needle)))
-    .sort((a, b) => a.name.localeCompare(b.name, locale))
-
-  return (
-    <DialogOverlay onClose={onClose} ariaLabel={t('menu.phone.pickIngredient')} className="p-0">
-      {(requestClose) => (
-        <div className="flex max-h-[80dvh] flex-col">
-          <div className="flex shrink-0 justify-center pb-1 pt-2.5 sm:hidden" aria-hidden="true">
-            <div className="h-1 w-10 rounded-full bg-ink-300" />
-          </div>
-          <div className="flex shrink-0 items-center gap-2 px-[18px] pt-1.5">
-            <div className="min-w-0 flex-1 text-base font-bold leading-tight text-ink">
-              {t('menu.phone.pickIngredient')}
-            </div>
-            <button
-              type="button"
-              onClick={requestClose}
-              aria-label={t('common.close')}
-              className={cn(ICON_BUTTON, '-mr-2.5')}
-            >
-              <X className="size-[19px]" aria-hidden="true" />
-            </button>
-          </div>
-          <div className="shrink-0 px-[18px] pt-3">
-            <label className="flex h-[42px] items-center gap-2.5 rounded-xl bg-hover px-3.5">
-              <Search className="size-4 shrink-0 text-ink-3" strokeWidth={2} aria-hidden="true" />
-              <input
-                type="search"
-                autoFocus
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder={t('menu.phone.pickSearch')}
-                aria-label={t('menu.phone.pickSearch')}
-                className="min-w-0 flex-1 bg-transparent text-[13.5px] font-medium text-ink placeholder:text-ink-400 focus:outline-none [&::-webkit-search-cancel-button]:appearance-none"
-              />
-            </label>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-[18px] pt-2" style={SAFE_BOTTOM(16)}>
-            {shown.length === 0 ? (
-              <p className="py-8 text-center text-[13px] text-ink-3">
-                {t('menu.phone.noIngredients')}
-              </p>
-            ) : (
-              <div className="overflow-hidden rounded-[13px] border border-line bg-surface">
-                {shown.map((ing) => (
-                  <button
-                    key={ing.id}
-                    type="button"
-                    onClick={() => onPick(ing)}
-                    className="flex min-h-[48px] w-full items-center gap-3 border-b border-line/60 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-paper"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">
-                      {ing.name}
-                    </span>
-                    <span className="tnum shrink-0 font-mono text-[11.5px] text-ink-3">
-                      {ing.unitCostMinor != null && ing.costCurrency
-                        ? `${formatMoney(ing.unitCostMinor, ing.costCurrency, locale)}/${ing.unit}`
-                        : t('menu.phone.costNone')}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <Link
-              to="/inventory"
-              viewTransition
-              className="mt-3 block text-center text-[12.5px] font-semibold text-ink-2 underline-offset-2 hover:underline"
-            >
-              {t('menu.phone.inCatalog')}
-            </Link>
-          </div>
-        </div>
-      )}
-    </DialogOverlay>
-  )
-}
 
 function RecipeQtySheet({
   ingredient,

@@ -2,14 +2,17 @@
  * Pure mount policy for the phone bottom navigation — its own module (not in the gate
  * component file) so it stays unit-testable and fast-refresh-safe.
  *
- * False on every full-screen till surface (each carries its own chrome — ADR 0043) and on
- * onboarding (a deliberate no-escape wizard).
+ * False on every full-screen till surface (each carries its own chrome — ADR 0043), on
+ * onboarding (a deliberate no-escape wizard), and on the phone bill form (a sticky footer of its
+ * own — ADR 0084).
  */
 export function shouldMountTabBar(pathname: string): boolean {
   if (pathname === '/pos' || pathname.startsWith('/pos/')) return false
   if (pathname === '/menu' || pathname === '/catalog' || pathname === '/kitchen') return false
   if (pathname === '/inventory' || pathname.startsWith('/inventory/')) return false
   if (pathname === '/onboarding' || pathname.startsWith('/onboarding/')) return false
+  // The phone bill form owns the bottom of its screen — a sticky total + save (ADR 0084).
+  if (pathname === '/bills/new') return false
   return true
 }
 

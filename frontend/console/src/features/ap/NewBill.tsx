@@ -10,6 +10,8 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import { useOrgUnits } from '@/features/org/api'
 import { apiFetch } from '@/lib/api'
 import { useSession, type CompanySession } from '@/lib/session'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
+import { NewBillPhone } from './NewBillPhone'
 import { localeOf } from '@/i18n'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
 import {
@@ -193,6 +195,14 @@ function parseLine(
  * currency (rule: no currency toggle in the dashboard).
  */
 export function NewBill() {
+  const { company } = useSession()
+  // ADR 0084 — below 640px the form is the phone work form; the desktop tree is untouched.
+  const isPhone = useIsPhone()
+  if (isPhone && company) return <NewBillPhone company={company} />
+  return <NewBillDesktop />
+}
+
+function NewBillDesktop() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
   const navigate = useNavigate()
