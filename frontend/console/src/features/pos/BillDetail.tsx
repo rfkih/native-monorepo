@@ -39,6 +39,7 @@ import { dockActions, dueLabelKey, peekLines } from './lib/dockLines'
 import { BillLineItem } from './components/BillLineItem'
 import { BillLineGroupItem } from './components/BillLineGroupItem'
 import { groupUnpaidLines, type BillLineGroup } from './lib/billLineGroups'
+import { modifierList } from './lib/lineLabels'
 import { canCancelBill, canRemoveBillLines, showCancelNeedsManager } from './lib/billPermissions'
 import { ApiError } from '@/lib/api'
 import { BillBreakdown } from './components/BillBreakdown'
@@ -445,8 +446,11 @@ export function BillDetail({
   // ── The bill deck (phone, Native Till Android v2) ──────────────────────────────────────────
   // BillDock renders strings, never numbers: every money value is formatted here (rule 8/9).
   const busy = appendLines.isPending || removeLine.isPending || billQuery.isFetching
-  const modifierSuffix = (mods: { nameSnapshot: string }[]) =>
-    mods.length > 0 ? ` · ${mods.map((m) => m.nameSnapshot).join(', ')}` : ''
+  // Each add-on with its per-unit price on its own row, and the unit label is the product's OWN
+  // price — so "Telur (+Rp 2.000)" over "2 × Rp 25.000" reads to the Rp 54.000 total
+  // (lib/lineLabels — the till-side twin of the receipt rule).
+  const addOns = (mods: { nameSnapshot: string; priceDeltaMinor: number }[]) =>
+    mods.length > 0 ? modifierList(mods, currency, locale) : undefined
 
   // Split mode charges an explicit SUBSET of line ids, so it lists bill.lines raw — one tickable
   // row per line. The normal view collapses identical unpaid lines into one stepper row
@@ -454,10 +458,11 @@ export function BillDetail({
   const dockLines: DockLine[] = splitMode
     ? bill.lines.map((l) => ({
         key: l.id,
-        name: l.nameSnapshot + modifierSuffix(l.modifiers),
+        name: l.nameSnapshot,
+        modifiersLabel: addOns(l.modifiers),
         unitLabel: t('posShell.dock.lineUnit', {
           qty: l.qty,
-          price: formatMoney(l.unitPriceMinor + l.modifierDeltaMinor, currency, locale),
+          price: formatMoney(l.unitPriceMinor, currency, locale),
         }),
         totalLabel: formatMoney(l.lineTotalMinor, currency, locale),
         qty: l.qty,
@@ -470,10 +475,11 @@ export function BillDetail({
     : [
         ...lineGroups.map((g) => ({
           key: g.key,
-          name: g.nameSnapshot + modifierSuffix(g.modifiers),
+          name: g.nameSnapshot,
+          modifiersLabel: addOns(g.modifiers),
           unitLabel: t('posShell.dock.lineUnit', {
             qty: g.qty,
-            price: formatMoney(g.unitPriceMinor + g.modifierDeltaMinor, currency, locale),
+            price: formatMoney(g.unitPriceMinor, currency, locale),
           }),
           totalLabel: formatMoney(g.lineTotalMinor, currency, locale),
           qty: g.qty,
@@ -487,10 +493,11 @@ export function BillDetail({
         })),
         ...paidLines.map((l) => ({
           key: l.id,
-          name: l.nameSnapshot + modifierSuffix(l.modifiers),
+          name: l.nameSnapshot,
+        modifiersLabel: addOns(l.modifiers),
           unitLabel: t('posShell.dock.lineUnit', {
             qty: l.qty,
-            price: formatMoney(l.unitPriceMinor + l.modifierDeltaMinor, currency, locale),
+            price: formatMoney(l.unitPriceMinor, currency, locale),
           }),
           totalLabel: formatMoney(l.lineTotalMinor, currency, locale),
           qty: l.qty,

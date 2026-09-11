@@ -68,6 +68,7 @@ import { useDisplayPublisher } from './display/displayPublisher'
 import { deriveCategories, visibleMenuItems } from './lib/categories'
 import { displayCategoryName } from './lib/categoryCanon'
 import { lineKey } from './lib/lineKey'
+import { baseUnitPrice, modifierList } from './lib/lineLabels'
 import { parseDiscountInput } from './lib/discountInput'
 import {
   billDisplayBreakdown,
@@ -372,7 +373,10 @@ function PosInner({ session }: { session: CompanySession }) {
       menuItemId: l.menuItemId,
       qty: l.qty,
       selectedOptionIds: l.modifiers.map((m) => m.optionId),
-      effectiveUnitPriceMinor: l.unitPriceMinor,
+      // The server's unitPriceMinor is the BASE; the cart's price is what the line is charged at,
+      // so the add-ons go back on top — resuming a parked order used to drop them from the price.
+      effectiveUnitPriceMinor:
+        l.unitPriceMinor + l.modifiers.reduce((sum, m) => sum + m.priceDeltaMinor, 0),
       selectedOptionNames: l.modifiers.map((m) => m.nameSnapshot),
 }))
     setCart(rebuiltCart)
@@ -572,16 +576,24 @@ function PosInner({ session }: { session: CompanySession }) {
   // data owner.
   const walkInDockLines: DockLine[] = cart.map((l) => {
     const key = lineKey(l.menuItemId, l.selectedOptionIds)
-    const name = items.find((i) => i.id === l.menuItemId)?.name ?? ''
+    const item = items.find((i) => i.id === l.menuItemId)
+    const name = item?.name ?? ''
+    // The chosen options, priced, from the menu — so the row names each add-on with its price and
+    // the unit label is the product's OWN price (lib/lineLabels; the receipt's twin rule). An item
+    // that has since left the menu falls back to the names the cart kept, unpriced.
+    const chosen = item
+      ? item.modifierGroups
+          .flatMap((g) => g.options)
+          .filter((o) => l.selectedOptionIds.includes(o.id))
+          .map((o) => ({ nameSnapshot: o.name, priceDeltaMinor: o.priceDeltaMinor }))
+      : l.selectedOptionNames.map((n) => ({ nameSnapshot: n, priceDeltaMinor: 0 }))
     return {
       key,
-      name:
-        l.selectedOptionNames.length > 0
-          ? `${name} · ${l.selectedOptionNames.join(', ')}`
-          : name,
+      name,
+      modifiersLabel: chosen.length > 0 ? modifierList(chosen, currency, locale) : undefined,
       unitLabel: t('posShell.dock.lineUnit', {
         qty: l.qty,
-        price: formatMoney(l.effectiveUnitPriceMinor, currency, locale),
+        price: formatMoney(baseUnitPrice(l.effectiveUnitPriceMinor, chosen), currency, locale),
       }),
       totalLabel: formatMoney(l.effectiveUnitPriceMinor * l.qty, currency, locale),
       qty: l.qty,

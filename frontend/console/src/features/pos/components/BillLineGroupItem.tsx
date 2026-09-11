@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { Minus, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
+import { modifierLabel } from '../lib/lineLabels'
 import type { BillLineGroup } from '../lib/billLineGroups'
 
 // ---------------------------------------------------------------------------
@@ -42,14 +43,15 @@ export function BillLineGroupItem({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-ink">{group.nameSnapshot}</div>
           <div className="tnum mt-0.5 font-mono text-xs text-ink-3">
-            {formatMoney(group.unitPriceMinor + group.modifierDeltaMinor, currency, locale)}
+            {/* The product's own price — the add-ons are priced on their pills below. */}
+            {formatMoney(group.unitPriceMinor, currency, locale)}
           </div>
           {/* Modifier pills */}
           {group.modifiers.length > 0 ? (
             <div className="mt-1 flex flex-wrap gap-1">
               {group.modifiers.map((mod) => (
                 <span key={mod.optionId} className="text-2xs text-ink-3">
-                  {mod.nameSnapshot}
+                  {modifierLabel(mod, currency, locale)}
                 </span>
               ))}
             </div>
