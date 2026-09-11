@@ -105,6 +105,48 @@ body {
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
+  /*
+   * THE TYPE SCALE (ADR 0085). Eight steps, all whole pixels, one line-height each. This is the
+   * whole vocabulary of size the app may use — `text-[Npx]` is forbidden outside the landing and
+   * the print surfaces (scripts/check-design-tokens.sh). It replaces 34 arbitrary sizes, seven of
+   * them half-pixel, that had grown because the designs are drawn at 11/13/15/17 and Tailwind's
+   * defaults sit at 12/14/16/18 — so every author reached past the scale.
+   *
+   *   2xs  11/14  eyebrow, badge, table caption, tab-bar label
+   *   xs   12/16  caption, meta, subtitle under a header title
+   *   sm   13/19  secondary text, dense rows, tables               (was 14/20)
+   *   base 15/22  body, input, CTA label, list row                 (was 16/24; body is 15px)
+   *   lg   17/24  ScreenHeader title, card title, lede             (was 18/28)
+   *   xl   22/28  section title, phone page title                  (was 20/28)
+   *   2xl  28/34  desktop page title                               (was 24/32)
+   *   3xl  32/36  the ONE hero figure a screen is about (mono)     (was 30/36)
+   *
+   * 4xl and up keep Tailwind's values — only the landing's display headlines use them. Pixels, not
+   * rem, deliberately: the body is 15px, the designs are specified in px, and a rem scale here
+   * would read as 0.8667rem everywhere.
+   */
+  --text-2xs: 11px;
+  --text-2xs--line-height: 14px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 19px;
+  --text-base: 15px;
+  --text-base--line-height: 22px;
+  --text-lg: 17px;
+  --text-lg--line-height: 24px;
+  --text-xl: 22px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 28px;
+  --text-2xl--line-height: 34px;
+  --text-3xl: 32px;
+  --text-3xl--line-height: 36px;
+
+  /* Letter-spacing has TWO values: display tightening on anything ≥ 22px, and the eyebrow's
+     opening on an 11px uppercase label. Everything else is 0. (There were 27.) */
+  --tracking-display: -0.02em;
+  --tracking-eyebrow: 0.08em;
+
   /* Brand cyan ramp — hue 193° (600 fills, 700 speaks, 500 icons/charts/strokes only) */
   --color-brand-50: #e4f6fa;
   --color-brand-100: #bfe9f1;
@@ -198,7 +240,19 @@ body {
      (ADR 0077). Dark reassigns it below. */
   --shadow-lift: 0 6px 16px rgba(14, 17, 22, 0.22);
 
+  /*
+   * RADIUS rides with size, and there are four (ADR 0085): control 12 (`rounded-xl`), tile /
+   * phone row-card 16 (`rounded-2xl`), card 20 (`rounded-card`), sheet top 26 (`rounded-t-sheet`).
+   * `rounded-3xl` (24) stays for the few large icon tiles. Bracket radii are forbidden — there
+   * were 20 distinct ones, and `rounded-[20px]` alone was `rounded-card` spelled 76 more times.
+   */
   --radius-card: 1.25rem; /* 20px */
+  --radius-sheet: 26px; /* the rounded TOP of every bottom sheet — Dialog on phone, MobileSheet */
+
+  /* The ONE modal backdrop. Every overlay — Dialog, Drawer, MobileSheet, the till's own — dims
+     the page with this; it is ink-tinted rather than black so it belongs to the palette, and it
+     is a token so dark mode can go deeper (below). There were seven different scrims. */
+  --color-scrim: rgba(14, 17, 22, 0.42);
 
   /* Reusable entrance animations (from the comp) */
   --animate-fade-up: fade-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
@@ -293,6 +347,9 @@ body {
   --color-amber-tint: rgba(245, 166, 35, 0.15);
   --color-rose: #ff6b70;
   --color-rose-tint: rgba(229, 72, 77, 0.16);
+
+  /* A dark page needs a deeper scrim to read as "behind" at all. */
+  --color-scrim: rgba(0, 0, 0, 0.6);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
