@@ -13,6 +13,8 @@ import id.co.nativeapp.payment.charge.service.ChargeService;
 import id.co.nativeapp.payment.settings.dto.UpsertSettingsRequest;
 import id.co.nativeapp.payment.settings.service.SettingsService;
 import id.co.nativeapp.tenant.TenantContext;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -70,6 +72,7 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
 
   @Autowired private ChargeService chargeService;
   @Autowired private SettingsService settingsService;
+  @Autowired private MeterRegistry meterRegistry;
 
   @DynamicPropertySource
   static void midtransProperties(DynamicPropertyRegistry registry) {
@@ -349,6 +352,8 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
 
   @Test
   void syncSettlesExactlyOnceAndEmitsOneEvent() throws Exception {
+    double syncBefore = settledCount("sync");
+    double webhookBefore = settledCount("webhook");
     TenantContext.callAs(
         TENANT,
         ACTOR,
@@ -368,10 +373,17 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
         });
     assertThat(outboxCount()).isEqualTo(1);
     assertThat(outboxEventType()).isEqualTo("PaymentChargeSucceeded");
+    // The webhook canary's other half: a settlement the cashier had to go and ASK for counts under
+    // `sync`, once (the no-op second sync must not inflate it), and never under `webhook`. Without
+    // this the sync increment could be deleted and every test would still pass — the canary would
+    // die the same silent way the webhook did.
+    assertThat(settledCount("sync") - syncBefore).isEqualTo(1.0d);
+    assertThat(settledCount("webhook") - webhookBefore).isEqualTo(0.0d);
   }
 
   @Test
   void cancelRacingASettlementCapturesInsteadOfSwallowingTheMoney() throws Exception {
+    double syncBefore = settledCount("sync");
     TenantContext.callAs(
         TENANT,
         ACTOR,
@@ -389,6 +401,13 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
           return null;
         });
     assertThat(outboxCount()).isEqualTo(1);
+    // The cancel-vs-paid race is the other non-webhook edge — it is "sync" too: we went asking.
+    assertThat(settledCount("sync") - syncBefore).isEqualTo(1.0d);
+  }
+
+  private double settledCount(String source) {
+    Counter counter = meterRegistry.find("payment.charge.settled").tag("source", source).counter();
+    return counter == null ? 0d : counter.count();
   }
 
   @Test

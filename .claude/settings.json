@@ -29,7 +29,14 @@
       "Glob",
       "Grep",
       "Edit",
-      "Write"
+      "Write",
+      "Bash(./gradlew.bat *)",
+      "Bash(git rev-list *)",
+      "Bash(git merge-base *)",
+      "Bash(npm run lint)",
+      "Bash(npm run test)",
+      "Bash(npm test)",
+      "Bash(nslookup *)"
     ]
   }
 }

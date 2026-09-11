@@ -7,6 +7,8 @@ import id.co.nativeapp.payment.charge.domain.ChargeStatus;
 import id.co.nativeapp.payment.charge.domain.PaymentCharge;
 import id.co.nativeapp.payment.charge.domain.WebhookRejectedException;
 import id.co.nativeapp.tenant.TenantContext;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -69,9 +71,28 @@ public class WebhookService {
   private final ErrorInboxWriter errorInbox;
   private final ObjectMapper objectMapper = new ObjectMapper();
 
-  public WebhookService(ChargeWriter writer, ErrorInboxWriter errorInbox) {
+  /**
+   * Counts settlements this webhook actually applied. Its twin lives in {@link ChargeService} under
+   * {@code source="sync"}: the cashier's "Check payment status" tap applies the SAME transition, so
+   * a dead webhook still ends with correct charges and printed receipts — a human just quietly does
+   * the callback's job. That is exactly how the 2026-08-22 outage survived months undetected. Watch
+   * the RATIO, not either count alone: a healthy fleet settles overwhelmingly by webhook, and
+   * {@code source="webhook"} flatlining at zero while {@code source="sync"} climbs means the
+   * callback never arrives and the till staff are compensating for it by hand.
+   *
+   * <p>No {@code company_id} tag — tenant ids are never metric tags (ENGINEERING-STANDARDS §5).
+   */
+  private final Counter settledByWebhook;
+
+  public WebhookService(
+      ChargeWriter writer, ErrorInboxWriter errorInbox, MeterRegistry meterRegistry) {
     this.writer = writer;
     this.errorInbox = errorInbox;
+    this.settledByWebhook =
+        Counter.builder("payment.charge.settled")
+            .description("Charges settled, by which edge observed the payment")
+            .tag("source", "webhook")
+            .register(meterRegistry);
   }
 
   /**
@@ -191,6 +212,9 @@ public class WebhookService {
       applied = writer.applySettlement(charge.getId(), transactionId, Instant.now());
     } catch (OptimisticLockingFailureException concurrentSettle) {
       // A concurrent sync/webhook transition won the version check — verify the winner below.
+    }
+    if (applied) {
+      settledByWebhook.increment();
     }
     if (!applied) {
       // Code review C1: applySettlement declining is only a correct no-op when a CONCURRENT

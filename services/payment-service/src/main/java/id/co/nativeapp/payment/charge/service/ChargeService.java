@@ -8,6 +8,8 @@ import id.co.nativeapp.payment.charge.dto.ChargeResponse;
 import id.co.nativeapp.payment.charge.dto.CreateChargeRequest;
 import id.co.nativeapp.payment.charge.projection.ChargeView;
 import id.co.nativeapp.tenant.TenantContext;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -27,15 +29,30 @@ public class ChargeService {
   private final QrisGatewayPort gateway;
   private final ErrorInboxWriter errorInbox;
 
+  /**
+   * Counts settlements applied by the NON-webhook edges — the cashier's "Check payment status"
+   * ({@code /sync}) and the cancel-vs-paid race, where Midtrans answers that the money already
+   * moved. Both are lumped together deliberately: the twin in {@link WebhookService} (where the
+   * reasoning for the pair lives) is the one that matters, and the only question this tag answers
+   * is "did the callback bring us this settlement, or did we have to go asking?".
+   */
+  private final Counter settledBySync;
+
   public ChargeService(
       ChargeWriter writer,
       ChargeReader reader,
       QrisGatewayPort gateway,
-      ErrorInboxWriter errorInbox) {
+      ErrorInboxWriter errorInbox,
+      MeterRegistry meterRegistry) {
     this.writer = writer;
     this.reader = reader;
     this.gateway = gateway;
     this.errorInbox = errorInbox;
+    this.settledBySync =
+        Counter.builder("payment.charge.settled")
+            .description("Charges settled, by which edge observed the payment")
+            .tag("source", "sync")
+            .register(meterRegistry);
   }
 
   /** A create result: the response plus whether this call minted a NEW charge (→ 201 vs 200). */
@@ -141,6 +158,9 @@ public class ChargeService {
       applied = writer.applySettlement(chargeId, providerTxnId, Instant.now());
     } catch (OptimisticLockingFailureException concurrentSettle) {
       // A concurrent webhook/sync transition won the version check — verify the winner below.
+    }
+    if (applied) {
+      settledBySync.increment();
     }
     if (!applied) {
       // Code review C1 (the webhook path's twin): a declined applySettlement is a correct no-op

@@ -31,7 +31,7 @@ import { CheckoutErrorText } from '@/features/pos-shell/payment/CheckoutErrorTex
 import { usePaymentAttempt } from '@/features/pos-shell/payment/usePaymentAttempt'
 import { Spinner } from '@/components/ui/Spinner'
 import { useQrisEffective, useStaticQrImageUrl, type QrisMode } from '@/features/payments/api'
-import { effectiveQrisMode } from '@/features/payments/effectiveMode'
+import { effectiveQrisMode, isSandboxGateway } from '@/features/payments/effectiveMode'
 import { useGatewayQris } from '@/features/payments/useGatewayQris'
 import { OfflineHint } from '@/features/pos/offline/OfflineHint'
 import { enqueueSale } from '@/features/pos/offline/queue'
@@ -131,6 +131,9 @@ export function ServicePaymentModal({
     enabled: !offline,
   })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
+  // ADR 0045: a SANDBOX gateway still resolves to GATEWAY and still reports "connected", so the
+  // mode alone cannot reveal it — the panel says so explicitly instead of rendering an unpayable QR.
+  const gatewaySandbox = isSandboxGateway(qrisEffectiveQuery.data ?? undefined)
   // ADR 0045 amendment: configured GATEWAY degraded to MANUAL — see PaymentModal's twin doc
   // (gated on IDR so a non-IDR currency limitation isn't misattributed to a gateway outage).
   const degradedFromGateway =
@@ -259,6 +262,7 @@ export function ServicePaymentModal({
               tenderType={tender}
               qrisMode={qrisMode}
               degradedFromGateway={degradedFromGateway}
+              gatewaySandbox={gatewaySandbox}
               registerGatewayCancel={registerGatewayCancel}
             />
           )}
@@ -394,6 +398,7 @@ function ServiceDigitalAttempt({
   tenderType,
   qrisMode,
   degradedFromGateway = false,
+  gatewaySandbox = false,
   registerGatewayCancel,
 }: {
   attempt: TicketAttemptArgs
@@ -405,6 +410,8 @@ function ServiceDigitalAttempt({
   qrisMode: QrisMode
   /** ADR 0045 amendment: configured GATEWAY degraded to MANUAL — see PaymentModal's twin doc. */
   degradedFromGateway?: boolean
+  /** ADR 0045: gateway live but pointed at SANDBOX — see PaymentModal's twin doc. */
+  gatewaySandbox?: boolean
   /** ADR 0045: lets this attempt register the live gateway-cancel function with the modal frame —
    *  see ServicePaymentModal's `handleFrameClose` doc (identical contract to PaymentModal's). */
   registerGatewayCancel?: (fn: (() => Promise<boolean>) | null) => void
@@ -539,6 +546,7 @@ function ServiceDigitalAttempt({
         qrString={gateway.charge?.qrString ?? null}
         expiresAtMs={gateway.charge?.expiresAt ? new Date(gateway.charge.expiresAt).getTime() : null}
         phase={gateway.phase}
+        sandbox={gatewaySandbox}
         errorSlot={
           gateway.phase !== 'error' && ticketQuery.isError ? (
             <p className="mb-3 text-xs text-loss" role="alert">

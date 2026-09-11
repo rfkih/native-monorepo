@@ -166,6 +166,12 @@ function PaymentSettingsLoaded({
   const currentMode: QrisMode = data.companyDefault?.mode ?? 'MANUAL'
   const isIdr = session.baseCurrency === 'IDR'
   const gateway = data.companyDefault?.gateway ?? null
+  // The company default is not the only way GATEWAY reaches a till: an outlet can override to
+  // GATEWAY on its own while the company sits on MANUAL/STATIC, and the credentials + active
+  // environment are company-wide either way. Gate the SANDBOX warning on BOTH, or the exact
+  // configuration the warning exists to catch is the one it stays silent for.
+  const gatewayInUse =
+    currentMode === 'GATEWAY' || data.outletOverrides.some((row) => row.mode === 'GATEWAY')
 
   return (
     <>
@@ -186,7 +192,12 @@ function PaymentSettingsLoaded({
       </div>
       <ModePickerCard session={session} currentMode={currentMode} isIdr={isIdr} />
       <CompanyStaticImageCard session={session} companyDefault={data.companyDefault} />
-      <GatewayCard session={session} currentMode={currentMode} gateway={gateway} />
+      <GatewayCard
+        session={session}
+        currentMode={currentMode}
+        gatewayInUse={gatewayInUse}
+        gateway={gateway}
+      />
     </>
   )
 }
@@ -353,6 +364,8 @@ function OutletModeEditor({
   const fallbackMode: QrisMode = companyMode
   const effectiveMode: QrisMode = row?.mode ?? fallbackMode
   const hasImage = row?.hasStaticImage ?? false
+  const gatewayConnected = gatewayActiveConnected(companyGateway)
+  const gatewayIsSandbox = companyGateway?.activeEnvironment === 'SANDBOX'
   const displayValue: QrisMode | 'INHERIT' = pendingInherit ? 'INHERIT' : hasOverride ? row.mode : 'INHERIT'
 
   const options: Choice<QrisMode | 'INHERIT'>[] = [
@@ -443,10 +456,17 @@ function OutletModeEditor({
       {effectiveMode === 'GATEWAY' ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-paper px-3.5 py-2.5 text-xs text-ink-3">
           <span>{t('settings.payments.outlet.gatewayHint')}</span>
-          <Badge tone={gatewayActiveConnected(companyGateway) ? 'profit' : 'neutral'}>
-            {gatewayActiveConnected(companyGateway)
-              ? t('settings.payments.gateway.connected')
-              : t('settings.payments.gateway.notConnected')}
+          {/* A green "Connected" is true but misleading when the active environment is SANDBOX —
+              the outlet IS wired up, to a gateway whose QR codes nobody can pay. Say the more
+              urgent fact instead; "not connected" still outranks both, being the harder block. */}
+          <Badge
+            tone={!gatewayConnected ? 'neutral' : gatewayIsSandbox ? 'loss' : 'profit'}
+          >
+            {!gatewayConnected
+              ? t('settings.payments.gateway.notConnected')
+              : gatewayIsSandbox
+                ? t('settings.payments.gateway.sandboxBadge')
+                : t('settings.payments.gateway.connected')}
           </Badge>
         </div>
       ) : null}
@@ -644,10 +664,13 @@ function StaticImageEditor({
 function GatewayCard({
   session,
   currentMode,
+  gatewayInUse,
   gateway,
 }: {
   session: CompanySession
   currentMode: QrisMode
+  /** GATEWAY is what SOME till resolves to — the company default or any outlet override. */
+  gatewayInUse: boolean
   gateway: PaymentSettingsRow['gateway']
 }) {
   const { t } = useTranslation()
@@ -716,6 +739,15 @@ function GatewayCard({
           <p className="mt-2 text-xs text-loss">{t('settings.payments.gateway.activateNeedsKey')}</p>
         ) : activeEnvironment === 'PRODUCTION' ? (
           <p className="mt-2 text-xs text-amber-2">{t('settings.payments.gateway.productionLiveWarning')}</p>
+        ) : null}
+        {/* The dangerous state in production is the QUIET one: GATEWAY serving customers off the
+            SANDBOX slot mints QR codes nobody can pay. Only the opposite direction used to be called
+            out, so this state shipped silently — a prod company was found live in it. Keyed on the
+            SAVED environment as well as the draft: flipping the control to Production makes the
+            draft-based line above change, but the till keeps minting sandbox QRs until Save. */}
+        {gatewayInUse &&
+        (gateway?.activeEnvironment === 'SANDBOX' || activeEnvironment === 'SANDBOX') ? (
+          <p className="mt-2 text-xs text-loss">{t('settings.payments.gateway.sandboxLiveWarning')}</p>
         ) : null}
       </div>
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { effectiveQrisMode, type EffectiveSettings } from '../effectiveMode'
+import { effectiveQrisMode, isSandboxGateway, type EffectiveSettings } from '../effectiveMode'
 
 const MANUAL: EffectiveSettings = { mode: 'MANUAL', staticQrAvailable: false, gateway: null }
 const STATIC_READY: EffectiveSettings = { mode: 'STATIC', staticQrAvailable: true, gateway: null }
@@ -15,6 +15,11 @@ const GATEWAY_DISCONNECTED: EffectiveSettings = {
   gateway: { provider: 'MIDTRANS', environment: 'SANDBOX', connected: false },
 }
 const GATEWAY_NO_PROVIDER: EffectiveSettings = { mode: 'GATEWAY', staticQrAvailable: false, gateway: null }
+const GATEWAY_PRODUCTION: EffectiveSettings = {
+  mode: 'GATEWAY',
+  staticQrAvailable: false,
+  gateway: { provider: 'MIDTRANS', environment: 'PRODUCTION', connected: true },
+}
 
 describe('effectiveQrisMode', () => {
   it('MANUAL settings stay MANUAL', () => {
@@ -60,5 +65,31 @@ describe('effectiveQrisMode', () => {
     it('degrades to MANUAL when no gateway is configured at all', () => {
       expect(effectiveQrisMode(GATEWAY_NO_PROVIDER, false, false, 'IDR')).toBe('MANUAL')
     })
+  })
+})
+
+describe('isSandboxGateway', () => {
+  it('flags a gateway pointed at SANDBOX', () => {
+    expect(isSandboxGateway(GATEWAY_CONNECTED)).toBe(true)
+  })
+
+  it('does NOT flag a gateway pointed at PRODUCTION', () => {
+    expect(isSandboxGateway(GATEWAY_PRODUCTION)).toBe(false)
+  })
+
+  it('is independent of the resolved mode — a SANDBOX gateway still resolves to GATEWAY', () => {
+    // The whole point: the mode cannot reveal this, so the till needs the separate signal.
+    expect(effectiveQrisMode(GATEWAY_CONNECTED, false, false, 'IDR')).toBe('GATEWAY')
+    expect(isSandboxGateway(GATEWAY_CONNECTED)).toBe(true)
+  })
+
+  it('flags SANDBOX even when the gateway is disconnected', () => {
+    expect(isSandboxGateway(GATEWAY_DISCONNECTED)).toBe(true)
+  })
+
+  it('stays quiet with no gateway configured, or while the read is still loading', () => {
+    expect(isSandboxGateway(GATEWAY_NO_PROVIDER)).toBe(false)
+    expect(isSandboxGateway(MANUAL)).toBe(false)
+    expect(isSandboxGateway(undefined)).toBe(false)
   })
 })

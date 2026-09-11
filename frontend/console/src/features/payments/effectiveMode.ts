@@ -36,6 +36,22 @@ export interface EffectiveSettings {
 }
 
 /**
+ * True when the gateway the till would actually charge against is pointed at SANDBOX — a test
+ * environment whose QR codes NO real customer can ever pay (ADR 0045).
+ *
+ * This is deliberately independent of {@link effectiveQrisMode}: a SANDBOX gateway is still
+ * "connected" and still resolves to GATEWAY, so the mode alone cannot reveal it. A production
+ * company has been found live in exactly this state, and neither the till nor the customer display
+ * showed anything — hence a separate, explicit signal rather than a silently-degraded mode.
+ *
+ * Absent/loading settings return false: the panel only renders once a gateway charge exists, and
+ * claiming "test mode" on a missing read would cry wolf on every slow query.
+ */
+export function isSandboxGateway(settings: EffectiveSettings | undefined): boolean {
+  return settings?.gateway?.environment === 'SANDBOX'
+}
+
+/**
  * Resolves the mode the till should actually render for this sale. `settings` is the effective
  * query's data (undefined while loading or on a 404-shaped gap); `isError` is the query's own
  * `isError` (a network/5xx failure — distinct from "not yet loaded"); `offline` is the terminal's
