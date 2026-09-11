@@ -117,10 +117,10 @@ export function InventoryMethodSettings() {
             <Boxes className="size-6" strokeWidth={1.8} />
           </span>
           <div>
-            <h1 className="font-display text-[28px] font-extrabold tracking-[-0.025em] text-ink">
+            <h1 className="font-display text-2xl font-extrabold tracking-[-0.025em] text-ink">
               {t('settings.inventoryMethod.title')}
             </h1>
-            <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-ink-3">
+            <p className="mt-1.5 max-w-xl text-base leading-relaxed text-ink-3">
               {t('settings.inventoryMethod.subtitle')}
             </p>
           </div>
@@ -221,7 +221,7 @@ function ActiveStatus({
         </div>
         <div
           className={cn(
-            'tnum mt-[7px] font-mono text-[30px] font-bold leading-none tracking-[-0.02em]',
+            'tnum mt-[7px] font-mono text-2xl font-bold leading-none tracking-[-0.02em]',
             negative ? 'text-loss' : 'text-ink',
           )}
         >
@@ -256,7 +256,7 @@ function ActiveStatus({
               key={f.label}
               className="flex items-baseline gap-2.5 border-t border-line/60 py-[9px] sm:block sm:border-0 sm:py-0"
             >
-              <dt className="min-w-0 flex-1 text-xs font-medium text-ink-3 sm:text-[10.5px] sm:font-bold sm:uppercase sm:tracking-[0.06em] sm:text-ink-400">
+              <dt className="min-w-0 flex-1 text-xs font-medium text-ink-3 sm:text-2xs sm:font-bold sm:uppercase sm:tracking-[0.06em] sm:text-ink-400">
                 {f.label}
               </dt>
               <dd
@@ -336,7 +336,7 @@ function Activation({
           <h2 className="font-display text-xl font-bold tracking-[-0.02em] text-ink">
             {t('settings.inventoryMethod.inactive.heading')}
           </h2>
-          <p className="mt-2 text-[13px] leading-relaxed text-ink-2 text-pretty">
+          <p className="mt-2 text-sm leading-relaxed text-ink-2 text-pretty">
             {t('settings.inventoryMethod.inactive.body')}
           </p>
         </div>
@@ -345,7 +345,7 @@ function Activation({
           {(['bullet1', 'bullet2', 'bullet3'] as const).map((key) => (
             <li
               key={key}
-              className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-ink-2"
+              className="flex items-start gap-2.5 text-xs leading-relaxed text-ink-2"
             >
               <span
                 className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-amber-tint text-amber"
@@ -377,7 +377,7 @@ function Activation({
   if (step === 'form') {
     return (
       <Card className="flex flex-col gap-5 p-5 sm:p-6">
-        <p className="text-[13px] leading-relaxed text-ink-2 text-pretty">
+        <p className="text-sm leading-relaxed text-ink-2 text-pretty">
           {t('settings.inventoryMethod.activate.formIntro')}
         </p>
 
@@ -392,7 +392,7 @@ function Activation({
             className="mt-[7px] rounded-[14px] font-semibold"
             required
           />
-          <p className="mt-[7px] text-[11.5px] leading-relaxed text-ink-400">
+          <p className="mt-[7px] text-xs leading-relaxed text-ink-400">
             {t('settings.inventoryMethod.activate.cutoverHint')}
           </p>
         </div>
@@ -411,7 +411,7 @@ function Activation({
             aria-label={t('settings.inventoryMethod.activate.openingValueLabel', { currency })}
             className="tnum mt-[7px] h-[52px] w-full rounded-[14px] border-[1.5px] border-ink bg-surface px-4 text-right font-mono text-xl font-bold text-ink focus:outline-none focus:ring-4 focus:ring-emerald/15"
           />
-          <p className="mt-[9px] text-[11.5px] font-medium leading-relaxed text-ink-3">
+          <p className="mt-[9px] text-xs font-medium leading-relaxed text-ink-3">
             {openingValueMinor != null && openingValueMinor > 0
               ? formatMoney(openingValueMinor, currency, locale)
               : t('settings.inventoryMethod.activate.openingValueHint')}
@@ -427,7 +427,7 @@ function Activation({
               {t('settings.inventoryMethod.activate.useCatalogValue', { value: catalogValueText })}
             </button>
           ) : null}
-          <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400 text-pretty">
+          <p className="mt-2 text-xs leading-relaxed text-ink-400 text-pretty">
             {t('settings.inventoryMethod.activate.zeroOk')}
           </p>
         </div>
@@ -461,7 +461,7 @@ function Activation({
 
   return (
     <Card className="flex flex-col gap-[18px] p-5 sm:p-6">
-      <p className="flex items-start gap-2.5 rounded-2xl bg-amber-tint px-4 py-[15px] text-[12.5px] font-semibold leading-relaxed text-amber-2">
+      <p className="flex items-start gap-2.5 rounded-2xl bg-amber-tint px-4 py-[15px] text-xs font-semibold leading-relaxed text-amber-2">
         <TriangleAlert className="mt-0.5 size-[17px] shrink-0 text-amber" aria-hidden="true" />
         {t('settings.inventoryMethod.activate.confirmWarning')}
       </p>
@@ -501,7 +501,7 @@ function Activation({
           onChange={(e) => setAcknowledged(e.target.checked)}
           className="mt-0.5 size-5 shrink-0 accent-emerald"
         />
-        <span className="text-[12.5px] font-medium leading-relaxed text-ink-2">
+        <span className="text-xs font-medium leading-relaxed text-ink-2">
           {t('settings.inventoryMethod.activate.acknowledge')}
         </span>
       </label>

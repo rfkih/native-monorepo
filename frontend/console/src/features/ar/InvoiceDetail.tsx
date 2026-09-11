@@ -94,7 +94,7 @@ export function InvoiceDetail() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+            <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
               {invoice.invoiceNumber}
             </h1>
             <InvoiceStatusBadge status={invoice.status} />
@@ -162,7 +162,7 @@ export function InvoiceDetail() {
 
       {/* Line items */}
       <Card className="p-6">
-        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
           {t('ar.detail.lines')}
         </h2>
         {invoice.lines.length === 0 ? (
@@ -170,7 +170,7 @@ export function InvoiceDetail() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              <tr className="border-b border-line text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
                 <th className="py-2">{t('ar.detail.colDescription')}</th>
                 <th className="py-2 text-right">{t('ar.detail.colQuantity')}</th>
                 <th className="py-2 text-right">{t('ar.detail.colUnitPrice')}</th>
@@ -207,7 +207,7 @@ export function InvoiceDetail() {
 
       {/* Payments */}
       <Card className="p-6">
-        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
           {t('ar.detail.payments')}
         </h2>
         {invoice.payments.length === 0 ? (
@@ -215,7 +215,7 @@ export function InvoiceDetail() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              <tr className="border-b border-line text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
                 <th className="py-2">{t('ar.detail.colPaymentDate')}</th>
                 <th className="py-2">{t('ar.detail.colPaymentMethod')}</th>
                 <th className="py-2 text-right">{t('ar.detail.colPaymentAmount')}</th>

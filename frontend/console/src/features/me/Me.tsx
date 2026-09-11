@@ -157,7 +157,7 @@ export function Me() {
               {/* Rail */}
               <div className="flex flex-col gap-4">
                 <Card className="p-5">
-                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                  <h2 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
                     {t('me.home.personalData')}
                   </h2>
                   <div className="mt-3 flex flex-col gap-2.5">
@@ -188,7 +188,7 @@ export function Me() {
                 </Card>
 
                 <Card className="p-5">
-                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                  <h2 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
                     {t('me.assignments.title')}
                   </h2>
                   {profile.data.assignments.length === 0 ? (
@@ -245,7 +245,7 @@ function ProfileRow({ label, children }: { label: string; children: React.ReactN
   return (
     <div className="flex items-center justify-between gap-4">
       <span className="text-xs font-medium text-ink-3">{label}</span>
-      <span className="text-right text-[12.5px] font-semibold text-ink">{children}</span>
+      <span className="text-right text-xs font-semibold text-ink">{children}</span>
     </div>
   )
 }
@@ -272,10 +272,10 @@ function SalesRailCard({
 
   return (
     <Card className="p-5">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+      <h2 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
         {t('me.sales.title')}
       </h2>
-      <p className="tnum mt-2 font-mono text-[20px] font-bold text-ink">
+      <p className="tnum mt-2 font-mono text-xl font-bold text-ink">
         {formatMoney(salesMinor, currency, locale)}
       </p>
       {commissionBasisPoints !== null ? (
@@ -284,11 +284,11 @@ function SalesRailCard({
             <span className="text-xs text-ink-3">
               {t('me.sales.estimate')} · {formatPercent(commissionBasisPoints / 10000, locale)}
             </span>
-            <span className="tnum font-mono text-[13px] font-bold text-profit-ink">
+            <span className="tnum font-mono text-sm font-bold text-profit-ink">
               {formatMoney(commissionEstimateMinor ?? 0, currency, locale)}
             </span>
           </div>
-          <p className="mt-1.5 text-[11px] leading-normal text-ink-3">
+          <p className="mt-1.5 text-2xs leading-normal text-ink-3">
             {t('me.sales.estimateHint')}
           </p>
         </>
@@ -319,7 +319,7 @@ function ClaimsCard({
   return (
     <section className="min-w-0">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        <h2 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
           {t('me.expenses.card.title')}
         </h2>
         <Button type="button" variant="outline" onClick={() => navigate('/me/expenses')}>
@@ -344,7 +344,7 @@ function ClaimsCard({
                   {c.merchant ? ` · ${c.merchant}` : null}
                 </p>
               </div>
-              <span className="tnum font-mono text-[13px] font-semibold text-ink">
+              <span className="tnum font-mono text-sm font-semibold text-ink">
                 {formatMoney(c.amountMinor, c.currency, locale)}
               </span>
             </div>

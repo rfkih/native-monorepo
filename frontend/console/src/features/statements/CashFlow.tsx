@@ -69,10 +69,10 @@ export function CashFlow() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <EntityScope name={company.name} scope={t('statements.scopeAllUnits')} />
-          <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-extrabold tracking-[-0.02em] text-ink">
             {t('statements.cashFlow.title')}
           </h1>
-          <p className="mt-1.5 text-[15px] text-ink-3">{t('statements.cashFlow.subtitle')}</p>
+          <p className="mt-1.5 text-base text-ink-3">{t('statements.cashFlow.subtitle')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5 print:hidden max-sm:w-full max-sm:justify-end">
           <div className="max-sm:w-full">

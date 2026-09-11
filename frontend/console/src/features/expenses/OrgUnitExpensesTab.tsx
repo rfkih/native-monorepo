@@ -119,7 +119,7 @@ export function OrgUnitExpensesTab({
         <p className="text-sm text-ink-3">{t('orgHub.expensesTab.noPostings')}</p>
       ) : data && data.byCategory.length > 0 ? (
         <Card className="p-5">
-          <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
             {t('orgHub.expensesTab.byCategory')}
           </h2>
           <div className="mt-4 flex flex-col gap-3.5">
@@ -154,11 +154,11 @@ function CountTile({
 }) {
   return (
     <Card className="p-5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-3 h-7 w-16 animate-pulse rounded bg-ink-100" />
       ) : (
-        <div className="tnum mt-2 font-mono text-[25px] font-semibold text-ink">
+        <div className="tnum mt-2 font-mono text-2xl font-semibold text-ink">
           {formatCount(value, locale)}
         </div>
       )}
@@ -186,7 +186,7 @@ function CategoryRow({
         </span>
         <span className="tnum shrink-0 font-mono text-sm font-semibold text-ink">
           {formatMoney(category.totalMinor, category.currency, locale)}
-          <span className="ml-2 text-[11px] font-normal text-ink-3">
+          <span className="ml-2 text-2xs font-normal text-ink-3">
             {t('orgHub.expensesTab.shareOfTotal', {
               percent: new Intl.NumberFormat(locale, {
                 style: 'percent',
@@ -220,7 +220,7 @@ function RecentClaimsCard({
 
   return (
     <Card className="p-5">
-      <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+      <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
         {t('orgHub.expensesTab.recentTitle')}
       </h2>
       {query.isError ? (
@@ -246,7 +246,7 @@ function RecentClaimRow({ claim, locale }: { claim: ExpenseClaimSummary; locale:
     <div className="flex flex-wrap items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-hover">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[14.5px] font-semibold text-ink">{claim.employeeName}</span>
+          <span className="text-base font-semibold text-ink">{claim.employeeName}</span>
           <ClaimStatusBadge status={claim.status} />
         </div>
         <p className="mt-0.5 text-xs text-ink-3">

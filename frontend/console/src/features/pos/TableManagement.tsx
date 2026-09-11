@@ -132,12 +132,12 @@ function TableRow({
         <div className="flex items-center gap-2">
           <span className="font-medium text-ink">{table.label}</span>
           {table.occupied ? (
-            <Badge tone="amber" className="text-[10px] px-1.5 py-0">
+            <Badge tone="amber" className="text-2xs px-1.5 py-0">
               {t('pos.table.occupied')}
             </Badge>
           ) : null}
           {!table.active ? (
-            <Badge tone="neutral" className="text-[10px] px-1.5 py-0">
+            <Badge tone="neutral" className="text-2xs px-1.5 py-0">
               {t('pos.table.inactive')}
             </Badge>
           ) : null}

@@ -127,7 +127,7 @@ function CatalogManagementInner({
           <ArrowLeft className="size-4" />
         </BackButton>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-[15px] font-bold text-ink">{t('serviceCatalog.title')}</h1>
+          <h1 className="truncate font-display text-base font-bold text-ink">{t('serviceCatalog.title')}</h1>
         </div>
         <div className="min-w-0 max-sm:order-last max-sm:w-full">
           <OutletPicker />
@@ -800,7 +800,7 @@ function WasherDialog({
             id="washer-employee"
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
-            className="h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-[15px] text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+            className="h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-base text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
           >
             <option value="">{t('serviceCatalog.employeeNone')}</option>
             {employees.map((e) => (

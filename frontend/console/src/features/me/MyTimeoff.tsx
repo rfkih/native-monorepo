@@ -64,7 +64,7 @@ export function MyTimeoff({
   return (
     <section className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        <h2 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
           {t('me.timeoff.title')}
         </h2>
         <div className="flex gap-2">
@@ -105,7 +105,7 @@ export function MyTimeoff({
       )}
 
       {/* My leave requests */}
-      <h3 className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+      <h3 className="mt-4 text-2xs font-semibold uppercase tracking-wider text-ink-3">
         {t('me.timeoff.myLeaveRequests')}
       </h3>
       {leaveRequests.isLoading ? (
@@ -128,7 +128,7 @@ export function MyTimeoff({
       )}
 
       {/* My overtime entries */}
-      <h3 className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+      <h3 className="mt-4 text-2xs font-semibold uppercase tracking-wider text-ink-3">
         {t('me.timeoff.myOvertimeEntries')}
       </h3>
       {overtimeEntries.isLoading ? (
@@ -174,14 +174,14 @@ export function LeaveBalanceCard({ companyId, actor }: { companyId: string; acto
   const usedFrac = total > 0 ? Math.min(1, used / total) : 0
   return (
     <Card className="p-5">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+      <h2 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
         {t('me.timeoff.balanceTitle', { year })}
       </h2>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="tnum font-mono text-[32px] font-bold leading-none text-emerald-2">
+        <span className="tnum font-mono text-3xl font-bold leading-none text-emerald-2">
           {balance.isLoading ? '…' : (balance.data?.remaining ?? 0)}
         </span>
-        <span className="text-[13px] font-medium text-ink-3">{t('me.timeoff.daysLeft')}</span>
+        <span className="text-sm font-medium text-ink-3">{t('me.timeoff.daysLeft')}</span>
       </div>
       <div className="mt-3.5 h-2 overflow-hidden rounded-full bg-ink-50">
         <div
@@ -209,7 +209,7 @@ function BalanceTile({
 }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</p>
+      <p className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{label}</p>
       <p className={cn('tnum mt-1 text-2xl font-bold', emphatic ? 'text-emerald-2' : 'text-ink')}>
         {loading ? '…' : (value ?? 0)}
       </p>

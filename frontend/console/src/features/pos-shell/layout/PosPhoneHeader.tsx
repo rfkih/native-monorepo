@@ -58,12 +58,12 @@ export function PosPhoneHeader({
       {/* Identity — the only shrinkable element; everything right of it is a fixed control, so a
           long business or outlet name must compress rather than push the ⋮ off a 360px screen. */}
       <div className="flex min-w-0 flex-1 flex-col justify-center">
-        <span className="truncate font-display text-[15px] font-bold leading-tight tracking-[-.01em] text-ink">
+        <span className="truncate font-display text-base font-bold leading-tight tracking-[-.01em] text-ink">
           {businessName}
         </span>
         {/* A div, not a span: the outlet picker slots a positioned <div> in here (its dropdown
             anchor), and phrasing content cannot legally hold it. */}
-        <div className="mt-px flex min-w-0 items-center gap-1 text-[11.5px] font-medium leading-tight text-ink-3">
+        <div className="mt-px flex min-w-0 items-center gap-1 text-xs font-medium leading-tight text-ink-3">
           <div className="min-w-0 shrink">{outletPicker}</div>
           {identity ? (
             <>
@@ -81,7 +81,7 @@ export function PosPhoneHeader({
         data-testid="pos-connection-pill"
         aria-label={t('offline.syncCenterButton')}
         className={cn(
-          'flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11.5px] font-semibold transition-colors',
+          'flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold transition-colors',
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
           flagged
             ? 'border-warning-line bg-tint-warning text-amber'
@@ -129,7 +129,7 @@ export function PosPhoneHeader({
           <path d="M11 18h2" />
         </svg>
         {parkedCount > 0 ? (
-          <span className="tnum absolute right-1 top-1 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-emerald px-1 font-mono text-[10px] font-bold text-on-emerald">
+          <span className="tnum absolute right-1 top-1 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-emerald px-1 font-mono text-2xs font-bold text-on-emerald">
             {parkedCount}
           </span>
         ) : null}

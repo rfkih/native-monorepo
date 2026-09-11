@@ -185,12 +185,12 @@ export function InventoryCatalog({
             onClick={() => order.setFilter(on ? null : key)}
             aria-pressed={on}
             className={cn(
-              'flex h-[30px] shrink-0 items-center gap-[7px] rounded-full px-3 text-[11.5px] font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+              'flex h-[30px] shrink-0 items-center gap-[7px] rounded-full px-3 text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
               on ? 'bg-emerald text-on-emerald' : CHIP_TONE[key],
             )}
           >
             {t(`inventory.catalog.chips.${key}`)}
-            <span className="tnum font-mono text-[11px] font-bold opacity-70">
+            <span className="tnum font-mono text-2xs font-bold opacity-70">
               {new Intl.NumberFormat(locale).format(order.counts[key])}
             </span>
           </button>
@@ -201,7 +201,7 @@ export function InventoryCatalog({
 
   const caption = (
     <div className="flex items-center justify-between gap-2.5">
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.04em] text-ink-3">
+      <span className="text-2xs font-semibold uppercase tracking-[0.04em] text-ink-3">
         {order.filter
           ? t('inventory.catalog.captionFiltered', { count: order.ranked.length })
           : t('inventory.catalog.caption', { count: order.ranked.length })}
@@ -212,7 +212,7 @@ export function InventoryCatalog({
         aria-label={t('inventory.catalog.sortAria', {
           sort: t(`inventory.catalog.sort.${order.sort}`),
         })}
-        className="flex h-7 shrink-0 items-center gap-[5px] rounded-full bg-ink-50 px-2.5 text-[10.5px] font-semibold text-ink-2 transition-colors hover:bg-hover active:bg-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        className="flex h-7 shrink-0 items-center gap-[5px] rounded-full bg-ink-50 px-2.5 text-2xs font-semibold text-ink-2 transition-colors hover:bg-hover active:bg-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         <ListFilter className="size-[11px]" strokeWidth={2.2} aria-hidden="true" />
         {t(`inventory.catalog.sort.${order.sort}`)}
@@ -274,7 +274,7 @@ export function InventoryCatalog({
     <div className="pb-6">
       <div className="flex flex-wrap items-end gap-x-9 gap-y-4 px-6 pt-5">
         <div>
-          <div className="text-[11px] font-semibold text-ink-3">
+          <div className="text-2xs font-semibold text-ink-3">
             {t('inventory.catalog.heroLabel', { count: ingredients.length })}
           </div>
           <HeroValue
@@ -285,7 +285,7 @@ export function InventoryCatalog({
           />
         </div>
         <div>
-          <div className="text-[11px] font-semibold text-ink-3">
+          <div className="text-2xs font-semibold text-ink-3">
             {t('inventory.catalog.usedToday')}
           </div>
           <div className="tnum mt-1.5 font-mono text-lg font-bold leading-tight text-ink">
@@ -294,7 +294,7 @@ export function InventoryCatalog({
         </div>
         {showDays ? (
           <div>
-            <div className="text-[11px] font-semibold text-ink-3">
+            <div className="text-2xs font-semibold text-ink-3">
               {t('inventory.catalog.shelf')}
             </div>
             <div className="tnum mt-1.5 font-mono text-lg font-bold leading-tight text-ink">
@@ -308,7 +308,7 @@ export function InventoryCatalog({
       </div>
 
       <div className="mx-6 mt-[18px] flex items-center gap-3.5 border-b border-line px-3 pb-2">
-        <span className="min-w-0 flex-1 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-ink-400">
+        <span className="min-w-0 flex-1 text-2xs font-semibold uppercase tracking-[0.04em] text-ink-400">
           {t('inventory.catalog.columns.name')}
         </span>
         <ColumnHead width="w-[108px]">{t('inventory.catalog.columns.stock')}</ColumnHead>
@@ -355,7 +355,7 @@ function HeroValue({
     <span
       className={cn(
         'tnum block font-mono font-bold leading-none tracking-[-0.02em] text-ink',
-        compact ? 'text-[26px]' : 'text-[30px]',
+        compact ? 'text-2xl' : 'text-2xl',
       )}
     >
       {value}
@@ -402,7 +402,7 @@ function ColumnHead({ width, children }: { width: string; children: React.ReactN
   return (
     <span
       className={cn(
-        'shrink-0 text-right text-[10.5px] font-semibold uppercase tracking-[0.04em] text-ink-400',
+        'shrink-0 text-right text-2xs font-semibold uppercase tracking-[0.04em] text-ink-400',
         width,
       )}
     >
@@ -418,7 +418,7 @@ function RowChip({ row }: { row: CatalogRow }) {
   return (
     <span
       className={cn(
-        'flex h-[19px] shrink-0 items-center rounded-full px-[7px] text-[10.5px] font-bold',
+        'flex h-[19px] shrink-0 items-center rounded-full px-[7px] text-2xs font-bold',
         CHIP_TONE[chip.key],
       )}
     >
@@ -532,7 +532,7 @@ function PhoneRow({
         {showDays ? (
           <span className="flex shrink-0 flex-col items-end gap-[3px]">
             <DaysFigure row={row} locale={locale} />
-            <span className="text-[10.5px] font-medium text-ink-400">
+            <span className="text-2xs font-medium text-ink-400">
               <RateLabel row={row} locale={locale} />
             </span>
           </span>
@@ -575,13 +575,13 @@ function DesktopRow({
         className="flex min-h-14 min-w-0 flex-1 items-center gap-3.5 py-[9px] text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          <span className="truncate text-[13.5px] font-semibold leading-tight text-ink">
+          <span className="truncate text-sm font-semibold leading-tight text-ink">
             {ingredient.name}
           </span>
           <span className="flex items-center gap-1.5">
             <RowChip row={row} />
             {ingredient.packSize != null ? (
-              <span className="text-[10.5px] font-medium text-ink-400">
+              <span className="text-2xs font-medium text-ink-400">
                 {t('inventory.catalog.packLine', {
                   qty: formatShownQty(ingredient.packSize, ingredient, locale),
                   unit: shownUnit(ingredient),
@@ -592,7 +592,7 @@ function DesktopRow({
         </span>
         <span
           className={cn(
-            'tnum w-[108px] shrink-0 text-right font-mono text-[13px] font-semibold',
+            'tnum w-[108px] shrink-0 text-right font-mono text-sm font-semibold',
             row.cls === 'zero' ? 'text-loss' : 'text-ink',
           )}
         >
@@ -600,7 +600,7 @@ function DesktopRow({
         </span>
         <span
           className={cn(
-            'tnum w-[118px] shrink-0 text-right font-mono text-[13px]',
+            'tnum w-[118px] shrink-0 text-right font-mono text-sm',
             costed ? 'text-ink-2' : 'text-ink-400',
           )}
         >
@@ -608,7 +608,7 @@ function DesktopRow({
             ? formatMoney(stockValueOf(ingredient), ingredient.costCurrency as string, locale)
             : t('inventory.catalog.valueUncosted')}
         </span>
-        <span className="tnum w-[112px] shrink-0 text-right font-mono text-[13px] text-ink-3">
+        <span className="tnum w-[112px] shrink-0 text-right font-mono text-sm text-ink-3">
           {row.rate != null
             ? `${formatRateQty(row.rate, ingredient, locale)} ${shownUnit(ingredient)}`
             : t('inventory.catalog.daysNone')}

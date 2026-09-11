@@ -250,7 +250,7 @@ export function RegisterSheet({
                     : 'bg-tint-loss text-loss',
               )}
             >
-              <div className="text-[12px] font-semibold uppercase tracking-[.06em]">
+              <div className="text-xs font-semibold uppercase tracking-[.06em]">
                 {(closed.overShortMinor ?? 0) === 0
                   ? t('register.resultBalanced')
                   : (closed.overShortMinor ?? 0) > 0
@@ -315,7 +315,7 @@ export function RegisterSheet({
                 className="rounded-xl border border-line bg-surface px-4 py-3"
                 data-testid="register-expected-breakdown"
               >
-                <div className="mb-2 text-[12px] font-semibold uppercase tracking-[.06em] text-ink-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[.06em] text-ink-3">
                   {t('register.expectedByTender')}
                 </div>
                 <dl className="space-y-2">

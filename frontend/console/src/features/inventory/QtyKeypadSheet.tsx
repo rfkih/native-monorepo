@@ -235,7 +235,7 @@ export function QtyKeypadSheet({
               <span
                 aria-hidden="true"
                 className={cn(
-                  'tnum font-mono text-[44px] font-bold leading-none tracking-[-0.03em]',
+                  'tnum font-mono text-5xl font-bold leading-none tracking-[-0.03em]',
                   raw === ''
                     ? 'text-ink-400'
                     : sign === 'remove' && mode === 'receive'
@@ -264,7 +264,7 @@ export function QtyKeypadSheet({
                 onPaste={onPaste}
                 style={{ width: `${Math.max(1, raw.length)}ch` }}
                 className={cn(
-                  'tnum min-w-[1ch] bg-transparent text-right font-mono text-[44px] font-bold leading-none tracking-[-0.03em] caret-transparent placeholder:text-ink-400 focus:outline-none',
+                  'tnum min-w-[1ch] bg-transparent text-right font-mono text-5xl font-bold leading-none tracking-[-0.03em] caret-transparent placeholder:text-ink-400 focus:outline-none',
                   sign === 'remove' && mode === 'receive' ? 'text-loss' : 'text-ink',
                 )}
               />

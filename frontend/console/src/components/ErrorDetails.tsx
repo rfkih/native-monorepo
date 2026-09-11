@@ -58,7 +58,7 @@ export function ErrorDetails({ error, className }: { error: unknown; className?:
         </div>
       ) : null}
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 font-mono text-[11px] leading-relaxed text-ink-3">
+        <div className="min-w-0 font-mono text-2xs leading-relaxed text-ink-3">
           <div className="truncate font-semibold text-ink-2">
             {error.path ? `${error.method} ${error.path} → ${error.status}` : `HTTP ${error.status}`}
           </div>
@@ -75,7 +75,7 @@ export function ErrorDetails({ error, className }: { error: unknown; className?:
           onClick={() => copyBundle(error)}
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1',
-            'text-[11px] font-semibold text-ink-2 transition-colors hover:text-ink',
+            'text-2xs font-semibold text-ink-2 transition-colors hover:text-ink',
             'focus-visible:outline-2 focus-visible:outline-emerald',
           )}
         >

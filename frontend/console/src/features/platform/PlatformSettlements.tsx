@@ -54,7 +54,7 @@ function PlatformSettlementsInner({ company }: { company: CompanySession }) {
   return (
     <div className="flex flex-col gap-[18px]">
       <div>
-        <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+        <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
           {t('platform.title')}
         </h1>
         <p className="mt-1.5 text-sm text-ink-3">{t('platform.subtitle')}</p>
@@ -133,7 +133,7 @@ function HistorySection({
         <Card className="overflow-hidden rounded-[20px]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
                 <th className="px-4 py-3">{t('platform.history.colChannel')}</th>
                 <th className="px-4 py-3">{t('platform.history.colSettledAt')}</th>
                 <th className="px-4 py-3 text-right">{t('platform.history.colGross')}</th>
@@ -166,7 +166,7 @@ function HistorySection({
                   </td>
                   <td className="px-4 py-3 text-right">
                     {row.voided ? (
-                      <span className="text-[12.5px] font-semibold text-ink-3 no-underline">
+                      <span className="text-xs font-semibold text-ink-3 no-underline">
                         {t('platform.history.voided')}
                       </span>
                     ) : (
@@ -213,7 +213,7 @@ function VoidButton({
       <button
         type="button"
         onClick={() => setAsking(true)}
-        className="text-[13px] font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        className="text-sm font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         {t('platform.history.void')}
       </button>
@@ -221,9 +221,9 @@ function VoidButton({
   }
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <span className="text-[12.5px] text-ink-3">{t('platform.history.voidConfirm')}</span>
+      <span className="text-xs text-ink-3">{t('platform.history.voidConfirm')}</span>
       {voidIt.isError ? (
-        <span className="text-[12.5px] text-loss" role="alert">
+        <span className="text-xs text-loss" role="alert">
           {t('platform.history.voidFailed')}
         </span>
       ) : null}
@@ -231,14 +231,14 @@ function VoidButton({
         type="button"
         disabled={voidIt.isPending}
         onClick={() => voidIt.mutate(row.id, { onSuccess: () => setAsking(false) })}
-        className="text-[13px] font-semibold text-loss underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        className="text-sm font-semibold text-loss underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         {t('platform.history.voidYes')}
       </button>
       <button
         type="button"
         onClick={() => setAsking(false)}
-        className="text-[13px] text-ink-3 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        className="text-sm text-ink-3 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         {t('common.cancel')}
       </button>

@@ -381,7 +381,7 @@ function GroupDetail({
             <>
               {/* Period nav */}
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                <span className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
                   {t('groups.consolidation')}
                 </span>
                 <PeriodNav
@@ -421,7 +421,7 @@ function GroupDetail({
         {/* Members card */}
         <Card className="rounded-[20px] p-5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+            <p className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
               {t('groups.members')}
             </p>
             <button
@@ -528,7 +528,7 @@ function GroupDetail({
           <>
             {/* Consolidated figures card */}
             <Card className="rounded-[20px] p-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+              <p className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
                 {t('groups.consolidation')} · {currency}
               </p>
               <div className="mt-4 space-y-3">
@@ -563,7 +563,7 @@ function GroupDetail({
 
             {/* Eliminations card */}
             <Card className="rounded-[20px] p-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+              <p className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
                 {t('groups.eliminations')}
               </p>
               <div className="mt-4 grid grid-cols-2 gap-4">
@@ -612,7 +612,7 @@ function GroupDetail({
             <Card className="rounded-[20px] p-5">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                  <p className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
                     {t('groups.state')}
                   </p>
                   <div className="mt-2">
@@ -620,7 +620,7 @@ function GroupDetail({
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                  <p className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
                     {t('groups.closeRunSeq')}
                   </p>
                   <p className="tnum mt-2 font-mono text-sm text-ink">#{data.closeRunSeq}</p>
@@ -670,7 +670,7 @@ export function GroupConsolidation() {
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
             {t('groups.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('groups.subtitle')}</p>

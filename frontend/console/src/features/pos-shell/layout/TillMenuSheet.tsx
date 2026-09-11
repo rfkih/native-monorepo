@@ -47,7 +47,7 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
 
   const itemClass = (it: TillMenuItem) =>
     cn(
-      'flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left text-[14px] font-medium transition-colors',
+      'flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left text-sm font-medium transition-colors',
       'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald',
       it.danger ? 'text-loss hover:bg-tint-loss' : 'text-ink hover:bg-hover',
       it.disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
@@ -59,7 +59,7 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
     <span className="min-w-0 flex-1">
       <span className="block truncate">{it.label}</span>
       {it.disabled && it.disabledTitle ? (
-        <span className="block truncate text-[11px] font-normal text-ink-3">{it.disabledTitle}</span>
+        <span className="block truncate text-2xs font-normal text-ink-3">{it.disabledTitle}</span>
       ) : null}
     </span>
   )

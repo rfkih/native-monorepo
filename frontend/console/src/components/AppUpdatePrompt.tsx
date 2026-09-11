@@ -52,7 +52,7 @@ export function AppUpdatePrompt() {
   return (
     <div
       role="status"
-      className="flex items-center justify-center gap-3 border-b border-line bg-surface px-4 py-2 text-[13px] text-ink shadow-sm print:hidden"
+      className="flex items-center justify-center gap-3 border-b border-line bg-surface px-4 py-2 text-sm text-ink shadow-sm print:hidden"
     >
       <ArrowUpCircle className="size-4 shrink-0 text-emerald-2" aria-hidden="true" />
       <span className="font-semibold">{t('appUpdate.available')}</span>
@@ -62,7 +62,7 @@ export function AppUpdatePrompt() {
           setReloading(true)
           void reloadToLatest()
         }}
-        className="rounded-lg bg-emerald px-3 py-1 text-[12px] font-bold text-on-emerald transition-colors hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        className="rounded-lg bg-emerald px-3 py-1 text-xs font-bold text-on-emerald transition-colors hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
       >
         {t('appUpdate.action')}
       </button>

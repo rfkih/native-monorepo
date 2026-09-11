@@ -173,7 +173,7 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
 
           {/* ── Dine-in floor grid ─────────────────────────────────────────── */}
           <section aria-label={t('bills.dineInSection')}>
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.05em] text-ink-3">
+            <p className="mb-3 text-2xs font-bold uppercase tracking-[0.05em] text-ink-3">
               {t('bills.dineInSection')}
             </p>
 
@@ -248,11 +248,11 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
           {/* ── Takeaway / Counter section ────────────────────────────────── */}
           <section aria-label={t('bills.takeawaySection')}>
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-[0.05em] text-ink-3">
+              <p className="text-2xs font-bold uppercase tracking-[0.05em] text-ink-3">
                 {t('bills.takeawaySection')}
               </p>
               {takeawayBills.length > 0 ? (
-                <Badge tone="neutral" className="text-[10px]">
+                <Badge tone="neutral" className="text-2xs">
                   {takeawayBills.length}
                 </Badge>
               ) : null}
@@ -377,7 +377,7 @@ function TableCard({
       {/* Label */}
       <span
         className={cn(
-          'font-display text-[17px] font-bold leading-tight',
+          'font-display text-lg font-bold leading-tight',
           occupied ? 'text-emerald-2' : 'text-ink',
         )}
       >
@@ -385,17 +385,17 @@ function TableCard({
       </span>
 
       {/* Capacity */}
-      <span className={cn('mt-0.5 text-[10.5px]', occupied ? 'text-emerald-2/80' : 'text-ink-3')}>
+      <span className={cn('mt-0.5 text-2xs', occupied ? 'text-emerald-2/80' : 'text-ink-3')}>
         {t('pos.table.capacity', { n: table.capacity })}
       </span>
 
       {/* Occupied details */}
       {occupied ? (
         <div className="mt-2 w-full space-y-0.5">
-          <div className="tnum rounded-lg bg-emerald-tint px-2 py-1 font-mono text-[11px] font-semibold text-emerald-2">
+          <div className="tnum rounded-lg bg-emerald-tint px-2 py-1 font-mono text-2xs font-semibold text-emerald-2">
             {formatMoney(runningTotalMinor, currency, locale)}
           </div>
-          <div className="text-[10px] text-emerald-2">
+          <div className="text-2xs text-emerald-2">
             {t('bills.itemCount', { n: itemCount })}
           </div>
         </div>

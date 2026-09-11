@@ -345,7 +345,7 @@ export function OperatorPinSheet({
                         onClick={() => pickEmployee(entry)}
                         className="flex h-14 w-full items-center gap-3 px-4 text-left text-sm font-medium text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald"
                       >
-                        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-tint text-[13px] font-bold text-emerald-2">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-tint text-sm font-bold text-emerald-2">
                           {initials(entry.displayName)}
                         </span>
                         <span className="truncate">{entry.displayName}</span>

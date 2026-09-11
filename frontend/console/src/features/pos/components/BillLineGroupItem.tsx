@@ -48,7 +48,7 @@ export function BillLineGroupItem({
           {group.modifiers.length > 0 ? (
             <div className="mt-1 flex flex-wrap gap-1">
               {group.modifiers.map((mod) => (
-                <span key={mod.optionId} className="text-[11px] text-ink-3">
+                <span key={mod.optionId} className="text-2xs text-ink-3">
                   {mod.nameSnapshot}
                 </span>
               ))}

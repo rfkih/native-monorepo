@@ -125,10 +125,10 @@ function KitchenInner({ session }: { session: CompanySession }) {
               <ChefHat className="size-[18px]" />
             </span>
             <div className="min-w-0">
-              <div className="truncate font-display text-[17px] font-bold leading-tight text-ink">
+              <div className="truncate font-display text-lg font-bold leading-tight text-ink">
                 {t('kitchen.title')}
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] leading-tight text-ink-3">
+              <div className="flex items-center gap-1.5 text-2xs leading-tight text-ink-3">
                 {/* Pulsing live dot — skipped when prefers-reduced-motion */}
                 <span className="relative flex size-2 shrink-0" aria-hidden="true">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75 motion-reduce:hidden" />

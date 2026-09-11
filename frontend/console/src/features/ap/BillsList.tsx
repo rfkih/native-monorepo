@@ -54,7 +54,7 @@ export function BillsList() {
     <div className="flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
             {t('ap.bills.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('ap.bills.subtitle')}</p>
@@ -103,7 +103,7 @@ export function BillsList() {
         <Card className="overflow-hidden rounded-[20px]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
                 <th className="px-4 py-3">{t('ap.bills.colNumber')}</th>
                 <th className="px-4 py-3">{t('ap.bills.colVendor')}</th>
                 <th className="px-4 py-3">{t('ap.bills.colStatus')}</th>

@@ -242,7 +242,7 @@ export function PeriodChart({
               <span
                 key={p}
                 className={cn(
-                  'shrink-0 text-center text-[10.5px] leading-none',
+                  'shrink-0 text-center text-2xs leading-none',
                   sel ? 'font-bold text-ink' : 'font-medium text-ink-3',
                 )}
                 style={{ width: track.colW }}

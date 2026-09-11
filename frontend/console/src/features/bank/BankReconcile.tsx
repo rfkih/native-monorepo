@@ -127,7 +127,7 @@ export function BankReconcile() {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
             {account.name}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">
@@ -187,7 +187,7 @@ export function BankReconcile() {
         <Card className="overflow-x-auto rounded-[20px]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
                 <th className="px-4 py-3">{t('bank.reconcile.colDate')}</th>
                 <th className="px-4 py-3">{t('bank.reconcile.colDescription')}</th>
                 <th className="px-4 py-3 text-right">{t('bank.reconcile.colAmount')}</th>

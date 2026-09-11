@@ -142,7 +142,7 @@ export function IngredientDetail({
           <span
             className={cn(
               'tnum font-mono font-bold leading-none tracking-[-0.02em]',
-              rail ? 'text-[26px]' : 'text-[30px]',
+              rail ? 'text-2xl' : 'text-2xl',
               row.cls === 'zero' ? 'text-loss' : 'text-ink',
             )}
           >
@@ -231,7 +231,7 @@ export function IngredientDetail({
           <button
             type="button"
             onClick={() => navigate('/inventory/history')}
-            className="shrink-0 text-[11px] font-bold text-profit-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="shrink-0 text-2xs font-bold text-profit-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {t('inventory.detail.allHistory')}
           </button>
@@ -257,7 +257,7 @@ export function IngredientDetail({
                     <span className="text-xs font-semibold text-ink">
                       {dateFmt.format(new Date(c.countedAt))}
                     </span>
-                    <span className="tnum font-mono text-[10.5px] text-ink-3">
+                    <span className="tnum font-mono text-2xs text-ink-3">
                       {t('inventory.detail.countLine', {
                         system: formatShownQty(c.line.systemQty, bearing, locale),
                         counted: formatShownQty(c.line.countedQty, bearing, locale),
@@ -270,7 +270,7 @@ export function IngredientDetail({
                       {formatSignedShownQty(v, bearing, locale)} {countUnit}
                     </span>
                     {c.line.unitCostMinor != null && v !== 0 ? (
-                      <span className={cn('tnum font-mono text-[10.5px]', tone)}>
+                      <span className={cn('tnum font-mono text-2xs', tone)}>
                         {formatSignedMoney(
                           c.line.varianceValueMinor,
                           c.currency ?? currency,

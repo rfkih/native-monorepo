@@ -969,7 +969,7 @@ function PosInner({ session }: { session: CompanySession }) {
             disabled={offline}
             data-testid="pos-tables"
             title={offline ? t('offline.disabled.tableFloor') : undefined}
-            className="flex h-11 shrink-0 items-center gap-1.5 rounded-[13px] border border-line bg-surface px-3 text-[13px] font-semibold text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-11 shrink-0 items-center gap-1.5 rounded-[13px] border border-line bg-surface px-3 text-sm font-semibold text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Table2 className="size-4" aria-hidden="true" />
             {t('bills.floorTitle')}
@@ -1021,7 +1021,7 @@ function PosInner({ session }: { session: CompanySession }) {
             aria-pressed={activeCategoryId === null && !searchQuery}
             onClick={() => { setActiveCategoryId(null); setSearchQuery('') }}
             className={cn(
-              'h-10 shrink-0 rounded-full px-4 text-[13px] font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+              'h-10 shrink-0 rounded-full px-4 text-sm font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
               activeCategoryId === null && !searchQuery
                 ? 'bg-emerald text-on-emerald'
                 : 'border border-line bg-surface text-ink-2 hover:border-emerald-line hover:bg-emerald-tint',
@@ -1036,7 +1036,7 @@ function PosInner({ session }: { session: CompanySession }) {
               aria-pressed={cat.id === resolvedCategoryId && activeCategoryId !== null}
               onClick={() => { setActiveCategoryId(cat.id); setSearchQuery('') }}
               className={cn(
-                'h-10 shrink-0 rounded-full px-4 text-[13px] font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+                'h-10 shrink-0 rounded-full px-4 text-sm font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
                 cat.id === resolvedCategoryId && activeCategoryId !== null
                   ? 'bg-emerald text-on-emerald'
                   : 'border border-line bg-surface text-ink-2 hover:border-emerald-line hover:bg-emerald-tint',
@@ -1091,7 +1091,7 @@ function PosInner({ session }: { session: CompanySession }) {
             <div>
               {/* Section label */}
               {!searchQuery && orderedCategories.length > 0 ? (
-                <div className="mb-3 text-[11px] font-bold uppercase tracking-[.08em] text-ink-3">
+                <div className="mb-3 text-2xs font-bold uppercase tracking-[.08em] text-ink-3">
                   {orderedCategories.find((c) => c.id === resolvedCategoryId)?.name ?? t('pos.category.all', 'All')}
                 </div>
               ) : null}

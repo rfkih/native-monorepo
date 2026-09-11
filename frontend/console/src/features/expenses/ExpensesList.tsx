@@ -138,7 +138,7 @@ export function ExpensesList() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
                   <th className="px-4 py-3">{t('expenses.list.colEmployee')}</th>
                   <th className="px-4 py-3">{t('expenses.list.colCategory')}</th>
                   <th className="px-4 py-3">{t('expenses.list.colOrgUnit')}</th>
@@ -330,7 +330,7 @@ function ClaimDetailDrawer({
 
               {claim.decisionComment ? (
                 <div className="rounded-xl bg-tint-info px-3.5 py-3 text-sm text-ink-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-info">
+                  <div className="text-2xs font-semibold uppercase tracking-wider text-info">
                     {t('me.expenses.detail.decisionComment')}
                   </div>
                   <p className="mt-0.5">{claim.decisionComment}</p>

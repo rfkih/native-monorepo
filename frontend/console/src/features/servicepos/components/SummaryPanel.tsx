@@ -28,7 +28,7 @@ import type {
 } from '../api'
 
 export const SELECT_CLASS =
-  'h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-[15px] text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
+  'h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-base text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
 
 export interface AddonLine {
   item: CatalogItemResponse
@@ -125,7 +125,7 @@ export function SummaryPanel({
   return (
     <div className="flex flex-col gap-5 p-5">
       <div>
-        <h2 className="mb-2 text-[11px] font-bold uppercase tracking-[.08em] text-ink-3">
+        <h2 className="mb-2 text-2xs font-bold uppercase tracking-[.08em] text-ink-3">
           {t('servicePos.summary.title')}
         </h2>
         {!hasSelection ? (
@@ -216,7 +216,7 @@ export function SummaryPanel({
               <span className="inline-flex items-center gap-1.5">
                 {t(config.attribution.labelKey)}
                 {config.attribution.required ? (
-                  <Badge tone="amber" className="px-1.5 py-0 text-[10px]">
+                  <Badge tone="amber" className="px-1.5 py-0 text-2xs">
                     {t('common.required')}
                   </Badge>
                 ) : null}

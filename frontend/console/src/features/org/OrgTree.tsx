@@ -158,7 +158,7 @@ function OrgNode({
         <Link
           to={`/org/${unit.id}`}
           className={cn(
-            'min-w-0 flex-1 truncate text-[14.5px] font-semibold transition-colors',
+            'min-w-0 flex-1 truncate text-base font-semibold transition-colors',
             'hover:text-emerald-2 hover:underline',
             unit.active ? 'text-ink' : 'text-ink-3',
           )}
@@ -176,7 +176,7 @@ function OrgNode({
               className={cn('size-1.5 rounded-full', unit.active ? 'bg-profit' : 'bg-ink-300')}
               aria-hidden="true"
             />
-            <span className="text-[11px] text-ink-3 hidden sm:block">
+            <span className="text-2xs text-ink-3 hidden sm:block">
               {unit.active ? t('org.active') : t('org.inactive')}
             </span>
           </span>
@@ -258,7 +258,7 @@ export function OrgTree() {
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
             {t('org.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('org.subtitle')}</p>

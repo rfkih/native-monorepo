@@ -80,7 +80,7 @@ export function MyExpenses() {
             type="button"
             onClick={() => setDialog({ mode: 'create' })}
             disabled={!ready}
-            className="flex h-10 items-center gap-1.5 rounded-full bg-emerald px-3.5 text-[13px] font-bold text-on-emerald disabled:opacity-50"
+            className="flex h-10 items-center gap-1.5 rounded-full bg-emerald px-3.5 text-sm font-bold text-on-emerald disabled:opacity-50"
           >
             <Plus className="size-4" aria-hidden />
             {t('me.expenses.newClaim')}
@@ -386,7 +386,7 @@ function ClaimDetailSheet({
 
               {claim.decisionComment ? (
                 <div className="rounded-xl bg-tint-info px-3.5 py-3 text-sm text-ink-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-info">
+                  <div className="text-2xs font-semibold uppercase tracking-wider text-info">
                     {t('me.expenses.detail.decisionComment')}
                   </div>
                   <p className="mt-0.5">{claim.decisionComment}</p>

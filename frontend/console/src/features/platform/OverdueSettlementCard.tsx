@@ -42,12 +42,12 @@ export function OverdueSettlementCard({
           <TriangleAlert className="size-3.5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-[14px] font-bold text-ink">{t('platform.overdue.title')}</h2>
-          <p className="mt-0.5 max-w-[62ch] text-[13px] text-ink-2">{t('platform.overdue.body')}</p>
+          <h2 className="text-sm font-bold text-ink">{t('platform.overdue.title')}</h2>
+          <p className="mt-0.5 max-w-[62ch] text-sm text-ink-2">{t('platform.overdue.body')}</p>
 
           <div className="mt-3 flex flex-col gap-1.5">
             {overdue.map((row) => (
-              <div key={row.sourceCode} className="flex items-baseline gap-3 text-[13px]">
+              <div key={row.sourceCode} className="flex items-baseline gap-3 text-sm">
                 <span className="min-w-0 flex-1 truncate">
                   <span className="font-semibold text-ink">{row.sourceCode}</span>
                   <span className="ml-1.5 text-ink-3">
@@ -65,7 +65,7 @@ export function OverdueSettlementCard({
 
           <Link
             to="/platform-settlements"
-            className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-emerald-2 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             {t('platform.overdue.action')}
             <ArrowRight className="size-3.5" aria-hidden />

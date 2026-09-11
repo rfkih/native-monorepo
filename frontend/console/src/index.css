@@ -121,7 +121,8 @@ body {
    *   2xl  28/34  desktop page title                               (was 24/32)
    *   3xl  32/36  the ONE hero figure a screen is about (mono)     (was 30/36)
    *
-   * 4xl and up keep Tailwind's values — only the landing's display headlines use them. Pixels, not
+   * 4xl and up keep Tailwind's values — the landing's display headlines and the quantity keypad's
+   * entry figure (5xl, a few digits at most) are the only users. Pixels, not
    * rem, deliberately: the body is 15px, the designs are specified in px, and a rem scale here
    * would read as 0.8667rem everywhere.
    */

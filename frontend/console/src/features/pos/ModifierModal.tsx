@@ -236,7 +236,7 @@ function GroupSection({
         <h3 id={headingId} className="font-medium text-ink">
           {group.name}
         </h3>
-        <Badge tone={group.required ? 'amber' : 'neutral'} className="text-[11px]">
+        <Badge tone={group.required ? 'amber' : 'neutral'} className="text-2xs">
           {hintText}
         </Badge>
         {showMaxHint ? (

@@ -479,7 +479,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
         {/* Catalog — packages + add-ons */}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
           <section>
-            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[.08em] text-ink-3">
+            <h2 className="mb-3 text-2xs font-bold uppercase tracking-[.08em] text-ink-3">
               {t(config.primaryItemLabels.titleKey)}
             </h2>
             {packagesQuery.isLoading ? (
@@ -506,7 +506,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
           </section>
 
           <section className="mt-8">
-            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[.08em] text-ink-3">
+            <h2 className="mb-3 text-2xs font-bold uppercase tracking-[.08em] text-ink-3">
               {t(`${config.i18nNs}.addons`)}
             </h2>
             {addonsQuery.isLoading ? (

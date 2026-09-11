@@ -303,7 +303,7 @@ export function IngredientForm({
         >
           {INGREDIENT_UNIT_GROUPS.map((group) => (
             <div key={group.key} className="flex items-center gap-2.5">
-              <span className="w-14 shrink-0 text-[11px] font-semibold text-ink-3">
+              <span className="w-14 shrink-0 text-2xs font-semibold text-ink-3">
                 {t(`inventory.unitGroup.${group.key}`)}
               </span>
               <div className="flex flex-1 flex-wrap gap-[7px]">
@@ -331,7 +331,7 @@ export function IngredientForm({
             </div>
           ))}
         </div>
-        <p className="mt-[9px] text-[11.5px] leading-relaxed text-ink-400 text-pretty">
+        <p className="mt-[9px] text-xs leading-relaxed text-ink-400 text-pretty">
           {t('inventory.form.unitNote')}
         </p>
       </div>
@@ -422,7 +422,7 @@ export function IngredientForm({
         </div>
         <p
           className={cn(
-            'mt-[7px] text-[11.5px] font-medium leading-relaxed text-pretty',
+            'mt-[7px] text-xs font-medium leading-relaxed text-pretty',
             costError
               ? 'text-loss'
               : useTotalMode && derivedShownCostMinor != null
@@ -474,7 +474,7 @@ export function IngredientForm({
         </div>
         <p
           className={cn(
-            'mt-[7px] text-[11.5px] leading-relaxed text-pretty',
+            'mt-[7px] text-xs leading-relaxed text-pretty',
             packSizeError ? 'text-loss' : 'text-ink-400',
           )}
         >

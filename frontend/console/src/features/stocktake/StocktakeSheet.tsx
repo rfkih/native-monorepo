@@ -748,7 +748,7 @@ function DraftFooterSummary({
         type="button"
         onClick={onShowInvalid}
         data-testid="stocktake-show-invalid"
-        className="mb-2.5 flex min-h-11 w-full items-center justify-between gap-3 rounded-[13px] bg-tint-loss px-3 py-2 text-left text-[12.5px] font-semibold leading-snug text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loss"
+        className="mb-2.5 flex min-h-11 w-full items-center justify-between gap-3 rounded-[13px] bg-tint-loss px-3 py-2 text-left text-xs font-semibold leading-snug text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loss"
       >
         <span>
           {t('stocktake.invalidLines', {
@@ -971,7 +971,7 @@ function StocktakeIngredientRow({
           )}
         >
           {invalid ? (
-            <span className="text-[15px] font-bold leading-none">!</span>
+            <span className="text-base font-bold leading-none">!</span>
           ) : done ? (
             <Check className="size-3.5" strokeWidth={3.4} />
           ) : null}
@@ -986,7 +986,7 @@ function StocktakeIngredientRow({
         <div className="line-clamp-2 text-sm font-semibold leading-snug text-ink">
           {ingredient.name}
         </div>
-        <div className="tnum mt-1 h-[15px] truncate font-mono text-[10px] leading-[15px] text-ink-3">
+        <div className="tnum mt-1 h-[15px] truncate font-mono text-2xs leading-[15px] text-ink-3">
           {meta}
         </div>
       </div>
@@ -1033,7 +1033,7 @@ function StocktakeIngredientRow({
         </button>
         <div
           className={cn(
-            'tnum h-[15px] w-full truncate text-right font-mono text-[10px] font-bold leading-[15px]',
+            'tnum h-[15px] w-full truncate text-right font-mono text-2xs font-bold leading-[15px]',
             invalid ? 'text-loss' : tone ? TONE_TEXT[tone] : 'text-ink-3',
           )}
         >
@@ -1233,7 +1233,7 @@ function CountSheet({
                   onKeyDown={(e) => onKeyDown(e, save)}
                   onPaste={onPaste}
                   className={cn(
-                    'tnum w-full min-w-0 flex-1 bg-transparent text-right font-mono text-[30px] font-bold leading-none tracking-tight caret-transparent placeholder:text-ink-3/40 focus:outline-none',
+                    'tnum w-full min-w-0 flex-1 bg-transparent text-right font-mono text-2xl font-bold leading-none tracking-tight caret-transparent placeholder:text-ink-3/40 focus:outline-none',
                     canSave ? 'text-ink' : 'text-loss',
                   )}
                 />
@@ -1568,7 +1568,7 @@ function StocktakeSummary({
             {/* currency null = no counted line carried a cost — nothing was posted, so showing a
                 zero money figure would imply a valuation that never happened. */}
             {result.currency != null ? (
-              <div className="tnum mt-2 font-mono text-[30px] font-bold leading-none tracking-tight">
+              <div className="tnum mt-2 font-mono text-2xl font-bold leading-none tracking-tight">
                 {formatMoney(Math.abs(result.shrinkageMinor), result.currency, locale)}
               </div>
             ) : (
@@ -1648,7 +1648,7 @@ function StocktakeVarianceLine({
     <li className="flex items-center gap-3 border-b border-line py-[11px]">
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium leading-snug text-ink">{line.name}</div>
-        <div className="tnum mt-0.5 font-mono text-[10.5px] leading-snug text-ink-3">
+        <div className="tnum mt-0.5 font-mono text-2xs leading-snug text-ink-3">
           {t('stocktake.lineArrow', { system, counted, unit })}
         </div>
       </div>

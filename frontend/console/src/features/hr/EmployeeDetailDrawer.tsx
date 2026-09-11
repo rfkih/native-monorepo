@@ -238,17 +238,17 @@ export function EmployeeDetailDrawer({
     <Drawer onClose={onClose} ariaLabel={employee.fullName}>
       {/* Header */}
       <div className="flex flex-none items-center gap-3 border-b border-line px-5 pb-4 pt-5">
-        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-emerald-tint text-[15px] font-semibold text-emerald-2">
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-emerald-tint text-base font-semibold text-emerald-2">
           {initials}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate font-display text-[17px] font-bold text-ink">
+            <h2 className="truncate font-display text-lg font-bold text-ink">
               {employee.fullName}
             </h2>
             {!active ? <Badge tone="amber">{t('hr.list.inactive')}</Badge> : null}
           </div>
-          <div className="mt-0.5 truncate text-[12.5px] font-medium text-ink-3">{headline}</div>
+          <div className="mt-0.5 truncate text-xs font-medium text-ink-3">{headline}</div>
         </div>
         <button
           type="button"
@@ -285,10 +285,10 @@ export function EmployeeDetailDrawer({
                 className="flex items-center justify-between gap-2.5 rounded-xl border border-line px-3.5 py-3"
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-[13px] font-semibold text-ink">
+                  <span className="block truncate text-sm font-semibold text-ink">
                     {row.role}
                   </span>
-                  <span className="mt-0.5 block truncate text-[11.5px] font-medium text-ink-3">
+                  <span className="mt-0.5 block truncate text-xs font-medium text-ink-3">
                     {unitName(row.orgUnitId)}
                     {monthYear(row.effectiveFrom)
                       ? ` · ${t('hr.detail.since', { date: monthYear(row.effectiveFrom) })}`
@@ -298,7 +298,7 @@ export function EmployeeDetailDrawer({
                 <button
                   type="button"
                   onClick={() => onEndAssignment(row)}
-                  className="h-[30px] shrink-0 rounded-[9px] border border-line px-2.5 text-[11.5px] font-semibold text-ink-3 transition-colors hover:border-loss/40 hover:text-loss"
+                  className="h-[30px] shrink-0 rounded-[9px] border border-line px-2.5 text-xs font-semibold text-ink-3 transition-colors hover:border-loss/40 hover:text-loss"
                 >
                   {t('hr.detail.endAssignment')}
                 </button>
@@ -309,7 +309,7 @@ export function EmployeeDetailDrawer({
             <button
               type="button"
               onClick={onAssign}
-              className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-[12.5px] font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
+              className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-xs font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
             >
               <Plus className="size-3.5" />
               {t('hr.detail.assignAnother')}
@@ -653,7 +653,7 @@ export function EmployeeDetailDrawer({
           <button
             type="button"
             onClick={onTerminate}
-            className="h-11 shrink-0 rounded-xl border border-loss/30 px-4 text-[13px] font-semibold text-loss transition-colors hover:bg-tint-loss"
+            className="h-11 shrink-0 rounded-xl border border-loss/30 px-4 text-sm font-semibold text-loss transition-colors hover:bg-tint-loss"
           >
             {t('hr.list.actionTerminate')}
           </button>
@@ -670,7 +670,7 @@ function SectionHeading({ children, className }: { children: React.ReactNode; cl
   return (
     <div
       className={cn(
-        'text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3',
+        'text-2xs font-bold uppercase tracking-[0.08em] text-ink-3',
         className,
       )}
     >
@@ -699,7 +699,7 @@ function Detail({ label, value, mono }: { label: string; value: string; mono?: b
   return (
     <div className="min-w-0">
       <div className="text-xs text-ink-3">{label}</div>
-      <div className={cn('truncate text-ink', mono && 'font-mono text-[13px]')}>{value}</div>
+      <div className={cn('truncate text-ink', mono && 'font-mono text-sm')}>{value}</div>
     </div>
   )
 }

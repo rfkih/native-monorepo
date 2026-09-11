@@ -113,10 +113,10 @@ export function FeaturesSettings() {
             <Sparkles className="size-6" strokeWidth={1.8} />
           </span>
           <div>
-            <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
+            <h1 className="font-display text-2xl font-extrabold tracking-[-0.02em] text-ink">
               {t('settings.tier.title')}
             </h1>
-            <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-ink-3">
+            <p className="mt-1.5 max-w-xl text-base leading-relaxed text-ink-3">
               {t('settings.tier.help')}
             </p>
           </div>
@@ -128,7 +128,7 @@ export function FeaturesSettings() {
             <Badge tone="info">
               {t('settings.tier.currentPlanBadge')} · {planName(tier)}
             </Badge>
-            <div className="tnum mt-3 font-mono text-[34px] font-bold leading-none tracking-[-0.02em] text-ink">
+            <div className="tnum mt-3 font-mono text-3xl font-bold leading-none tracking-[-0.02em] text-ink">
               {tier === 'FREE' ? t('settings.tier.priceFree') : money(price.totalMinor)}
               {tier !== 'FREE' ? (
                 <span className="ml-1 font-sans text-sm font-medium text-ink-3">
@@ -136,7 +136,7 @@ export function FeaturesSettings() {
                 </span>
               ) : null}
             </div>
-            <p className="mt-2 text-[13px] leading-relaxed text-ink-3">
+            <p className="mt-2 text-sm leading-relaxed text-ink-3">
               {t('settings.tier.currentUsage')}
               {': '}
               {outletCount != null ? t('settings.tier.usageOutlets', { count: outletCount }) : '—'}
@@ -163,8 +163,8 @@ export function FeaturesSettings() {
                 />
               ) : null}
               <div className="mt-2 flex items-baseline justify-between border-t border-line pt-2">
-                <span className="text-[13px] font-bold text-ink">{t('settings.tier.totalPerMonth')}</span>
-                <span className="tnum font-mono text-[15px] font-bold text-ink">{money(price.totalMinor)}</span>
+                <span className="text-sm font-bold text-ink">{t('settings.tier.totalPerMonth')}</span>
+                <span className="tnum font-mono text-base font-bold text-ink">{money(price.totalMinor)}</span>
               </div>
             </div>
           ) : null}
@@ -241,8 +241,8 @@ export function FeaturesSettings() {
 function BreakdownRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-1">
-      <span className="min-w-0 text-[13px] leading-snug text-ink-3">{label}</span>
-      <span className="tnum shrink-0 font-mono text-[13px] font-semibold text-ink-2">{value}</span>
+      <span className="min-w-0 text-sm leading-snug text-ink-3">{label}</span>
+      <span className="tnum shrink-0 font-mono text-sm font-semibold text-ink-2">{value}</span>
     </div>
   )
 }
@@ -282,14 +282,14 @@ function PlanCard({
       )}
     >
       {current ? (
-        <span className="absolute -top-3 left-6 rounded-full bg-emerald px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-on-emerald shadow-sm">
+        <span className="absolute -top-3 left-6 rounded-full bg-emerald px-3 py-1 text-2xs font-bold uppercase tracking-wide text-on-emerald shadow-sm">
           {currentLabel}
         </span>
       ) : null}
 
       <div>
         <h2 className="font-display text-lg font-bold text-ink">{name}</h2>
-        <div className="tnum mt-1.5 font-mono text-[22px] font-bold tracking-[-0.01em] text-ink">
+        <div className="tnum mt-1.5 font-mono text-xl font-bold tracking-[-0.01em] text-ink">
           {priceLine}
         </div>
         <p className="mt-1.5 text-sm text-ink-3">{tagline}</p>

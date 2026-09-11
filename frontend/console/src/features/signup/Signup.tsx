@@ -185,10 +185,10 @@ function BrandPanel() {
       <div className="flex-1" />
 
       <div className="relative">
-        <h1 className="max-w-[14ch] font-display text-[40px] font-extrabold leading-[1.1] tracking-[-0.03em] text-white [text-wrap:pretty]">
+        <h1 className="max-w-[14ch] font-display text-4xl font-extrabold leading-[1.1] tracking-[-0.03em] text-white [text-wrap:pretty]">
           {t('signup.heroTitle')}
         </h1>
-        <p className="mt-[18px] max-w-[38ch] text-[17px] leading-relaxed text-white/[0.78] [text-wrap:pretty]">
+        <p className="mt-[18px] max-w-[38ch] text-lg leading-relaxed text-white/[0.78] [text-wrap:pretty]">
           {t('signup.heroBody')}
         </p>
         <ul className="mt-9 flex flex-col gap-3.5">
@@ -197,7 +197,7 @@ function BrandPanel() {
               <span className="mt-px grid size-[22px] shrink-0 place-items-center rounded-full bg-white/[0.16]">
                 <Check className="size-[13px] text-profit" strokeWidth={3} aria-hidden />
               </span>
-              <span className="text-[15px] leading-normal text-white/90">{proof}</span>
+              <span className="text-base leading-normal text-white/90">{proof}</span>
             </li>
           ))}
         </ul>
@@ -205,7 +205,7 @@ function BrandPanel() {
 
       <div className="flex-1" />
 
-      <p className="relative border-t border-white/[0.16] pt-7 text-[13px] leading-relaxed text-white/[0.65]">
+      <p className="relative border-t border-white/[0.16] pt-7 text-sm leading-relaxed text-white/[0.65]">
         {t('signup.heroFootnote')}
       </p>
     </aside>
@@ -229,7 +229,7 @@ function SuccessPanel({
         <div className="mx-auto grid size-16 place-items-center rounded-full bg-tint-profit text-profit">
           <Check className="size-7" />
         </div>
-        <h2 className="mt-5 font-display text-[26px] font-bold tracking-[-0.02em] text-ink">
+        <h2 className="mt-5 font-display text-2xl font-bold tracking-[-0.02em] text-ink">
           {t('signup.successTitle')}
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
@@ -539,11 +539,11 @@ export function Signup() {
             <span className="grid size-8 place-items-center rounded-xl bg-white text-ink-fixed">
               <BrandMark size={18} stroke="currentColor" strokeWidth={2.6} />
             </span>
-            <span className="font-display text-[17px] font-extrabold tracking-[-0.02em] text-white">
+            <span className="font-display text-lg font-extrabold tracking-[-0.02em] text-white">
               {t('app.name')}
             </span>
           </div>
-          <h1 className="relative mt-5 max-w-[15ch] font-display text-[26px] font-extrabold leading-[1.15] tracking-[-0.025em] text-white [text-wrap:pretty]">
+          <h1 className="relative mt-5 max-w-[15ch] font-display text-2xl font-extrabold leading-[1.15] tracking-[-0.025em] text-white [text-wrap:pretty]">
             {t('signup.heroTitle')}
           </h1>
         </div>
@@ -571,10 +571,10 @@ export function Signup() {
             stepName={steps[step]}
           />
 
-          <h2 className="mt-[22px] font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
+          <h2 className="mt-[22px] font-display text-2xl font-extrabold tracking-[-0.02em] text-ink">
             {t('signup.title')}
           </h2>
-          <p className="mt-2 text-[15px] leading-relaxed text-ink-3">{t('signup.subtitle')}</p>
+          <p className="mt-2 text-base leading-relaxed text-ink-3">{t('signup.subtitle')}</p>
 
           <div className="mt-7">
           <form

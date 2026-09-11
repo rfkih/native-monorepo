@@ -8,7 +8,7 @@ import { cn } from '@/lib/cn'
 
 export function OfflineHint({ text, className }: { text: string; className?: string }) {
   return (
-    <p className={cn('flex items-center gap-1.5 text-[11px] text-ink-3', className)}>
+    <p className={cn('flex items-center gap-1.5 text-2xs text-ink-3', className)}>
       <WifiOff className="size-3 shrink-0" aria-hidden="true" />
       {text}
     </p>

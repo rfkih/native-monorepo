@@ -152,7 +152,7 @@ export function FixedAssets() {
     <div className="flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
             {t('assets.title')}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('assets.subtitle')}</p>
@@ -206,7 +206,7 @@ export function FixedAssets() {
         <Card className="overflow-x-auto rounded-[20px]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
                 <th className="px-4 py-3">{t('assets.colName')}</th>
                 <th className="px-4 py-3">{t('assets.colAcquired')}</th>
                 <th className="px-4 py-3 text-right">{t('assets.colLife')}</th>
@@ -271,7 +271,7 @@ export function FixedAssets() {
           <Card className="overflow-x-auto rounded-[20px]">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
                   <th className="px-4 py-3">{t('assets.colPeriod')}</th>
                   <th className="px-4 py-3 text-right">{t('assets.colItems')}</th>
                   <th className="px-4 py-3 text-right">{t('assets.colPosted')}</th>

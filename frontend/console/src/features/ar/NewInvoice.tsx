@@ -113,7 +113,7 @@ export function NewInvoice() {
   return (
     <div className="mx-auto flex max-w-[820px] flex-col gap-[18px]">
       <div>
-        <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+        <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
           {t('ar.newInvoice.title')}
         </h1>
         <p className="mt-1.5 text-sm text-ink-3">{t('ar.newInvoice.subtitle')}</p>
@@ -169,7 +169,7 @@ export function NewInvoice() {
 
         <Card className="p-6">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+            <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
               {t('ar.newInvoice.lines')}
             </h2>
             <Button type="button" variant="outline" size="sm" onClick={addLine}>
@@ -235,7 +235,7 @@ export function NewInvoice() {
         </Card>
 
         <Card className="p-6">
-          <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.08em] text-ink-3">
             {t('ar.newInvoice.preview')}
           </h2>
           <div className="flex flex-col gap-2 text-sm">

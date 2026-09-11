@@ -118,7 +118,7 @@ export function CompanyExpensesList() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.08em] text-ink-3">
                   <th className="px-4 py-3">{t('expenses.company.colNo')}</th>
                   <th className="px-4 py-3">{t('expenses.company.colDate')}</th>
                   <th className="px-4 py-3">{t('expenses.company.colKind')}</th>
@@ -320,7 +320,7 @@ function CompanyExpenseDetailSheet({
                   <div className="overflow-hidden rounded-xl border border-line">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                        <tr className="border-b border-line bg-paper text-left text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
                           <th className="px-3 py-2">{t('expenses.record.inventory.ingredientLabel')}</th>
                           <th className="px-3 py-2 text-right">{t('expenses.company.detail.lineQty')}</th>
                           <th className="px-3 py-2 text-right">{t('expenses.record.inventory.lineValue')}</th>

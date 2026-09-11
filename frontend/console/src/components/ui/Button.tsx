@@ -20,11 +20,11 @@ const variants: Record<Variant, string> = {
 
 /** Radius rides with size: small controls are 12px, the full-width CTAs are 16px. */
 const sizes: Record<Size, string> = {
-  sm: 'h-10 rounded-xl px-4 text-[13px]',
+  sm: 'h-10 rounded-xl px-4 text-sm',
   md: 'h-11 rounded-xl px-4 text-sm',
   lg: 'h-12 rounded-xl px-5 text-sm',
-  xl: 'h-[52px] rounded-2xl px-6 text-[15px]',
-  '2xl': 'h-14 rounded-2xl px-6 text-[15.5px]',
+  xl: 'h-[52px] rounded-2xl px-6 text-base',
+  '2xl': 'h-14 rounded-2xl px-6 text-base',
 }
 
 export function Button({

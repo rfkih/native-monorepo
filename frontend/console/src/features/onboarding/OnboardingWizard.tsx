@@ -125,7 +125,7 @@ export function OnboardingWizard() {
     <div className="mx-auto max-w-[680px]">
       {/* Centered header */}
       <header className="mb-8 text-center">
-        <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+        <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
           {t(isAdditional ? 'onboarding.addTitle' : 'onboarding.title')}
         </h1>
         <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-ink-3">
@@ -234,7 +234,7 @@ function Stepper({ steps, current }: { steps: string[]; current: number }) {
               {/* Step circle */}
               <span
                 className={cn(
-                  'tnum grid size-7 place-items-center rounded-full text-[13px] font-bold',
+                  'tnum grid size-7 place-items-center rounded-full text-sm font-bold',
                   state === 'done' || state === 'active'
                     ? 'bg-emerald text-on-emerald'
                     : 'bg-ink-50 text-ink-3',
@@ -245,7 +245,7 @@ function Stepper({ steps, current }: { steps: string[]; current: number }) {
               {/* Step label */}
               <span
                 className={cn(
-                  'hidden text-[12.5px] font-semibold sm:block',
+                  'hidden text-xs font-semibold sm:block',
                   state === 'active' ? 'text-ink' : 'text-ink-3',
                 )}
               >
@@ -279,7 +279,7 @@ function SuccessPanel({
           <Check className="size-7" />
         </div>
 
-        <h2 className="mt-5 font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+        <h2 className="mt-5 font-display text-2xl font-bold tracking-[-0.02em] text-ink">
           {t('onboarding.createdTitle')}
         </h2>
         <p className="mt-1.5 text-sm text-ink-3">{t('onboarding.createdBody')}</p>

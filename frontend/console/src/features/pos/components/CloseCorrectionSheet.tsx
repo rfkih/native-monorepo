@@ -99,7 +99,7 @@ export function CloseCorrectionSheet({
   }
 
   const overShortRow = (label: string, value: number) => (
-    <div className="flex items-center justify-between text-[13px]">
+    <div className="flex items-center justify-between text-sm">
       <span className="text-ink-3">{label}</span>
       <span
         className={
@@ -121,7 +121,7 @@ export function CloseCorrectionSheet({
     >
       <header className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface px-4">
         <CalendarClock className="size-[18px] text-emerald-2" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-[16px] font-bold text-ink">
+        <span className="min-w-0 flex-1 truncate text-base font-bold text-ink">
           {t('closeCorrection.title')}
         </span>
         <button
@@ -142,7 +142,7 @@ export function CloseCorrectionSheet({
           <div className="mx-auto mt-8 max-w-sm rounded-card border border-line bg-surface px-6 py-6 text-center">
             <CheckCircle2 className="mx-auto mb-3 size-8 text-emerald-2" aria-hidden />
             <p className="text-sm font-semibold text-ink">{t('closeCorrection.successTitle')}</p>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">
+            <p className="mt-2 text-xs leading-relaxed text-ink-3">
               {t('closeCorrection.successNote')}
             </p>
             <Button className="mt-5 w-full" onClick={onCorrected}>
@@ -164,7 +164,7 @@ export function CloseCorrectionSheet({
             <section className="rounded-card border border-line bg-surface p-4">
               <div className="mb-3 flex items-center gap-2">
                 <Coins className="size-4 text-ink-2" aria-hidden />
-                <h2 className="text-[14px] font-bold text-ink">{t('closeCorrection.cashTitle')}</h2>
+                <h2 className="text-sm font-bold text-ink">{t('closeCorrection.cashTitle')}</h2>
               </div>
               <div className="flex flex-col gap-1.5">
                 {overShortRow(t('register.expected'), expected)}
@@ -174,7 +174,7 @@ export function CloseCorrectionSheet({
 
               <label
                 htmlFor="correct-counted"
-                className="mt-4 block text-[12px] font-semibold text-ink-2"
+                className="mt-4 block text-xs font-semibold text-ink-2"
               >
                 {t('closeCorrection.newCounted')}
               </label>
@@ -183,13 +183,13 @@ export function CloseCorrectionSheet({
                 inputMode="decimal"
                 value={countedValue}
                 onChange={(e) => setCountedInput(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-right font-mono text-[15px] font-bold text-ink outline-none focus:border-emerald-line"
+                className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-right font-mono text-base font-bold text-ink outline-none focus:border-emerald-line"
               />
               <div className="mt-2">
                 {newOverShort != null ? (
                   overShortRow(t('closeCorrection.newOverShort'), newOverShort)
                 ) : (
-                  <p className="text-[12px] font-semibold text-loss">
+                  <p className="text-xs font-semibold text-loss">
                     {t('closeCorrection.invalidAmount')}
                   </p>
                 )}
@@ -197,7 +197,7 @@ export function CloseCorrectionSheet({
 
               <label
                 htmlFor="correct-reason"
-                className="mt-4 block text-[12px] font-semibold text-ink-2"
+                className="mt-4 block text-xs font-semibold text-ink-2"
               >
                 {t('closeCorrection.reasonLabel')}
               </label>
@@ -208,11 +208,11 @@ export function CloseCorrectionSheet({
                 rows={2}
                 maxLength={500}
                 placeholder={t('closeCorrection.reasonPlaceholder')}
-                className="mt-1 w-full resize-none rounded-xl border border-line bg-paper px-3 py-2.5 text-[13px] text-ink outline-none focus:border-emerald-line"
+                className="mt-1 w-full resize-none rounded-xl border border-line bg-paper px-3 py-2.5 text-sm text-ink outline-none focus:border-emerald-line"
               />
 
               {correct.isError ? (
-                <p className="mt-2 text-[12.5px] font-semibold text-loss">
+                <p className="mt-2 text-xs font-semibold text-loss">
                   {t(correctErrorKey(correct.error) as Parameters<typeof t>[0])}
                 </p>
               ) : null}
@@ -221,7 +221,7 @@ export function CloseCorrectionSheet({
                 {correct.isPending ? t('closeCorrection.saving') : t('closeCorrection.save')}
               </Button>
               {unchanged ? (
-                <p className="mt-2 text-center text-[11.5px] text-ink-3">
+                <p className="mt-2 text-center text-xs text-ink-3">
                   {t('closeCorrection.unchangedHint')}
                 </p>
               ) : null}
@@ -231,9 +231,9 @@ export function CloseCorrectionSheet({
             <section className="rounded-card border border-line bg-surface p-4">
               <div className="mb-2 flex items-center gap-2">
                 <Package className="size-4 text-ink-2" aria-hidden />
-                <h2 className="text-[14px] font-bold text-ink">{t('closeCorrection.stockTitle')}</h2>
+                <h2 className="text-sm font-bold text-ink">{t('closeCorrection.stockTitle')}</h2>
               </div>
-              <p className="text-[12.5px] text-ink-3">{t('closeCorrection.stockHint')}</p>
+              <p className="text-xs text-ink-3">{t('closeCorrection.stockHint')}</p>
               <Button
                 variant="outline"
                 className="mt-3 w-full"

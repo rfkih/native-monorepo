@@ -102,7 +102,7 @@ export function BalanceSheet() {
   /** The "n accounts worth nothing are hidden · Show" line under a section that has any. */
   const zeroFootnote = (hiddenCount: number) =>
     hiddenCount === 0 ? undefined : (
-      <p className="text-[11.5px] text-ink-3 print:hidden">
+      <p className="text-xs text-ink-3 print:hidden">
         {/* The sentence tracks the state — it said "hidden" even after the reader revealed them. */}
         {showZeros
           ? hiddenCount === 1
@@ -135,7 +135,7 @@ export function BalanceSheet() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <EntityScope name={company.name} scope={t('statements.scopeAllUnits')} />
-          <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-extrabold tracking-[-0.02em] text-ink">
             {t('statements.balanceTitle')}
           </h1>
         </div>
@@ -195,10 +195,10 @@ export function BalanceSheet() {
           {/* Net worth — the answer the statement exists to produce, in the position the balance
               check used to occupy. */}
           <Card className="border-emerald-line bg-emerald-tint p-6 print:break-inside-avoid">
-            <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-2">
+            <div className="text-2xs font-bold uppercase tracking-[0.08em] text-emerald-2">
               {t('statements.netWorth')} · {formatPeriod(asOf, locale)}
             </div>
-            <div className="tnum mt-1.5 font-mono text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink print:text-2xl">
+            <div className="tnum mt-1.5 font-mono text-3xl font-bold leading-tight tracking-[-0.02em] text-ink print:text-2xl">
               {formatMoney(totalEquity, currency, locale)}
             </div>
           </Card>
@@ -250,11 +250,11 @@ export function BalanceSheet() {
                 <TriangleAlert className="size-4 text-white" aria-hidden />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-bold text-ink">
+                <div className="text-base font-bold text-ink">
                   {t('statements.unbalancedTitle')}
                 </div>
               </div>
-              <span className="tnum shrink-0 font-mono text-[15px] font-bold text-amber-2">
+              <span className="tnum shrink-0 font-mono text-base font-bold text-amber-2">
                 {t('statements.difference', {
                   amount: formatMoney(delta, currency, locale),
                 })}
@@ -266,11 +266,11 @@ export function BalanceSheet() {
               choice too — this is the only row on the page that asks for action. */}
           {flagged.length > 0 ? (
             <div className="flex items-start gap-3 rounded-[20px] border border-loss/30 bg-tint-loss px-5 py-4 print:break-inside-avoid">
-              <span className="mt-0.5 grid size-[22px] shrink-0 place-items-center rounded-full bg-loss text-[13px] font-bold text-white">
+              <span className="mt-0.5 grid size-[22px] shrink-0 place-items-center rounded-full bg-loss text-sm font-bold text-white">
                 !
               </span>
               <div className="min-w-0">
-                <div className="text-[13.5px] font-bold text-ink">
+                <div className="text-sm font-bold text-ink">
                   {flagged.length === 1
                     ? t('statements.unnatural.oneTitle', {
                         name:
@@ -283,7 +283,7 @@ export function BalanceSheet() {
                       })
                     : t('statements.unnatural.manyTitle', { count: flagged.length })}
                 </div>
-                <p className="mt-0.5 max-w-[62ch] text-[12.5px] text-ink-2">
+                <p className="mt-0.5 max-w-[62ch] text-xs text-ink-2">
                   {t('statements.unnatural.body')}
                 </p>
               </div>

@@ -68,7 +68,7 @@ export function PayrollReportsTab({
 
       {/* 1721-A1 — annual, owner-only, real NIK/NPWP */}
       <Card className="p-5">
-        <p className="text-[15px] font-semibold text-ink">{t('hr.payroll.reports.bukti1721a1.title')}</p>
+        <p className="text-base font-semibold text-ink">{t('hr.payroll.reports.bukti1721a1.title')}</p>
         <p className="mt-1 text-sm leading-relaxed text-ink-3">
           {t('hr.payroll.reports.bukti1721a1.body')}
         </p>
@@ -110,7 +110,7 @@ export function PayrollReportsTab({
 
       {/* pph21-monthly — aggregate, owner/manager */}
       <Card className="p-5">
-        <p className="text-[15px] font-semibold text-ink">{t('hr.payroll.reports.pph21Monthly.title')}</p>
+        <p className="text-base font-semibold text-ink">{t('hr.payroll.reports.pph21Monthly.title')}</p>
         <p className="mt-1 text-sm leading-relaxed text-ink-3">
           {t('hr.payroll.reports.pph21Monthly.body')}
         </p>
@@ -147,7 +147,7 @@ export function PayrollReportsTab({
 
       {/* bpjs-summary — per-employee wage, owner-only */}
       <Card className="p-5">
-        <p className="text-[15px] font-semibold text-ink">{t('hr.payroll.reports.bpjsSummary.title')}</p>
+        <p className="text-base font-semibold text-ink">{t('hr.payroll.reports.bpjsSummary.title')}</p>
         <p className="mt-1 text-sm leading-relaxed text-ink-3">
           {t('hr.payroll.reports.bpjsSummary.body')}
         </p>

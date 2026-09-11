@@ -125,7 +125,7 @@ export function OpenBillDialog({
                   )}
                 >
                   <div className={cn('text-sm font-bold', selectedTableId === null ? 'text-on-emerald' : 'text-ink')}>—</div>
-                  <div className={cn('text-[10px]', selectedTableId === null ? 'text-on-emerald/80' : 'text-ink-3')}>
+                  <div className={cn('text-2xs', selectedTableId === null ? 'text-on-emerald/80' : 'text-ink-3')}>
                     {t('bills.noTable')}
                   </div>
                 </button>
@@ -146,7 +146,7 @@ export function OpenBillDialog({
                       )}
                     >
                       <div className={cn('text-sm font-bold', selected ? 'text-on-emerald' : 'text-ink')}>{tbl.label}</div>
-                      <div className={cn('text-[10px]', selected ? 'text-on-emerald/80' : 'text-ink-3')}>
+                      <div className={cn('text-2xs', selected ? 'text-on-emerald/80' : 'text-ink-3')}>
                         {t('pos.table.capacity', { n: tbl.capacity })}
                       </div>
                     </button>

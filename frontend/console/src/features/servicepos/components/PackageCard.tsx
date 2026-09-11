@@ -47,11 +47,11 @@ export function PackageCard({
           : 'border-line shadow-sm hover:-translate-y-0.5 hover:border-emerald-line hover:shadow-md active:scale-[0.98]',
       )}
     >
-      <span className="line-clamp-2 text-[13px] font-semibold leading-snug text-ink">{item.name}</span>
+      <span className="line-clamp-2 text-sm font-semibold leading-snug text-ink">{item.name}</span>
       {item.description ? (
         <span className="mt-1 line-clamp-2 text-xs text-ink-3">{item.description}</span>
       ) : null}
-      <span className="tnum mt-2 font-mono text-[14px] font-semibold text-ink">
+      <span className="tnum mt-2 font-mono text-sm font-semibold text-ink">
         {formatMoney(item.priceMinor, item.currency, locale)}
       </span>
     </button>

@@ -72,15 +72,15 @@ export function BillTabsBar({
             aria-hidden="true"
           />
           <span className="flex flex-col items-start">
-            <span className={cn('text-[14px] font-bold leading-tight', walkInActive ? 'text-ink' : 'text-ink-2')}>
+            <span className={cn('text-sm font-bold leading-tight', walkInActive ? 'text-ink' : 'text-ink-2')}>
               {t('posShell.walkIn')}
               {walkInCount > 0 ? (
-                <span className="ml-1.5 text-[12px] font-semibold text-ink-3">· {walkInCount}</span>
+                <span className="ml-1.5 text-xs font-semibold text-ink-3">· {walkInCount}</span>
               ) : null}
             </span>
             <span
               className={cn(
-                'tnum font-mono text-[11px] font-semibold leading-tight',
+                'tnum font-mono text-2xs font-semibold leading-tight',
                 walkInActive ? 'text-emerald-2' : 'text-ink-3',
               )}
             >
@@ -107,16 +107,16 @@ export function BillTabsBar({
               )}
             >
               <div className="flex items-center gap-1.5">
-                <span className={cn('max-w-[120px] truncate text-[14px] font-bold leading-tight', isActive ? 'text-ink' : 'text-ink-2')}>
+                <span className={cn('max-w-[120px] truncate text-sm font-bold leading-tight', isActive ? 'text-ink' : 'text-ink-2')}>
                   {bill.guestLabel}
                 </span>
                 {bill.lineCount > 0 ? (
-                  <span className="text-[12px] font-semibold leading-tight text-ink-3">· {bill.lineCount}</span>
+                  <span className="text-xs font-semibold leading-tight text-ink-3">· {bill.lineCount}</span>
                 ) : null}
               </div>
               <div
                 className={cn(
-                  'tnum font-mono text-[11px] font-semibold leading-tight',
+                  'tnum font-mono text-2xs font-semibold leading-tight',
                   isActive ? 'text-emerald-2' : 'text-ink-3',
                 )}
               >
@@ -156,21 +156,21 @@ export function BillTabsBar({
         >
           {activeBill ? (
             <>
-              <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-emerald-2">
+              <span className="min-w-0 flex-1 truncate text-sm font-bold text-emerald-2">
                 {activeBill.guestLabel}
               </span>
-              <span className="tnum shrink-0 font-mono text-[13px] font-semibold text-emerald-2">
+              <span className="tnum shrink-0 font-mono text-sm font-semibold text-emerald-2">
                 {formatMoney(activeBill.runningTotalMinor, activeBill.currency, locale)}
               </span>
             </>
           ) : (
             <>
               <ShoppingBag className="size-4 shrink-0 text-emerald-2" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-emerald-2">
+              <span className="min-w-0 flex-1 truncate text-sm font-bold text-emerald-2">
                 {t('posShell.walkIn')}
               </span>
               {walkInCount > 0 ? (
-                <span className="tnum shrink-0 font-mono text-[13px] font-semibold text-emerald-2">
+                <span className="tnum shrink-0 font-mono text-sm font-semibold text-emerald-2">
                   {formatMoney(walkInTotalMinor, currency, locale)}
                 </span>
               ) : null}

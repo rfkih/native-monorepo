@@ -111,7 +111,7 @@ export function DailySummary({
       >
         <div className="w-full max-w-sm rounded-card border border-line bg-surface px-6 py-6 text-center">
           <p className="text-sm font-semibold text-ink">{t('register.summaryTitle')}</p>
-          <p className="mt-1.5 text-[13px] text-ink-3">
+          <p className="mt-1.5 text-sm text-ink-3">
             {summaryQuery.isError ? t('register.summaryError') : t('register.summaryEmpty')}
           </p>
           <button

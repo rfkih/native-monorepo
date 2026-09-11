@@ -43,7 +43,7 @@ import {
 } from './recipeApi'
 
 const SELECT_CLASS =
-  'h-11 w-full min-w-0 rounded-lg border border-line bg-surface px-3 text-[13.5px] text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
+  'h-11 w-full min-w-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
 
 // ---------------------------------------------------------------------------
 // Entry point — gates the drawer on the three queries it needs (recipe, the item's modifier
@@ -87,7 +87,7 @@ export function RecipeDrawer({
       ) : (
         <>
           <div className="flex flex-none items-center justify-between gap-3 border-b border-line px-5 pb-4 pt-5">
-            <h2 className="flex min-w-0 items-center gap-2 truncate font-display text-[17px] font-bold text-ink">
+            <h2 className="flex min-w-0 items-center gap-2 truncate font-display text-lg font-bold text-ink">
               <ChefHat className="size-4 shrink-0 text-emerald-2" aria-hidden="true" />
               <span className="truncate">{item.name}</span>
             </h2>
@@ -305,11 +305,11 @@ function RecipeEditor({
       {/* Header — live HPP + margin, recomputed from the current draft on every keystroke. */}
       <div className="flex flex-none items-start justify-between gap-3 border-b border-line px-5 pb-4 pt-5">
         <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-2 truncate font-display text-[17px] font-bold text-ink">
+          <h2 className="flex items-center gap-2 truncate font-display text-lg font-bold text-ink">
             <ChefHat className="size-4 shrink-0 text-emerald-2" aria-hidden="true" />
             <span className="truncate">{item.name}</span>
           </h2>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="text-ink-3">
               {t('recipe.hppLabel')}{' '}
               <span className="tnum font-mono font-semibold text-ink">
@@ -357,7 +357,7 @@ function RecipeEditor({
                 type="button"
                 disabled={autoLink.isPending}
                 onClick={() => autoLink.mutate(item.id)}
-                className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-emerald-line bg-emerald-tint/40 text-[12.5px] font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint disabled:opacity-60"
+                className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-emerald-line bg-emerald-tint/40 text-xs font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint disabled:opacity-60"
               >
                 {autoLink.isPending ? t('recipe.autoLinkRunning') : t('recipe.autoLinkAction')}
               </button>
@@ -387,7 +387,7 @@ function RecipeEditor({
           <button
             type="button"
             onClick={() => setLines((prev) => [...prev, newLine(null)])}
-            className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-[12.5px] font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
+            className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-xs font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
           >
             <Plus className="size-3.5" />
             {t('recipe.addLine')}
@@ -402,7 +402,7 @@ function RecipeEditor({
             <div className="mt-2.5 flex flex-col gap-4">
               {groupsWithOptions.map((group) => (
                 <div key={group.id}>
-                  <div className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                  <div className="text-2xs font-bold uppercase tracking-[0.06em] text-ink-3">
                     {group.name}
                   </div>
                   <div className="mt-1.5 flex flex-col gap-3">
@@ -410,7 +410,7 @@ function RecipeEditor({
                       const optionLines = lines.filter((l) => l.modifierOptionId === option.id)
                       return (
                         <div key={option.id} className="rounded-[14px] border border-line p-3">
-                          <div className="text-[12.5px] font-semibold text-ink">{option.name}</div>
+                          <div className="text-xs font-semibold text-ink">{option.name}</div>
                           <div className="mt-2 flex flex-col gap-2">
                             {optionLines.map((line) => (
                               <RecipeLineRow
@@ -428,7 +428,7 @@ function RecipeEditor({
                               onClick={() =>
                                 setLines((prev) => [...prev, newLine(option.id)])
                               }
-                              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-line-strong text-[12px] font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
+                              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-line-strong text-xs font-semibold text-emerald-2 transition-colors hover:border-line-strong hover:bg-emerald-tint"
                             >
                               <Plus className="size-3" />
                               {t('recipe.addDelta')}
@@ -573,10 +573,10 @@ function RecipeLineRow({
         </button>
       </div>
       {selected && !selected.active ? (
-        <p className="mt-1 text-[11px] text-amber-2">{t('recipe.ingredientInactiveWarning')}</p>
+        <p className="mt-1 text-2xs text-amber-2">{t('recipe.ingredientInactiveWarning')}</p>
       ) : null}
       {error ? (
-        <p className="mt-1 text-[11px] text-loss" role="alert">
+        <p className="mt-1 text-2xs text-loss" role="alert">
           {error}
         </p>
       ) : null}
@@ -586,7 +586,7 @@ function RecipeLineRow({
 
 function SectionHeading({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn('text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3', className)}>
+    <div className={cn('text-2xs font-bold uppercase tracking-[0.08em] text-ink-3', className)}>
       {children}
     </div>
   )

@@ -52,7 +52,7 @@ export function WalkInCartSheet({
       <div className="flex min-h-0 flex-1 flex-col">
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between px-4 pb-3 pt-1">
-          <h2 className="text-[17px] font-bold text-ink">{t('posShell.currentOrder')}</h2>
+          <h2 className="text-lg font-bold text-ink">{t('posShell.currentOrder')}</h2>
           {cart.length > 0 ? (
             <button
               type="button"
@@ -84,7 +84,7 @@ export function WalkInCartSheet({
                         {l.selectedOptionNames.length > 0 ? (
                           <div className="mt-1 flex flex-wrap gap-1">
                             {l.selectedOptionNames.map((n, i) => (
-                              <span key={i} className="text-[11px] text-ink-3">
+                              <span key={i} className="text-2xs text-ink-3">
                                 {n}
                               </span>
                             ))}

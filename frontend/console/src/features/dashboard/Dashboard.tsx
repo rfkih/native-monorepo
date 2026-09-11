@@ -151,7 +151,7 @@ export function Dashboard() {
       {/* Header — the ACTIVE business by name, then the scope of every figure below. */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
             {company.name}
           </h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('dashboard.scopeAllUnits')}</p>
@@ -248,7 +248,7 @@ export function Dashboard() {
               {prev && prev.fig.revenue > 0 ? (
                 <div className="flex flex-wrap items-center gap-3">
                   <DeltaPill value={revDelta} locale={locale} />
-                  <span className="text-[13px] text-ink-3">
+                  <span className="text-sm text-ink-3">
                     {t('dashboard.revenueVsPrev', { month: prevMonthLabel })}
                   </span>
                 </div>
@@ -281,7 +281,7 @@ export function Dashboard() {
                 </span>
                 <div>
                   <div className="text-sm font-semibold text-ink">{t('dashboard.noSalesYet')}</div>
-                  <div className="mt-1 px-6 text-[13px] text-ink-3">
+                  <div className="mt-1 px-6 text-sm text-ink-3">
                     {t('dashboard.noSalesYetHint')}
                   </div>
                 </div>
@@ -294,7 +294,7 @@ export function Dashboard() {
                 {showOpeningShortcut ? (
                   <Link
                     to="/opening-balances"
-                    className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-2 hover:underline"
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-2 hover:underline"
                   >
                     <BookOpen className="size-4" aria-hidden="true" />
                     {t('dashboard.openingShortcut')}
@@ -306,7 +306,7 @@ export function Dashboard() {
                 <Sparkline spark={spark} />
                 <div className="mt-2 flex justify-between px-1">
                   {points.map((p) => (
-                    <span key={p.period} className="font-mono text-[10px] text-ink-3">
+                    <span key={p.period} className="font-mono text-2xs text-ink-3">
                       {monthShort(p.period, locale)}
                     </span>
                   ))}
@@ -381,13 +381,13 @@ export function Dashboard() {
 
               {/* Ready to close — flat cyan tint, one leading button (no gradient, no pill). */}
               <Card className="border-emerald-line bg-emerald-tint p-6 shadow-none">
-                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-2">
+                <div className="text-2xs font-bold uppercase tracking-[0.08em] text-emerald-2">
                   {t('dashboard.readyToClose')}
                 </div>
                 <div className="mt-2 font-display text-lg font-bold text-ink">
                   {formatPeriod(period, locale)}
                 </div>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">
+                <p className="mt-1.5 text-sm leading-relaxed text-ink-2">
                   {t('dashboard.readyToCloseBody')}
                 </p>
                 <Link
@@ -549,7 +549,7 @@ function OutletContributionPanel({
     <Card className="p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
-        <span className="text-[13px] text-ink-3">{postedLabel}</span>
+        <span className="text-sm text-ink-3">{postedLabel}</span>
       </div>
 
       {loading ? (
@@ -577,7 +577,7 @@ function OutletContributionPanel({
             const shareOfTotal = totalRevenue > 0 ? outlet.revenueMinor / totalRevenue : 0
             const initials = outletInitials(outlet.outletName, outlet.businessId)
             const displayName = outlet.outletName ?? (
-              <span className="font-mono text-[13px] text-ink-3">
+              <span className="font-mono text-sm text-ink-3">
                 {outlet.businessId.slice(0, 8)}
               </span>
             )
@@ -590,23 +590,23 @@ function OutletContributionPanel({
                 <div className="flex items-center gap-3">
                   {/* Monogram tile */}
                   <span
-                    className="grid size-[34px] shrink-0 place-items-center rounded-xl bg-emerald-tint font-mono text-[11px] font-bold text-emerald-2"
+                    className="grid size-[34px] shrink-0 place-items-center rounded-xl bg-emerald-tint font-mono text-2xs font-bold text-emerald-2"
                     aria-hidden="true"
                   >
                     {initials}
                   </span>
 
                   {/* Name */}
-                  <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
                     {displayName}
                   </span>
 
                   {/* Amount + share */}
                   <span className="shrink-0 text-right">
-                    <span className="tnum block font-mono text-[14px] font-semibold text-ink">
+                    <span className="tnum block font-mono text-sm font-semibold text-ink">
                       {formatMoney(outlet.revenueMinor, currency, locale)}
                     </span>
-                    <span className="mt-0.5 block text-[11px] font-semibold text-emerald-2">
+                    <span className="mt-0.5 block text-2xs font-semibold text-emerald-2">
                       {ofRevenueKey(formatPercent(shareOfTotal, locale))}
                     </span>
                   </span>
@@ -625,7 +625,7 @@ function OutletContributionPanel({
           })}
 
           {overflow > 0 ? (
-            <div className="pt-3 text-center text-[13px] text-ink-3">{moreKey(overflow)}</div>
+            <div className="pt-3 text-center text-sm text-ink-3">{moreKey(overflow)}</div>
           ) : null}
         </div>
       ) : (
@@ -633,7 +633,7 @@ function OutletContributionPanel({
         <div className="grid min-h-[220px] place-items-center rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
           <div>
             <div className="text-sm font-semibold text-ink-2">{noDataLabel}</div>
-            <p className="mx-auto mt-1.5 max-w-[36ch] text-[13px] leading-relaxed text-ink-3">
+            <p className="mx-auto mt-1.5 max-w-[36ch] text-sm leading-relaxed text-ink-3">
               {noDataHint}
             </p>
           </div>
@@ -660,7 +660,7 @@ function Stat({
       {loading ? (
         <div className="mt-2 h-5 w-20 animate-pulse rounded bg-ink-100" />
       ) : (
-        <div className={cn('tnum mt-1 font-mono text-[19px] font-semibold', valueClass ?? 'text-ink')}>
+        <div className={cn('tnum mt-1 font-mono text-xl font-semibold', valueClass ?? 'text-ink')}>
           {value}
         </div>
       )}
@@ -690,12 +690,12 @@ function Kpi({
     // step — technically neutral, but it stopped saying anything. Ink is the emphasis colour now,
     // so the ring uses it, the same way the hero figure does.
     <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')}>
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-2 h-7 w-28 animate-pulse rounded bg-ink-100" />
       ) : (
         // A summary figure, not a column — display face at 800 (ADR 0077).
-        <div className={cn('tnum mt-2 font-display text-[25px] font-extrabold tracking-[-0.035em]', valueClass ?? 'text-ink')}>
+        <div className={cn('tnum mt-2 font-display text-2xl font-extrabold tracking-[-0.035em]', valueClass ?? 'text-ink')}>
           {value}
         </div>
       )}
@@ -718,10 +718,10 @@ function Glance({
   return (
     <div>
       <div className="text-xs text-ink-3">{label}</div>
-      <div className={cn('tnum mt-1 font-mono text-[22px] font-bold', valueClass ?? 'text-ink')}>
+      <div className={cn('tnum mt-1 font-mono text-xl font-bold', valueClass ?? 'text-ink')}>
         {value}
       </div>
-      <div className="text-[11px] text-ink-3">{sub}</div>
+      <div className="text-2xs text-ink-3">{sub}</div>
     </div>
   )
 }

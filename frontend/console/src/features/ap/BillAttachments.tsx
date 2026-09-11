@@ -74,7 +74,7 @@ export function BillAttachments({
   return (
     <div>
       {items.length === 0 ? (
-        <p className="text-[13px] text-ink-3">{t('ap.detail.noAttachments')}</p>
+        <p className="text-sm text-ink-3">{t('ap.detail.noAttachments')}</p>
       ) : (
         <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
           {items.map((a) => (
@@ -96,10 +96,10 @@ export function BillAttachments({
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-semibold text-ink">
+                  <span className="block truncate text-sm font-semibold text-ink">
                     {a.originalFilename ?? a.contentType}
                   </span>
-                  <span className="block text-[11.5px] text-ink-3">
+                  <span className="block text-xs text-ink-3">
                     {sizeLabel(a.byteSize, locale)}
                   </span>
                 </span>
@@ -123,7 +123,7 @@ export function BillAttachments({
         </div>
       )}
       {failed ? (
-        <p className="mt-2 text-[12px] text-loss-ink" role="alert">
+        <p className="mt-2 text-xs text-loss-ink" role="alert">
           {t('ap.detail.errors.generic')}
         </p>
       ) : null}

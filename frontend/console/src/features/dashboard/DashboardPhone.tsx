@@ -90,10 +90,10 @@ const StandaloneStocktake = lazy(() =>
 /** The outlet-local zone every "today" here is read in — the server's OutletZone. */
 const OUTLET_ZONE = 'Asia/Jakarta'
 
-const SECTION_LABEL = 'pl-1 text-[12px] font-semibold text-ink-3'
+const SECTION_LABEL = 'pl-1 text-xs font-semibold text-ink-3'
 const LIST_CARD = 'mt-2 overflow-hidden rounded-[18px] border border-line bg-surface'
 const TILE_CLASS =
-  'flex min-h-[60px] items-center gap-[11px] rounded-2xl border border-line bg-surface px-3.5 py-3 text-left text-[13.5px] font-semibold leading-tight text-ink transition-[background-color,border-color,transform] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.98] motion-reduce:active:scale-100'
+  'flex min-h-[60px] items-center gap-[11px] rounded-2xl border border-line bg-surface px-3.5 py-3 text-left text-sm font-semibold leading-tight text-ink transition-[background-color,border-color,transform] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.98] motion-reduce:active:scale-100'
 
 export function DashboardPhone() {
   const { company } = useSession()
@@ -391,15 +391,15 @@ function TodayHome({ company }: { company: CompanySession }) {
       <div className="flex items-center gap-3">
         <div
           aria-hidden="true"
-          className="grid size-11 shrink-0 place-items-center rounded-[15px] bg-ink-900 font-display text-[15px] font-extrabold tracking-[-0.02em] text-paper"
+          className="grid size-11 shrink-0 place-items-center rounded-[15px] bg-ink-900 font-display text-base font-extrabold tracking-[-0.02em] text-paper"
         >
           {initials(company.name)}
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-[19px] font-extrabold leading-tight tracking-[-0.025em] text-ink">
+          <h1 className="truncate font-display text-xl font-extrabold leading-tight tracking-[-0.025em] text-ink">
             {company.name}
           </h1>
-          <p className="mt-0.5 text-[12.5px] font-medium text-ink-3">{dateLine}</p>
+          <p className="mt-0.5 text-xs font-medium text-ink-3">{dateLine}</p>
         </div>
         <Link
           to="/more"
@@ -439,11 +439,11 @@ function TodayHome({ company }: { company: CompanySession }) {
             style={{ animationDelay: '0.05s' }}
           >
             <div className="flex items-center gap-2.5">
-              <span className="flex-1 text-[12px] font-semibold tracking-[0.02em] text-paper/60">
+              <span className="flex-1 text-xs font-semibold tracking-[0.02em] text-paper/60">
                 {t('dashboardPhone.todayRevenue')}
               </span>
               {delta ? (
-                <span className="tnum grid h-6 shrink-0 place-items-center rounded-full bg-paper/10 px-2.5 text-[11.5px] font-bold text-paper">
+                <span className="tnum grid h-6 shrink-0 place-items-center rounded-full bg-paper/10 px-2.5 text-xs font-bold text-paper">
                   {signedPercent.format(delta.netPct)}
                 </span>
               ) : null}
@@ -454,14 +454,14 @@ function TodayHome({ company }: { company: CompanySession }) {
               <div className="mt-2 h-[33px] w-56 max-w-full animate-pulse rounded-lg bg-paper/20" />
             ) : (
               <div
-                className="num-rise tnum mt-2 font-display text-[33px] font-extrabold leading-none tracking-[-0.04em] text-paper"
+                className="num-rise tnum mt-2 font-display text-3xl font-extrabold leading-none tracking-[-0.04em] text-paper"
                 style={{ animationDelay: '0.18s' }}
               >
                 {formatMoney(today.net, currency, locale)}
               </div>
             )}
             {delta ? (
-              <div className="mt-2 text-[12.5px] font-medium text-paper/60">
+              <div className="mt-2 text-xs font-medium text-paper/60">
                 <span
                   className={cn('tnum font-bold', delta.net >= 0 ? 'text-profit' : 'text-loss')}
                 >
@@ -470,7 +470,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                 {t('dashboardPhone.fromLastWeekday', { day: lastWeekday })}
               </div>
             ) : !daily.isLoading && today.net > 0 ? (
-              <div className="mt-2 text-[12.5px] font-medium text-paper/60">
+              <div className="mt-2 text-xs font-medium text-paper/60">
                 {t('dashboardPhone.noComparison', { day: weekdayName(todayKey) })}
               </div>
             ) : null}
@@ -498,7 +498,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                   </div>
                   <span
                     className={cn(
-                      'text-[10.5px] font-semibold leading-none',
+                      'text-2xs font-semibold leading-none',
                       b.isToday ? 'text-paper' : 'text-paper/55',
                     )}
                   >
@@ -511,12 +511,12 @@ function TodayHome({ company }: { company: CompanySession }) {
 
           {/* An outlet that failed leaves the figure partial — say so, and offer the retry. */}
           {daily.failedCount > 0 ? (
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-warning-line bg-tint-warning px-3.5 py-2.5 text-[12.5px] font-medium text-amber-2">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-warning-line bg-tint-warning px-3.5 py-2.5 text-xs font-medium text-amber-2">
               <span>{t('dashboardPhone.partialFailed', { count: daily.failedCount })}</span>
               <button
                 type="button"
                 onClick={daily.retryFailed}
-                className="shrink-0 rounded-full bg-surface px-3 py-1 text-[12px] font-bold text-ink hover:bg-hover"
+                className="shrink-0 rounded-full bg-surface px-3 py-1 text-xs font-bold text-ink hover:bg-hover"
               >
                 {t('dashboardPhone.retry')}
               </button>
@@ -530,15 +530,15 @@ function TodayHome({ company }: { company: CompanySession }) {
                 key={s.key}
                 className="rounded-[18px] border border-line bg-surface px-3.5 pb-3 pt-[13px]"
               >
-                <div className="text-[11.5px] font-semibold text-ink-3">{s.label}</div>
+                <div className="text-xs font-semibold text-ink-3">{s.label}</div>
                 {s.value == null ? (
                   <div className="mt-1.5 h-[19px] w-16 animate-pulse rounded-md bg-ink-100" />
                 ) : (
-                  <div className="tnum mt-1.5 truncate font-mono text-[19px] font-bold leading-none tracking-[-0.02em] text-ink">
+                  <div className="tnum mt-1.5 truncate font-mono text-xl font-bold leading-none tracking-[-0.02em] text-ink">
                     {s.value}
                   </div>
                 )}
-                <div className="mt-1.5 min-h-[14px] truncate text-[11px] font-medium text-ink-3">
+                <div className="mt-1.5 min-h-[14px] truncate text-2xs font-medium text-ink-3">
                   {s.sub}
                 </div>
               </div>
@@ -553,7 +553,7 @@ function TodayHome({ company }: { company: CompanySession }) {
               </span>
               <div>
                 <div className="text-sm font-semibold text-ink">{t('dashboard.noSalesYet')}</div>
-                <div className="mt-1 text-[13px] text-ink-3">{t('dashboard.noSalesYetHint')}</div>
+                <div className="mt-1 text-sm text-ink-3">{t('dashboard.noSalesYetHint')}</div>
               </div>
               <Link
                 to="/pos"
@@ -566,7 +566,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                 <Link
                   to="/opening-balances"
                   viewTransition
-                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-2 hover:underline"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-2 hover:underline"
                 >
                   <BookOpen className="size-4" aria-hidden="true" />
                   {t('dashboard.openingShortcut')}
@@ -593,14 +593,14 @@ function TodayHome({ company }: { company: CompanySession }) {
                         <TaskIcon className="size-[18px]" strokeWidth={1.8} aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[14px] font-semibold leading-snug tracking-[-0.01em] text-ink">
+                        <span className="block text-sm font-semibold leading-snug tracking-[-0.01em] text-ink">
                           {task.label}
                         </span>
-                        <span className="mt-0.5 block truncate text-[12.5px] text-ink-3">
+                        <span className="mt-0.5 block truncate text-xs text-ink-3">
                           {task.sub}
                         </span>
                       </span>
-                      <span className="tnum grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-ink-50 px-2 text-[12px] font-bold text-ink-2">
+                      <span className="tnum grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-ink-50 px-2 text-xs font-bold text-ink-2">
                         {integer.format(task.count)}
                       </span>
                       <ChevronRight
@@ -619,10 +619,10 @@ function TodayHome({ company }: { company: CompanySession }) {
           {shares.length > 1 ? (
             <section className="rise-in" style={{ animationDelay: '0.5s' }}>
               <div className="flex items-baseline justify-between gap-2.5 px-1">
-                <span className="text-[12px] font-semibold text-ink-3">
+                <span className="text-xs font-semibold text-ink-3">
                   {t('dashboardPhone.perOutlet')}
                 </span>
-                <span className="text-[11.5px] font-medium text-ink-400">
+                <span className="text-xs font-medium text-ink-400">
                   {t('dashboardPhone.today')}
                 </span>
               </div>
@@ -630,10 +630,10 @@ function TodayHome({ company }: { company: CompanySession }) {
                 {shares.map((o) => (
                   <div key={o.id} className="mb-3.5">
                     <div className="flex items-baseline gap-2.5">
-                      <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
                         {o.name}
                       </span>
-                      <span className="tnum shrink-0 font-mono text-[13.5px] font-semibold leading-none text-ink">
+                      <span className="tnum shrink-0 font-mono text-sm font-semibold leading-none text-ink">
                         {formatMoney(o.net, currency, locale)}
                       </span>
                     </div>
@@ -660,18 +660,18 @@ function TodayHome({ company }: { company: CompanySession }) {
                     key={item.rank}
                     className="flex min-h-[58px] items-center gap-3 border-b border-line/60 px-[15px] py-[11px] last:border-b-0"
                   >
-                    <span className="tnum grid size-[22px] shrink-0 place-items-center rounded-[7px] bg-ink-50 font-mono text-[11px] font-bold text-ink-2">
+                    <span className="tnum grid size-[22px] shrink-0 place-items-center rounded-[7px] bg-ink-50 font-mono text-2xs font-bold text-ink-2">
                       {item.rank}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13.5px] font-semibold text-ink">
+                      <span className="block truncate text-sm font-semibold text-ink">
                         {item.name}
                       </span>
-                      <span className="mt-0.5 block text-[12px] text-ink-3">
+                      <span className="mt-0.5 block text-xs text-ink-3">
                         {t('dashboardPhone.sold', { count: item.soldQty })}
                       </span>
                     </span>
-                    <span className="tnum shrink-0 font-mono text-[13px] font-semibold leading-none text-ink-2">
+                    <span className="tnum shrink-0 font-mono text-sm font-semibold leading-none text-ink-2">
                       {formatMoney(item.revenueMinor, currency, locale)}
                     </span>
                   </div>

@@ -114,7 +114,7 @@ export function PeoplePage() {
   return (
     <div className="flex flex-col gap-[18px]">
       <div>
-        <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+        <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
           {t('people.title')}
         </h1>
         <p className="mt-1.5 text-sm text-ink-3">{t('people.subtitle')}</p>

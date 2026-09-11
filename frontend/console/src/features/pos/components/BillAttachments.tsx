@@ -73,14 +73,14 @@ export function BillAttachments({
   return (
     <div className="border-t border-line px-5 py-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-2">
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-ink-2">
           <Paperclip className="size-4 text-ink-3" aria-hidden="true" />
           {t('bills.attach.title')}
           {attachments.length > 0 ? (
             <span className="tnum font-mono text-ink-3">({attachments.length})</span>
           ) : null}
         </span>
-        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12px] font-semibold text-ink-2 transition-colors hover:border-emerald-line hover:bg-emerald-tint focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-emerald">
+        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:border-emerald-line hover:bg-emerald-tint focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-emerald">
           {upload.isPending ? (
             <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           ) : (
@@ -249,7 +249,7 @@ function AttachmentThumb({
           aria-label={t('bills.attach.title')}
         >
           <FileText className="size-6" aria-hidden="true" />
-          <span className="text-[9px] font-bold tracking-wide">PDF</span>
+          <span className="text-2xs font-bold tracking-wide">PDF</span>
         </button>
       )}
       <button

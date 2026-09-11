@@ -92,7 +92,7 @@ export function PosStatusBar({
         <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white/10 text-white">
           <Store className="size-4" />
         </span>
-        <span className="hidden max-w-[160px] truncate font-display text-[14px] font-bold leading-tight lg:block">
+        <span className="hidden max-w-[160px] truncate font-display text-sm font-bold leading-tight lg:block">
           {businessName}
         </span>
       </span>
@@ -112,7 +112,7 @@ export function PosStatusBar({
         data-testid="pos-connection-pill"
         aria-label={t('offline.syncCenterButton')}
         className={cn(
-          'flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold transition-colors',
+          'flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors',
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
           offline || queuedCount > 0
             ? 'bg-warning/15 text-warning ring-1 ring-inset ring-warning/40'
@@ -128,7 +128,7 @@ export function PosStatusBar({
               : t('posShell.online')}
         </span>
         {queuedCount > 0 ? (
-          <span className="grid h-4 min-w-4 place-items-center rounded-full bg-warning px-1 text-[9px] font-bold text-ink sm:hidden">
+          <span className="grid h-4 min-w-4 place-items-center rounded-full bg-warning px-1 text-2xs font-bold text-ink sm:hidden">
             {queuedCount}
           </span>
         ) : null}
@@ -142,7 +142,7 @@ export function PosStatusBar({
         <span
           data-testid="pos-operator-chip"
           title={`${operator.displayName} · ${operator.role}`}
-          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold text-white/70 ring-1 ring-inset ring-white/15 max-sm:px-2 dark:text-ink-2 dark:ring-line"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold text-white/70 ring-1 ring-inset ring-white/15 max-sm:px-2 dark:text-ink-2 dark:ring-line"
         >
           <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="hidden max-w-[110px] truncate sm:inline">
@@ -156,7 +156,7 @@ export function PosStatusBar({
           data-testid="pos-operator-signin"
           aria-label={t('posShell.operatorSignIn')}
           className={cn(
-            'flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold transition-colors max-sm:px-2',
+            'flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition-colors max-sm:px-2',
             'bg-warning/15 text-warning ring-1 ring-inset ring-warning/40 hover:bg-warning/25',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
           )}
@@ -187,7 +187,7 @@ export function PosStatusBar({
           {a.badge && a.badge.count > 0 ? (
             <span
               className={cn(
-                'absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold',
+                'absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-2xs font-bold',
                 a.badge.tone === 'warning' ? 'bg-warning text-ink' : 'bg-emerald text-white',
               )}
             >

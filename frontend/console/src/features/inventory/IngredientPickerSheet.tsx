@@ -69,13 +69,13 @@ export function IngredientPickerSheet({
                 onChange={(e) => setQ(e.target.value)}
                 placeholder={t('inventoryPicker.sheet.search')}
                 aria-label={t('inventoryPicker.sheet.search')}
-                className="min-w-0 flex-1 bg-transparent text-[13.5px] font-medium text-ink placeholder:text-ink-400 focus:outline-none [&::-webkit-search-cancel-button]:appearance-none"
+                className="min-w-0 flex-1 bg-transparent text-sm font-medium text-ink placeholder:text-ink-400 focus:outline-none [&::-webkit-search-cancel-button]:appearance-none"
               />
             </label>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-[18px] pt-2" style={SAFE_BOTTOM(16)}>
             {shown.length === 0 ? (
-              <p className="py-8 text-center text-[13px] text-ink-3">
+              <p className="py-8 text-center text-sm text-ink-3">
                 {t('inventoryPicker.sheet.empty')}
               </p>
             ) : (
@@ -87,10 +87,10 @@ export function IngredientPickerSheet({
                     onClick={() => onPick(ing)}
                     className="flex min-h-[48px] w-full items-center gap-3 border-b border-line/60 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-paper"
                   >
-                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
                       {ing.name}
                     </span>
-                    <span className="tnum shrink-0 font-mono text-[11.5px] text-ink-3">
+                    <span className="tnum shrink-0 font-mono text-xs text-ink-3">
                       {ing.unitCostMinor != null && ing.costCurrency
                         ? `${formatMoney(ing.unitCostMinor, ing.costCurrency, locale)}/${ing.unit}`
                         : t('inventoryPicker.sheet.costNone')}
@@ -102,7 +102,7 @@ export function IngredientPickerSheet({
             <Link
               to="/inventory"
               viewTransition
-              className="mt-3 block text-center text-[12.5px] font-semibold text-ink-2 underline-offset-2 hover:underline"
+              className="mt-3 block text-center text-xs font-semibold text-ink-2 underline-offset-2 hover:underline"
             >
               {t('inventoryPicker.sheet.manage')}
             </Link>

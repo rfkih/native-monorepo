@@ -39,11 +39,11 @@ export function CountTile({
 }) {
   return (
     <Card className="p-5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</div>
+      <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-3 h-7 w-16 animate-pulse rounded bg-ink-100" />
       ) : (
-        <div className={cn('tnum mt-2 font-mono text-[25px] font-semibold text-ink')}>
+        <div className={cn('tnum mt-2 font-mono text-2xl font-semibold text-ink')}>
           {new Intl.NumberFormat(locale).format(value)}
         </div>
       )}

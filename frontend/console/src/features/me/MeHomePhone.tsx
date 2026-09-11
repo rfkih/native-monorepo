@@ -33,7 +33,7 @@ import { isNotLinked, useMyLeaveBalance, useMyProfile, useMySales } from './api'
 
 function MicroLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+    <div className="font-mono text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">
       {children}
     </div>
   )
@@ -55,8 +55,8 @@ function StatCard({
     <Link to={to} viewTransition className="block rounded-[18px] border border-line bg-surface p-4 shadow-sm">
       <MicroLabel>{label}</MicroLabel>
       <div className="mt-1.5 flex items-baseline gap-1.5">
-        <span className="tnum font-mono text-[27px] font-bold leading-none text-ink">{value}</span>
-        <span className="text-[13px] font-medium text-ink-3">{unit}</span>
+        <span className="tnum font-mono text-2xl font-bold leading-none text-ink">{value}</span>
+        <span className="text-sm font-medium text-ink-3">{unit}</span>
       </div>
     </Link>
   )
@@ -182,10 +182,10 @@ export function MeHomePhone() {
                 <UserRound className="size-[26px]" aria-hidden />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[19px] font-bold leading-tight tracking-[-0.01em] text-ink">
+                <div className="truncate text-xl font-bold leading-tight tracking-[-0.01em] text-ink">
                   {profile.data.fullName}
                 </div>
-                <div className="mt-0.5 truncate text-[13px] font-medium text-ink-3">
+                <div className="mt-0.5 truncate text-sm font-medium text-ink-3">
                   {profile.data.assignments.length > 0
                     ? profile.data.assignments.map((a) => a.role).join(' · ')
                     : t('me.assignments.empty')}
@@ -219,28 +219,28 @@ export function MeHomePhone() {
             (sales.data.salesMinor !== 0 || sales.data.commissionBasisPoints !== null) ? (
               <Card className="p-[18px]">
                 <MicroLabel>{t('me.sales.title')}</MicroLabel>
-                <div className="tnum mt-1.5 font-mono text-[26px] font-bold leading-none tracking-[-0.02em] text-ink">
+                <div className="tnum mt-1.5 font-mono text-2xl font-bold leading-none tracking-[-0.02em] text-ink">
                   {formatMoney(sales.data.salesMinor, sales.data.currency, locale)}
                 </div>
                 {sales.data.commissionBasisPoints !== null ? (
                   <>
                     <div className="mt-3.5 flex gap-2.5">
                       <div className="flex-1 rounded-[14px] bg-paper px-3.5 py-3">
-                        <div className="text-[11px] font-medium text-ink-3">{t('me.sales.rate')}</div>
-                        <div className="tnum mt-1 font-mono text-[16px] font-bold leading-none text-ink">
+                        <div className="text-2xs font-medium text-ink-3">{t('me.sales.rate')}</div>
+                        <div className="tnum mt-1 font-mono text-base font-bold leading-none text-ink">
                           {formatPercent(sales.data.commissionBasisPoints / 10000, locale)}
                         </div>
                       </div>
                       <div className="flex-1 rounded-[14px] bg-tint-profit px-3.5 py-3">
-                        <div className="text-[11px] font-medium text-profit-ink">
+                        <div className="text-2xs font-medium text-profit-ink">
                           {t('me.sales.estimate')}
                         </div>
-                        <div className="tnum mt-1 font-mono text-[16px] font-bold leading-none text-profit-ink">
+                        <div className="tnum mt-1 font-mono text-base font-bold leading-none text-profit-ink">
                           {formatMoney(sales.data.commissionEstimateMinor ?? 0, sales.data.currency, locale)}
                         </div>
                       </div>
                     </div>
-                    <p className="mt-2.5 text-[11.5px] leading-snug text-ink-3">
+                    <p className="mt-2.5 text-xs leading-snug text-ink-3">
                       {t('me.sales.estimateHint')}
                     </p>
                   </>
@@ -257,7 +257,7 @@ export function MeHomePhone() {
                     key={a.key}
                     to={a.to}
                     viewTransition
-                    className="flex min-h-[60px] items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3 text-[13.5px] font-semibold leading-tight text-ink transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
+                    className="flex min-h-[60px] items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3 text-sm font-semibold leading-tight text-ink transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
                   >
                     <ActionIcon className="size-5 shrink-0 text-emerald-2" strokeWidth={1.9} aria-hidden />
                     {a.label}
@@ -284,12 +284,12 @@ export function MeHomePhone() {
                     key={row.key}
                     className="flex min-h-[52px] items-center justify-between gap-3 border-b border-line/60 px-4 py-3 last:border-b-0"
                   >
-                    <span className="text-[13.5px] font-medium text-ink-3">{row.label}</span>
+                    <span className="text-sm font-medium text-ink-3">{row.label}</span>
                     <span
                       className={
                         row.amber
-                          ? 'text-[13.5px] font-semibold text-amber-2'
-                          : 'font-mono text-[13.5px] font-semibold text-ink'
+                          ? 'text-sm font-semibold text-amber-2'
+                          : 'font-mono text-sm font-semibold text-ink'
                       }
                     >
                       {row.value}
@@ -297,7 +297,7 @@ export function MeHomePhone() {
                   </div>
                 ))}
               </Card>
-              <p className="mt-2 pl-1 text-[11.5px] leading-snug text-ink-3">{t('me.home.piiHint')}</p>
+              <p className="mt-2 pl-1 text-xs leading-snug text-ink-3">{t('me.home.piiHint')}</p>
             </section>
           </div>
         </>

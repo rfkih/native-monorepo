@@ -134,7 +134,7 @@ function ParkedEntry({
             {t(orderTypeKey)}
           </span>
           {order.tableLabel ? (
-            <Badge tone="neutral" className="text-[10px] px-1.5 py-0">
+            <Badge tone="neutral" className="text-2xs px-1.5 py-0">
               {order.tableLabel}
             </Badge>
           ) : null}
@@ -143,7 +143,7 @@ function ParkedEntry({
               walk-in. Missing `source` (a response from before this field existed) reads as POS —
               no badge, the pre-existing look. */}
           {order.source === 'SELF_ORDER' ? (
-            <Badge tone="info" className="text-[10px] px-1.5 py-0">
+            <Badge tone="info" className="text-2xs px-1.5 py-0">
               <Smartphone className="size-3" aria-hidden="true" />
               {t('pos.parked.sourceSelfOrder')}
             </Badge>

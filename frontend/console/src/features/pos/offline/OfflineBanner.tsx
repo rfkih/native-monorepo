@@ -26,12 +26,12 @@ export function OfflineBanner() {
     return (
       <div
         role="status"
-        className="flex items-center justify-center gap-2 border-b border-amber/30 bg-amber-tint px-4 py-2 text-center text-[13px] font-semibold text-amber-2 print:hidden"
+        className="flex items-center justify-center gap-2 border-b border-amber/30 bg-amber-tint px-4 py-2 text-center text-sm font-semibold text-amber-2 print:hidden"
       >
         <WifiOff className="size-4 shrink-0" aria-hidden="true" />
         <span>{t('offline.banner.offline')}</span>
         {queuedCount > 0 ? (
-          <span className="tnum font-mono text-[12px] font-normal opacity-90">
+          <span className="tnum font-mono text-xs font-normal opacity-90">
             {t('offline.banner.queuedCount', { count: queuedCount })}
           </span>
         ) : null}
@@ -43,7 +43,7 @@ export function OfflineBanner() {
   return (
     <div
       role="status"
-      className="flex items-center justify-center gap-2 border-b border-emerald-line bg-emerald-tint px-4 py-2 text-center text-[13px] font-semibold text-emerald-2 print:hidden"
+      className="flex items-center justify-center gap-2 border-b border-emerald-line bg-emerald-tint px-4 py-2 text-center text-sm font-semibold text-emerald-2 print:hidden"
     >
       <RefreshCw className="size-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
       <span>{t('offline.banner.syncing', { count: queuedCount + syncingCount })}</span>

@@ -55,7 +55,7 @@ export function InventoryChrome({
           <ArrowLeft className="size-[17px]" aria-hidden="true" />
         </BackButton>
         <div className="flex min-w-0 flex-col">
-          <h1 className="truncate text-[16px] font-bold leading-tight tracking-[-0.01em] text-ink">
+          <h1 className="truncate text-base font-bold leading-tight tracking-[-0.01em] text-ink">
             {title}
           </h1>
           {subtitle != null ? (
@@ -77,7 +77,7 @@ export function MicroLabel({ children, className }: { children: ReactNode; class
   return (
     <div
       className={cn(
-        'text-[10.5px] font-semibold uppercase tracking-[0.04em] text-ink-3',
+        'text-2xs font-semibold uppercase tracking-[0.04em] text-ink-3',
         className,
       )}
     >

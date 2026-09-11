@@ -146,10 +146,10 @@ export function GiftCardSellModal({ vertical, session, currency, locale, onClose
           </p>
 
           <div className="mt-5 rounded-2xl border-[1.5px] border-dashed border-emerald-line bg-emerald-tint/50 px-4 py-5">
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-2">
+            <p className="mb-2 text-2xs font-bold uppercase tracking-[0.08em] text-emerald-2">
               {t('pos.loyalty.giftCard.printableCode')}
             </p>
-            <p className="tnum select-all break-all font-mono text-[22px] font-bold tracking-[0.08em] text-ink">
+            <p className="tnum select-all break-all font-mono text-xl font-bold tracking-[0.08em] text-ink">
               {result.code}
             </p>
           </div>

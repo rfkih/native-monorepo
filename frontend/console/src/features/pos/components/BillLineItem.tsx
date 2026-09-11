@@ -80,7 +80,7 @@ export function BillLineItem({
           {line.modifiers.length > 0 ? (
             <div className="mt-1 flex flex-wrap gap-1">
               {line.modifiers.map((mod) => (
-                <span key={mod.optionId} className="text-[11px] text-ink-3">
+                <span key={mod.optionId} className="text-2xs text-ink-3">
                   {mod.nameSnapshot}
                 </span>
               ))}
@@ -94,7 +94,7 @@ export function BillLineItem({
 
         {/* Paid badge (non-split) */}
         {!splitMode && isPaid ? (
-          <Badge tone="emerald" className="shrink-0 px-1.5 py-0 text-[10px]">
+          <Badge tone="emerald" className="shrink-0 px-1.5 py-0 text-2xs">
             {t('bills.paid')}
           </Badge>
         ) : null}

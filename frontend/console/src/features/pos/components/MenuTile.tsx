@@ -29,7 +29,7 @@ function itemInitials(name: string): string {
   return letters.join('') || '·'
 }
 
-const BADGE = 'absolute right-1.5 top-1.5 grid h-5 place-items-center rounded-full px-1.5 text-[10px] font-bold'
+const BADGE = 'absolute right-1.5 top-1.5 grid h-5 place-items-center rounded-full px-1.5 text-2xs font-bold'
 
 export function MenuTile({
   item,
@@ -85,14 +85,14 @@ export function MenuTile({
         ) : (
           <span
             aria-hidden="true"
-            className="select-none text-[18px] font-extrabold tracking-[.02em] text-ink-3"
+            className="select-none text-lg font-extrabold tracking-[.02em] text-ink-3"
           >
             {itemInitials(item.name)}
           </span>
         )}
 
         {qty > 0 && !unavailable ? (
-          <span className={cn(BADGE, 'tnum min-w-5 bg-emerald font-mono text-[11px] text-on-emerald')}>
+          <span className={cn(BADGE, 'tnum min-w-5 bg-emerald font-mono text-2xs text-on-emerald')}>
             {qty}
           </span>
         ) : unavailable ? (
@@ -108,7 +108,7 @@ export function MenuTile({
       <span className="flex min-w-0 flex-col px-3 pb-3 pt-2.5">
         <span
           className={cn(
-            'line-clamp-2 min-h-[34px] text-[12.5px] font-semibold leading-[1.35]',
+            'line-clamp-2 min-h-[34px] text-xs font-semibold leading-[1.35]',
             unavailable ? 'text-ink-3' : 'text-ink',
           )}
         >
@@ -116,7 +116,7 @@ export function MenuTile({
         </span>
         <span
           className={cn(
-            'tnum mt-1 font-mono text-[13px] font-semibold leading-none',
+            'tnum mt-1 font-mono text-sm font-semibold leading-none',
             unavailable ? 'text-ink-3' : 'text-ink-2',
           )}
         >

@@ -73,7 +73,7 @@ export function ConvertUnitForm({
           {t('inventory.convertUnit.title', { name: ingredient.name })}
         </div>
       ) : null}
-      <p className="text-[13px] leading-relaxed text-ink-2 text-pretty">
+      <p className="text-sm leading-relaxed text-ink-2 text-pretty">
         {t('inventory.convertUnit.intro', { unit: ingredient.unit })}
       </p>
 
@@ -86,7 +86,7 @@ export function ConvertUnitForm({
         >
           {INGREDIENT_UNIT_GROUPS.map((group) => (
             <div key={group.key} className="flex items-center gap-2.5">
-              <span className="w-14 shrink-0 text-[11px] font-semibold text-ink-3">
+              <span className="w-14 shrink-0 text-2xs font-semibold text-ink-3">
                 {t(`inventory.unitGroup.${group.key}`)}
               </span>
               <div className="flex flex-1 flex-wrap gap-[7px]">
