@@ -34,7 +34,7 @@ const config: CapacitorConfig = {
   webDir: 'www',
   // Matches the console's page background (--color-paper) so the moment between splash
   // and first paint isn't a white flash.
-  backgroundColor: '#F6F9FA',
+  backgroundColor: '#FAFAFA',
   server: {
     url: SERVER_URL,
     // The auth host must stay inside the WebView (see AUTH_ORIGIN above). External links

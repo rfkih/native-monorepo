@@ -1,10 +1,10 @@
 /*
  * Native login theme — re-skins the stock Keycloak keycloak.v2 (PatternFly v5) login page to match
  * the console's "Native Console" design system: Plus Jakarta Sans, the DEEP-CYAN brand ramp
- * (hue 193°), cool neutral inks, soft paper surfaces and rounded fields.
+ * neutral ink brand (ADR 0077), true-grey surfaces and rounded fields.
  *
  * It mirrors the sign-up page's split canvas (design 5a): on wide screens the photo brand rail
- * (cyan duotone, wordmark pinned top-left) carries all the brand weight while the form sits as a
+ * (ink duotone, wordmark pinned top-left) carries all the brand weight while the form sits as a
  * QUIET FULL-HEIGHT WHITE COLUMN on the right — no floating card, exactly like the console's
  * signup form column. Below 62rem it folds back to a centred card on paper, which stays robust on
  * mobile. Pure CSS on top of the inherited templates (plus message-bundle copy overrides in
@@ -19,27 +19,29 @@
  *    .native-wordmark .mark tile draws its glyph from a CSS data-URI, never from the realm HTML.
  *
  * Brand rule (from the design foundations): green is RETIRED as the brand — it now means
- * profit/done only. The brand is cyan: 600 (#0B7F99) fills, 700 (#095F73) speaks (text/links).
+ * profit/done only. The brand is INK (ADR 0077): 600 (#0E1116) fills, 700 (#22272E) speaks.
  */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Deep-cyan brand ramp — mirrors frontend/console/src/index.css */
-  --nt-brand-50: #e4f6fa;
-  --nt-brand-100: #bfe9f1;
-  --nt-brand-200: #8bd5e3;
-  --nt-brand-300: #4fbdd1;
-  --nt-brand-500: #0e8fab;
-  --nt-brand-600: #0b7f99; /* primary fills — white on it is 4.7:1 */
-  --nt-brand-700: #095f73; /* text / links / hover — 7.3:1 */
-  --nt-brand-800: #064654;
-  --nt-brand-900: #04303a;
+  /* Brand = ink (ADR 0077) — the token NAMES are historical (the ramp was cyan), the values are the
+     console's: fills are ink, text/links one step off ink, the tints are true greys. Kept as a ramp
+     so PatternFly's recolour below and the rail keep working unchanged. */
+  --nt-brand-50: #f5f5f5;
+  --nt-brand-100: #e4e4e4;
+  --nt-brand-200: #dedede;
+  --nt-brand-300: #ffffff; /* the rail's wordmark tile — white, glyph ink (signup panel treatment) */
+  --nt-brand-500: #0e1116;
+  --nt-brand-600: #0e1116; /* primary fills — white on it is ~18:1 */
+  --nt-brand-700: #22272e; /* text / links / hover */
+  --nt-brand-800: #1c2027;
+  --nt-brand-900: #0e1116;
 
   --nt-ink: #0e1116;
   --nt-ink-2: #384151;
   --nt-ink-3: #6b7280;
-  --nt-line: #e5e8ec;
-  --nt-paper: #f6f9fa;
+  --nt-line: #e4e4e4;
+  --nt-paper: #fafafa;
   --nt-surface: #ffffff;
 
   /* Width of the photo brand rail on wide screens (and the matching form offset). */
@@ -47,9 +49,9 @@
   /* Shared field metrics — inputs and the primary button read as one family. */
   --nt-field-radius: 12px;
   --nt-field-height: 46px;
-  --nt-focus-ring: 0 0 0 4px rgba(11, 127, 153, 0.14);
+  --nt-focus-ring: 0 0 0 4px rgba(14, 17, 22, 0.15);
 
-  /* Recolour PatternFly's global design tokens → brand cyan (primary buttons, links, active). */
+  /* Recolour PatternFly's global design tokens → brand ink (primary buttons, links, active). */
   --pf-v5-global--primary-color--100: var(--nt-brand-600);
   --pf-v5-global--primary-color--200: var(--nt-brand-700);
   --pf-v5-global--link--Color: var(--nt-brand-700);
@@ -72,7 +74,7 @@ textarea,
   font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif !important;
 }
 
-/* Page background — mobile/narrow: the console's cool paper + a faint cyan glow. */
+/* Page background — mobile/narrow: the console's paper + a faint grey glow. */
 body#keycloak-bg {
   background: radial-gradient(80% 80% at 50% -10%, var(--nt-brand-50) 0%, var(--nt-paper) 60%) fixed !important;
   color: var(--nt-ink);
@@ -105,14 +107,14 @@ body#keycloak-bg {
     inset: 0 auto 0 0;
     width: var(--nt-rail);
     z-index: 0;
-    /* Layers, top → bottom: soft glows, bottom vignette (anchors the rail), cyan gradient
+    /* Layers, top → bottom: soft glows, bottom vignette (anchors the rail), ink gradient
        MULTIPLIED onto the (pre-desaturated) photo — a true duotone: the joglo-restaurant texture
-       shows through, everything stays brand cyan. Image is theme-local
+       shows through, everything stays brand ink. Image is theme-local
        (../img, license: frontend/console/src/assets/landing/SOURCES.md). */
     background:
       radial-gradient(58% 46% at 88% 10%, rgba(255, 255, 255, 0.1), transparent 70%),
-      linear-gradient(to top, rgba(4, 48, 58, 0.5), transparent 42%),
-      linear-gradient(157deg, var(--nt-brand-600) 0%, #073c49 100%),
+      linear-gradient(to top, rgba(14, 17, 22, 0.55), transparent 42%),
+      linear-gradient(157deg, var(--nt-brand-600) 0%, #1c2027 100%),
       url('../img/login-rail.webp') center / cover no-repeat var(--nt-brand-700);
     background-blend-mode: normal, normal, multiply, normal;
     box-shadow: inset -1px 0 0 rgba(4, 48, 58, 0.35);

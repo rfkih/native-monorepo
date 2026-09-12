@@ -3,7 +3,7 @@
 /*
  * Self-order mini app — a deliberately small, standalone stylesheet (this app has no shared
  * package with the console; see frontend/self-order's own README-in-comments in main.tsx). Reuses
- * the SAME brand cyan hue (193°) and type stack as the console so a diner who has also seen the
+ * the SAME neutral-ink brand (ADR 0077) and type stack as the console so a diner who has also seen the
  * console-driven customer display recognises the same product, without pulling in the console's
  * full design-token file.
  */
@@ -13,20 +13,21 @@
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  --color-brand-50: #e4f6fa;
-  --color-brand-100: #bfe9f1;
-  --color-brand-200: #8bd5e3;
-  --color-brand-500: #0e8fab;
-  --color-brand-600: #0b7f99;
-  --color-brand-700: #095f73;
+  /* Historical names, ink values (ADR 0077): 600 fills, 700 speaks, 50–200 are true-grey tints. */
+  --color-brand-50: #f5f5f5;
+  --color-brand-100: #e4e4e4;
+  --color-brand-200: #dedede;
+  --color-brand-500: #0e1116;
+  --color-brand-600: #0e1116;
+  --color-brand-700: #22272e;
 
   /* Light-only neutral scale (this kiosk app has no theme toggle) — same names as the console's
    * own tokens so the two codebases read the same, without importing the console's full palette. */
-  --color-paper: #f6f9fa;
+  --color-paper: #fafafa;
   --color-ink: #0e1116;
   --color-ink-2: #384151;
   --color-ink-3: #6b7280;
-  --color-line: #e5e8ec;
+  --color-line: #e4e4e4;
 }
 
 @layer base {
@@ -38,7 +39,7 @@
   body {
     margin: 0;
     min-height: 100dvh;
-    background-color: #f6f9fa;
+    background-color: #fafafa;
     color: #0e1116;
     font-family: var(--font-sans);
     font-size: 15px;
