@@ -41,7 +41,7 @@ const config: CapacitorConfig = {
   webDir: 'www',
   // Matches the console's page background (--color-paper) so the moment between splash
   // and first paint isn't a white flash.
-  backgroundColor: '#F6F9FA',
+  backgroundColor: '#FAFAFA',
   // Bundled (ADR 0051): no `url` → Capacitor serves the packaged webDir from local disk.
   // Thin client (ADR 0043): `url` points the WebView at the live origin.
   // Both keep errorPath: a branded retry page (www/error.html) instead of Chromium's raw
@@ -65,7 +65,7 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchAutoHide: true,
       launchShowDuration: 3000,
-      backgroundColor: '#F6F9FA',
+      backgroundColor: '#FAFAFA',
       showSpinner: false,
       splashFullScreen: true,
       splashImmersive: false,
