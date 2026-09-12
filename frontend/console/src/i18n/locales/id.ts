@@ -2686,6 +2686,10 @@ export const id = {
       hint: 'Persentase dari penjualan yang dicatat karyawan ini di bawah login-nya. Perlu login dan akses POS.',
     },
     payroll: {
+      activate: {
+        title: 'Aturan penggajian resmi belum diaktifkan',
+        body: 'Proses gaji akan memakai aturan statutori sementara. Aktifkan ID-2026.1 (PPh 21 TER, PTKP, BPJS) sebelum menjalankan penggajian.',
+      },
       setup: {
         title: 'Penggajian butuh penyiapan sekali',
         body: 'Aktifkan dataset resmi ketentuan Indonesia (ID-2026.1 — PPh 21 TER, PTKP, dan BPJS) beserta komponen gaji bawaan untuk perusahaan ini.',

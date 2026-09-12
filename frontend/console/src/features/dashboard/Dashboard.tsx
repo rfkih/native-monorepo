@@ -166,7 +166,7 @@ export function Dashboard() {
         />
       </div>
 
-      {/* Controls: illustrative badges · view toggle · currency lens */}
+      {/* Controls: stub-FX badge · view toggle · currency lens */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {converted && data?.usesStubFx ? (

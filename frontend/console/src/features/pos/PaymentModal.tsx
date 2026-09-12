@@ -247,7 +247,7 @@ export function PaymentModal({
   return (
     <PaymentSurfaceFrame onClose={handleFrameClose} backDismissEnabled={mutationsInFlight === 0}>
       {/* Offline: `breakdown` is already the caller's provisional breakdown, so this renders
-          unchanged with its "estimated" badge doing double duty. */}
+          unchanged — its `provisional` flag lights the "Provisional" chip on the tax/service rows. */}
       <PaymentBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
       {/* Gift-card redemption (Phase 4, ADR 0027) — a checkout-time server lookup, unreachable

@@ -202,14 +202,13 @@ function PayslipRow({
           <div className="text-[15px] font-bold leading-tight text-ink">
             {periodLabel(header.period, locale)}
           </div>
-          {header.runSeq > 1 || header.illustrative ? (
+          {header.runSeq > 1 ? (
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {header.runSeq > 1 ? (
                 <span className="text-[11.5px] text-ink-3">
                   {t('me.payslips.runSeq', { seq: header.runSeq })}
                 </span>
               ) : null}
-              {header.illustrative ? <Badge tone="amber">{t('me.payslips.illustrative')}</Badge> : null}
             </div>
           ) : null}
         </div>
@@ -357,7 +356,6 @@ function PayslipLineRow({ line, locale }: { line: MyPayslipLine; locale: string 
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-3">
           <span>{t(line.kind === 'EARNING' ? 'me.payslips.earning' : 'me.payslips.deduction')}</span>
           {line.bearer === 'EMPLOYER' ? <span>({t('me.payslips.employer')})</span> : null}
-          {line.illustrative ? <Badge tone="amber">{t('me.payslips.illustrative')}</Badge> : null}
           {isCredit ? <Badge tone="profit">{t('me.payslips.trueUpCredit')}</Badge> : null}
         </div>
       </div>

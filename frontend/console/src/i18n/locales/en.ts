@@ -2723,6 +2723,10 @@ export const en = {
       hint: 'A percentage of the sales this employee rings under their own login. Needs a login and POS access.',
     },
     payroll: {
+      activate: {
+        title: 'Official payroll rules are not activated yet',
+        body: 'Runs would use the placeholder statutory rules. Activate ID-2026.1 (PPh 21 TER, PTKP, BPJS) before running payroll.',
+      },
       setup: {
         title: 'Payroll needs a one-time setup',
         body: 'Activate the official Indonesian statutory dataset (ID-2026.1 — PPh 21 TER, PTKP, and BPJS) and the default pay components for this company.',

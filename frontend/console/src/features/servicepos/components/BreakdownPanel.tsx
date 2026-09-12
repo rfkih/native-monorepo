@@ -9,6 +9,7 @@ import type { } from './../config'
 import type {
   PriceBreakdownResponse,
 } from '../api'
+import { ProvisionalChip } from '@/features/pos-shell/payment/PaymentBreakdown'
 
 
 // ---------------------------------------------------------------------------
@@ -67,6 +68,7 @@ export function BreakdownPanel({
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
           {t('pos.serviceCharge')}
+          {breakdown.provisional ? <ProvisionalChip /> : null}
         </span>
         <span className="tnum font-mono">{formatMoney(breakdown.serviceChargeMinor, currency, locale)}</span>
       </div>
@@ -74,6 +76,7 @@ export function BreakdownPanel({
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
           {t('pos.tax')}
+          {breakdown.provisional ? <ProvisionalChip /> : null}
         </span>
         <span className="tnum font-mono">{formatMoney(breakdown.taxMinor, currency, locale)}</span>
       </div>

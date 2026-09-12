@@ -69,6 +69,8 @@ export interface PriceBreakdownResponse {
   grandTotalMinor: number
   currency: string
   usesIllustrativeRules: boolean
+  /** CLIENT-ONLY (see features/pos/api.ts): computed offline from cached rules. */
+  provisional?: boolean
   appliedPromotions: AppliedPromotionResponse[]
   couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
   loyaltyRedeemedMinor: number

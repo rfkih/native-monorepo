@@ -106,8 +106,9 @@ export interface AppliedPromotionLike {
  * Structurally mirrors both verticals' `PriceBreakdownResponse` shape so a provisional breakdown
  * can be handed straight to the SAME rendering code (PaymentModal's ModalBreakdown /
  * ServicePaymentModal's twin) that renders a live server breakdown — no offline-specific rendering
- * fork needed. `usesIllustrativeRules: true` deliberately reuses the existing "estimated" badge —
- * a provisional offline price IS an estimate, in the same spirit as an illustrative tax rate.
+ * fork needed. `provisional: true` is what lights the "Provisional" chip on the tax/service rows —
+ * an offline price is an estimate from cached rules until the server confirms the sale.
+ * (`usesIllustrativeRules` is still set for shape compatibility; the console no longer renders it.)
  */
 export interface DisplayBreakdown {
   subtotalMinor: number
@@ -117,6 +118,7 @@ export interface DisplayBreakdown {
   grandTotalMinor: number
   currency: string
   usesIllustrativeRules: boolean
+  provisional: true
   appliedPromotions: AppliedPromotionLike[]
   couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
   loyaltyRedeemedMinor: number
@@ -134,6 +136,7 @@ export function toDisplayBreakdown(p: ProvisionalBreakdown): DisplayBreakdown {
     grandTotalMinor: p.grandTotalMinor,
     currency: p.currency,
     usesIllustrativeRules: true,
+    provisional: true,
     appliedPromotions: [],
     couponStatus: null,
     loyaltyRedeemedMinor: 0,

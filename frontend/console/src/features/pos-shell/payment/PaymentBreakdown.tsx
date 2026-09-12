@@ -4,13 +4,14 @@
  * byte-identical) and BillPaymentModal's simpler BillModalBreakdown.
  *
  * variant 'full'   — restaurant walk-in + service tickets: discount, loyalty-redeemed row,
- *                    illustrative-rules badges, applied-promotion chips.
+ *                    the offline "Provisional" chip, applied-promotion chips.
  * variant 'simple' — bill checks: subtotal/discount/service/tax/total only (bills carry no
  *                    coupon/loyalty detail — ADR 0026/0027 scope).
  */
 import { useTranslation } from 'react-i18next'
 import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import { formatMoney } from '@/lib/money'
+import { Badge } from '@/components/ui/Badge'
 import type { AppliedPromotionResponse } from '@/features/pos/api'
 
 /**
@@ -26,6 +27,8 @@ export interface PaymentBreakdownLike {
   taxMinor: number
   grandTotalMinor: number
   usesIllustrativeRules?: boolean
+  /** Offline: computed from cached rules (features/pos/api.ts). */
+  provisional?: boolean
   appliedPromotions: AppliedPromotionResponse[]
 }
 
@@ -57,6 +60,7 @@ export function PaymentBreakdown({
   }
 
   const full = variant === 'full'
+  const provisional = full && breakdown.provisional === true
 
   return (
     <div className="border-b border-line px-5 py-3 space-y-1.5 text-sm">
@@ -92,6 +96,7 @@ export function PaymentBreakdown({
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
           {t('pos.serviceCharge')}
+          {provisional ? <ProvisionalChip /> : null}
         </span>
         <span className="tnum font-mono">{formatMoney(breakdown.serviceChargeMinor, currency, locale)}</span>
       </div>
@@ -100,6 +105,7 @@ export function PaymentBreakdown({
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
           {t('pos.tax')}
+          {provisional ? <ProvisionalChip /> : null}
         </span>
         <span className="tnum font-mono">{formatMoney(breakdown.taxMinor, currency, locale)}</span>
       </div>
@@ -121,5 +127,18 @@ export function PaymentBreakdown({
         />
       ) : null}
     </div>
+  )
+}
+
+/** Offline (ADR 0028): the figure beside it came from cached rules, not the server. */
+export function ProvisionalChip() {
+  const { t } = useTranslation()
+  const hint = t('offline.provisional.hint')
+  return (
+    <span title={hint} aria-label={hint}>
+      <Badge tone="amber" className="text-2xs py-0 px-1.5">
+        {t('offline.provisional.badge')}
+      </Badge>
+    </span>
   )
 }

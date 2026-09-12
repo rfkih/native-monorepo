@@ -12,7 +12,7 @@
  *
  * Money rule (rule 8): server minor units through formatMoney only. Strings rule (rule 9): i18n keys
  * only; the transaction COUNT is the one non-money numeric (locale-formatted). Reporting only — the
- * tax line is PB1 ("Pajak Restoran"), badged "estimasi" when the rate is illustrative, and the
+ * tax line is PB1 ("Pajak Restoran"), and the
  * footer states it is not a tax invoice.
  */
 import { useTranslation } from 'react-i18next'

@@ -1,7 +1,7 @@
 /**
- * Payroll tab of the org-unit hub. The statutory rates behind every run are ILLUSTRATIVE
- * PLACEHOLDERS until OFFICIAL rows are seeded — a persistent amber banner says so whenever the
- * provenance is not OFFICIAL (never hide it).
+ * Payroll tab of the org-unit hub. A company that seeded the placeholder statutory rules before
+ * the official dataset existed keeps an ACTIVATION gate at the top of the runs view until it
+ * activates ID-2026.1 — an action, not a label (the console no longer tags figures "illustrative").
  *
  * A payroll run is COMPANY-WIDE, never per-unit: finance treats (period, run_seq) as a
  * supersession chain — a higher run_seq REVERSES every earlier ACTIVE run's labor postings for
@@ -167,6 +167,27 @@ export function PayrollTab({
         </Card>
       ) : (
         <>
+          {/* Seeded on the placeholder rules, official dataset not yet activated: the one-click
+              activation the !seeded gate offers, kept in view so real payroll never runs on
+              placeholders unnoticed (the bootstrap is idempotent — safe on a seeded tenant). */}
+          {setup.data.provenance !== 'OFFICIAL' ? (
+            <Card className="flex flex-wrap items-center gap-3 border-amber/40 bg-amber-tint p-4">
+              <TriangleAlert className="size-5 shrink-0 text-amber" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-amber">{t('hr.payroll.activate.title')}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-amber/90">{t('hr.payroll.activate.body')}</p>
+              </div>
+              <Button
+                type="button"
+                onClick={() =>
+                  seed.mutate({ baseCurrency, datasetVersion: DEFAULT_OFFICIAL_DATASET_VERSION })
+                }
+                disabled={seed.isPending}
+              >
+                {seed.isPending ? t('hr.payroll.setup.seeding') : t('hr.payroll.setup.seed')}
+              </Button>
+            </Card>
+          ) : null}
           {/* Runs / Setup / Reports sub-view — statutory-rule administration lives beside the run
               history (Track P phase P2, ADR 0031), and the statutory CSV exports beside both
               (Track P phase P9), not as separate org-hub tabs. */}

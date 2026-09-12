@@ -158,6 +158,10 @@ export interface PriceBreakdownResponse {
   grandTotalMinor: number
   currency: string
   usesIllustrativeRules: boolean
+  /** CLIENT-ONLY, never sent by the server: true when this breakdown was computed offline from
+   *  cached rules (provisionalPricing) — the POS shows a "Provisional" chip on its tax/service rows
+   *  until the sale is confirmed online. */
+  provisional?: boolean
   /** Empty on checkout/pay-parked responses — see class doc. */
   appliedPromotions: AppliedPromotionResponse[]
   /** 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null — null when no coupon code was supplied. */
