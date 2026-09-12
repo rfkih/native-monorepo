@@ -1,5 +1,42 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-13 — phone text overflow: measured, fixed, gated
+
+The owner kept meeting text that ran out of its box on Android phones. Rather than guess from
+the code, a DOM walk measured it: `frontend/console/scripts/overflow-audit.mjs` visits every
+console route plus the mobile-shots scenes (sheets, the POS deck, the opname, the phone menu) at
+360 px and 320 px, `id` and `en`, against the fixtures now shared from `mobile-fixtures.mjs`,
+and reports every element whose own text is wider than its box, every box past the right edge,
+every wrapped money figure and every `truncate` that fired. Console at 360: **233 findings** (46
+real spills, 184 truncations, 3 wrapped figures); the Native Karyawan app: **33**, including a
+payslips screen that scrolled sideways.
+
+**What was actually broken.** Employee Slip gaji: a two-column YTD hero (`flex-1` without
+`min-w-0`, 21 px mono) ran off a 360 px screen and took the tab bar with it; its Bruto/Potongan/
+Diterima tiles were a third of a card each — ~70 px for a 100 px figure. Console: the POS phone
+header gave `owner@…` `shrink-0`, so the *outlet* read "Kema…"; the kitchen's "Diperbarui
+16.41.43" ran under the ticket badge; the home KPI tile showed "IDR 28,73…"; the menu list showed
+"Sate Ay…" beside its Sold-out badge and "Makanan · sisa 3 · meni…" lost the one word that
+mattered; opname rows, the variance guard ("+2.636,589 · Rp 160.831.…"), the inventory row
+("48 pack · Rp 600.…"), the till menu's printer hint, expense rows, the vendor line of Tagihan
+baru, statement account names, org module labels, ledger metas — all one-line `truncate`s that
+cut money, names or the decisive word. At 320 px the settings headers (`SettingsChrome` + the two
+in-file copies), the inventory days-left chip and the KPI cards pushed the page sideways.
+
+**The fixes, by rule** (now written into `docs/DESIGN-SYSTEM.md` › *Text on a phone*): money in
+a tile goes through the new **`<FitText>`** (`components/ui/FitText`) — token size kept, scaled
+DOWN to the box, `contain-inline-size` so a nowrap figure cannot widen its own cell — used by the
+shared `KpiTile`, the home tiles and the employee home; identifiers get `line-clamp-2` before an
+ellipsis; meta lines lead with the decisive word; control rows `flex-wrap`; the two-column hero
+became two rows and the three tiles one three-row panel; the four-column detail tables scroll
+inside their card. Kitchen's stamp dropped its seconds (the pulsing dot says "live").
+
+**Verified:** tsc + eslint both apps, design-token gate, 999 console unit tests; audit reruns —
+employee 33 → 0, console 360: 233 → 13 (all by-design ellipses on context text), console 320:
+clean. **Not covered:** office pages without fixtures (budgets, assets, promotions, loyalty,
+channels, marketplace, customers, vendors, bank, tax, org detail, people tabs) were walked in
+their empty state only — add fixtures to `mobile-fixtures.mjs` when their rows get a phone pass.
+
 ## 2026-09-11 — the design tokens gain a scale (ADR 0085)
 
 A design-consistency audit of the console (static scan of `frontend/console/src`, both phone and

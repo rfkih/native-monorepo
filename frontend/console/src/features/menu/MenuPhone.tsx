@@ -364,9 +364,11 @@ function ItemRow({
         : stock.kind === 'low'
           ? `${t('menu.phone.stockLeft', { count: stock.qty })} · ${t('menu.phone.low')}`
           : t('menu.phone.stockLeft', { count: stock.qty })
+  // Stock FIRST: the line truncates from the right on a 360px phone, and "Makanan · sisa 3 · meni…"
+  // lost the one word that mattered. The category is what the chips above already filter by.
   const meta = [
-    category === '' ? t('menu.uncategorized') : displayCategoryName(category, t),
     stockText,
+    category === '' ? t('menu.uncategorized') : displayCategoryName(category, t),
   ]
 
   return (
@@ -389,23 +391,26 @@ function ItemRow({
           <Glyph className="size-[21px]" strokeWidth={1.8} aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-[7px]">
-            <span className="min-w-0 truncate text-sm font-semibold leading-snug tracking-display text-ink">
-              {item.name}
-            </span>
+          {/* The name is the row's identity: it owns its line (two before it gives anything up)
+              and the sold-out badge sits on the meta line — beside the name it left ~60px on a
+              phone, and "Sate Ay…" is not a name a manager can act on. */}
+          <span className="line-clamp-2 break-words text-sm font-semibold leading-snug tracking-display text-ink">
+            {item.name}
+          </span>
+          <span className="mt-1 flex min-w-0 items-center gap-[7px]">
             {!item.available ? (
               <span className="grid h-[18px] shrink-0 place-items-center rounded-full bg-emerald px-[7px] text-2xs font-bold text-on-emerald">
                 {t('pos.soldOut')}
               </span>
             ) : null}
-          </span>
-          <span
-            className={cn(
-              'mt-1 block truncate text-xs leading-snug text-ink-3',
-              stock.kind === 'low' || stock.kind === 'zero' ? 'font-semibold' : 'font-normal',
-            )}
-          >
-            {meta.join(' · ')}
+            <span
+              className={cn(
+                'line-clamp-2 min-w-0 break-words text-xs leading-snug text-ink-3',
+                stock.kind === 'low' || stock.kind === 'zero' ? 'font-semibold' : 'font-normal',
+              )}
+            >
+              {meta.join(' · ')}
+            </span>
           </span>
         </span>
         <span className="shrink-0 text-right">
@@ -668,7 +673,8 @@ function ItemPanel({
               key={line.id}
               className="flex min-h-[46px] items-center gap-2.5 border-b border-line/60 py-[9px] pl-3 pr-2"
             >
-              <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
+              {/* Two lines, not one: the qty, cost and remove controls leave ~90px on a phone. */}
+              <span className="line-clamp-2 min-w-0 flex-1 break-words text-xs font-medium leading-snug text-ink">
                 {line.ingredientName}
               </span>
               <button

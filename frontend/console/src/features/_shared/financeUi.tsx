@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { FitText } from '@/components/ui/FitText'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import { formatPeriod } from '@/lib/period'
@@ -76,9 +77,11 @@ export function KpiTile({
       {loading ? (
         <div className="mt-3 h-7 w-28 animate-pulse rounded bg-ink-100" />
       ) : (
-        <div className={cn('tnum mt-2 font-mono text-2xl font-semibold', tone ?? 'text-ink')}>
+        // The figure fits the tile — a nine-digit rupiah figure at text-2xl is wider than a
+        // phone-width card, and neither a wrapped nor a truncated amount is that amount.
+        <FitText className={cn('tnum mt-2 font-mono text-2xl font-semibold', tone ?? 'text-ink')}>
           {formatMoney(minor, currency, locale)}
-        </div>
+        </FitText>
       )}
     </Card>
   )

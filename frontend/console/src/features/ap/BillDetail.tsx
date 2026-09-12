@@ -304,6 +304,8 @@ export function BillDetail() {
         {bill.lines.length === 0 ? (
           <p className="py-2 text-sm text-ink-3">{t('ap.detail.noLines')}</p>
         ) : (
+          // Scrolls sideways inside the card on a narrow phone; four money columns are wider than 320px.
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
@@ -365,6 +367,7 @@ export function BillDetail() {
               </tr>
             </tfoot>
           </table>
+          </div>
         )}
       </Card>
 
@@ -390,6 +393,8 @@ export function BillDetail() {
         {bill.payments.length === 0 ? (
           <p className="py-2 text-sm text-ink-3">{t('ap.detail.noPayments')}</p>
         ) : (
+          // Scrolls sideways inside the card on a narrow phone; four money columns are wider than 320px.
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-2xs font-bold uppercase tracking-eyebrow text-ink-3">
@@ -410,6 +415,7 @@ export function BillDetail() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
 

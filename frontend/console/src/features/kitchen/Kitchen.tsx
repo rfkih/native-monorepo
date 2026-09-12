@@ -97,12 +97,12 @@ function KitchenInner({ session }: { session: CompanySession }) {
   // Active tickets: open bills that have not been locally bumped (or have new items since bump).
   const activeTickets = openBills.filter((b) => !isBumped(b.id, b.lineCount))
 
-  // Last-refreshed timestamp string — cosmetic "Live" indicator.
+  // Last-refreshed timestamp string — cosmetic "Live" indicator. Hour and minute only: with
+  // seconds ("Diperbarui 23.48.26") the stamp is wider than the ~100px a 360px phone leaves for
+  // it beside the ticket badge; the pulsing dot is what says the board is alive.
   const updatedAt = billsQuery.dataUpdatedAt
   const updatedStr = updatedAt
-    ? new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(
-        new Date(updatedAt),
-      )
+    ? new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(new Date(updatedAt))
     : null
 
   return (
@@ -128,7 +128,9 @@ function KitchenInner({ session }: { session: CompanySession }) {
               <div className="truncate font-display text-lg font-bold leading-tight text-ink">
                 {t('kitchen.title')}
               </div>
-              <div className="flex items-center gap-1.5 text-2xs leading-tight text-ink-3">
+              {/* `flex-wrap`: on a 360px phone the timestamp does not fit beside "Live" once the
+                  ticket badge is up; it drops to its own line instead of running under the badge. */}
+              <div className="flex flex-wrap items-center gap-x-1.5 text-2xs leading-tight text-ink-3">
                 {/* Pulsing live dot — skipped when prefers-reduced-motion */}
                 <span className="relative flex size-2 shrink-0" aria-hidden="true">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75 motion-reduce:hidden" />
@@ -136,7 +138,7 @@ function KitchenInner({ session }: { session: CompanySession }) {
                 </span>
                 {t('kitchen.live')}
                 {updatedStr ? (
-                  <span className="ml-1 text-ink-3/70">
+                  <span className="ml-1 max-w-full truncate text-ink-3/70">
                     {t('kitchen.updatedAt', { time: updatedStr })}
                   </span>
                 ) : null}

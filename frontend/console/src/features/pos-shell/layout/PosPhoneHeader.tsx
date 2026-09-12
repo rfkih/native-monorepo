@@ -63,12 +63,15 @@ export function PosPhoneHeader({
         </span>
         {/* A div, not a span: the outlet picker slots a positioned <div> in here (its dropdown
             anchor), and phrasing content cannot legally hold it. */}
+        {/* The OUTLET is the fact a cashier checks; the login is context. So the picker keeps its
+            own width (up to most of the line) and the identity is what truncates — the other way
+            round, `owner@…` squeezed the outlet to "Kema…" on a 360px phone. */}
         <div className="mt-px flex min-w-0 items-center gap-1 text-xs font-medium leading-tight text-ink-3">
-          <div className="min-w-0 shrink">{outletPicker}</div>
+          <div className="min-w-0 max-w-[70%] shrink-0">{outletPicker}</div>
           {identity ? (
             <>
               <span aria-hidden="true">·</span>
-              <span className="shrink-0 truncate">{identity}</span>
+              <span className="min-w-0 truncate">{identity}</span>
             </>
           ) : null}
         </div>

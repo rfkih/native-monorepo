@@ -303,9 +303,12 @@ export function BillDock({
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
+                      {/* Two lines before an ellipsis: with the stepper and the price beside it a
+                          phone leaves ~108px, and "Nasi Goreng Spes…" is not a bill line a cashier
+                          can check against the kitchen. */}
                       <span
                         className={cn(
-                          'truncate text-sm font-medium leading-[1.35]',
+                          'line-clamp-2 min-w-0 break-words text-sm font-medium leading-[1.35]',
                           l.paid ? 'text-ink-3' : 'text-ink',
                         )}
                       >
@@ -320,7 +323,7 @@ export function BillDock({
                     {l.modifiersLabel ? (
                       <div className="mt-0.5 break-words text-xs leading-[1.3] text-ink-3">{l.modifiersLabel}</div>
                     ) : null}
-                    <div className="tnum mt-0.5 font-mono text-xs leading-[1.3] text-ink-3">
+                    <div className="tnum mt-0.5 break-words font-mono text-xs leading-[1.3] text-ink-3">
                       {l.unitLabel}
                     </div>
                   </div>

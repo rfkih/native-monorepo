@@ -195,8 +195,9 @@ function ModuleRow({
   return (
     <li className="flex items-center gap-3 py-2.5">
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-ink">{label}</span>
+        {/* The badge wraps under the name on a phone; beside it, the name had ~60px ("Barbers…"). */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="min-w-0 break-words text-sm font-semibold text-ink">{label}</span>
           <Badge tone={isEntitled ? 'profit' : 'neutral'}>
             {isEntitled
               ? t('modules.statusEntitled')

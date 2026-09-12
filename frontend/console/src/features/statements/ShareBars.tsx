@@ -50,9 +50,11 @@ export function ShareBars({
         return (
           <div key={r.key}>
             <div className={cn('flex items-baseline', sm ? 'gap-2.5' : 'gap-3')}>
+              {/* An account name may take two lines on a phone ("Beban BPJS — bagian perusahaan"
+                  next to its amount and share); the ellipsis cut the part that named the account. */}
               <span
                 className={cn(
-                  'min-w-0 flex-1 truncate',
+                  'line-clamp-2 min-w-0 flex-1 break-words',
                   sm ? 'text-xs font-semibold leading-[1.3] text-ink' : 'text-sm text-ink-2',
                 )}
               >
