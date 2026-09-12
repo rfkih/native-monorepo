@@ -34,7 +34,7 @@
  */
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { chromium } from 'playwright-core'
-import { COMPANY, PARKED_ORDER, resolveFixture } from './mobile-fixtures.mjs'
+import { COMPANY, resolveFixture } from './mobile-fixtures.mjs'
 
 const BASE = process.env.SHOT_BASE ?? 'http://localhost:5173'
 const WIDTH = Number(process.env.W ?? 360)
@@ -173,8 +173,6 @@ const ROUTES = [
   '/me/account', '/settings/printer', '/settings/features', '/settings/payments', '/settings/inventory',
   '/pos', '/onboarding', '/signup',
 ]
-
-const L = (id, en) => (lang) => new RegExp(`^(${id}|${en})$`)
 
 /** Interactive scenes — copied from mobile-shots so the same sheets/dialogs get measured. */
 const SCENES = [
@@ -335,6 +333,9 @@ const TAG = EMPLOYEE ? 'emp-' : ''
 // ── Run ─────────────────────────────────────────────────────────────────────
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 const all = []
+// A route or scene that throws (server down, a renamed button, a selector timeout) measured
+// NOTHING — it must fail the walk, or a dead dev server would print OVERFLOW AUDIT OK.
+const failed = []
 const want = (name) => ONLY.length === 0 || ONLY.some((o) => name.startsWith(o))
 
 for (const lang of LANGS) {
@@ -373,14 +374,20 @@ for (const lang of LANGS) {
       await page.goto(`${BASE}${r}`, { waitUntil: 'load' })
       await page.waitForTimeout(1500)
       await measure(r)
-    } catch (e) { console.log(`[${lang}] ${r} FAILED ${String(e.message).split('\n')[0]}`) }
+    } catch (e) {
+      failed.push(`${lang}:${r}`)
+      console.log(`[${lang}] ${r} FAILED ${String(e.message).split('\n')[0]}`)
+    }
   }
   for (const [name, fn] of SCENE_LIST) {
     if (!want(name)) continue
     try {
       await fn(page, lang)
       await measure(name)
-    } catch (e) { console.log(`[${lang}] ${name} FAILED ${String(e.message).split('\n')[0]}`) }
+    } catch (e) {
+      failed.push(`${lang}:${name}`)
+      console.log(`[${lang}] ${name} FAILED ${String(e.message).split('\n')[0]}`)
+    }
   }
   await ctx.close()
 }
@@ -405,5 +412,11 @@ for (const g of seen.values()) {
   const f = g.ex
   console.log(`  ${f.kind.padEnd(22)} ${f.tag ?? ''}.${(f.cls ?? '').split(' ').slice(0, 5).join('.')}  "${(f.text ?? '').slice(0, 50)}"  over=${f.over ?? '-'}  [${[...g.scenes].slice(0, 4).join(', ')}${g.scenes.size > 4 ? ', …' : ''}]`)
 }
-console.log(defects.length === 0 ? '\nOVERFLOW AUDIT OK' : `\nOVERFLOW AUDIT FAILED (${defects.length} defects, ${seen.size} distinct) — see ${OUT}/`)
-process.exit(defects.length === 0 ? 0 : 1)
+if (failed.length) console.log(`\nNOT MEASURED (${failed.length}): ${failed.join(', ')}`)
+const ok = defects.length === 0 && failed.length === 0
+console.log(
+  ok
+    ? '\nOVERFLOW AUDIT OK'
+    : `\nOVERFLOW AUDIT FAILED (${defects.length} defects, ${seen.size} distinct, ${failed.length} scenes not measured) — see ${OUT}/`,
+)
+process.exit(ok ? 0 : 1)

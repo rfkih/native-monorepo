@@ -136,7 +136,7 @@ function PromotionsInner({ company }: { company: CompanySession }) {
           value={vertical}
           onChange={setVertical}
           ariaLabel={t('promotions.vertical.label')}
-          className="max-sm:flex max-sm:w-full max-sm:[&>button]:min-w-0 max-sm:[&>button]:flex-1 max-sm:[&>button]:px-1"
+          fluid="max-sm"
         />
       </div>
 
