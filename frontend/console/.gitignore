@@ -15,6 +15,7 @@ dist-ssr
 # Vite dep-optimizer cache + local design-verification screenshots
 .vite
 shots
+shots-*
 
 # Editor directories and files
 .vscode/*

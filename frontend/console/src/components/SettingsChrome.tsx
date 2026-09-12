@@ -20,12 +20,14 @@ export function SettingsChrome({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-[100dvh] bg-paper">
       {/* Phone: scrolls away with the content, like the Shell's bar; tablet+: pinned. */}
-      <header className="z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur sm:sticky sm:top-0 lg:px-8">
-        <Wordmark />
-        <div className="flex-1" />
+      {/* Tighter gutters below sm and a link that may truncate: at ~320px (a phone on Android's
+          "large display size") the four controls no longer fit and pushed the page sideways. */}
+      <header className="z-30 flex h-16 items-center gap-2 border-b border-line bg-surface/80 px-4 backdrop-blur sm:gap-3 sm:px-5 sm:sticky sm:top-0 lg:px-8">
+        <Wordmark className="shrink-0" />
+        <div className="min-w-0 flex-1" />
         <Link
           to="/"
-          className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          className="min-w-0 truncate rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           {t('me.toDashboard')}
         </Link>

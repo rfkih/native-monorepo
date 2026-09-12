@@ -357,7 +357,9 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
               <span className="block truncate text-base font-semibold leading-snug tracking-display text-ink">
                 {vendor ? vendor.name : t('ap.newBill.phone.pickVendor')}
               </span>
-              <span className="mt-1 block truncate text-xs text-ink-3">
+              {/* Tax id · terms · balance: the terms are what the due-date chips below preselect,
+                  so the line wraps rather than truncating before it reaches them. */}
+              <span className="mt-1 line-clamp-2 break-words text-xs leading-snug text-ink-3">
                 {vendor ? vendorMeta(vendor) : t('ap.newBill.phone.vendorNotChosen')}
               </span>
             </span>

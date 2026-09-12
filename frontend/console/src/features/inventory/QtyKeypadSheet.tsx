@@ -201,7 +201,9 @@ export function QtyKeypadSheet({
             <div className="flex shrink-0 items-start gap-2 px-[18px] pt-1.5 sm:pt-4">
               <div className="min-w-0 flex-1 pt-1">
                 <div className="truncate text-base font-bold leading-tight text-ink">{title}</div>
-                <div className="tnum mt-1 truncate font-mono text-xs text-ink-3">
+                {/* The current quantity is what the count is checked against — it wraps to a second
+                    line behind a long name rather than being the part that gets cut off. */}
+                <div className="tnum mt-1 line-clamp-2 break-words font-mono text-xs leading-snug text-ink-3">
                   {ingredient.name} · {t('inventory.keypadSheet.current', { qty: current, unit })}
                 </div>
               </div>

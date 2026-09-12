@@ -37,7 +37,10 @@ export function LedgerPhoneList({ rows, locale }: { rows: LedgerPhoneRow[]; loca
               <span className="truncate text-sm font-bold text-ink">{r.party}</span>
               {r.badge}
             </div>
-            <p className="tnum mt-1 truncate font-mono text-xs text-ink-3">{r.meta}</p>
+            {/* Number · date: the date is the half that truncated on a phone, so the line may wrap. */}
+            <p className="tnum mt-1 line-clamp-2 break-words font-mono text-xs leading-snug text-ink-3">
+              {r.meta}
+            </p>
           </div>
           <div className="shrink-0 text-right">
             <div className="tnum font-mono text-sm font-bold text-ink">

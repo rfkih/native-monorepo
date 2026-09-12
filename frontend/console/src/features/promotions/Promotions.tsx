@@ -129,7 +129,15 @@ function PromotionsInner({ company }: { company: CompanySession }) {
           <h1 className="font-display text-2xl font-bold tracking-display text-ink">{t('promotions.title')}</h1>
           <p className="mt-1.5 text-sm text-ink-3">{t('promotions.subtitle')}</p>
         </div>
-        <Segmented options={verticalOptions} value={vertical} onChange={setVertical} ariaLabel={t('promotions.vertical.label')} />
+        {/* Three short labels share the row on a phone (the content-sized control poked past a
+            320px column); it stays inline from sm up. */}
+        <Segmented
+          options={verticalOptions}
+          value={vertical}
+          onChange={setVertical}
+          ariaLabel={t('promotions.vertical.label')}
+          fluid="max-sm"
+        />
       </div>
 
       {/* ---- Rules ---- */}

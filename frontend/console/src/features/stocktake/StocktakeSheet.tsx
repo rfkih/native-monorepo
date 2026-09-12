@@ -986,7 +986,9 @@ function StocktakeIngredientRow({
         <div className="line-clamp-2 text-sm font-semibold leading-snug text-ink">
           {ingredient.name}
         </div>
-        <div className="tnum mt-1 h-[15px] truncate font-mono text-2xs leading-[15px] text-ink-3">
+        {/* One 15px line at 390px and up; on a 360px phone the figure column leaves ~150px and the
+            "used" figure wrapped off the end of every row, so it may take a second line there. */}
+        <div className="tnum mt-1 line-clamp-2 min-h-[15px] break-words font-mono text-2xs leading-[15px] text-ink-3">
           {meta}
         </div>
       </div>
@@ -1031,9 +1033,13 @@ function StocktakeIngredientRow({
             {unit}
           </span>
         </button>
+        {/* `min-h`, not `h` + truncate: a normal variance ("−1,4 kg · Rp 85.400") is one line and
+            every row stays the same height, but a wrong-unit slip ("+2.636,589 · Rp 160.831.929",
+            the ADR 0068 incident) is exactly the note that must not lose its money to an ellipsis —
+            it wraps, and that row alone grows. */}
         <div
           className={cn(
-            'tnum h-[15px] w-full truncate text-right font-mono text-2xs font-bold leading-[15px]',
+            'tnum min-h-[15px] w-full break-words text-right font-mono text-2xs font-bold leading-[15px]',
             invalid ? 'text-loss' : tone ? TONE_TEXT[tone] : 'text-ink-3',
           )}
         >

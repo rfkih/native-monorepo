@@ -35,6 +35,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { FitText } from '@/components/ui/FitText'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { OverdueSettlementCard } from '@/features/platform/OverdueSettlementCard'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
@@ -526,11 +527,13 @@ function TodayHome({ company }: { company: CompanySession }) {
                 {s.value == null ? (
                   <div className="mt-1.5 h-[19px] w-16 animate-pulse rounded-md bg-ink-100" />
                 ) : (
-                  <div className="tnum mt-1.5 truncate font-mono text-xl font-bold leading-none tracking-display text-ink">
+                  // A figure shrinks to the tile, never "Rp 28.73…" (a twelve-character rupiah
+                  // amount is wider than a 360px tile at text-xl).
+                  <FitText className="tnum mt-1.5 font-mono text-xl font-bold leading-none tracking-display text-ink">
                     {s.value}
-                  </div>
+                  </FitText>
                 )}
-                <div className="mt-1.5 min-h-[14px] truncate text-2xs font-medium text-ink-3">
+                <div className="mt-1.5 line-clamp-2 min-h-[14px] text-2xs font-medium text-ink-3">
                   {s.sub}
                 </div>
               </div>
@@ -588,9 +591,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                         <span className="block text-sm font-semibold leading-snug tracking-display text-ink">
                           {task.label}
                         </span>
-                        <span className="mt-0.5 block truncate text-xs text-ink-3">
-                          {task.sub}
-                        </span>
+                        <span className="mt-0.5 line-clamp-2 text-xs text-ink-3">{task.sub}</span>
                       </span>
                       <span className="tnum grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-ink-50 px-2 text-xs font-bold text-ink-2">
                         {integer.format(task.count)}

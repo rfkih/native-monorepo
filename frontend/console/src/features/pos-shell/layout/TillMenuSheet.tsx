@@ -56,11 +56,15 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
 
   // Touch devices never surface title= tooltips, so a disabled row must EXPLAIN itself in-line —
   // otherwise the Android till shows a greyed button with no visible reason (e.g. while offline).
+  // Labels WRAP (two lines at most): "Belum ada printer — ketuk untuk menghubungkan" is an
+  // instruction, and a phone-width menu truncated it right before the verb.
   const itemText = (it: TillMenuItem) => (
-    <span className="min-w-0 flex-1">
-      <span className="block truncate">{it.label}</span>
+    <span className="min-w-0 flex-1 py-1">
+      <span className="line-clamp-2 break-words leading-snug">{it.label}</span>
       {it.disabled && it.disabledTitle ? (
-        <span className="block truncate text-2xs font-normal text-ink-3">{it.disabledTitle}</span>
+        <span className="line-clamp-2 break-words text-2xs font-normal leading-snug text-ink-3">
+          {it.disabledTitle}
+        </span>
       ) : null}
     </span>
   )

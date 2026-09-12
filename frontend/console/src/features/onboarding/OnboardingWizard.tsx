@@ -189,7 +189,9 @@ export function OnboardingWizard() {
         </div>
 
         {/* Footer nav */}
-        <div className="mt-6 flex items-center gap-2.5">
+        {/* `flex-wrap` + `ml-auto`: on a ~320px phone Back and Continue no longer share a line;
+            the forward button drops to its own, still on the right. */}
+        <div className="mt-6 flex flex-wrap items-center gap-2.5">
           <Button
             variant="outline"
             onClick={() => setStep((s) => Math.max(0, s - 1))}
@@ -199,13 +201,12 @@ export function OnboardingWizard() {
           >
             <ArrowLeft className="size-4" /> {t('common.back')}
           </Button>
-          <span className="flex-1" />
           {step < REVIEW_STEP ? (
-            <Button onClick={advance}>
+            <Button onClick={advance} className="ml-auto">
               {t('common.continue')} <ArrowRight className="size-4" />
             </Button>
           ) : (
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="ml-auto">
               {mutation.isPending ? (
                 <>
                   <Spinner /> {t('onboarding.creating')}

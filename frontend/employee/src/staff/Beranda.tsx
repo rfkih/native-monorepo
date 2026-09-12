@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
+import { FitText } from '@/components/ui/FitText'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useClaims, useMyClaims } from '@/features/expenses/api'
@@ -277,11 +278,13 @@ export function Beranda() {
               ? t('staff.lastPayslip', { month: monthLabel(latestSlip.period, locale) })
               : t('mobile.tabs.payslips')}
           </div>
-          <div className="tnum mt-1.5 font-mono text-[17px] font-bold leading-tight text-ink">
+          {/* Half a phone's width minus the card padding is ~124px; the net pay shrinks to it
+              rather than running out of the tile ("IDR 8,096,000" at 17px is 133px). */}
+          <FitText className="tnum mt-1.5 font-mono text-[17px] font-bold leading-tight text-ink">
             {latestDetail.data
               ? formatMoney(latestDetail.data.netMinor, latestDetail.data.currency, locale)
               : '—'}
-          </div>
+          </FitText>
         </Link>
       </section>
 

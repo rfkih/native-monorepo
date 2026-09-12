@@ -125,7 +125,9 @@ function InboxRow({
           <span className="truncate text-sm font-semibold text-ink">{claim.employeeName}</span>
           <span className="text-xs text-ink-3">{claim.categoryName}</span>
         </div>
-        <p className="mt-0.5 truncate text-xs text-ink-3">
+        {/* Date · merchant · how it is paid back — the last part is the approver's decision input,
+            and a truncating line on a 360px phone ended before it every time. */}
+        <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-ink-3">
           {formatDate(claim.expenseDate, locale)}
           {claim.merchant ? ` · ${claim.merchant}` : ''} ·{' '}
           {t(`expenses.reimbursementMethod.${claim.reimbursementMethod}`)}

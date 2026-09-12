@@ -75,6 +75,28 @@ exactly these strings so they can be swept into one):
 - Hero figure: `tnum font-mono text-3xl font-bold leading-none tracking-display text-ink`.
 - Money in a row: `tnum font-mono text-sm font-semibold` (13) or `text-base` (15), right-aligned.
 
+### Text on a phone (360 px, and ~320 on Android's "large display size")
+
+Every phone row has three or four things competing for ~150 px of text column. The rules, in
+order of what a cut-off costs:
+
+- **A money figure is never truncated and never wraps.** In a tile or hero it goes in
+  `<FitText>` (`components/ui/FitText`), which keeps the token size and scales the figure DOWN
+  to its box (to 60 % at most); in a row it is `shrink-0` and it is the *label* that gives way.
+- **An identifier (item name, account name, ingredient, bill line) wraps to two lines**
+  (`line-clamp-2 break-words`) before it truncates. A one-line `truncate` is for context text
+  only (a login, a category), and the truncating element must be the least important on the line.
+- **A meta line puts the decisive word first** ("sisa 3 · menipis · Makanan", not the other way
+  round): the ellipsis eats from the right.
+- **A control row wraps** (`flex-wrap`) — a chip, a switcher or a second button drops to the next
+  line rather than pushing the page sideways. A flex child that must not shrink is `shrink-0`; one
+  that holds text is `min-w-0`. A table of money columns sits in an `overflow-x-auto` wrapper.
+
+`scripts/overflow-audit.mjs` is the executable form: it walks every route and the phone scenes at
+360 and 320 px in both languages and fails on any text wider than its box, any box past the edge of
+the screen, and any wrapped money figure (an ellipsis is reported, not failed). Run it before a
+phone UI change is called done.
+
 ## Shape
 
 | Class | px | Role |

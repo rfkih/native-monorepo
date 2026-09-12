@@ -207,7 +207,7 @@ function ClaimRow({
           <span className="truncate text-sm font-semibold text-ink">{claim.categoryName}</span>
           <ClaimStatusBadge status={claim.status} />
         </div>
-        <p className="mt-0.5 truncate text-xs text-ink-3">
+        <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-ink-3">
           {formatDate(claim.expenseDate, locale)}
           {claim.merchant ? ` · ${claim.merchant}` : ''}
         </p>

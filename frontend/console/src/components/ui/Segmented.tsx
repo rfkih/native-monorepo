@@ -24,9 +24,12 @@ export function Segmented<T extends string>({
   /** Fill the parent's width and let every segment shrink/grow equally. The default inline
    * control is content-sized and CANNOT shrink, so 4+ options overflow a phone column (the
    * signup company-size row poked past the card edge on an S23). Only for short labels —
-   * segments share the row evenly and never wrap. */
-  fluid?: boolean
+   * segments share the row evenly and never wrap. `'max-sm'` does it on phones only and keeps
+   * the content-sized control from sm up (a page-title row that fits three labels beside the
+   * title on a tablet but not across a 320px phone). */
+  fluid?: boolean | 'max-sm'
 }) {
+  const phoneOnly = fluid === 'max-sm'
   return (
     <div
       role="tablist"
@@ -36,7 +39,8 @@ export function Segmented<T extends string>({
         // filter on a 360px phone) grows to fit its rows instead of the 2nd row spilling out of the
         // box and being overlapped by the next element. min-h-11 (44px) is a comfortable touch row.
         'inline-flex min-h-11 items-center gap-[3px] rounded-xl bg-ink-50 p-1',
-        fluid && 'flex w-full',
+        fluid === true && 'flex w-full',
+        phoneOnly && 'max-sm:flex max-sm:w-full',
         className,
       )}
     >
@@ -54,7 +58,8 @@ export function Segmented<T extends string>({
             className={cn(
               'grid h-9 place-items-center rounded-lg text-sm transition-[background-color,color,box-shadow,transform,scale] duration-200',
               'active:scale-[0.98] motion-reduce:active:scale-100',
-              fluid ? 'min-w-0 flex-1 px-1' : 'px-4',
+              fluid === true ? 'min-w-0 flex-1 px-1' : 'px-4',
+              phoneOnly && 'max-sm:min-w-0 max-sm:flex-1 max-sm:px-1',
               'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-3',
               active
                 ? 'bg-surface font-bold text-ink shadow-sm'

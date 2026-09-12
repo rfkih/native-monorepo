@@ -58,7 +58,7 @@ export function PayslipsScreen() {
       <>
         <StaffHeader title={t('staff.payslips.title')} />
         <div className="flex flex-col gap-3 p-4">
-          <Skeleton className="h-[124px] rounded-[20px]" />
+          <Skeleton className="h-[104px] rounded-[20px]" />
           <ListSkeleton rows={4} />
         </div>
       </>
@@ -101,31 +101,35 @@ export function PayslipsScreen() {
           <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-white/45">
             {t('staff.payslips.ytdTitle', { year })}
           </div>
-          <div className="mt-3 flex">
-            <div className="flex-1 pr-4">
-              <div className="text-[12px] font-medium text-white/55">{t('staff.payslips.gross')}</div>
-              {ytd.loading ? (
-                // Not the shared `<Skeleton>` here — its own `bg-ink-100` and this `bg-white/10`
-                // are equal-specificity Tailwind utilities, so which one wins depends on
-                // generated-stylesheet order, not JSX order; a plain pulse div avoids that trap.
-                <div aria-hidden="true" className="mt-1.5 h-6 w-24 animate-pulse rounded bg-white/10" />
-              ) : (
-                <div className="tnum mt-1 font-mono text-[21px] font-bold leading-none text-white">
-                  {formatMoney(ytd.grossMinor, ytdCurrency, locale)}
+          {/* Two ROWS (label left, figure right), not two columns: side by side, each column had
+              ~130px on a 360px phone and "Rp 26.400.000" at 21px is 165px — the second column ran
+              off the screen and took the whole page sideways with it. A row holds any figure. */}
+          <div className="mt-3 flex flex-col">
+            {(
+              [
+                ['gross', t('staff.payslips.gross'), ytd.grossMinor],
+                ['pph21', t('staff.payslips.pph21'), ytd.pph21Minor],
+              ] as const
+            ).map(([key, label, minor]) => (
+              <div
+                key={key}
+                className="flex items-baseline justify-between gap-3 border-t border-white/10 py-2.5 first:border-t-0 first:pt-0 last:pb-0"
+              >
+                <div className="min-w-0 text-[12px] font-medium leading-tight text-white/55">
+                  {label}
                 </div>
-              )}
-            </div>
-            <div className="w-px shrink-0 bg-white/10" />
-            <div className="flex-1 pl-4">
-              <div className="text-[12px] font-medium text-white/55">{t('staff.payslips.pph21')}</div>
-              {ytd.loading ? (
-                <div aria-hidden="true" className="mt-1.5 h-6 w-24 animate-pulse rounded bg-white/10" />
-              ) : (
-                <div className="tnum mt-1 font-mono text-[21px] font-bold leading-none text-white">
-                  {formatMoney(ytd.pph21Minor, ytdCurrency, locale)}
-                </div>
-              )}
-            </div>
+                {ytd.loading ? (
+                  // Not the shared `<Skeleton>` here — its own `bg-ink-100` and this `bg-white/10`
+                  // are equal-specificity Tailwind utilities, so which one wins depends on
+                  // generated-stylesheet order, not JSX order; a plain pulse div avoids that trap.
+                  <div aria-hidden="true" className="h-6 w-24 shrink-0 animate-pulse rounded bg-white/10" />
+                ) : (
+                  <div className="tnum shrink-0 font-mono text-[21px] font-bold leading-none text-white">
+                    {formatMoney(minor, ytdCurrency, locale)}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
           <p className="mt-3 text-[11.5px] leading-snug text-white/40">
             {t('staff.payslips.ytdHint', { count: ytd.runCount })}
@@ -230,18 +234,16 @@ function PayslipRow({
         <div className="border-t border-line px-4 pb-4 pt-3.5">
           {detail.isLoading ? (
             <div className="flex flex-col gap-2.5">
-              <div className="grid grid-cols-3 gap-2">
-                <Skeleton className="h-16 rounded-[14px]" />
-                <Skeleton className="h-16 rounded-[14px]" />
-                <Skeleton className="h-16 rounded-[14px]" />
-              </div>
+              <Skeleton className="h-[118px] rounded-[14px]" />
               <Skeleton className="h-24 rounded-[14px]" />
             </div>
           ) : detail.isError || !detail.data ? (
             <p className="text-[13px] text-loss">{t('me.error')}</p>
           ) : (
             <>
-              <div className="grid grid-cols-3 gap-2">
+              {/* Three ROWS in one panel, not three tiles: a third of a phone card is ~70px and
+                  "Rp 8.800.000" needs ~100px, so the tiles' figures ran out of their boxes. */}
+              <div className="overflow-hidden rounded-[14px] bg-paper">
                 <PayslipTile
                   label={t('staff.payslips.gross')}
                   minor={detail.data.grossMinor}
@@ -304,7 +306,7 @@ function PayslipRow({
   )
 }
 
-/** One Bruto/Potongan/Diterima tile — `tint` marks the "Diterima" (net) tile a profit tone. */
+/** One Bruto/Potongan/Diterima row — `tint` marks the "Diterima" (net) row a profit tone. */
 function PayslipTile({
   label,
   minor,
@@ -319,13 +321,18 @@ function PayslipTile({
   tint?: boolean
 }) {
   return (
-    <div className={cn('rounded-[14px] px-3 py-2.5', tint ? 'bg-tint-profit' : 'bg-paper')}>
-      <div className={cn('text-[10.5px] font-medium', tint ? 'text-profit-ink' : 'text-ink-3')}>
+    <div
+      className={cn(
+        'flex items-baseline justify-between gap-3 border-t border-line/60 px-3 py-2.5 first:border-t-0',
+        tint && 'bg-tint-profit',
+      )}
+    >
+      <div className={cn('min-w-0 text-[12px] font-medium', tint ? 'text-profit-ink' : 'text-ink-3')}>
         {label}
       </div>
       <div
         className={cn(
-          'tnum mt-1 font-mono text-[13.5px] font-bold leading-tight',
+          'tnum shrink-0 font-mono text-[13.5px] font-bold leading-tight',
           tint ? 'text-profit-ink' : 'text-ink',
         )}
       >

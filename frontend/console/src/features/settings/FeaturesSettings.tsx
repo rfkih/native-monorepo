@@ -84,12 +84,15 @@ export function FeaturesSettings() {
     <div className="min-h-[100dvh] bg-paper">
       {/* Own minimal topbar — this route renders OUTSIDE the dashboard Shell (owner-only). */}
       {/* Phone: scrolls away with the content, like the Shell's bar; tablet+: pinned. */}
-      <header className="z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur sm:sticky sm:top-0 lg:px-8">
-        <Wordmark />
-        <div className="flex-1" />
+      {/* Tighter gutters below sm and a link that may truncate: at ~320px (a phone on Android's
+          "large display size") the four controls no longer fit and pushed the page sideways —
+          the same guard SettingsChrome carries. */}
+      <header className="z-30 flex h-16 items-center gap-2 border-b border-line bg-surface/80 px-4 backdrop-blur sm:gap-3 sm:px-5 sm:sticky sm:top-0 lg:px-8">
+        <Wordmark className="shrink-0" />
+        <div className="min-w-0 flex-1" />
         <Link
           to="/"
-          className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          className="min-w-0 truncate rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           {t('me.toDashboard')}
         </Link>
@@ -129,10 +132,13 @@ export function FeaturesSettings() {
             <Badge tone="info">
               {t('settings.tier.currentPlanBadge')} · {planName(tier)}
             </Badge>
-            <div className="tnum mt-3 font-mono text-3xl font-bold leading-none tracking-display text-ink">
-              {tier === 'FREE' ? t('settings.tier.priceFree') : money(price.totalMinor)}
+            {/* Baseline row that WRAPS: "/bulan" drops under the figure on a narrow phone rather
+                than sharing a leading-none line with it; the figure itself is one token size down
+                below sm so a 360px card still holds it. */}
+            <div className="tnum mt-3 flex flex-wrap items-baseline gap-x-1 font-mono text-2xl font-bold leading-none tracking-display text-ink sm:text-3xl">
+              <span>{tier === 'FREE' ? t('settings.tier.priceFree') : money(price.totalMinor)}</span>
               {tier !== 'FREE' ? (
-                <span className="ml-1 font-sans text-sm font-medium text-ink-3">
+                <span className="font-sans text-sm font-medium text-ink-3">
                   {t('settings.tier.perMonth')}
                 </span>
               ) : null}

@@ -240,7 +240,9 @@ export function InventoryCatalog({
             note={heroNote}
             onOpen={isOwner ? openMethod : null}
           />
-          <div className="mt-2.5 flex items-center gap-2 border-t border-line pt-[11px]">
+          {/* `flex-wrap`: below ~340px the days-left toggle no longer fits beside the figure and
+              took the whole page sideways with it; now it drops to a second line. */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-line pt-[11px]">
             <span className="text-xs font-medium text-ink-3">
               {t('inventory.catalog.usedToday')}
             </span>
@@ -526,9 +528,11 @@ function PhoneRow({
           <span className="truncate text-sm font-semibold leading-tight text-ink">
             {ingredient.name}
           </span>
-          <span className="flex min-w-0 items-center gap-1.5">
+          {/* Wraps under the chip rather than truncating: the value sits at the END of the line,
+              and "48 pack · Rp 600.…" is the one part a stock count is for. */}
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
             <RowChip row={row} />
-            <span className="tnum truncate font-mono text-xs text-ink-3">{qtyLine}</span>
+            <span className="tnum min-w-0 break-words font-mono text-xs text-ink-3">{qtyLine}</span>
           </span>
         </span>
         {showDays ? (
