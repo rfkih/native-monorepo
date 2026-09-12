@@ -17,10 +17,11 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, Copy, Gift, Printer, X } from 'lucide-react'
+import { Check, Copy, Printer, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
+import { SuccessMark } from '@/components/ui/SuccessMark'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
@@ -137,9 +138,7 @@ export function GiftCardSellModal({ vertical, session, currency, locale, onClose
         aria-label={t('pos.loyalty.giftCard.sellSuccessTitle')}
       >
         <Card className="reveal max-h-full w-full max-w-sm overflow-y-auto overscroll-contain p-6 text-center">
-          <div className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
-            <Gift className="size-6" aria-hidden />
-          </div>
+          <SuccessMark className="mx-auto mb-3" />
           <h2 className="font-display text-lg font-bold text-ink">{t('pos.loyalty.giftCard.sellSuccessTitle')}</h2>
           <p className="mt-1 text-sm text-ink-3">
             {formatMoney(result.amountMinor, result.currency, locale)}

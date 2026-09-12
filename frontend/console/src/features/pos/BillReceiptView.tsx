@@ -132,6 +132,7 @@ export function BillReceiptView({
   return (
     <ThermalReceipt
       autoPrint
+      completionMark
       cashTender={isCash}
       zIndexClass="z-[70]"
       businessName={businessName ?? 'Native POS'}

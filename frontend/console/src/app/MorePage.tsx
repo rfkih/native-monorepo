@@ -78,7 +78,7 @@ function Tile({ to, icon: TileIcon, label }: { to: string; icon: Icon; label: st
 }
 
 const ROW_CLASS =
-  'flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-ink transition-colors hover:bg-hover'
+  'flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-ink transition-colors hover:bg-hover active:bg-line'
 
 function MicroHeading({ children }: { children: React.ReactNode }) {
   return (

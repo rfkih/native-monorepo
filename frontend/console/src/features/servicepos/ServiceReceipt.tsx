@@ -193,6 +193,7 @@ export function ServiceReceipt({
   return (
     <ThermalReceipt
       autoPrint
+      completionMark
       cashTender={isCash}
       businessName={businessName}
       title={t('servicePos.receipt.title')}

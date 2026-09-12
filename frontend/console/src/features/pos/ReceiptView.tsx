@@ -259,6 +259,7 @@ export function ReceiptView({
       cashTender={isCash}
       businessName={businessName ?? 'Native POS'}
       title={t('pos.receipt.title')}
+      completionMark={!reprint && payment.status === 'CAPTURED'}
       reference={reference}
       tagline={tagline}
       dateTime={dateTime}

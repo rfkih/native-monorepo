@@ -35,6 +35,7 @@ import { usePrinter } from '@/lib/escpos/printerContext'
 import { autoPrintEnabled } from '@/lib/escpos/printerStore'
 import { toEscposReceiptData } from '@/lib/escpos/fromThermalProps'
 import { cn } from '@/lib/cn'
+import { SuccessMark } from '@/components/ui/SuccessMark'
 
 // ---------------------------------------------------------------------------
 // Prop types — normalised data model
@@ -137,6 +138,9 @@ export interface ThermalProps {
   isReversed?: boolean
   /** Reversed-sale banner text (shown when isReversed is true). */
   reversedNote?: string
+  /** The moment a payment is captured: the one "done" mark (components/ui/SuccessMark) above
+   *  the paper. Screen only — never on a reprint, a daily summary, or the paper itself. */
+  completionMark?: boolean
   /**
    * Set by surfaces that mount right after a successful payment (ReceiptView, ServiceReceipt,
    * BillReceiptView): when the operator has enabled auto-print in printer settings AND a device
@@ -340,6 +344,7 @@ export function ThermalReceipt({
   pendingNote,
   isProvisional,
   provisionalNote,
+  completionMark = false,
   isReversed,
   reversedNote,
   autoPrint,
@@ -511,6 +516,11 @@ export function ThermalReceipt({
         aria-modal="true"
         aria-labelledby={headingId}
       >
+        {completionMark ? (
+          <div className="mb-3 flex justify-center print:hidden">
+            <SuccessMark size="lg" />
+          </div>
+        ) : null}
         {/* Paper strip */}
         <div className="reveal" style={paperStyle} id="native-thermal-receipt-paper">
           {/* Torn top edge */}

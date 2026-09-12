@@ -255,26 +255,51 @@ body {
      is a token so dark mode can go deeper (below). There were seven different scrims. */
   --color-scrim: rgba(14, 17, 22, 0.42);
 
-  /* Reusable entrance animations (from the comp) */
-  --animate-fade-up: fade-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  --animate-pop: pop 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  /*
+   * THE MOTION LANGUAGE — three curves, four durations. Everything that moves in the console uses
+   * one of these; there were ten curves and twelve durations before, which is why nothing felt
+   * of a piece. The rule is that motion ANSWERS the user: a press shrinks, a sheet rises and — as
+   * importantly — leaves, a state settles. Nothing moves on its own except a skeleton.
+   *
+   *   ease-out       entrances and anything arriving      (0.22, 1, 0.36, 1) — fast start, soft land
+   *   ease-in        exits and dismissals                  (0.4, 0, 1, 1)     — gone before you look
+   *   ease-standard  state changes, moves, colour          (0.2, 0, 0, 1)
+   *
+   *   fast 120ms     press / hover / colour     base 200ms   state (toggle knob, tab pill, chips)
+   *   enter 260ms    sheets, dialogs, drawers   exit 160ms   deliberately quicker than entering
+   *
+   * `--ease-out`/`--ease-in` override Tailwind's, so `ease-out` / `ease-in` utilities are ours;
+   * `--default-transition-*` makes every plain `transition-*` utility speak the standard curve.
+   * lib/motion.ts carries the exit duration for the components that delay an unmount.
+   */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-timing-function: var(--ease-standard);
+  --default-transition-duration: 120ms;
+
+  /* Content arriving (the `reveal` utility). 320ms: the old 450 read as the page waking up. */
+  --animate-fade-up: fade-up 0.32s var(--ease-out) both;
+  --animate-pop: pop 0.2s var(--ease-out) both;
   /* Continuous, gentle float for the landing's floating accent cards. */
   --animate-float: float 7s ease-in-out infinite;
   /* Phone bottom-sheet entrance (Native Console Android design). */
-  --animate-sheet-up: sheet-up 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-sheet-up: sheet-up 0.26s var(--ease-out) both;
   /* Side-panel entrance (Native Console Web design — the "Kelola" panel). */
-  --animate-drawer-in: drawer-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-drawer-in: drawer-in 0.26s var(--ease-out) both;
 
   /* EXITS. Overlays used to vanish on the frame they closed — every one of them was rendered as
-     `{open ? <X/> : null}`, so there was nowhere for an exit to live. `Dialog` (components/ui)
-     delays telling its parent to unmount until these have run. Deliberately faster than the
-     matching entrance: leaving should feel like a dismissal, not a performance. Keep
-     DIALOG_EXIT_MS in components/ui/Dialog.tsx in step with these durations. */
-  --animate-dialog-in: pop 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-dialog-out: dialog-out 0.16s cubic-bezier(0.4, 0, 1, 1) both;
-  --animate-sheet-down: sheet-down 0.16s cubic-bezier(0.4, 0, 1, 1) both;
-  --animate-scrim-in: scrim-in 0.18s ease-out both;
-  --animate-scrim-out: scrim-out 0.16s ease-in both;
+     `{open ? <X/> : null}`, so there was nowhere for an exit to live. `Dialog` and `MobileSheet`
+     (components) delay telling their parent to unmount until these have run. Deliberately faster
+     than the matching entrance: leaving should feel like a dismissal, not a performance. Keep
+     EXIT_MS in lib/motion.ts in step with these durations. */
+  --animate-dialog-in: pop 0.2s var(--ease-out) both;
+  --animate-dialog-out: dialog-out 0.16s var(--ease-in) both;
+  --animate-sheet-down: sheet-down 0.16s var(--ease-in) both;
+  --animate-scrim-in: scrim-in 0.2s var(--ease-out) both;
+  --animate-scrim-out: scrim-out 0.16s var(--ease-in) both;
+  /* The one "done" moment (components/ui/SuccessMark): a check that draws itself in. */
+  --animate-draw-check: draw-path 0.45s var(--ease-out) 0.1s both;
 }
 
 /*
@@ -437,43 +462,28 @@ body {
   .reveal {
     animation: var(--animate-fade-up);
   }
-  /* Phone bottom-sheet entrance (MobileSheet). */
-  .sheet-up {
-    animation: var(--animate-sheet-up);
-  }
-  /* Dialog entrance/exit (components/ui/Dialog): a centred card on tablet+, a bottom sheet on
-     phone — each with the matching way out. */
-  .dialog-in {
-    animation: var(--animate-dialog-in);
-  }
-  .dialog-out {
-    animation: var(--animate-dialog-out);
-  }
-  .sheet-down {
-    animation: var(--animate-sheet-down);
-  }
-  .scrim-in {
-    animation: var(--animate-scrim-in);
-  }
-  .scrim-out {
-    animation: var(--animate-scrim-out);
-  }
+  /* The overlay entrances/exits (sheet-up/down, dialog-in/out, scrim-in/out) are declared as
+     @utility below, NOT here: Dialog applies them under `max-sm:` / `sm:` variants, and Tailwind v4
+     only generates variants for @utility-declared classes — as a plain layer class, `max-sm:sheet-up`
+     silently produced nothing, and the app's one modal had never animated in or out. */
   /* The in-app welcome's trend line drawing itself in (AppWelcome; pathLength=100). */
   .draw-path {
     stroke-dasharray: 100;
-    animation: draw-path 1s cubic-bezier(0.22, 0.7, 0.2, 1) 0.15s both;
+    animation: draw-path 1s var(--ease-out) 0.15s both;
+  }
+  /* The SuccessMark's check (components/ui/SuccessMark; pathLength=100): quicker than the welcome's
+     trend line — a tick, not a drawing. */
+  .draw-check {
+    stroke-dasharray: 100;
+    animation: var(--animate-draw-check);
   }
   @media (prefers-reduced-motion: reduce) {
-    .sheet-up,
-    .dialog-in,
-    .dialog-out,
-    .sheet-down,
-    .scrim-in,
-    .scrim-out,
-    .draw-path {
+    .draw-path,
+    .draw-check {
       animation: none;
     }
-    .draw-path {
+    .draw-path,
+    .draw-check {
       stroke-dasharray: none;
     }
   }
@@ -481,22 +491,22 @@ body {
      stagger set inline via animation-delay; the hero figure blurs in; the strip's bars grow from
      the floor and an outlet's share bar from the left. */
   .rise-in {
-    animation: rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: rise-in 0.6s var(--ease-out) both;
   }
   .num-rise {
-    animation: num-rise 0.78s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: num-rise 0.78s var(--ease-out) both;
   }
   .bar-up {
     transform-origin: bottom;
-    animation: bar-up 0.82s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: bar-up 0.82s var(--ease-out) both;
   }
   .bar-wide {
     transform-origin: left;
-    animation: bar-wide 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: bar-wide 0.8s var(--ease-out) both;
   }
   /* The phone menu's row panel dropping open under its row (ADR 0083). */
   .panel-in {
-    animation: panel-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: panel-in 0.26s var(--ease-out) both;
   }
   @media (prefers-reduced-motion: reduce) {
     .rise-in,
@@ -583,6 +593,49 @@ body {
     transform: scaleX(1);
   }
 }
+/*
+ * Overlay entrances and exits — @utility, so they take variants (Dialog: `max-sm:sheet-up` on the
+ * phone, `sm:dialog-in` on tablet+). Each carries its own reduced-motion fallback; under it an
+ * overlay simply appears and disappears — Dialog/MobileSheet skip the unmount delay too
+ * (lib/motion.ts), so nothing waits on an animation that never runs.
+ */
+@utility sheet-up {
+  animation: var(--animate-sheet-up);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+@utility sheet-down {
+  animation: var(--animate-sheet-down);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+@utility dialog-in {
+  animation: var(--animate-dialog-in);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+@utility dialog-out {
+  animation: var(--animate-dialog-out);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+@utility scrim-in {
+  animation: var(--animate-scrim-in);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+@utility scrim-out {
+  animation: var(--animate-scrim-out);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;
@@ -659,10 +712,10 @@ body {
  */
 @media screen {
   ::view-transition-old(root) {
-    animation: vt-out 90ms cubic-bezier(0.4, 0, 1, 1) both;
+    animation: vt-out 90ms var(--ease-in) both;
   }
   ::view-transition-new(root) {
-    animation: vt-in 230ms cubic-bezier(0, 0, 0.2, 1) 40ms both;
+    animation: vt-in 230ms var(--ease-out) 40ms both;
   }
   @media (prefers-reduced-motion: reduce) {
     ::view-transition-old(root),

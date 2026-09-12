@@ -4,6 +4,7 @@ import { Check, TriangleAlert, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
+import { SuccessMark } from '@/components/ui/SuccessMark'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { ListSkeleton } from '@/components/ui/Skeleton'
@@ -155,8 +156,8 @@ export function PeriodClose() {
 
       {/* Result toast */}
       {lastResult ? (
-        <Card className="flex items-start gap-3 border-profit/25 bg-tint-profit p-4">
-          <Check className="mt-0.5 size-4 shrink-0 text-profit-ink" />
+        <Card className="flex items-center gap-3 border-profit/25 bg-tint-profit p-4">
+          <SuccessMark size="sm" className="bg-surface" />
           <p className="text-sm text-ink">
             {lastResult.firstClose
               ? t('close.result.success', { period: formatPeriod(lastResult.period, locale) })

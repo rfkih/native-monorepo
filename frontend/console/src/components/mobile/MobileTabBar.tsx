@@ -34,7 +34,9 @@ function TabInner({ tab, active }: { tab: MobileTab; active: boolean }) {
     <>
       <span
         className={cn(
-          'grid h-[30px] w-[60px] place-items-center rounded-full transition-colors',
+          'grid h-[30px] w-[60px] place-items-center rounded-full transition-[background-color,color,transform] duration-200',
+          // The press squeezes the PILL, not the whole tab — the label stays put.
+          'group-active:scale-95 motion-reduce:group-active:scale-100',
           active ? 'bg-emerald-tint text-emerald-2' : 'text-ink-3',
         )}
       >
@@ -42,7 +44,7 @@ function TabInner({ tab, active }: { tab: MobileTab; active: boolean }) {
       </span>
       <span
         className={cn(
-          'text-xs leading-none',
+          'text-xs leading-none transition-colors duration-200',
           active ? 'font-bold text-emerald-2' : 'font-medium text-ink-3',
         )}
       >
@@ -60,7 +62,7 @@ export function MobileTabBar({ tabs }: { tabs: MobileTab[] }) {
     tab.end ? pathname === tab.to : pathname === tab.to || pathname.startsWith(tab.to + '/')
 
   const tabClass =
-    'flex h-full flex-col items-center justify-center gap-[3px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald'
+    'group flex h-full flex-col items-center justify-center gap-[3px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald'
 
   return (
     <nav

@@ -1646,6 +1646,7 @@ export const en = {
     noValuedLines:
       'No costed line in this count, so nothing was posted to the books. Stock was still adjusted.',
     countedAt: 'Counted',
+    submittedTitle: 'Count submitted',
     resultBalanced: 'Balanced',
     resultLoss: 'Net shrinkage',
     resultGain: 'Net overage',

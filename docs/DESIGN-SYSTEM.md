@@ -91,11 +91,30 @@ primary button carries `shadow-lift`. A card that must float passes its own shad
 
 ## Motion
 
-Entrances and exits live in `index.css` as utilities — `dialog-in/out`, `sheet-up/down`,
-`scrim-in/out`, `drawer-in`, `reveal`, `rise-in` — each with its `prefers-reduced-motion` fallback.
-Use them; do not name tailwindcss-animate classes (`animate-in`, `fade-in-0`, `zoom-in-95`): the
-package is not installed and they silently do nothing. Press feedback is `active:scale-[0.98]`
-with `motion-reduce:active:scale-100`.
+**Motion answers the user; nothing moves on its own except a skeleton.** One language, in
+`index.css` `@theme`: three curves — `ease-out` (arriving), `ease-in` (leaving), `ease-standard`
+(state, colour; also every plain `transition-*` utility's default) — and four durations: 120ms press /
+colour, 200ms state (toggle knob, tab pill, chips), 260ms sheets and dialogs in, 160ms out
+(`lib/motion.ts` `EXIT_MS` for the components that delay an unmount).
+
+Six patterns, each living in its primitive — do not add a seventh per feature:
+
+| Pattern | Where it lives |
+|---|---|
+| Press: buttons/tiles/chips `active:scale-[0.98]` (+ `motion-reduce:active:scale-100`); rows `active:bg-line` | `Button`, `MenuTile`, `Segmented`, `ChoiceCards`, More rows, tab-bar pill (`group-active:scale-95`) |
+| State settles over 200ms on `ease-standard` — knob on `transform`, tab pill fill, chip colour | `ToggleRow`, `MobileTabBar`, `Segmented` |
+| Leaves the way it arrived: `sheet-up/down`, `dialog-in/out`, `scrim-in/out`, then unmount | `DialogOverlay`, `MobileSheet` (render-prop `requestClose` for inner buttons), `FileSaveToast` |
+| Between screens: the View Transition crossfade + 8px lift (230ms). No slides. | `TransitionedRoutes`, index.css `vt-*` |
+| Content arriving: `reveal` (320ms); the ONE hero figure re-rises on a period change (`num-rise`, keyed on its value) | phone home, Laporan |
+| The one "done" moment: `SuccessMark` — disc pops, check draws (0.45s). Only when a task completes | receipts (fresh capture, never a reprint), period closed, count submitted, gift card sold |
+
+Deliberately absent: staggered lists, count-up numbers, hover lifts, springs/bounce, parallax.
+Every keyframe has a `prefers-reduced-motion` fallback.
+
+**The overlay animations are declared with `@utility`**, not in `@layer utilities`: Tailwind v4 only
+generates variants (`max-sm:sheet-up`, `sm:dialog-in`) for `@utility` classes — as layer classes those
+variants produced nothing and the app's one modal never animated. Do not name tailwindcss-animate
+classes (`animate-in`, `fade-in-0`, `zoom-in-95`): the package is not installed and the gate rejects them.
 
 ## Touch and focus (Android shells)
 

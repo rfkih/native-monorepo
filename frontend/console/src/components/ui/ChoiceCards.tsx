@@ -39,7 +39,8 @@ export function ChoiceCards<T extends string>({
           <label
             key={option.value}
             className={cn(
-              'relative flex items-start gap-3 rounded-2xl border p-4 transition-all',
+              'relative flex items-start gap-3 rounded-2xl border p-4 transition-[background-color,border-color,box-shadow,transform] duration-200',
+              'active:scale-[0.98] motion-reduce:active:scale-100',
               option.disabled
                 ? 'cursor-not-allowed border-line bg-surface opacity-55'
                 : cn(

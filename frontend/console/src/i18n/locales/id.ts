@@ -1632,6 +1632,7 @@ export const id = {
     noValuedLines:
       'Tidak ada baris berbiaya di hitungan ini, jadi tidak ada yang diposting ke buku besar. Stoknya tetap disesuaikan.',
     countedAt: 'Dihitung',
+    submittedTitle: 'Opname tersimpan',
     resultBalanced: 'Seimbang',
     resultLoss: 'Susut bersih',
     resultGain: 'Kelebihan bersih',

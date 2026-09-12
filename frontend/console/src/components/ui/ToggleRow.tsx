@@ -41,14 +41,15 @@ export function ToggleRow({
       <span
         aria-hidden
         className={cn(
-          'relative h-6 w-10 shrink-0 rounded-full transition-colors',
+          'relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200',
           checked ? 'bg-emerald' : 'bg-line',
         )}
       >
         <span
           className={cn(
-            'absolute top-0.5 size-5 rounded-full bg-white shadow transition-all',
-            checked ? 'left-[18px]' : 'left-0.5',
+            // Slides on transform (compositor-only), 200ms on the standard curve — not `left`.
+            'absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200',
+            checked ? 'translate-x-4' : 'translate-x-0',
           )}
         />
       </span>
