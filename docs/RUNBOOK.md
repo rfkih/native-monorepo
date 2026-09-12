@@ -83,6 +83,11 @@ users is acceptable — drop the KC db and re-import. Symptom of a stale scalar 
 2+ companies gets a malformed `company_id` claim and the gateway 403s every request.
 
 ## GOTCHAS (each cost real debugging — read before running locally)
+0. **MinIO images come from `quay.io`, not Docker Hub.** MinIO removed `minio/minio` and `minio/mc`
+   from Docker Hub (confirmed 2026-09-12: the Hub repos 404, the registry answers 401 from any network,
+   the same release tags are on quay.io). Every compose file pins `quay.io/minio/…`; a bare `minio/…`
+   reference fails `docker compose pull` — and because `prod-deploy.sh` pulls everything before it
+   touches the stack, it aborted the v0.1.69 release (prod stayed on v0.1.68, untouched).
 1. **Host `DB_*` env vars override the service defaults.** The yml uses `${DB_PASSWORD:default}`; if the
    shell has `DB_PASSWORD`/`DB_USERNAME`/`DB_URL` set (e.g. another project), Spring picks the host value
    → `FATAL: password authentication failed`. **Always pass `DB_URL/DB_USERNAME/DB_PASSWORD` explicitly**
