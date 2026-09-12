@@ -56,6 +56,7 @@ export function PeriodChart({
   tone,
   formatValue,
   locale,
+  seriesKey,
   height = 132,
 }: {
   /** `YYYY-MM`, oldest first. */
@@ -73,6 +74,9 @@ export function PeriodChart({
   /** For the column tooltip — already locale-aware (formatMoney). */
   formatValue: (v: number) => string
   locale: string
+  /** Identity of WHAT the chart shows (e.g. "pnl:net"). Changing it regrows the columns / redraws
+   *  the line; a month resolving or a period being picked does not. */
+  seriesKey: string
   height?: number
 }) {
   const { t } = useTranslation()
@@ -129,6 +133,7 @@ export function PeriodChart({
           />
           {isLine && present.length > 0 ? (
             <svg
+              key={seriesKey}
               width={track.trackW}
               height={height}
               viewBox={`0 0 ${track.trackW} ${height}`}
@@ -181,11 +186,13 @@ export function PeriodChart({
           {/* Columns — the period control. Each is a full-height hit target. The row is exactly
               `height` tall (the plot box carries 6px more for the selected marker's ring), so a
               bottom-anchored column ends ON the baseline, not below it. */}
-          {/* Keyed on the SERIES, so switching what the chart shows (income ↔ balance ↔ cash, net ↔
-              expense) regrows the columns the way the home's strip does on arrival — while tapping
-              a column to pick a period keeps the same nodes and moves nothing but the tint. */}
+          {/* Keyed on the SERIES IDENTITY, so switching what the chart shows (income ↔ balance ↔
+              cash, net ↔ expense) regrows the columns the way the home's strip does on arrival —
+              while a month resolving, a retry, or tapping a column to pick a period keeps the same
+              nodes and moves nothing but the tint. (Keying on the values remounted all twelve
+              columns every time one month's query settled.) */}
           <div
-            key={values.map((v) => v ?? 'x').join('|')}
+            key={seriesKey}
             className="relative flex"
             style={{ height, gap: track.gap, paddingInline: track.inset }}
           >
