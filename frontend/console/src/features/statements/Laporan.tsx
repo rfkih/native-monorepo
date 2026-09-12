@@ -342,7 +342,11 @@ export function Laporan({ tab }: { tab: ReportTab }) {
           </div>
         </div>
       ) : (
-        <div className={cn('pb-8 transition-opacity', settling && 'opacity-60')}>
+        // The home's arrival, once per statement: the report rises in (keyed on the tab, so
+        // income ↔ balance ↔ cash rises again), its hero figure rises after it (Hero, keyed on
+        // the value) and the chart's columns grow (PeriodChart, keyed on the series). Picking a
+        // period moves only the numbers.
+        <div key={tab} className={cn('rise-in pb-8 transition-opacity', settling && 'opacity-60')}>
           {tab === 'pnl' || tab === 'exp' ? (
             <IncomeView
               tab={tab}

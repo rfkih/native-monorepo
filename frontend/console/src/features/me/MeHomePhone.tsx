@@ -199,8 +199,8 @@ export function MeHomePhone() {
           </div>
 
           <div className="flex flex-col gap-3.5 px-4 pt-4">
-            {/* Stat cards */}
-            <div className="grid grid-cols-2 gap-2.5">
+            {/* The home's arrival: the cards rise in on a stagger, the sales figure rises after. */}
+            <div className="rise-in grid grid-cols-2 gap-2.5" style={{ animationDelay: '0.05s' }}>
               <StatCard
                 to="/me/timeoff"
                 label={t('me.home.leaveRemaining')}
@@ -218,9 +218,12 @@ export function MeHomePhone() {
             {/* Sales + commission — same null rule as the desktop SalesSection. */}
             {sales.data != null &&
             (sales.data.salesMinor !== 0 || sales.data.commissionBasisPoints !== null) ? (
-              <Card className="p-[18px]">
+              <Card className="rise-in p-[18px]" style={{ animationDelay: '0.15s' }}>
                 <MicroLabel>{t('me.sales.title')}</MicroLabel>
-                <div className="tnum mt-1.5 font-mono text-2xl font-bold leading-none tracking-display text-ink">
+                <div
+                  className="num-rise tnum mt-1.5 font-mono text-2xl font-bold leading-none tracking-display text-ink"
+                  style={{ animationDelay: '0.28s' }}
+                >
                   {formatMoney(sales.data.salesMinor, sales.data.currency, locale)}
                 </div>
                 {sales.data.commissionBasisPoints !== null ? (
@@ -250,7 +253,7 @@ export function MeHomePhone() {
             ) : null}
 
             {/* Quick actions */}
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="rise-in grid grid-cols-2 gap-2.5" style={{ animationDelay: '0.25s' }}>
               {quickActions.map((a) => {
                 const ActionIcon = a.icon
                 return (
