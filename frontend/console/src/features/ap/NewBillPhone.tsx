@@ -990,7 +990,7 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
           disabled={issues.length > 0 || saving}
           onClick={() => void save()}
           className={cn(
-            'h-[50px] shrink-0 rounded-2xl px-[22px] text-sm font-bold tracking-display transition-[transform,background-color] duration-150 active:scale-[0.97] motion-reduce:active:scale-100',
+            'h-[50px] shrink-0 rounded-2xl px-[22px] text-sm font-bold tracking-display transition-[transform,scale,background-color] duration-150 active:scale-[0.97] motion-reduce:active:scale-100',
             issues.length > 0 || saving
               ? 'bg-ink-100 text-ink-400'
               : 'bg-emerald text-on-emerald shadow-lift',

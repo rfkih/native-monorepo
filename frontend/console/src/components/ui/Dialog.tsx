@@ -28,21 +28,11 @@ import { cn } from '@/lib/cn'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { SAFE_AREA_BOTTOM } from '@/lib/safeArea'
+import { exitDelayMs } from '@/lib/motion'
 import { Card } from './Card'
-
-/** Keep in step with --animate-dialog-out / --animate-sheet-down in index.css. */
-const DIALOG_EXIT_MS = 160
 
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
-
-function prefersReducedMotion(): boolean {
-  try {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  } catch {
-    return false
-  }
-}
 
 export function DialogOverlay({
   children,
@@ -87,7 +77,7 @@ export function DialogOverlay({
   // users who allow animation is not a dialog — there the delay is skipped, not waited out.
   useEffect(() => {
     if (!exiting) return
-    const id = window.setTimeout(onClose, prefersReducedMotion() ? 0 : DIALOG_EXIT_MS)
+    const id = window.setTimeout(onClose, exitDelayMs())
     return () => window.clearTimeout(id)
   }, [exiting, onClose])
 

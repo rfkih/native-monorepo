@@ -99,7 +99,7 @@ const GLYPHS: Record<string, LucideIcon> = {
 const FIELD_LABEL = 'block text-2xs font-semibold uppercase tracking-eyebrow text-ink-3'
 const FIELD_CARD = 'block rounded-xl border border-line bg-surface px-3 py-2.5'
 const PANEL_BUTTON =
-  'h-11 flex-1 rounded-xl border border-line bg-surface text-sm font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50'
+  'h-11 flex-1 rounded-xl border border-line bg-surface text-sm font-semibold transition-[background-color,border-color,transform,scale] duration-150 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50'
 const ICON_BUTTON =
   'grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald'
 

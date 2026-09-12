@@ -60,6 +60,7 @@ import {
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
+import { SuccessMark } from '@/components/ui/SuccessMark'
 import { DialogOverlay } from '@/components/ui/Dialog'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
@@ -1544,6 +1545,11 @@ function StocktakeSummary({
           Done button stranded halfway up the screen with empty space under it. */}
       <div className="flex min-h-full flex-col">
         <div className="shrink-0 px-[18px] pt-4">
+          {/* The one "done" moment: the count is in. */}
+          <div className="mb-3 flex items-center gap-3">
+            <SuccessMark size="sm" />
+            <span className="text-lg font-bold text-ink">{t('stocktake.submittedTitle')}</span>
+          </div>
           <div className="flex items-baseline justify-between gap-2.5 text-xs">
             <span className="font-medium text-ink-3">{t('stocktake.countedAt')}</span>
             <span className="font-semibold text-ink">

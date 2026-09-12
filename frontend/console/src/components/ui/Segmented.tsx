@@ -52,7 +52,8 @@ export function Segmented<T extends string>({
             title={option.disabled ? option.title : undefined}
             onClick={() => onChange(option.value)}
             className={cn(
-              'grid h-9 place-items-center rounded-lg text-sm transition-colors',
+              'grid h-9 place-items-center rounded-lg text-sm transition-[background-color,color,box-shadow,transform,scale] duration-200',
+              'active:scale-[0.98] motion-reduce:active:scale-100',
               fluid ? 'min-w-0 flex-1 px-1' : 'px-4',
               'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-3',
               active

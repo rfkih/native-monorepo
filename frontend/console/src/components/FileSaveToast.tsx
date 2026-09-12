@@ -9,26 +9,37 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, TriangleAlert } from 'lucide-react'
 import { FILE_SAVE_EVENT } from '@/lib/nativeShell'
+import { exitDelayMs } from '@/lib/motion'
+import { cn } from '@/lib/cn'
 
 const SHOW_MS = 3500
 
 export function FileSaveToast() {
   const { t } = useTranslation()
   const [toast, setToast] = useState<{ filename: string; ok: boolean } | null>(null)
+  const [leaving, setLeaving] = useState(false)
   const timerRef = useRef<number | undefined>(undefined)
+  const leaveRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     function onSave(e: Event) {
       const detail = (e as CustomEvent<{ filename: string; ok: boolean }>).detail
       if (!detail) return
       setToast(detail)
+      setLeaving(false)
       window.clearTimeout(timerRef.current)
-      timerRef.current = window.setTimeout(() => setToast(null), SHOW_MS)
+      window.clearTimeout(leaveRef.current)
+      // Leaves the way it came (motion language): a fade-out beat, then unmount.
+      timerRef.current = window.setTimeout(() => {
+        setLeaving(true)
+        leaveRef.current = window.setTimeout(() => setToast(null), exitDelayMs())
+      }, SHOW_MS)
     }
     window.addEventListener(FILE_SAVE_EVENT, onSave)
     return () => {
       window.removeEventListener(FILE_SAVE_EVENT, onSave)
       window.clearTimeout(timerRef.current)
+      window.clearTimeout(leaveRef.current)
     }
   }, [])
 
@@ -38,7 +49,12 @@ export function FileSaveToast() {
       className="pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+var(--safe-area-inset-bottom,0px))] z-[100] flex justify-center px-4 print:hidden"
       role="status"
     >
-      <span className="flex max-w-full items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-medium text-surface shadow-lg">
+      <span
+        className={cn(
+          'flex max-w-full items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-medium text-surface shadow-lg',
+          leaving ? 'dialog-out' : 'dialog-in',
+        )}
+      >
         {toast.ok ? (
           <CheckCircle2 className="size-4 shrink-0 text-profit" aria-hidden="true" />
         ) : (

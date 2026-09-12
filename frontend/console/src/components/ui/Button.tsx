@@ -39,7 +39,7 @@ export function Button({
         'inline-flex items-center justify-center gap-2 font-semibold',
         // Transform joins the transition for the press-scale — `transition-colors` alone made the
         // scale snap. Reduced motion drops the movement but keeps the colour feedback.
-        'transition-[color,background-color,border-color,box-shadow,transform] duration-150',
+        'transition-[color,background-color,border-color,box-shadow,transform,scale] duration-150',
         'active:scale-[0.98] motion-reduce:transition-colors motion-reduce:active:scale-100',
         'focus-visible:outline-2 focus-visible:outline-offset-2',
         'focus-visible:outline-emerald disabled:cursor-not-allowed disabled:active:scale-100',

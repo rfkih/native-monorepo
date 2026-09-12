@@ -459,7 +459,12 @@ function Hero({
   const color = tone === 'profit' ? 'text-profit-ink' : tone === 'loss' ? 'text-loss' : 'text-ink'
   const body = (
     <>
-      <span className={cn('tnum font-mono text-2xl font-bold leading-none tracking-display', color)}>
+      {/* Keyed on the figure, so a period change re-runs the rise the home's hero has — the one
+          number the screen is about arrives, everything else just updates. */}
+      <span
+        key={value}
+        className={cn('num-rise tnum block font-mono text-2xl font-bold leading-none tracking-display', color)}
+      >
         {value}
       </span>
       {note ? (
