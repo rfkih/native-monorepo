@@ -203,7 +203,7 @@ services:
   # "Object-store backup") — objects do NOT ride along in pg_dump.
   # ---------------------------------------------------------------------------
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: native-uat-minio
     restart: unless-stopped
     mem_limit: 512m
@@ -224,7 +224,7 @@ services:
   # — the storage twin of the per-service Postgres roles. Community MinIO has no web
   # console; ALL administration goes through `mc` like this job does.
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: native-uat-minio-init
     depends_on:
       minio:
