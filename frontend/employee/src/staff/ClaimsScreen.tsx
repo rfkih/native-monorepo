@@ -179,7 +179,7 @@ function ClaimRow({ claim, locale }: { claim: MyExpenseClaim; locale: string }) 
           <span className="truncate text-[14px] font-bold text-ink">{claim.categoryName}</span>
           <ClaimStatusBadge status={claim.status} />
         </span>
-        <span className="mt-0.5 block truncate text-[12.5px] text-ink-3">
+        <span className="mt-0.5 line-clamp-2 break-words text-[12.5px] leading-snug text-ink-3">
           {formatDate(claim.expenseDate, locale)}
           {claim.merchant ? ` · ${claim.merchant}` : ''}
         </span>
