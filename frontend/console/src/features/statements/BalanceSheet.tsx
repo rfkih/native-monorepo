@@ -167,14 +167,6 @@ export function BalanceSheet() {
         </div>
       </div>
 
-      {/* Illustrative badge */}
-      {data?.usesIllustrativeRules ? (
-        <div>
-          <Badge tone="amber">
-            <TriangleAlert className="size-3" /> {t('statements.illustrative')}
-          </Badge>
-        </div>
-      ) : null}
 
       {/* Error / empty / content */}
       {query.isError ? (

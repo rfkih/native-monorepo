@@ -30,7 +30,6 @@ export const id = {
       title: 'Slip gaji',
       empty: 'Belum ada slip gaji. Muncul di sini setelah penggajian diproses.',
       runSeq: 'Proses #{{seq}}',
-      illustrative: 'Ilustratif',
       trueUp: 'Penyesuaian tahunan',
       trueUpCredit: 'Pengembalian',
       lines: '{{count}} baris',
@@ -281,7 +280,7 @@ export const id = {
     posPhotoAlt: 'Barista sedang bekerja di balik mesin kopi',
     f1Title: 'Payroll yang tahu aturan Indonesia',
     f1Body:
-      'PPh 21, BPJS Kesehatan, dan JHT dihitung dari data absensi yang sama. THR punya jenis payroll-nya sendiri. Angka yang masih memakai dataset ilustratif diberi tanda kuning.',
+      'PPh 21, BPJS Kesehatan, dan JHT dihitung dari data absensi yang sama. THR punya jenis payroll-nya sendiri.',
     f2Title: 'Laporan yang siap diserahkan',
     f2Body:
       'Laba rugi, neraca, dan arus kas tersusun dari jurnal, bukan dari rekap manual. Konsolidasi lintas perusahaan dan mata uang ada di halaman yang sama.',
@@ -301,7 +300,7 @@ export const id = {
     t2Body: 'Bulan yang sudah ditutup tidak bisa diubah diam-diam, hanya dikoreksi lewat jurnal baru.',
     t3Title: 'Angka sementara ditandai',
     t3Body:
-      'Kurs stub dan aturan statutori ilustratif diberi badge kuning, tidak pernah tampil seolah final.',
+      'Kurs stub diberi badge kuning, tidak pernah tampil seolah final.',
     t4Title: 'Data Anda milik Anda',
     t4Body: 'Ekspor CSV di setiap laporan. Tidak ada biaya keluar, tidak ada penguncian data.',
     quoteText:
@@ -835,9 +834,6 @@ export const id = {
       'Konversi tampilan saja pada kurs rata-rata periode — pembukuan tidak berubah.',
     stubFx: 'Kurs sementara',
     stubFxTooltip: 'Dikonversi dengan kurs sementara — bukan kurs pasar terverifikasi.',
-    illustrative: 'Angka ilustratif',
-    illustrativeTooltip:
-      'Termasuk data statutori/penggajian sementara — bukan nilai produksi terverifikasi.',
     asOf: 'per {{date}}',
     breakdown: 'Rincian',
     overview: 'Ringkasan',
@@ -1069,7 +1065,6 @@ export const id = {
       noInvesting: 'Tidak ada aktivitas investasi',
       noFinancing: 'Tidak ada aktivitas pendanaan',
     },
-    illustrative: 'Angka ilustratif',
     noData: 'Belum ada posting untuk periode ini',
     noDataHint: 'Angka muncul setelah penjualan, beban, atau penggajian diposting ke buku besar.',
     error: 'Tidak dapat memuat laporan.',
@@ -1091,8 +1086,6 @@ export const id = {
     discount: 'Diskon',
     serviceCharge: 'Biaya layanan',
     tax: 'Pajak',
-    estimated: 'Estimasi',
-    illustrativeHint: 'Tarif merupakan angka ilustratif — bukan angka regulasi yang terverifikasi.',
     addDiscount: 'Tambah diskon',
     discountInvalid: 'Diskon harus berupa angka positif.',
     coupon: {
@@ -1530,8 +1523,6 @@ export const id = {
     summaryLoyalty: 'Poin loyalti',
     summaryService: 'Biaya layanan',
     summaryTax: 'Pajak (PB1)',
-    summaryEstimated: 'estimasi',
-    summaryTaxEstimatedNote: 'Tarif pajak masih estimasi ilustratif — belum diverifikasi untuk pelaporan.',
     summaryRefunds: 'Refund',
     summaryNet: 'Penjualan bersih',
     summaryCashSection: 'Kas laci',
@@ -1947,7 +1938,6 @@ export const id = {
       partiallyPaid: 'Sebagian terbayar',
       linePaid: 'Terbayar',
       dueRemaining: 'Sisa tagihan',
-      estimated: 'estimasi',
       lineUnit: '{{qty}} × {{price}}',
       emptyCart: 'Ketuk menu untuk mulai menulis pesanan.',
       emptyBill: 'Bill ini masih kosong — ketuk menu untuk menambahkan.',
@@ -2092,7 +2082,6 @@ export const id = {
       noPostings:
         'Belum ada pembukuan untuk periode ini. Penjualan akan muncul di sini saat tercatat.',
       error: 'Gagal memuat laba rugi unit ini.',
-      illustrative: 'Termasuk angka ilustratif',
       prevMonth: 'Bulan sebelumnya',
       nextMonth: 'Bulan berikutnya',
     },
@@ -2697,10 +2686,9 @@ export const id = {
       hint: 'Persentase dari penjualan yang dicatat karyawan ini di bawah login-nya. Perlu login dan akses POS.',
     },
     payroll: {
-      illustrativeBanner: {
-        badge: 'Ilustratif',
-        title: 'Tarif contoh ilustratif',
-        body: 'Angka pajak dan BPJS BUKAN tarif resmi DJP/BPJS — jangan dipakai untuk penggajian sungguhan. Akuntan harus memuat tarif resmi sebelum keluar dari uji coba.',
+      activate: {
+        title: 'Aturan penggajian resmi belum diaktifkan',
+        body: 'Proses gaji akan memakai aturan statutori sementara. Aktifkan ID-2026.1 (PPh 21 TER, PTKP, BPJS) sebelum menjalankan penggajian.',
       },
       setup: {
         title: 'Penggajian butuh penyiapan sekali',
@@ -2819,7 +2807,7 @@ export const id = {
       reports: {
         subtitle:
           'Laporan statutori dari proses penggajian yang sudah diposting. Laporan ini melampaui yang disediakan lokalisasi Indonesia Odoo — tetapi tata letak kolomnya masih ilustratif, bukan skema resmi pemerintah. Verifikasi setiap angka sebelum pelaporan.',
-        illustrativeLayoutNote: 'Tata letak ilustratif — verifikasi setiap angka sebelum pelaporan.',
+        illustrativeLayoutNote: 'Bukan format berkas resmi DJP/BPJS — cocokkan dengan formulir resmi sebelum melapor.',
         ownerOnly: 'Khusus pemilik — ekspor ini memuat angka yang mengungkap gaji.',
         yearLabel: 'Tahun',
         download: 'Unduh CSV',
@@ -2903,7 +2891,6 @@ export const id = {
         THR: 'THR (Tunjangan Hari Raya)',
       },
       provenanceOfficial: 'Tarif resmi',
-      provenanceIllustrative: 'Tarif ilustratif sementara — jangan gunakan untuk penggajian sungguhan',
       earnings: 'Pendapatan',
       deductions: 'Potongan',
       employerBorne: 'ditanggung pemberi kerja',
@@ -3096,7 +3083,6 @@ export const id = {
       SUPERSEDED: 'Digantikan',
     },
     stubFx: 'Kurs sementara',
-    illustrative: 'Angka ilustratif',
     simplifiedPolicy: 'Kebijakan translasi disederhanakan',
     defineDialog: {
       title: 'Tentukan grup konsolidasi',
@@ -3754,7 +3740,6 @@ export const id = {
     baseCurrency: 'Mata uang',
     firstClose: 'Penutupan pertama',
     reconciled: 'Direkonsiliasi',
-    illustrative: 'Ilustratif',
     yes: 'Ya',
     no: 'Tidak',
     confirmDialog: {
@@ -3861,7 +3846,6 @@ export const id = {
       total: 'Total',
       paid: 'Dibayar',
       outstanding: 'Belum dibayar',
-      estimatedTax: 'Pajak estimasi',
       lines: 'Rincian item',
       noLines: 'Tidak ada baris',
       colDescription: 'Deskripsi',
@@ -4130,7 +4114,6 @@ export const id = {
       total: 'Total',
       paid: 'Dibayar',
       outstanding: 'Belum dibayar',
-      estimatedTax: 'Pajak estimasi',
       lines: 'Rincian item',
       noLines: 'Tidak ada baris',
       colDescription: 'Deskripsi',
@@ -4617,8 +4600,6 @@ export const id = {
       subtitle: 'SPT Masa PPN Anda untuk bulan ini — PPN keluaran dikurangi PPN masukan.',
       periodLabel: 'Masa',
       exportEfaktur: 'Ekspor e-Faktur',
-      illustrativeNote:
-        'Ilustratif: tarif 11%, kebijakan kompensasi, dan format e-Faktur masih sementara menunggu ahli pajak — bukan SPT resmi.',
       error: 'Tidak dapat memuat SPT PPN.',
       noCompany: 'Belum ada perusahaan',
       noCompanyHint: 'Buat perusahaan untuk melihat SPT PPN-nya.',
@@ -4752,8 +4733,6 @@ export const id = {
     proceedsLabel: 'Harga jual (0 = hapus buku)',
     disposeHint:
       'Menghapus aset dan penyusutannya dari pembukuan, lalu membukukan selisih terhadap nilai buku {{bookValue}} sebagai laba atau rugi pelepasan — pendapatan lain-lain, bukan pendapatan penjualan. Tidak dapat dibatalkan.',
-    illustrativeNote:
-      'Ilustratif: hanya garis lurus, penyusutan mulai bulan setelah perolehan, dan kode akun masih sementara menunggu ahli akuntansi.',
     errors: {
       invalid: 'Periksa jumlahnya — harga perolehan harus positif dan nilai sisa di bawahnya.',
       currencyMismatch: 'Mata uang harus sama dengan mata uang dasar perusahaan untuk periode ini.',

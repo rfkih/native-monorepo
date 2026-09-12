@@ -183,9 +183,6 @@ export function BillDetail() {
               {bill.billNumber}
             </h1>
             <BillStatusBadge status={bill.status} />
-            {bill.usesIllustrativeRules ? (
-              <Badge tone="amber">{t('ap.detail.estimatedTax')}</Badge>
-            ) : null}
           </div>
           <p className="mt-1.5 text-sm text-ink-3">
             {t('ap.detail.vendor')}: {bill.vendorName} · {t('ap.detail.billDate')}:{' '}

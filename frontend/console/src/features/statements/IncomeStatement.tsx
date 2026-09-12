@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, Printer, TriangleAlert } from 'lucide-react'
+import { Download, Printer } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { useSession } from '@/lib/session'
@@ -130,14 +129,6 @@ export function IncomeStatement() {
         </div>
       </div>
 
-      {/* Illustrative badge */}
-      {data?.usesIllustrativeRules ? (
-        <div>
-          <Badge tone="amber">
-            <TriangleAlert className="size-3" /> {t('statements.illustrative')}
-          </Badge>
-        </div>
-      ) : null}
 
       {/* Error / empty / content */}
       {query.isError ? (

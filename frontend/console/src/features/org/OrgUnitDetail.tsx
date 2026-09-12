@@ -536,9 +536,6 @@ function OverviewTab({
           prevLabel={t('orgHub.overview.prevMonth')}
           nextLabel={t('orgHub.overview.nextMonth')}
         />
-        {pnl?.usesIllustrativeRules ? (
-          <Badge tone="amber">{t('orgHub.overview.illustrative')}</Badge>
-        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

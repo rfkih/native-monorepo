@@ -1,7 +1,7 @@
 /**
- * Payroll tab of the org-unit hub. The statutory rates behind every run are ILLUSTRATIVE
- * PLACEHOLDERS until OFFICIAL rows are seeded — a persistent amber banner says so whenever the
- * provenance is not OFFICIAL (never hide it).
+ * Payroll tab of the org-unit hub. A company that seeded the placeholder statutory rules before
+ * the official dataset existed keeps an ACTIVATION gate at the top of the runs view until it
+ * activates ID-2026.1 — an action, not a label (the console no longer tags figures "illustrative").
  *
  * A payroll run is COMPANY-WIDE, never per-unit: finance treats (period, run_seq) as a
  * supersession chain — a higher run_seq REVERSES every earlier ACTIVE run's labor postings for
@@ -136,25 +136,9 @@ export function PayrollTab({
     runTypeFilter === 'ALL' ? allRuns : allRuns.filter((r) => r.runType === runTypeFilter)
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? runs[0] ?? null
 
-  const showIllustrativeBanner = !!setup.data && setup.data.provenance !== 'OFFICIAL'
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Persistent illustrative banner — visible whenever provenance is not OFFICIAL. */}
-      {showIllustrativeBanner ? (
-        <Card className="flex items-start gap-3 border-amber/40 bg-amber-tint p-4">
-          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-amber" aria-hidden="true" />
-          <div>
-            <p className="text-sm font-semibold text-amber">
-              {t('hr.payroll.illustrativeBanner.title')}
-            </p>
-            <p className="mt-0.5 text-xs leading-relaxed text-amber/90">
-              {t('hr.payroll.illustrativeBanner.body')}
-            </p>
-          </div>
-        </Card>
-      ) : null}
-
       {setup.isLoading ? (
         <div className="flex flex-col gap-4">
           <Skeleton className="h-9 w-64 rounded-xl" />
@@ -183,6 +167,27 @@ export function PayrollTab({
         </Card>
       ) : (
         <>
+          {/* Seeded on the placeholder rules, official dataset not yet activated: the one-click
+              activation the !seeded gate offers, kept in view so real payroll never runs on
+              placeholders unnoticed (the bootstrap is idempotent — safe on a seeded tenant). */}
+          {setup.data.provenance !== 'OFFICIAL' ? (
+            <Card className="flex flex-wrap items-center gap-3 border-amber/40 bg-amber-tint p-4">
+              <TriangleAlert className="size-5 shrink-0 text-amber" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-amber">{t('hr.payroll.activate.title')}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-amber/90">{t('hr.payroll.activate.body')}</p>
+              </div>
+              <Button
+                type="button"
+                onClick={() =>
+                  seed.mutate({ baseCurrency, datasetVersion: DEFAULT_OFFICIAL_DATASET_VERSION })
+                }
+                disabled={seed.isPending}
+              >
+                {seed.isPending ? t('hr.payroll.setup.seeding') : t('hr.payroll.setup.seed')}
+              </Button>
+            </Card>
+          ) : null}
           {/* Runs / Setup / Reports sub-view — statutory-rule administration lives beside the run
               history (Track P phase P2, ADR 0031), and the statutory CSV exports beside both
               (Track P phase P9), not as separate org-hub tabs. */}
@@ -320,9 +325,6 @@ export function PayrollTab({
                         ) : null}
                         {run.period.endsWith('-12') && !run.usesIllustrativeRules ? (
                           <Badge tone="info">{t('hr.payroll.history.trueUpBadge')}</Badge>
-                        ) : null}
-                        {run.usesIllustrativeRules ? (
-                          <Badge tone="amber">{t('hr.payroll.illustrativeBanner.badge')}</Badge>
                         ) : null}
                         <span className="text-xs text-ink-3">
                           {run.postedAt
@@ -472,13 +474,11 @@ function RunDetail({
             {run.period.endsWith('-12') && !run.usesIllustrativeRules ? (
               <Badge tone="info">{t('hr.payroll.history.trueUpBadge')}</Badge>
             ) : null}
-            {/* The provenance chip (P2) — green ONLY for OFFICIAL (done/verified), never for
-                illustrative, reusing PayrollSetupTab's exact short labels (single source). */}
-            <Badge tone={run.usesIllustrativeRules ? 'amber' : 'profit'}>
-              {run.usesIllustrativeRules
-                ? t('payrollSetup.provenance.illustrative')
-                : t('payrollSetup.provenance.official')}
-            </Badge>
+            {/* The provenance chip — green for OFFICIAL (done/verified); a run frozen on an older rule
+                set simply carries no chip (the console no longer labels figures "illustrative"). */}
+            {!run.usesIllustrativeRules ? (
+              <Badge tone="profit">{t('payrollSetup.provenance.official')}</Badge>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button

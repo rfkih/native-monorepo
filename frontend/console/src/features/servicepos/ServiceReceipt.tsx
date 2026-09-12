@@ -81,7 +81,6 @@ export function ServiceReceipt({
   const isPending = payment?.status === 'PENDING'
   const isCash = payment?.tenderType === 'CASH'
   const currency = ticket.breakdown.currency
-  const illustrative = ticket.breakdown.usesIllustrativeRules
 
   const reference = ticket.ticketId.slice(-8).toUpperCase()
 
@@ -148,11 +147,11 @@ export function ServiceReceipt({
     })
   }
   totalRows.push({
-    label: illustrative ? `${t('pos.serviceCharge')} · ${t('pos.estimated')}` : t('pos.serviceCharge'),
+    label: t('pos.serviceCharge'),
     valueLabel: formatMoney(breakdown.serviceChargeMinor, currency, locale),
   })
   totalRows.push({
-    label: illustrative ? `${t('pos.tax')} · ${t('pos.estimated')}` : t('pos.tax'),
+    label: t('pos.tax'),
     valueLabel: formatMoney(breakdown.taxMinor, currency, locale),
   })
 

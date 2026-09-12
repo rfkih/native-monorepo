@@ -67,8 +67,9 @@ export interface DockBreakdown {
   discountMinor: number
   serviceChargeMinor: number
   taxMinor: number
-  /** Rules are cached/illustrative rather than server-confirmed → the "estimate" badge lights. */
-  usesIllustrativeRules: boolean
+  /** Computed offline from cached rules (provisionalPricing) → the "Provisional" chip lights on
+   *  the service-charge and tax rows. Absent on a server breakdown. */
+  provisional?: boolean
 }
 
 export interface DockCancel {
@@ -387,12 +388,12 @@ export function BillDock({
                   <BreakdownRow
                     label={t('pos.serviceCharge')}
                     value={formatMoney(breakdown.serviceChargeMinor, currency, locale)}
-                    estimated={breakdown.usesIllustrativeRules}
+                    provisional={breakdown.provisional === true}
                   />
                   <BreakdownRow
                     label={t('pos.tax')}
                     value={formatMoney(breakdown.taxMinor, currency, locale)}
-                    estimated={breakdown.usesIllustrativeRules}
+                    provisional={breakdown.provisional === true}
                   />
                 </>
               ) : null}
@@ -474,21 +475,25 @@ function BreakdownRow({
   label,
   value,
   tone,
-  estimated = false,
+  provisional = false,
 }: {
   label: string
   value: string
   tone?: 'loss'
-  estimated?: boolean
+  /** Offline: this figure came from cached rules, not the server (ADR 0028). */
+  provisional?: boolean
 }) {
   const { t } = useTranslation()
   return (
     <div className="flex items-center justify-between gap-2.5">
       <span className="flex items-center gap-1.5 text-sm font-medium leading-[1.3] text-ink-3">
         {label}
-        {estimated ? (
-          <span className="grid h-[18px] place-items-center rounded-full border border-warning-line px-1.5 text-2xs font-bold text-amber">
-            {t('posShell.dock.estimated')}
+        {provisional ? (
+          <span
+            title={t('offline.provisional.hint')}
+            className="grid h-[18px] place-items-center rounded-full border border-warning-line px-1.5 text-2xs font-bold text-amber"
+          >
+            {t('offline.provisional.badge')}
           </span>
         ) : null}
       </span>

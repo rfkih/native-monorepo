@@ -451,20 +451,17 @@ export function Laporan({ tab }: { tab: ReportTab }) {
 
 function Hero({
   label,
-  illustrative,
   value,
   tone,
   note,
   onTap,
 }: {
   label: string
-  illustrative: boolean
   value: string
   tone: 'profit' | 'loss' | 'ink'
   note?: string
   onTap?: () => void
 }) {
-  const { t } = useTranslation()
   const color = tone === 'profit' ? 'text-profit-ink' : tone === 'loss' ? 'text-loss' : 'text-ink'
   const body = (
     <>
@@ -488,12 +485,6 @@ function Hero({
     <div className="pt-1.5">
       <div className="flex items-center gap-2">
         <span className="text-xs font-semibold text-ink-3">{label}</span>
-        {illustrative ? (
-          <span className="flex h-[19px] items-center gap-1 rounded-full border border-warning-line px-1.5 text-2xs font-bold text-amber">
-            <TriangleAlert className="size-2.5" aria-hidden="true" />
-            {t('statements.illustrative')}
-          </span>
-        ) : null}
       </div>
       {onTap ? (
         <button
@@ -624,7 +615,6 @@ function IncomeView({
       <>
         <Hero
           label={`${t('statements.expense')} · ${periodText}`}
-          illustrative={data.usesIllustrativeRules}
           value={money(expense)}
           tone="ink"
           note={t('statements.ofRevenue', { pct: formatPercent(expenseRatio, locale) })}
@@ -653,7 +643,6 @@ function IncomeView({
     <>
       <Hero
         label={`${profit ? t('statements.netProfit') : t('statements.netLoss')} · ${periodText}`}
-        illustrative={data.usesIllustrativeRules}
         value={money(net)}
         tone={profit ? 'profit' : 'loss'}
         note={revenue > 0 ? t('statements.marginPct', { pct: formatPercent(net / revenue, locale) }) : undefined}
@@ -768,7 +757,6 @@ function BalanceView({
     <>
       <Hero
         label={`${t('statements.netWorth')} · ${periodText}`}
-        illustrative={data.usesIllustrativeRules}
         value={money(totalEquity)}
         tone="ink"
         note={balanced ? t('statements.phone.netWorthNote') : undefined}
@@ -887,7 +875,6 @@ function CashView({
     <>
       <Hero
         label={`${t('statements.cashFlow.netChange')} · ${periodText}`}
-        illustrative={data.usesIllustrativeRules}
         value={money(net)}
         tone={net >= 0 ? 'profit' : 'loss'}
         note={t('statements.phone.cashNote')}
