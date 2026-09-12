@@ -827,9 +827,19 @@ body {
     display: block !important;
     box-shadow: none !important;
   }
-  /* prefers-reduced-motion: print is always "no motion" */
+  /* prefers-reduced-motion: print is always "no motion". Every ARRIVAL animation is listed:
+     Chrome's print rendering can snapshot a fill-mode animation at its first keyframe (opacity 0),
+     which would print a statement as a blank page. */
   .reveal,
-  .floaty {
+  .floaty,
+  .rise-in,
+  .num-rise,
+  .bar-up,
+  .bar-wide,
+  .panel-in,
+  .draw-path,
+  .draw-check,
+  .pop {
     animation: none !important;
   }
 

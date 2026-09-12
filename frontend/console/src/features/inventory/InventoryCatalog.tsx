@@ -352,9 +352,11 @@ function HeroValue({
 }) {
   const { t } = useTranslation()
   const figure = (
+    // Keyed on the value: the figure rises on arrival and again when the total changes.
     <span
+      key={value}
       className={cn(
-        'tnum block font-mono font-bold leading-none tracking-display text-ink',
+        'num-rise tnum block font-mono font-bold leading-none tracking-display text-ink',
         compact ? 'text-xl' : 'text-2xl',
       )}
     >

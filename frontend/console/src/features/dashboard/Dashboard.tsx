@@ -406,6 +406,7 @@ export function Dashboard() {
           {/* KPI tiles — all real */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi
+              index={0}
               label={t('dashboard.revenue')}
               value={formatMoney(figures.revenue, displayCurrency, locale)}
               note={
@@ -417,6 +418,7 @@ export function Dashboard() {
               loading={query.isLoading}
             />
             <Kpi
+              index={1}
               label={t('dashboard.expense')}
               value={formatMoney(figures.expense, displayCurrency, locale)}
               note={
@@ -427,6 +429,7 @@ export function Dashboard() {
               loading={query.isLoading}
             />
             <Kpi
+              index={2}
               label={t('dashboard.netProfit')}
               value={formatMoney(figures.net, displayCurrency, locale)}
               valueClass={profit ? 'text-profit-ink' : 'text-loss'}
@@ -438,6 +441,7 @@ export function Dashboard() {
               loading={query.isLoading}
             />
             <Kpi
+              index={3}
               label={t('dashboard.margin')}
               value={marginLabel}
               valueClass="text-profit-ink"
@@ -676,6 +680,7 @@ function Kpi({
   noteClass,
   emphatic,
   loading,
+  index = 0,
 }: {
   label: string
   value: string
@@ -684,18 +689,27 @@ function Kpi({
   noteClass?: string
   emphatic?: boolean
   loading: boolean
+  /** Position in the KPI row — sets the arrival stagger. */
+  index?: number
 }) {
   return (
     // `emphatic` singles ONE kpi out of a row. A #DEDEDE ring inside a #E4E4E4 border was a ~2%
     // step — technically neutral, but it stopped saying anything. Ink is the emphasis colour now,
     // so the ring uses it, the same way the hero figure does.
-    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')}>
+    <Card
+      className={cn('rise-in p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')}
+      style={{ animationDelay: `${(0.05 + index * 0.07).toFixed(2)}s` }}
+    >
       <div className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-2 h-7 w-28 animate-pulse rounded bg-ink-100" />
       ) : (
-        // A summary figure, not a column — display face at 800 (ADR 0077).
-        <div className={cn('tnum mt-2 font-display text-2xl font-extrabold tracking-display', valueClass ?? 'text-ink')}>
+        // A summary figure, not a column — display face at 800 (ADR 0077). Keyed on the value so it
+        // rises on arrival and again when the period changes (the phone home's rule).
+        <div
+          key={value}
+          className={cn('num-rise tnum mt-2 font-display text-2xl font-extrabold tracking-display', valueClass ?? 'text-ink')}
+        >
           {value}
         </div>
       )}

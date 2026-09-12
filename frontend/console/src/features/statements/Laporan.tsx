@@ -222,6 +222,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
           onRetry={retryMonth}
           type={chartType}
           tone={(v) => seriesTone(trendKey, v)}
+          seriesKey={`${tab}:${trendKey}`}
           formatValue={money}
           locale={locale}
         />
@@ -342,7 +343,14 @@ export function Laporan({ tab }: { tab: ReportTab }) {
           </div>
         </div>
       ) : (
-        <div className={cn('pb-8 transition-opacity', settling && 'opacity-60')}>
+        // The home's arrival, once per statement: the report rises in (keyed on the VIEW — income
+        // ↔ balance ↔ cash — not the tab, since pnl and exp share IncomeView and its state), its
+        // hero figure rises after it (Hero, keyed on the value) and the chart's columns grow
+        // (PeriodChart, keyed on the series). Picking a period moves only the numbers. The rise
+        // lives on its OWN wrapper: a forward-filled animation's opacity outranks a class, so on
+        // the same node it would have silently killed the settling dim below.
+        <div key={tab === 'bs' ? 'bs' : tab === 'cf' ? 'cf' : 'income'} className="rise-in">
+          <div className={cn('pb-8 transition-opacity', settling && 'opacity-60')}>
           {tab === 'pnl' || tab === 'exp' ? (
             <IncomeView
               tab={tab}
@@ -368,6 +376,7 @@ export function Laporan({ tab }: { tab: ReportTab }) {
           ) : (
             <CashView data={cash.data!} money={money} amount={amount} currency={currency} locale={locale} periodText={periodText} chart={chart} />
           )}
+          </div>
         </div>
       )}
 

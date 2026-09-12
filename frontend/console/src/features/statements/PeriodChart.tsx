@@ -56,6 +56,7 @@ export function PeriodChart({
   tone,
   formatValue,
   locale,
+  seriesKey,
   height = 132,
 }: {
   /** `YYYY-MM`, oldest first. */
@@ -73,6 +74,9 @@ export function PeriodChart({
   /** For the column tooltip — already locale-aware (formatMoney). */
   formatValue: (v: number) => string
   locale: string
+  /** Identity of WHAT the chart shows (e.g. "pnl:net"). Changing it regrows the columns / redraws
+   *  the line; a month resolving or a period being picked does not. */
+  seriesKey: string
   height?: number
 }) {
   const { t } = useTranslation()
@@ -129,6 +133,7 @@ export function PeriodChart({
           />
           {isLine && present.length > 0 ? (
             <svg
+              key={seriesKey}
               width={track.trackW}
               height={height}
               viewBox={`0 0 ${track.trackW} ${height}`}
@@ -141,6 +146,7 @@ export function PeriodChart({
                   <g key={run[0].i}>
                     {/* The area between the line and zero: a wash, quiet enough not to compete. */}
                     <polygon
+                      className="reveal"
                       points={[
                         `${columnCentre(run[0].i, track)},${scale.upperH}`,
                         ...run.map(pt),
@@ -150,6 +156,8 @@ export function PeriodChart({
                     />
                     <polyline
                       points={run.map(pt).join(' ')}
+                      pathLength={100}
+                      className="draw-path"
                       fill="none"
                       stroke="var(--color-ink)"
                       strokeWidth={2}
@@ -178,7 +186,16 @@ export function PeriodChart({
           {/* Columns — the period control. Each is a full-height hit target. The row is exactly
               `height` tall (the plot box carries 6px more for the selected marker's ring), so a
               bottom-anchored column ends ON the baseline, not below it. */}
-          <div className="relative flex" style={{ height, gap: track.gap, paddingInline: track.inset }}>
+          {/* Keyed on the SERIES IDENTITY, so switching what the chart shows (income ↔ balance ↔
+              cash, net ↔ expense) regrows the columns the way the home's strip does on arrival —
+              while a month resolving, a retry, or tapping a column to pick a period keeps the same
+              nodes and moves nothing but the tint. (Keying on the values remounted all twelve
+              columns every time one month's query settled.) */}
+          <div
+            key={seriesKey}
+            className="relative flex"
+            style={{ height, gap: track.gap, paddingInline: track.inset }}
+          >
             {periods.map((p, i) => {
               const v = values[i]
               const sel = p === selected
@@ -217,7 +234,7 @@ export function PeriodChart({
                     <span
                       aria-hidden="true"
                       className={cn(
-                        'absolute left-1/2 -translate-x-1/2 transition-colors duration-200',
+                        'bar-up absolute left-1/2 -translate-x-1/2 transition-colors duration-200',
                         geo.anchor === 'bottom' ? 'rounded-t-sm' : 'rounded-b-sm',
                         sel ? TONE_FILL[tone(v as number)] : 'bg-ink-200',
                       )}
@@ -225,6 +242,9 @@ export function PeriodChart({
                         width: barW,
                         height: geo.h,
                         [geo.anchor]: geo.offset,
+                        // Grows out of the baseline it sits on (a negative bar hangs from it).
+                        transformOrigin: geo.anchor,
+                        animationDelay: `${(i * 0.04).toFixed(2)}s`,
                       }}
                     />
                   ) : null}

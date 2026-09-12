@@ -154,7 +154,9 @@ export function DashboardPhoneMonthly() {
       ) : (
         <>
           {/* Hero — monthly net on the inverted card. */}
-          <div className="rounded-card bg-ink-900 p-5 shadow-lg">
+          {/* The home's choreography (DashboardPhone): sections rise in on a stagger, the hero
+              figure rises last and re-rises when the period changes, the share bars grow. */}
+          <div className="rise-in rounded-card bg-ink-900 p-5 shadow-lg" style={{ animationDelay: '0.05s' }}>
             <div className="font-mono text-2xs font-semibold uppercase tracking-eyebrow text-paper/55">
               {profit ? t('dashboard.netProfit') : t('dashboard.netLoss')} ·{' '}
               {formatPeriod(period, locale)}
@@ -165,7 +167,11 @@ export function DashboardPhoneMonthly() {
             {query.isLoading ? (
               <div className="mt-2 h-9 w-52 max-w-full animate-pulse rounded-lg bg-paper/20" />
             ) : (
-              <div className="tnum mt-2 font-display text-3xl font-extrabold leading-none tracking-display text-paper">
+              <div
+                key={formatMoney(figures.net, company.baseCurrency, locale)}
+                className="num-rise tnum mt-2 font-display text-3xl font-extrabold leading-none tracking-display text-paper"
+                style={{ animationDelay: '0.18s' }}
+              >
                 {formatMoney(figures.net, company.baseCurrency, locale)}
               </div>
             )}
@@ -227,7 +233,7 @@ export function DashboardPhoneMonthly() {
 
           {/* Per-outlet contribution — real POSTED figures only, bar = share of the top outlet. */}
           {outlets.length > 0 ? (
-            <Card className="p-[18px]">
+            <Card className="rise-in p-[18px]" style={{ animationDelay: '0.3s' }}>
               <div className="flex items-baseline justify-between">
                 <span className="text-base font-bold text-ink">
                   {t('dashboardPhone.perOutlet')}
@@ -249,8 +255,8 @@ export function DashboardPhoneMonthly() {
                         chart — the design draws it in the same ink as the figure beside it. */}
                     <div className="h-[7px] overflow-hidden rounded-full bg-hover">
                       <div
-                        className="h-full rounded-full bg-emerald"
-                        style={{ width: maxOutlet > 0 ? `${(o.revenueMinor / maxOutlet) * 100}%` : '0%' }}
+                        className="bar-wide h-full rounded-full bg-emerald"
+                        style={{ width: maxOutlet > 0 ? `${(o.revenueMinor / maxOutlet) * 100}%` : "0%", animationDelay: "0.55s" }}
                       />
                     </div>
                   </div>
@@ -261,7 +267,10 @@ export function DashboardPhoneMonthly() {
 
           {/* Quick tiles */}
           {quickTiles.length > 0 ? (
-            <div className={cn('grid gap-2.5', quickTiles.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
+            <div
+              className={cn('rise-in grid gap-2.5', quickTiles.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}
+              style={{ animationDelay: '0.4s' }}
+            >
               {quickTiles.map((tile) => {
                 const TileIcon = tile.icon
                 return (
