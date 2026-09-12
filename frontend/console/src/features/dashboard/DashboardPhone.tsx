@@ -93,7 +93,7 @@ const OUTLET_ZONE = 'Asia/Jakarta'
 const SECTION_LABEL = 'pl-1 text-xs font-semibold text-ink-3'
 const LIST_CARD = 'mt-2 overflow-hidden rounded-2xl border border-line bg-surface'
 const TILE_CLASS =
-  'flex min-h-[60px] items-center gap-[11px] rounded-2xl border border-line bg-surface px-3.5 py-3 text-left text-sm font-semibold leading-tight text-ink transition-[background-color,border-color,transform] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.98] motion-reduce:active:scale-100'
+  'flex min-h-[60px] items-center gap-[11px] rounded-2xl border border-line bg-surface px-3.5 py-3 text-left text-sm font-semibold leading-tight text-ink transition-[background-color,border-color,transform,scale] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.98] motion-reduce:active:scale-100'
 
 export function DashboardPhone() {
   const { company } = useSession()
@@ -405,7 +405,7 @@ function TodayHome({ company }: { company: CompanySession }) {
           to="/more"
           viewTransition
           aria-label={t('dashboardPhone.menu')}
-          className="-mr-2.5 grid size-11 shrink-0 place-items-center rounded-full text-ink-2 transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.94] motion-reduce:active:scale-100"
+          className="-mr-2.5 grid size-11 shrink-0 place-items-center rounded-full text-ink-2 transition-[background-color,transform,scale] duration-150 hover:bg-hover active:scale-[0.94] motion-reduce:active:scale-100"
         >
           <EllipsisVertical className="size-5" aria-hidden="true" />
         </Link>

@@ -517,7 +517,7 @@ export function ThermalReceipt({
         aria-labelledby={headingId}
       >
         {completionMark ? (
-          <div className="mb-3 flex justify-center print:hidden">
+          <div className="mb-3 flex w-full justify-center print:hidden">
             <SuccessMark size="lg" />
           </div>
         ) : null}

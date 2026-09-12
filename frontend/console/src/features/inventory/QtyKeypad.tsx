@@ -55,7 +55,7 @@ export function QtyKeypad({
                   ? t('inventory.keypad.decimal')
                   : t('inventory.keypad.digit', { digit: key })
             }
-            className="tnum grid min-h-14 place-items-center rounded-2xl font-mono text-xl font-semibold text-ink transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[.96] active:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald motion-reduce:active:scale-100"
+            className="tnum grid min-h-14 place-items-center rounded-2xl font-mono text-xl font-semibold text-ink transition-[background-color,transform,scale] duration-150 hover:bg-hover active:scale-[.96] active:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald motion-reduce:active:scale-100"
           >
             {key === 'backspace' ? (
               <Delete className="size-5" strokeWidth={1.9} aria-hidden="true" />

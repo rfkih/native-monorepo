@@ -34,7 +34,7 @@ function TabInner({ tab, active }: { tab: MobileTab; active: boolean }) {
     <>
       <span
         className={cn(
-          'grid h-[30px] w-[60px] place-items-center rounded-full transition-[background-color,color,transform] duration-200',
+          'grid h-[30px] w-[60px] place-items-center rounded-full transition-[background-color,color,transform,scale] duration-200',
           // The press squeezes the PILL, not the whole tab — the label stays put.
           'group-active:scale-95 motion-reduce:group-active:scale-100',
           active ? 'bg-emerald-tint text-emerald-2' : 'text-ink-3',

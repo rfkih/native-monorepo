@@ -64,7 +64,7 @@ export function MenuTile({
       style={{ animationDelay: `${delayMs}ms` }}
       className={cn(
         'reveal relative flex h-[133px] flex-col overflow-hidden rounded-2xl border bg-surface text-left',
-        'transition-[background-color,border-color,transform] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+        'transition-[background-color,border-color,transform,scale] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
         'active:scale-[0.98] motion-reduce:active:scale-100',
         unavailable
           ? 'cursor-not-allowed border-line opacity-55'

@@ -66,7 +66,7 @@ const StandaloneRegister = lazy(() =>
 )
 
 const TILE_CLASS =
-  'flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-xs font-semibold text-ink-2 transition-[background-color,border-color,color,transform] duration-150 hover:border-line-strong hover:bg-hover hover:text-ink active:scale-[0.97] motion-reduce:active:scale-100'
+  'flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-xs font-semibold text-ink-2 transition-[background-color,border-color,color,transform,scale] duration-150 hover:border-line-strong hover:bg-hover hover:text-ink active:scale-[0.97] motion-reduce:active:scale-100'
 
 function Tile({ to, icon: TileIcon, label }: { to: string; icon: Icon; label: string }) {
   return (

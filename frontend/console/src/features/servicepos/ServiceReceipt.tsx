@@ -193,7 +193,8 @@ export function ServiceReceipt({
   return (
     <ThermalReceipt
       autoPrint
-      completionMark
+      // Only a CAPTURED, confirmed payment is "done" — never over a pending or provisional banner.
+      completionMark={payment?.status === 'CAPTURED' && !provisional}
       cashTender={isCash}
       businessName={businessName}
       title={t('servicePos.receipt.title')}

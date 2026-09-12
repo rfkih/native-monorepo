@@ -599,6 +599,13 @@ body {
  * overlay simply appears and disappears — Dialog/MobileSheet skip the unmount delay too
  * (lib/motion.ts), so nothing waits on an animation that never runs.
  */
+/* The SuccessMark's disc (and any one-off "appear" that should read as a settle, not a cut). */
+@utility pop {
+  animation: var(--animate-pop);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
 @utility sheet-up {
   animation: var(--animate-sheet-up);
   @media (prefers-reduced-motion: reduce) {
