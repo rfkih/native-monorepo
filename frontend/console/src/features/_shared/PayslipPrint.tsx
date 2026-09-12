@@ -170,11 +170,9 @@ export function PayslipPrint({
             {/* Green (profit tone) is reserved for done/official — matches PayrollSetupTab's
                 provenance badges and PayrollTab's RunDetail provenance chip (never a second tone
                 for the same OFFICIAL state). */}
-            <Badge tone={illustrative ? 'amber' : 'profit'}>
-              {illustrative
-                ? t('payslip.print.provenanceIllustrative')
-                : t('payslip.print.provenanceOfficial')}
-            </Badge>
+            {!illustrative ? (
+              <Badge tone="profit">{t('payslip.print.provenanceOfficial')}</Badge>
+            ) : null}
           </div>
 
           {lines.length === 0 ? (
@@ -255,11 +253,6 @@ function PayslipLineRow({
         {componentLabel(t, line.componentKey)}
         {line.bearer === 'EMPLOYER' ? (
           <span className="ml-1.5 text-xs text-ink-3">({t('payslip.print.employerBorne')})</span>
-        ) : null}
-        {line.illustrative ? (
-          <span className="ml-1.5">
-            <Badge tone="amber">{t('payslip.print.provenanceIllustrative')}</Badge>
-          </span>
         ) : null}
       </span>
       <span className="tnum font-mono text-[14px] font-medium text-ink">

@@ -100,13 +100,6 @@ export function CashFlow() {
         </div>
       </div>
 
-      {data?.usesIllustrativeRules ? (
-        <div>
-          <Badge tone="amber">
-            <TriangleAlert className="size-3" /> {t('statements.illustrative')}
-          </Badge>
-        </div>
-      ) : null}
 
       {query.isError ? (
         <Card className="p-8 text-center text-sm text-loss">{t('statements.error')}</Card>

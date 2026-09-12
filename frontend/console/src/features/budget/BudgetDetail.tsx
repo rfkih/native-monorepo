@@ -4,7 +4,6 @@ import { ArrowLeft, Download, TriangleAlert } from 'lucide-react'
 import { BackButton } from '@/components/mobile/BackButton'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { downloadCsv } from '@/lib/csv'
@@ -107,11 +106,6 @@ export function BudgetDetail() {
           </p>
         </div>
         <div className="flex items-center gap-2.5">
-          {data?.usesIllustrativeRules ? (
-            <Badge tone="amber">
-              <TriangleAlert className="size-3" /> {t('statements.illustrative')}
-            </Badge>
-          ) : null}
           <Button type="button" variant="outline" onClick={exportCsv} disabled={!data}>
             <Download className="size-[15px]" aria-hidden />
             {t('budget.export')}

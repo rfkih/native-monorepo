@@ -35,7 +35,6 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { OverdueSettlementCard } from '@/features/platform/OverdueSettlementCard'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
@@ -411,13 +410,6 @@ function TodayHome({ company }: { company: CompanySession }) {
         </Link>
       </div>
 
-      {today.illustrative ? (
-        <div>
-          <Badge tone="amber">
-            <TriangleAlert className="size-3" /> {t('dashboard.illustrative')}
-          </Badge>
-        </div>
-      ) : null}
 
       {outletsQuery.isError ? (
         <ErrorDiagnostics

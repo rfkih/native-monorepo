@@ -4,7 +4,6 @@ import { Link, useParams } from 'react-router-dom'
 import { ChevronRight, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, KpiTile } from '@/features/_shared/financeUi'
@@ -98,9 +97,6 @@ export function InvoiceDetail() {
               {invoice.invoiceNumber}
             </h1>
             <InvoiceStatusBadge status={invoice.status} />
-            {invoice.usesIllustrativeRules ? (
-              <Badge tone="amber">{t('ar.detail.estimatedTax')}</Badge>
-            ) : null}
           </div>
           <p className="mt-1.5 text-sm text-ink-3">
             {t('ar.detail.customer')}: {invoice.customerName} · {t('ar.detail.issueDate')}:{' '}

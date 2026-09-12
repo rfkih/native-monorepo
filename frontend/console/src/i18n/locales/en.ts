@@ -32,7 +32,6 @@ export const en = {
       title: 'Payslips',
       empty: 'No payslips yet. They appear here after payroll runs.',
       runSeq: 'Run #{{seq}}',
-      illustrative: 'Illustrative',
       trueUp: 'Annual true-up',
       trueUpCredit: 'Refund',
       lines: '{{count}} lines',
@@ -290,7 +289,7 @@ export const en = {
     posPhotoAlt: 'A barista at work behind the coffee machine',
     f1Title: 'Payroll that knows the Indonesian rules',
     f1Body:
-      'PPh 21, BPJS Kesehatan, and JHT are computed from the same attendance data. THR gets its own payroll type. Figures still based on the illustrative dataset carry a yellow flag.',
+      'PPh 21, BPJS Kesehatan, and JHT are computed from the same attendance data. THR gets its own payroll type.',
     f2Title: 'Statements ready to hand over',
     f2Body:
       'P&L, balance sheet, and cash flow are built from the journal, not from manual recaps. Cross-company and cross-currency consolidation live on the same page.',
@@ -311,7 +310,7 @@ export const en = {
     t2Body: 'A closed month cannot be quietly edited — only corrected through a new journal entry.',
     t3Title: 'Provisional figures flagged',
     t3Body:
-      'Stub FX rates and illustrative statutory rules carry a yellow badge — they never masquerade as final.',
+      'Stub FX rates carry a yellow badge — they never masquerade as final.',
     t4Title: 'Your data stays yours',
     t4Body: 'CSV export on every report. No exit fees, no lock-in.',
     // founder note + product facts — the company speaking in its own voice; no invented
@@ -851,8 +850,6 @@ export const en = {
     presentationNote: 'View-only conversion at the period average rate — the books are unchanged.',
     stubFx: 'Provisional FX',
     stubFxTooltip: 'Converted with a placeholder rate — not a verified market rate.',
-    illustrative: 'Illustrative figures',
-    illustrativeTooltip: 'Includes placeholder statutory/payroll data — not verified production values.',
     asOf: 'as of {{date}}',
     breakdown: 'Breakdown',
     overview: 'Overview',
@@ -1084,7 +1081,6 @@ export const en = {
       noInvesting: 'No investing activity',
       noFinancing: 'No financing activity',
     },
-    illustrative: 'Illustrative figures',
     noData: 'No postings for this period yet',
     noDataHint: 'Figures appear once sales, expenses, or payroll post to the ledger.',
     error: 'Could not load the statement.',
@@ -1106,8 +1102,6 @@ export const en = {
     discount: 'Discount',
     serviceCharge: 'Service charge',
     tax: 'Tax',
-    estimated: 'Estimated',
-    illustrativeHint: 'Rates are illustrative placeholders — not verified regulatory figures.',
     addDiscount: 'Add discount',
     discountInvalid: 'Discount must be a positive number.',
     coupon: {
@@ -1545,8 +1539,6 @@ export const en = {
     summaryLoyalty: 'Loyalty redeemed',
     summaryService: 'Service charge',
     summaryTax: 'Tax (PB1)',
-    summaryEstimated: 'estimated',
-    summaryTaxEstimatedNote: 'Tax rate is an illustrative estimate — not yet verified for reporting.',
     summaryRefunds: 'Refunds',
     summaryNet: 'Net sales',
     summaryCashSection: 'Cash drawer',
@@ -1977,7 +1969,6 @@ export const en = {
       partiallyPaid: 'Partly paid',
       linePaid: 'Paid',
       dueRemaining: 'Still owing',
-      estimated: 'estimate',
       lineUnit: '{{qty}} × {{price}}',
       emptyCart: 'Tap an item to start the ticket.',
       emptyBill: 'Nothing on this bill yet — tap an item to add it.',
@@ -2121,7 +2112,6 @@ export const en = {
       shareOfRevenue: '{{percent}} of revenue',
       noPostings: 'No postings for this period yet. Sales appear here as they are recorded.',
       error: 'Could not load the P&L for this unit.',
-      illustrative: 'Includes illustrative figures',
       prevMonth: 'Previous month',
       nextMonth: 'Next month',
     },
@@ -2733,11 +2723,6 @@ export const en = {
       hint: 'A percentage of the sales this employee rings under their own login. Needs a login and POS access.',
     },
     payroll: {
-      illustrativeBanner: {
-        badge: 'Illustrative',
-        title: 'Illustrative placeholder rates',
-        body: 'Tax and BPJS figures are NOT verified DJP/BPJS rates — do not use for real payroll. An accountant must load official rates before this leaves the sandbox.',
-      },
       setup: {
         title: 'Payroll needs a one-time setup',
         body: 'Activate the official Indonesian statutory dataset (ID-2026.1 — PPh 21 TER, PTKP, and BPJS) and the default pay components for this company.',
@@ -2860,7 +2845,7 @@ export const en = {
       reports: {
         subtitle:
           'Statutory exports built from posted payroll runs. These go beyond what Odoo’s Indonesian localisation ships — but the column layout is illustrative, not a certified government schema. Verify every figure before filing.',
-        illustrativeLayoutNote: 'Illustrative layout — verify every figure before filing.',
+        illustrativeLayoutNote: 'Not a certified DJP/BPJS file format — check it against the official form before filing.',
         ownerOnly: 'Owner-only — this export carries salary-revealing figures.',
         yearLabel: 'Year',
         download: 'Download CSV',
@@ -2950,7 +2935,6 @@ export const en = {
         THR: 'THR (holiday allowance)',
       },
       provenanceOfficial: 'Official rates',
-      provenanceIllustrative: 'Illustrative placeholder rates — do not use for real payroll',
       earnings: 'Earnings',
       deductions: 'Deductions',
       employerBorne: 'employer-borne',
@@ -3143,7 +3127,6 @@ export const en = {
       SUPERSEDED: 'Superseded',
     },
     stubFx: 'Provisional FX',
-    illustrative: 'Illustrative figures',
     simplifiedPolicy: 'Simplified translation policy',
     defineDialog: {
       title: 'Define consolidation group',
@@ -3807,7 +3790,6 @@ export const en = {
     baseCurrency: 'Currency',
     firstClose: 'First close',
     reconciled: 'Reconciled',
-    illustrative: 'Illustrative',
     yes: 'Yes',
     no: 'No',
     confirmDialog: {
@@ -3914,7 +3896,6 @@ export const en = {
       total: 'Total',
       paid: 'Paid',
       outstanding: 'Outstanding',
-      estimatedTax: 'Estimated tax',
       lines: 'Line items',
       noLines: 'No lines',
       colDescription: 'Description',
@@ -4192,7 +4173,6 @@ export const en = {
       total: 'Total',
       paid: 'Paid',
       outstanding: 'Outstanding',
-      estimatedTax: 'Estimated tax',
       lines: 'Line items',
       noLines: 'No lines',
       colDescription: 'Description',
@@ -4680,8 +4660,6 @@ export const en = {
       subtitle: 'Your VAT return for the month — output VAT minus input VAT.',
       periodLabel: 'Period',
       exportEfaktur: 'Export e-Faktur',
-      illustrativeNote:
-        'Illustrative: the 11% rate, carryforward policy, and e-Faktur layout are placeholders pending a tax specialist — not a filed government return.',
       error: 'Could not load the VAT return.',
       noCompany: 'No company selected',
       noCompanyHint: 'Create a company to see its VAT return.',
@@ -4815,8 +4793,6 @@ export const en = {
     proceedsLabel: 'Sale price (0 = write-off)',
     disposeHint:
       'Removes the asset and its depreciation from the books and posts the difference against the {{bookValue}} book value as a gain or loss on disposal — other income, never sales revenue. This cannot be undone.',
-    illustrativeNote:
-      'Illustrative: straight-line only, depreciation starts the month after acquisition, and account codes are placeholders pending an accounting specialist.',
     errors: {
       invalid: 'Check the amounts — cost must be positive and salvage below cost.',
       currencyMismatch: 'The currency must match the company base currency for the period.',

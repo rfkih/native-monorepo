@@ -136,25 +136,9 @@ export function PayrollTab({
     runTypeFilter === 'ALL' ? allRuns : allRuns.filter((r) => r.runType === runTypeFilter)
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? runs[0] ?? null
 
-  const showIllustrativeBanner = !!setup.data && setup.data.provenance !== 'OFFICIAL'
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Persistent illustrative banner — visible whenever provenance is not OFFICIAL. */}
-      {showIllustrativeBanner ? (
-        <Card className="flex items-start gap-3 border-amber/40 bg-amber-tint p-4">
-          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-amber" aria-hidden="true" />
-          <div>
-            <p className="text-sm font-semibold text-amber">
-              {t('hr.payroll.illustrativeBanner.title')}
-            </p>
-            <p className="mt-0.5 text-xs leading-relaxed text-amber/90">
-              {t('hr.payroll.illustrativeBanner.body')}
-            </p>
-          </div>
-        </Card>
-      ) : null}
-
       {setup.isLoading ? (
         <div className="flex flex-col gap-4">
           <Skeleton className="h-9 w-64 rounded-xl" />
@@ -321,9 +305,6 @@ export function PayrollTab({
                         {run.period.endsWith('-12') && !run.usesIllustrativeRules ? (
                           <Badge tone="info">{t('hr.payroll.history.trueUpBadge')}</Badge>
                         ) : null}
-                        {run.usesIllustrativeRules ? (
-                          <Badge tone="amber">{t('hr.payroll.illustrativeBanner.badge')}</Badge>
-                        ) : null}
                         <span className="text-xs text-ink-3">
                           {run.postedAt
                             ? new Intl.DateTimeFormat(locale, {
@@ -472,13 +453,11 @@ function RunDetail({
             {run.period.endsWith('-12') && !run.usesIllustrativeRules ? (
               <Badge tone="info">{t('hr.payroll.history.trueUpBadge')}</Badge>
             ) : null}
-            {/* The provenance chip (P2) — green ONLY for OFFICIAL (done/verified), never for
-                illustrative, reusing PayrollSetupTab's exact short labels (single source). */}
-            <Badge tone={run.usesIllustrativeRules ? 'amber' : 'profit'}>
-              {run.usesIllustrativeRules
-                ? t('payrollSetup.provenance.illustrative')
-                : t('payrollSetup.provenance.official')}
-            </Badge>
+            {/* The provenance chip — green for OFFICIAL (done/verified); a run frozen on an older rule
+                set simply carries no chip (the console no longer labels figures "illustrative"). */}
+            {!run.usesIllustrativeRules ? (
+              <Badge tone="profit">{t('payrollSetup.provenance.official')}</Badge>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button

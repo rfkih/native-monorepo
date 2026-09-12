@@ -155,11 +155,6 @@ export function Deferrals() {
         </Card>
       )}
 
-      <div>
-        <Badge tone="amber">
-          <TriangleAlert className="size-3" /> {t('assets.illustrativeNote')}
-        </Badge>
-      </div>
 
       {dialogOpen ? (
         <div

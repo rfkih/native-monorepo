@@ -4,22 +4,10 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import type { } from '@/lib/session'
 import type { } from '@/features/loyalty/api'
 import type { } from './../config'
 
-
-export function EstimatedBadge({ hint }: { hint: string }) {
-  const { t } = useTranslation()
-  return (
-    <span title={hint} aria-label={hint}>
-      <Badge tone="amber" className="text-2xs py-0 px-1.5">
-        {t('pos.estimated')}
-      </Badge>
-    </span>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Empty / loading states

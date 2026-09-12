@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, TriangleAlert, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
@@ -209,11 +209,6 @@ export function PeriodClose() {
                   <Badge tone="neutral">{t('close.badge.notReconciled')}</Badge>
                 )}
                 {item.firstClose ? <Badge tone="info">{t('close.badge.firstClose')}</Badge> : null}
-                {item.usesIllustrativeRules ? (
-                  <Badge tone="amber">
-                    <TriangleAlert className="size-3" /> {t('close.illustrative')}
-                  </Badge>
-                ) : null}
               </div>
             </Card>
           ))}
@@ -253,11 +248,6 @@ export function PeriodClose() {
                     <Check className="size-3" aria-hidden />
                     {t('close.yes')}
                   </span>
-                  {item.usesIllustrativeRules ? (
-                    <Badge tone="amber">
-                      <TriangleAlert className="size-3" /> {t('close.illustrative')}
-                    </Badge>
-                  ) : null}
                 </div>
 
                 {/* Base currency */}

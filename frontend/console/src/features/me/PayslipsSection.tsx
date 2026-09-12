@@ -171,9 +171,6 @@ function PayslipRow({
         {isDecemberPeriod(slip.period) && !slip.illustrative ? (
           <Badge tone="info">{t('me.payslips.trueUp')}</Badge>
         ) : null}
-        {slip.illustrative ? (
-          <Badge tone="amber">{t('me.payslips.illustrative')}</Badge>
-        ) : null}
         <span className="ml-auto text-xs text-ink-3">
           {t('me.payslips.lines', { count: slip.lineCount })}
         </span>

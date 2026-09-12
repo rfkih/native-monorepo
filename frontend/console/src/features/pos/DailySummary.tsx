@@ -192,11 +192,8 @@ function buildSummaryProps(
   if (s.serviceChargeMinor > 0) {
     totalRows.push({ label: t('register.summaryService'), valueLabel: money(s.serviceChargeMinor) })
   }
-  if (s.taxMinor > 0 || s.usesIllustrativeRules) {
-    const taxLabel = s.usesIllustrativeRules
-      ? `${t('register.summaryTax')} (${t('register.summaryEstimated')})`
-      : t('register.summaryTax')
-    totalRows.push({ label: taxLabel, valueLabel: money(s.taxMinor) })
+  if (s.taxMinor > 0) {
+    totalRows.push({ label: t('register.summaryTax'), valueLabel: money(s.taxMinor) })
   }
 
   // Settlement: per-tender GROSS sales (foot to TOTAL) then − Refunds = Net. Zero-value tenders are
@@ -259,8 +256,5 @@ function buildSummaryProps(
     grandTotalLabel: money(s.totalMinor),
     paymentRows,
     footerNote: t('register.summaryFooter'),
-    // Prominent banner when the tax rate is an illustrative placeholder (reuses the pending banner).
-    isPending: s.usesIllustrativeRules,
-    pendingNote: t('register.summaryTaxEstimatedNote'),
   }
 }

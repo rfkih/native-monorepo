@@ -9,7 +9,6 @@ import type { } from './../config'
 import type {
   PriceBreakdownResponse,
 } from '../api'
-import { EstimatedBadge } from './ServiceStates'
 
 
 // ---------------------------------------------------------------------------
@@ -40,8 +39,6 @@ export function BreakdownPanel({
     )
   }
 
-  const illustrative = breakdown.usesIllustrativeRules
-
   return (
     <div className="space-y-1.5 border-t border-line pt-3 text-sm">
       <div className="flex items-baseline justify-between text-ink-3">
@@ -70,7 +67,6 @@ export function BreakdownPanel({
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
           {t('pos.serviceCharge')}
-          {illustrative ? <EstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
         </span>
         <span className="tnum font-mono">{formatMoney(breakdown.serviceChargeMinor, currency, locale)}</span>
       </div>
@@ -78,7 +74,6 @@ export function BreakdownPanel({
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
           {t('pos.tax')}
-          {illustrative ? <EstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
         </span>
         <span className="tnum font-mono">{formatMoney(breakdown.taxMinor, currency, locale)}</span>
       </div>

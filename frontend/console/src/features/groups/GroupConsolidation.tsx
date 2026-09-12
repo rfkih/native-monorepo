@@ -397,11 +397,6 @@ function GroupDetail({
               {/* Provisional badges */}
               {data ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {data.usesIllustrativeRules ? (
-                    <Badge tone="amber">
-                      <TriangleAlert className="size-3" /> {t('groups.illustrative')}
-                    </Badge>
-                  ) : null}
                   {data.usesStubFx ? (
                     <Badge tone="amber">
                       <TriangleAlert className="size-3" /> {t('groups.stubFx')}

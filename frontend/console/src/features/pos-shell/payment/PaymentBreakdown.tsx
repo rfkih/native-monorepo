@@ -9,7 +9,6 @@
  *                    coupon/loyalty detail — ADR 0026/0027 scope).
  */
 import { useTranslation } from 'react-i18next'
-import { Badge } from '@/components/ui/Badge'
 import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import { formatMoney } from '@/lib/money'
 import type { AppliedPromotionResponse } from '@/features/pos/api'
@@ -58,7 +57,6 @@ export function PaymentBreakdown({
   }
 
   const full = variant === 'full'
-  const illustrative = full && breakdown.usesIllustrativeRules
 
   return (
     <div className="border-b border-line px-5 py-3 space-y-1.5 text-sm">
@@ -94,7 +92,6 @@ export function PaymentBreakdown({
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
           {t('pos.serviceCharge')}
-          {illustrative ? <InlineEstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
         </span>
         <span className="tnum font-mono">{formatMoney(breakdown.serviceChargeMinor, currency, locale)}</span>
       </div>
@@ -103,7 +100,6 @@ export function PaymentBreakdown({
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
           {t('pos.tax')}
-          {illustrative ? <InlineEstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
         </span>
         <span className="tnum font-mono">{formatMoney(breakdown.taxMinor, currency, locale)}</span>
       </div>
@@ -125,16 +121,5 @@ export function PaymentBreakdown({
         />
       ) : null}
     </div>
-  )
-}
-
-export function InlineEstimatedBadge({ hint }: { hint: string }) {
-  const { t } = useTranslation()
-  return (
-    <span title={hint} aria-label={hint}>
-      <Badge tone="amber" className="text-2xs py-0 px-1.5">
-        {t('pos.estimated')}
-      </Badge>
-    </span>
   )
 }

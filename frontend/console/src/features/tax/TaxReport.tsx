@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, FileCheck2, Info, ReceiptText, TriangleAlert } from 'lucide-react'
+import { Download, FileCheck2, ReceiptText, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -152,10 +152,6 @@ export function TaxReport() {
         </div>
       </div>
 
-      <Card className="flex items-start gap-2.5 border-info/30 bg-tint-info/40 p-3.5 text-sm text-ink-2">
-        <Info className="mt-0.5 size-[15px] shrink-0 text-info" aria-hidden />
-        <span>{t('tax.report.illustrativeNote')}</span>
-      </Card>
 
       {returnQuery.isError ? (
         <Card className="p-8 text-center text-sm text-loss">
