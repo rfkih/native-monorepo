@@ -24,6 +24,7 @@ import {
   Cookie,
   CupSoda,
   IceCreamCone,
+  ImageIcon,
   Plus,
   Salad,
   Search,
@@ -60,6 +61,7 @@ import {
   type CountKey,
 } from '@/features/inventory/lib/countKeypad'
 import { use86Item, useCreateMenuItem, useDeleteItem, useUn86Item, useUpdateMenuItem } from './api'
+import { resizeImageFile } from './image'
 import {
   fetchRecipe,
   recipeKey,
@@ -387,9 +389,17 @@ function ItemRow({
           open ? 'bg-paper' : 'bg-surface',
         )}
       >
-        <span className="grid size-[42px] shrink-0 place-items-center rounded-xl bg-hover text-ink-400">
-          <Glyph className="size-[21px]" strokeWidth={1.8} aria-hidden="true" />
-        </span>
+        {item.imageUrl ? (
+          <img
+            src={item.imageUrl}
+            alt=""
+            className="size-[42px] shrink-0 rounded-xl border border-line object-cover"
+          />
+        ) : (
+          <span className="grid size-[42px] shrink-0 place-items-center rounded-xl bg-hover text-ink-400">
+            <Glyph className="size-[21px]" strokeWidth={1.8} aria-hidden="true" />
+          </span>
+        )}
         <span className="min-w-0 flex-1">
           {/* The name is the row's identity: it owns its line (two before it gives anything up)
               and the sold-out badge sits on the meta line — beside the name it left ~60px on a
@@ -467,6 +477,7 @@ function ItemPanel({
   // a name commit followed at once by a price commit would drop the name's onError.
   const updateName = useUpdateMenuItem(session)
   const updatePrice = useUpdateMenuItem(session)
+  const updatePhoto = useUpdateMenuItem(session)
   const mark86 = use86Item(session)
   const unMark86 = useUn86Item(session)
   const putRecipe = usePutRecipe(session)
@@ -507,6 +518,34 @@ function ItemPanel({
     setError(null)
     if (item.available) mark86.mutate(item.id, { onError: fail })
     else unMark86.mutate(item.id, { onError: fail })
+  }
+
+  // The photo — the same resize + `PUT /menu/{id}` path the desktop picker takes (ADR 0083 had
+  // left it on the desktop tree, which on a phone meant no way to add one at all). A plain
+  // `<input type=file accept="image/*">`: the Android shell's WebView opens the system chooser
+  // (gallery / camera) for it. `imageUrl: ''` is the API's "clear".
+  const photoInput = useRef<HTMLInputElement>(null)
+  const [resizing, setResizing] = useState(false)
+  const photoBusy = resizing || updatePhoto.isPending
+  const pickPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    // Reset so the same file can be picked again after a remove.
+    e.target.value = ''
+    if (!file) return
+    setError(null)
+    setResizing(true)
+    try {
+      const url = await resizeImageFile(file)
+      updatePhoto.mutate({ itemId: item.id, imageUrl: url }, { onError: fail })
+    } catch (err) {
+      setError(t(err instanceof Error ? err.message : 'menu.errorGeneric'))
+    } finally {
+      setResizing(false)
+    }
+  }
+  const removePhoto = () => {
+    setError(null)
+    updatePhoto.mutate({ itemId: item.id, imageUrl: '' }, { onError: fail })
   }
 
   const lines: RecipeLine[] = recipeQuery.data?.lines ?? []
@@ -652,6 +691,59 @@ function ItemPanel({
             )}
           />
         </button>
+      </div>
+
+      {/* Photo — thumbnail, what it is for, and the two actions. */}
+      <div className="mt-[9px] flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
+        {item.imageUrl ? (
+          <img
+            src={item.imageUrl}
+            alt={t('menu.image.previewAlt', { name: item.name })}
+            className="size-12 shrink-0 rounded-lg border border-line object-cover"
+          />
+        ) : (
+          <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-hover text-ink-400">
+            <ImageIcon className="size-5" strokeWidth={1.8} aria-hidden="true" />
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold leading-snug text-ink">
+            {t('menu.image.pickLabel')}
+          </span>
+          <span className="mt-0.5 line-clamp-2 text-xs leading-snug text-ink-3">
+            {item.imageUrl ? t('menu.phone.photoSet') : t('menu.phone.photoNone')}
+          </span>
+        </span>
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={() => photoInput.current?.click()}
+            disabled={photoBusy}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-hover disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          >
+            {photoBusy ? <Spinner /> : null}
+            {item.imageUrl ? t('menu.image.changeButton') : t('menu.image.pickButton')}
+          </button>
+          {item.imageUrl ? (
+            <button
+              type="button"
+              onClick={removePhoto}
+              disabled={photoBusy}
+              className="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-semibold text-loss transition-colors hover:bg-tint-loss/60 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loss"
+            >
+              {t('menu.image.removeButton')}
+            </button>
+          ) : null}
+        </span>
+        <input
+          ref={photoInput}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={pickPhoto}
+        />
       </div>
 
       {/* Recipe — the list the HPP is made of. */}

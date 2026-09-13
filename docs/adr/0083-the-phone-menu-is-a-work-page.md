@@ -63,8 +63,11 @@ into the item's whole editor.
 - **Hapus item confirms in a Dialog** (N3) and soft-deactivates (`DELETE /menu/{id}`); the row leaves
   the list.
 - **Not on the phone page:** per-item stock adjustment (ingredient stock is the real stock since
-  ADR 0081; the row shows the legacy quantity read-only), modifier options, and the photo. They stay
-  on the desktop tree.
+  ADR 0081; the row shows the legacy quantity read-only) and modifier options. They stay on the
+  desktop tree. *Amended 2026-09-13:* the **photo** was on that list too, which on a phone meant no
+  way to add one at all (the owner runs the menu from the Android app) — the panel now carries a
+  photo row (thumbnail · pick/change · remove) over the same resize + `PATCH /menu/{id}` path as the
+  desktop picker, and the list row shows the thumbnail in place of the category glyph.
 
 The rules are one pure module, `menu/lib/menuView.ts` (chips, filter, summary, stock meta, margin,
 line cost, recipe total, the PUT bodies, the price parser), with tests.

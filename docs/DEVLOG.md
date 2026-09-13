@@ -1,5 +1,17 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-13 — the phone menu gets its photo back
+
+Right after v0.1.74 the owner reported "I can't upload a menu picture in the app". Not a
+regression: prod was healthy (MinIO, restaurant-service, ops-watch green, no image errors) — the
+phone menu work page (ADR 0083, v0.1.62) had deliberately left the photo on the desktop tree, so
+below 640px there was no control at all, and the owner works from the Android app. `MenuPhone`'s
+item panel now has a photo row (thumbnail · Pilih/Ganti foto · Hapus foto, hidden
+`<input type=file accept="image/*">` the WebView answers with the system chooser) over the same
+`resizeImageFile` + `PATCH /menu/{id}` path the desktop picker uses; the list row shows the
+thumbnail instead of the category glyph. ADR 0083 amended. Verified with a fixture-driven walk
+(pick → PATCH carries a JPEG data URL → remove → `imageUrl: ''`) and the overflow audit at 360/320.
+
 ## 2026-09-13 — phone text overflow: measured, fixed, gated
 
 The owner kept meeting text that ran out of its box on Android phones. Rather than guess from
