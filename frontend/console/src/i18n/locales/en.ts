@@ -3412,6 +3412,8 @@ export const en = {
       noIngredients: 'No ingredient matches.',
       inCatalog: 'Manage ingredients',
       failed: 'That change did not save. Try again.',
+      photoSet: 'Shown on the till and the self-order menu',
+      photoNone: 'No photo yet — shown on the till and the self-order menu',
     },
     addItem: 'Add item',
     loadError: 'Could not load the menu.',

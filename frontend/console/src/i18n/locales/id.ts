@@ -3364,6 +3364,8 @@ export const id = {
       noIngredients: 'Tidak ada bahan yang cocok.',
       inCatalog: 'Kelola bahan',
       failed: 'Perubahan itu tidak tersimpan. Coba lagi.',
+      photoSet: 'Tampil di kasir dan menu pesan-sendiri',
+      photoNone: 'Belum ada foto — tampil di kasir dan menu pesan-sendiri',
     },
     addItem: 'Tambah item',
     loadError: 'Tidak dapat memuat menu.',
