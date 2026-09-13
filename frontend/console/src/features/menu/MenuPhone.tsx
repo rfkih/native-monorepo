@@ -520,7 +520,7 @@ function ItemPanel({
     else unMark86.mutate(item.id, { onError: fail })
   }
 
-  // The photo — the same resize + `PUT /menu/{id}` path the desktop picker takes (ADR 0083 had
+  // The photo — the same resize + `PATCH /menu/{id}` path the desktop picker takes (ADR 0083 had
   // left it on the desktop tree, which on a phone meant no way to add one at all). A plain
   // `<input type=file accept="image/*">`: the Android shell's WebView opens the system chooser
   // (gallery / camera) for it. `imageUrl: ''` is the API's "clear".
