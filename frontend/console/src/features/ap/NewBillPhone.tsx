@@ -233,10 +233,18 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
     }
     // "Isi per kemasan" is SEEDED from the ingredient's remembered default (the desktop form does
     // the same) and stays editable; clearing it makes the line a plain per-unit purchase again.
+    // Re-picking the SAME ingredient — the name is the only tap on the card, so "let me check
+    // what I picked" is common — keeps whatever the owner typed for this brand; only a different
+    // ingredient re-seeds.
     setLines((ls) =>
       ls.map((l) =>
         l.key === key && l.kind === 'inventory'
-          ? { ...l, ingredient: ref, packSizeInput: packSizeInputOf(ref) }
+          ? {
+              ...l,
+              ingredient: ref,
+              packSizeInput:
+                l.ingredient?.id === ref.id ? l.packSizeInput : packSizeInputOf(ref),
+            }
           : l,
       ),
     )

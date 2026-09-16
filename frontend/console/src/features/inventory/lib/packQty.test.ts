@@ -47,4 +47,11 @@ describe('parsePackedQtyBase', () => {
     expect(parsePackedQtyBase('0', '20', pcs)).toBeNull()
     expect(parsePackedQtyBase('-1', '20', pcs)).toBeNull()
   })
+
+  it('rejects a pack count that is not plain digits — what Number() would still accept', () => {
+    for (const count of ['+2', '1e1', '0x14', '2,', '']) {
+      expect(parsePackedQtyBase(count, '20', pcs)).toBeNull()
+    }
+    expect(parsePackedQtyBase(' 2 ', '20', pcs)).toEqual({ packs: 2, qtyBase: 40 })
+  })
 })

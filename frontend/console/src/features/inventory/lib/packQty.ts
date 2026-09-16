@@ -50,8 +50,13 @@ export function parsePackedQtyBase(
   // `parseShownQtyInput` both validates that AND rounds it to a whole BASE integer.
   const perPackBase = parseShownQtyInput(packSizeTrimmed, ingredient)
   if (perPackBase == null || perPackBase <= 0) return null
-  // Pack COUNT (how many packs) is always a whole number — you don't buy half a pack.
-  const packs = Number(qtyInput.trim())
+  // Pack COUNT (how many packs) is always a whole number — you don't buy half a pack. Digits
+  // ONLY: `Number()` would also take "+2", "1e1" or "0x14", which the forms' own quantity parsers
+  // (`parseShownQtyInput`, the phone bill form's `parseDecimal`) refuse — the readback drawn from
+  // this function and the line's submit gate must never disagree on what a valid count is.
+  const packsTrimmed = qtyInput.trim()
+  if (!/^\d+$/.test(packsTrimmed)) return null
+  const packs = Number(packsTrimmed)
   if (!Number.isInteger(packs) || packs <= 0) return null
   const qtyBase = packs * perPackBase
   if (!Number.isInteger(qtyBase) || qtyBase <= 0) return null
