@@ -153,10 +153,10 @@ const BILL_SUMMARIES = [
 // items with a display unit over an integer base, whole-unit items (pcs/pack), one uncosted item
 // and one priced in USD so the "partial value" note has something to say. Stock is BASE units.
 
-const ingredient = (id, name, unit, displayUnit, stockQty, unitCostMinor, costCurrency = 'IDR') => ({
+const ingredient = (id, name, unit, displayUnit, stockQty, unitCostMinor, costCurrency = 'IDR', packSize = null) => ({
   id, businessId: COMPANY.businessId, name, unit, displayUnit, stockQty,
   unitCostMinor, costCurrency: unitCostMinor == null ? null : costCurrency,
-  stockValueMinor: unitCostMinor == null ? 0 : stockQty * unitCostMinor, active: true, packSize: null,
+  stockValueMinor: unitCostMinor == null ? 0 : stockQty * unitCostMinor, active: true, packSize,
 })
 
 const INGREDIENTS = [
@@ -174,6 +174,8 @@ const INGREDIENTS = [
   ingredient('telur-ayam', 'Telur Ayam Negeri', 'pcs', null, 180, 2600),
   ingredient('box-medium', 'Kemasan Box Medium', 'pcs', null, 340, 1150),
   ingredient('saus-pouch', 'Saus Sambal Pouch', 'pack', null, 48, 12500),
+  // Sold by the pack of 20, counted by the piece — the bill form's "Isi per kemasan" pre-fill.
+  ingredient('tortilla', 'Tortilla 8 inch', 'pcs', null, 120, 1500, 'IDR', 20),
   ingredient('es-kristal', 'Es Batu Kristal', 'g', 'kg', 30000, null),
   ingredient('truffle-paste', 'Truffle Paste (impor)', 'g', 'kg', 900, 85, 'USD'),
   // Out of stock — the catalog's "Stok nol" chip and the top of its action ranking.

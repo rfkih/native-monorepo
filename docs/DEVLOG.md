@@ -1,5 +1,33 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-17 — the phone bill form had forgotten how to buy by the pack
+
+The owner reported that "1 pack of tortilla (20 pcs)" recorded through the app landed in stock as
+1 pcs. The desktop bill form and *Catat pengeluaran* have carried "Isi per kemasan" since ADR 0072
+(2026-09-04): the ingredient's remembered `packSize` (V46) pre-fills it, the quantity counts packs,
+and `packs × isi` is what `ingredientQtyBase` receives. The phone "Tagihan baru" form (ADR 0084,
+v0.1.63) rebuilt the line card without it — `IngredientRef` dropped `packSize`, and `parseLine`
+called `parsePackedQtyBase(line.qty, '', …)` with the pack-size argument hard-coded blank. Not a
+wire change and not a backend fault: finance received an honest `ingredientQtyBase` of 1.
+
+The field is back on the phone card, with the desktop's contract exactly: blank = a plain purchase
+in the shown unit; non-blank = the quantity counts **packs** (a whole number) and the price is the
+invoice's **per-pack** figure, so `qty × price` stays the line total in both modes and only the stock
+quantity goes through the pack maths. The card reads back "2 kemasan × 20 = 40 pcs masuk Persediaan
+· Rp 1.500 / pcs" before submit — the per-unit cost derived from the exact total (`total × factor ÷
+base qty`, the `shownUnitCostMinor` rule), never typed. The seed value is a remembered default only;
+clearing it is a per-unit purchase, and the hint says so while the value is still the default.
+
+Verified: `newBillForm.test.ts` pack cases (packs × size, kg pack size → grams, half a pack refused,
+seed in the shown unit, the per-unit figure), `tsc -b`/lint/design-token gate, the `bills` pass of
+`mobile-shots` with a `Tortilla 8 inch` fixture (`packSize: 20`) asserting the readback in id + en,
+and the overflow audit at 360/320 (the new row is clean; the 320/en ellipses are the pre-existing
+account chip labels).
+
+**Data follow-up (needs the owner).** Bills posted from the phone between v0.1.63 and this fix whose
+linked ingredient has a `packSize` received `1/packSize` of their stock. They can be listed from
+finance's bill lines joined to restaurant's ingredients; the stock is corrected by opname.
+
 ## 2026-09-13 — the phone menu gets its photo back
 
 Right after v0.1.74 the owner reported "I can't upload a menu picture in the app". Not a

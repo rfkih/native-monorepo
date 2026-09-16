@@ -4006,6 +4006,11 @@ export const id = {
         accountInventory: '5100 · Persediaan bahan',
         pickIngredient: 'Pilih bahan…',
         qtyPlaceholder: '0',
+        // Beli per kemasan, stok menghitung isinya (ADR 0072) — kolom "Isi per kemasan" memakai
+        // kunci inventoryPicker.*; tiga ini khusus baris ponsel.
+        packUnit: 'kemasan',
+        pricePerPackLabel: 'Harga per kemasan',
+        perUnitPrice: '{{price}} / {{unit}}',
         addLine: 'Tambah baris',
         summary: 'Ringkasan',
         discount: 'Diskon',

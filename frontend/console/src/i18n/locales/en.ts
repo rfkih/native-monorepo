@@ -4060,6 +4060,11 @@ export const en = {
         accountInventory: '5100 · Inventory purchase',
         pickIngredient: 'Choose an ingredient…',
         qtyPlaceholder: '0',
+        // Bought by the pack, counted by the piece (ADR 0072) — the "Units per pack" field reuses
+        // the inventoryPicker.* keys; these three are the phone row's own.
+        packUnit: 'pack',
+        pricePerPackLabel: 'Price per pack',
+        perUnitPrice: '{{price}} / {{unit}}',
         addLine: 'Add line',
         summary: 'Summary',
         discount: 'Discount',

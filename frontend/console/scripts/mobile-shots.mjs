@@ -457,14 +457,34 @@ for (const pass of [
     await qty.fill('24')
     await page.getByRole('textbox', { name: /^(Harga satuan|Unit price)$/ }).first().fill('34500')
     await page.waitForTimeout(400)
-    // Printed total that does NOT match → red reconciliation, then the exact figure → green.
+    // A second line bought BY THE PACK (ADR 0072 on the phone): Persediaan → Tortilla, whose
+    // remembered pack size (20) pre-fills "Isi per kemasan", so qty counts packs and the price is
+    // the invoice's per-pack figure — 2 × Rp 30.000 = Rp 60.000, and 40 pcs into stock.
+    await page.getByRole('button', { name: /^(Tambah baris|Add line)$/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(300)
+    await page.getByRole('button', { name: /^(Akun biaya|Expense account)$/ }).nth(1).click({ timeout: 8000 })
+    await page.waitForTimeout(300)
+    await page.getByRole('button', { name: /5100/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(600)
+    await page.getByRole('button', { name: /^Tortilla 8 inch/ }).click({ timeout: 8000 })
+    await page.waitForTimeout(500)
+    await page.getByRole('textbox', { name: /^(Jumlah \(kemasan\)|Quantity \(packs\))$/ }).fill('2')
+    await page.getByRole('textbox', { name: /^(Harga per kemasan|Price per pack)$/ }).fill('30000')
+    await page.waitForTimeout(400)
+    const readback = await page.getByTestId('line-pack-readback-l2').textContent()
+    if (!/\b2\b/.test(readback ?? '') || !/\b40\b/.test(readback ?? '') || !/1[.,]500/.test(readback ?? '')) {
+      throw new Error(`pack readback must say 2 × 20 = 40 pcs at Rp 1.500, got "${readback}"`)
+    }
+    await shot('bills-new-pack')
+    // Printed total that does NOT match → red reconciliation, then the exact figure → green
+    // (828.000 + 60.000 = 888.000, + 11% PPN = 985.680).
     const printed = page.getByRole('textbox', { name: /^(Nilai tercetak di faktur|Amount printed on the invoice)$/ })
     await printed.fill('900000')
     await page.waitForTimeout(500)
     await page.mouse.wheel(0, 700)
     await page.waitForTimeout(500)
     await shot('bills-new-mismatch')
-    await printed.fill('919080')
+    await printed.fill('985680')
     await page.waitForTimeout(500)
     await shot('bills-new-match')
     await page.mouse.wheel(0, 900)

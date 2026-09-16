@@ -14,7 +14,12 @@
 import type { CreateBillLineBody } from '../api'
 import { parseMajorPrice } from '@/features/menu/lib/menuView'
 import { parsePackedQtyBase } from '@/features/inventory/lib/packQty'
-import { shownUnit, type UnitBearing } from '@/features/inventory/lib/units'
+import {
+  shownFactor,
+  shownUnit,
+  toDisplayQty,
+  type UnitBearing,
+} from '@/features/inventory/lib/units'
 
 /** The PPN rates the form offers, in basis points. */
 export const TAX_BP_OPTIONS = [0, 1100, 1200] as const
@@ -30,6 +35,9 @@ export const DEFAULT_TERM_DAYS = 30
 export interface IngredientRef extends UnitBearing {
   id: string
   name: string
+  /** V46 — how many BASE units one pack usually holds (tortilla: 20 pcs; a flour sack on a g-based
+   *  item: 25 000); `null` = no remembered default. Pre-fills the line's pack size, never written back. */
+  packSize: number | null
 }
 
 /** One line as the owner types it; the kind is the "account" chip — Beban (5000) or Persediaan (5100). */
@@ -49,16 +57,40 @@ export type DraftLine =
       ingredient: IngredientRef | null
       /** The receipt's wording; empty = the ingredient's name. */
       description: string
-      /** Quantity in the ingredient's SHOWN unit (kg/liter admit decimals). */
+      /**
+       * Quantity in the ingredient's SHOWN unit (kg/liter admit decimals) — or, once `packSizeInput`
+       * is set, the NUMBER OF PACKS (a whole number; you don't buy half a pack).
+       */
       qty: string
-      /** Price per SHOWN unit, major units. */
+      /**
+       * Price per SHOWN unit — or, in pack mode, the price per PACK exactly as the invoice prints
+       * it. Major units. The line total is `qty × price` either way; the per-unit cost the books
+       * end up with is derived from the total (`perShownUnitMinor`), never typed.
+       */
       price: string
+      /**
+       * "Isi per kemasan" — the vendor sells by the PACK while stock counts CONTENTS (a receipt says
+       * "TORTILLA 1 PCS" for a pack of 20). Blank = plain shown-unit purchase; non-blank = how many of
+       * the ingredient's SHOWN unit one pack holds (decimal allowed for kg/liter, whole for pcs) —
+       * the desktop form's `InventoryLineDraft.packSizeInput` verbatim, so both forms feed
+       * `parsePackedQtyBase` the same way.
+       */
+      packSizeInput: string
     }
 
 export type LineIssue = 'name' | 'ingredient' | 'amount'
 
 export type ParsedLine =
-  | { ok: true; body: CreateBillLineBody; totalMinor: number; unit: string | null }
+  | {
+      ok: true
+      body: CreateBillLineBody
+      totalMinor: number
+      unit: string | null
+      /** Pack mode only — how many packs were counted (for the "N × isi = hasil" readback). */
+      packs: number | null
+      /** Inventory lines — the BASE quantity that lands in stock; 0 on an expense line. */
+      qtyBase: number
+    }
   | { ok: false; issue: LineIssue }
 
 function parseDecimal(raw: string): number | null {
@@ -86,6 +118,8 @@ export function parseLine(line: DraftLine, currency: string): ParsedLine {
         ok: true,
         totalMinor: qty * priceMinor,
         unit: null,
+        packs: null,
+        qtyBase: 0,
         body: { description, quantity: qty, unitPriceMinor: priceMinor, inventory: false },
       }
     }
@@ -95,22 +129,28 @@ export function parseLine(line: DraftLine, currency: string): ParsedLine {
       ok: true,
       totalMinor,
       unit: null,
+      packs: null,
+      qtyBase: 0,
       body: { description, quantity: 1, unitPriceMinor: totalMinor, inventory: false },
     }
   }
   if (!line.ingredient) return { ok: false, issue: 'ingredient' }
   const ingredient = line.ingredient
   const description = line.description.trim() || ingredient.name
-  const packed = parsePackedQtyBase(line.qty, '', ingredient)
+  // Pack mode (non-blank pack size): `qty` counts packs and `price` is per pack, so the SAME
+  // `qty × price` is the line total; only the stock quantity goes through the pack maths.
+  const packed = parsePackedQtyBase(line.qty, line.packSizeInput, ingredient)
   const priceMinor = parseMajorPrice(line.price, currency)
   if (!packed || priceMinor == null) return { ok: false, issue: 'amount' }
-  const shownQty = parseDecimal(line.qty) ?? 0
-  const totalMinor = Math.round(shownQty * priceMinor)
+  const count = parseDecimal(line.qty) ?? 0
+  const totalMinor = Math.round(count * priceMinor)
   if (totalMinor <= 0) return { ok: false, issue: 'amount' }
   return {
     ok: true,
     totalMinor,
     unit: shownUnit(ingredient),
+    packs: packed.packs,
+    qtyBase: packed.qtyBase,
     body: {
       description,
       quantity: 1,
@@ -121,6 +161,26 @@ export function parseLine(line: DraftLine, currency: string): ParsedLine {
       ingredientQtyBase: packed.qtyBase,
     },
   }
+}
+
+/**
+ * The value the "Isi per kemasan" field is SEEDED with from the ingredient's remembered `packSize`
+ * (BASE units → the shown unit, so a 25 000 g default on a kg item reads "25"); '' when there is no
+ * default. The desktop form's `packSizeToShownInput`, shared here.
+ */
+export function packSizeInputOf(ref: IngredientRef): string {
+  return ref.packSize != null ? String(toDisplayQty(ref.packSize, ref)) : ''
+}
+
+/**
+ * What ONE shown unit costs on this line, minor units — the "Rp 1.500 / pcs" the owner reads back
+ * after typing the invoice's per-pack price. Derived from the EXACT line total (`total × factor /
+ * base qty`), the same rule as `units.ts`'s `shownUnitCostMinor`: rounding a per-gram cost first
+ * and scaling it ×1000 would distort a cheap item. `null` when there is no quantity to divide by.
+ */
+export function perShownUnitMinor(totalMinor: number, qtyBase: number, ref: UnitBearing): number | null {
+  if (qtyBase <= 0) return null
+  return Math.round((totalMinor * shownFactor(ref)) / qtyBase)
 }
 
 export interface Totals {

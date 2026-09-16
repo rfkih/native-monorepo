@@ -37,7 +37,8 @@ import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
 import { useIngredients, type Ingredient } from '@/features/inventory/ingredientApi'
 import { IngredientPickerSheet } from '@/features/inventory/IngredientPickerSheet'
-import { shownUnit } from '@/features/inventory/lib/units'
+import { parsePackedQtyBase } from '@/features/inventory/lib/packQty'
+import { allowsFraction, formatShownQty, shownUnit } from '@/features/inventory/lib/units'
 import { prepareAttachment } from '@/features/pos/lib/attachmentImage'
 import { parseMajorPrice } from '@/features/menu/lib/menuView'
 import {
@@ -57,7 +58,9 @@ import {
   dueDateOf,
   effectiveTerms,
   isDuplicateInvoice,
+  packSizeInputOf,
   parseLine,
+  perShownUnitMinor,
   reconcile,
   totals,
   vendorInitials,
@@ -197,7 +200,15 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
       ls.map((l) => {
         if (l.key !== key || l.kind === kind) return l
         return kind === 'inventory'
-          ? { key, kind, ingredient: null, description: '', qty: l.qty, price: l.price }
+          ? {
+              key,
+              kind,
+              ingredient: null,
+              description: '',
+              qty: l.qty,
+              price: l.price,
+              packSizeInput: '',
+            }
           : {
               key,
               kind,
@@ -218,9 +229,16 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
       name: ing.name,
       unit: ing.unit,
       displayUnit: ing.displayUnit,
+      packSize: ing.packSize,
     }
+    // "Isi per kemasan" is SEEDED from the ingredient's remembered default (the desktop form does
+    // the same) and stays editable; clearing it makes the line a plain per-unit purchase again.
     setLines((ls) =>
-      ls.map((l) => (l.key === key && l.kind === 'inventory' ? { ...l, ingredient: ref } : l)),
+      ls.map((l) =>
+        l.key === key && l.kind === 'inventory'
+          ? { ...l, ingredient: ref, packSizeInput: packSizeInputOf(ref) }
+          : l,
+      ),
     )
     setPickerFor(null)
   }
@@ -528,6 +546,18 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
               const p = parsed[i]
               const ing = line.kind === 'inventory' ? line.ingredient : null
               const unit = ing ? shownUnit(ing) : null
+              // Pack mode: the vendor sells by the pack, stock counts the contents. The qty then
+              // counts packs and the price is the invoice's per-pack figure; the readback below
+              // says what lands in stock and what one unit ends up costing.
+              const packSizeInput = line.kind === 'inventory' ? line.packSizeInput : ''
+              const packMode = packSizeInput.trim() !== ''
+              const packSizeIsDefault =
+                !!ing && packMode && packSizeInput === packSizeInputOf(ing)
+              // Independent of `p` (which also needs a price): the "packs × isi = hasil" readback
+              // appears as soon as the two quantities resolve, before the price is typed.
+              const packed = ing && packMode ? parsePackedQtyBase(line.qty, packSizeInput, ing) : null
+              const perUnitMinor =
+                ing && p.ok && packMode ? perShownUnitMinor(p.totalMinor, p.qtyBase, ing) : null
               return (
                 <div
                   key={line.key}
@@ -579,16 +609,18 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
                   <div className="mt-2.5 flex items-center gap-[7px]">
                     <input
                       type="text"
-                      inputMode="decimal"
+                      inputMode={packMode ? 'numeric' : 'decimal'}
                       value={line.qty}
                       onChange={(e) => patchLine(line.key, { qty: e.target.value })}
                       placeholder={t('ap.newBill.phone.qtyPlaceholder')}
-                      aria-label={t('ap.newBill.quantityLabel')}
+                      aria-label={
+                        packMode ? t('inventoryPicker.qtyPacksLabel') : t('ap.newBill.quantityLabel')
+                      }
                       className={cn(CELL, 'w-[52px] shrink-0')}
                     />
                     {unit ? (
                       <span className="grid h-[34px] shrink-0 place-items-center rounded-xl bg-hover px-2.5 text-xs font-medium text-ink-2">
-                        {unit}
+                        {packMode ? t('ap.newBill.phone.packUnit') : unit}
                       </span>
                     ) : null}
                     <span className="shrink-0 text-xs font-medium text-ink-400">×</span>
@@ -602,11 +634,84 @@ export function NewBillPhone({ company }: { company: CompanySession }) {
                         value={line.price}
                         onChange={(e) => patchLine(line.key, { price: e.target.value })}
                         placeholder="0"
-                        aria-label={t('ap.newBill.unitPriceLabel')}
+                        aria-label={
+                          packMode
+                            ? t('ap.newBill.phone.pricePerPackLabel')
+                            : t('ap.newBill.unitPriceLabel')
+                        }
                         className="tnum min-w-0 flex-1 bg-transparent text-right font-mono text-xs font-semibold text-ink placeholder:text-ink-400 focus:outline-none"
                       />
                     </span>
                   </div>
+                  {line.kind === 'inventory' && ing ? (
+                    <div className="mt-2">
+                      {/* "Isi per kemasan" — optional. Seeded from the ingredient's remembered
+                          default; while it still holds that value the hint says so, so clearing it
+                          (to buy by the piece) is discoverable. Same field as the desktop form. */}
+                      <div className="flex items-center gap-[7px]">
+                        <label
+                          htmlFor={`line-pack-${line.key}`}
+                          className="min-w-0 flex-1 text-xs font-medium text-ink-3"
+                        >
+                          {t('inventoryPicker.packSizeLabel')}
+                        </label>
+                        <input
+                          id={`line-pack-${line.key}`}
+                          type="text"
+                          inputMode={allowsFraction(ing) ? 'decimal' : 'numeric'}
+                          value={line.packSizeInput}
+                          onChange={(e) => patchLine(line.key, { packSizeInput: e.target.value })}
+                          placeholder={t('inventoryPicker.packSizePlaceholder')}
+                          className={cn(CELL, 'w-[52px] shrink-0')}
+                        />
+                        <span className="grid h-[34px] shrink-0 place-items-center rounded-xl bg-hover px-2.5 text-xs font-medium text-ink-2">
+                          {unit}
+                        </span>
+                      </div>
+                      {/* The typo safety net: the whole "packs × isi = result" reads back before
+                          submit, with the per-unit cost the books will carry — every number through
+                          Intl (rule 9). A pack size that does not resolve blocks the line (amount). */}
+                      {packMode ? (
+                        <>
+                          {packed && packed.packs != null ? (
+                            <p
+                              data-testid={`line-pack-readback-${line.key}`}
+                              className="mt-1.5 text-xs font-semibold leading-[1.45] text-emerald-2"
+                            >
+                              {t('inventoryPicker.packResultLine', {
+                                packs: new Intl.NumberFormat(locale).format(packed.packs),
+                                packSize: formatShownQty(packed.qtyBase / packed.packs, ing, locale),
+                                result: formatShownQty(packed.qtyBase, ing, locale),
+                                unit,
+                              })}
+                              {perUnitMinor != null ? (
+                                <>
+                                  {' · '}
+                                  {t('ap.newBill.phone.perUnitPrice', {
+                                    price: money(perUnitMinor),
+                                    unit,
+                                  })}
+                                </>
+                              ) : null}
+                            </p>
+                          ) : (
+                            <p className="mt-1.5 text-xs leading-[1.45] text-loss">
+                              {t('inventoryPicker.packInvalid')}
+                            </p>
+                          )}
+                          {packSizeIsDefault ? (
+                            <p className="mt-1 text-xs leading-[1.45] text-ink-3">
+                              {t('inventoryPicker.packSizeDefaultHint')}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p className="mt-1.5 text-xs leading-[1.45] text-ink-3">
+                          {t('inventoryPicker.packSizeHint')}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
                   <div className="mt-2.5 flex items-center gap-2.5 border-t border-line/60 pt-[9px]">
                     <span className="relative min-w-0 flex-1">
                       <button
