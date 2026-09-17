@@ -39,7 +39,7 @@ import { FitText } from '@/components/ui/FitText'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { OverdueSettlementCard } from '@/features/platform/OverdueSettlementCard'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
-import { canFinance, canHr, canPos } from '@/lib/rolePreset'
+import { canFinance, canHr, canPos, canReports } from '@/lib/rolePreset'
 import { useSession, type CompanySession } from '@/lib/session'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
@@ -61,6 +61,7 @@ import { USAGE_WINDOW_DAYS, buildRows, usageRates } from '@/features/inventory/l
 import { usePnl } from './api'
 import { readFigures } from './figures'
 import { DashboardPhoneMonthly } from './DashboardPhoneMonthly'
+import { homeDoorFor } from './lib/homeDoors'
 import { useDailySalesByOutlet, useItemSalesByOutlet, useOpenBillsByOutlet } from './todayApi'
 import {
   WEEK_DAYS,
@@ -92,8 +93,37 @@ const OUTLET_ZONE = 'Asia/Jakarta'
 
 const SECTION_LABEL = 'pl-1 text-xs font-semibold text-ink-3'
 const LIST_CARD = 'mt-2 overflow-hidden rounded-2xl border border-line bg-surface'
-const TILE_CLASS =
-  'flex min-h-[60px] items-center gap-[11px] rounded-2xl border border-line bg-surface px-3.5 py-3 text-left text-sm font-semibold leading-tight text-ink transition-[background-color,border-color,transform,scale] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.98] motion-reduce:active:scale-100'
+const PRESSABLE =
+  'transition-[background-color,border-color,transform,scale] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.98] motion-reduce:active:scale-100'
+const TILE_CLASS = cn(
+  'flex min-h-[60px] items-center gap-[11px] rounded-2xl border border-line bg-surface px-3.5 py-3 text-left text-sm font-semibold leading-tight text-ink',
+  PRESSABLE,
+)
+/** A figure tile. The same card whether or not it is a door; the door adds the press language. */
+const FIGURE_CLASS = 'block rounded-2xl border border-line bg-surface px-3.5 pb-3 pt-[13px] text-left'
+const HERO_CLASS = 'rise-in block rounded-card bg-ink-900 px-5 pb-[18px] pt-5 shadow-lg'
+
+/** The inverted hero card — a Link when it has somewhere to go, the same card otherwise. */
+function HeroCard({ to, children }: { to: string | null; children: React.ReactNode }) {
+  const style = { animationDelay: '0.05s' }
+  return to ? (
+    <Link
+      to={to}
+      viewTransition
+      className={cn(
+        HERO_CLASS,
+        'transition-[transform,scale] duration-150 active:scale-[0.99] motion-reduce:active:scale-100',
+      )}
+      style={style}
+    >
+      {children}
+    </Link>
+  ) : (
+    <div className={HERO_CLASS} style={style}>
+      {children}
+    </div>
+  )
+}
 
 export function DashboardPhone() {
   const { company } = useSession()
@@ -133,6 +163,16 @@ function TodayHome({ company }: { company: CompanySession }) {
   // Tasks — each gated exactly as the More page gates its door to the same place.
   const claimsOk = hrOk && pageAccess.isAllowed('expenses') && tierAccess.allows('expenses')
   const stockOk = posOk && pageAccess.isAllowed('menu') && tierAccess.allows('products')
+  // The doors' gates are the ROUTES' gates (lib/homeDoors): a door the router would bounce is a
+  // plain card instead. `/pos` = POS role + `pos` grant (+ the tier feature, as the More page), and
+  // only the restaurant till reads `?sheet=`; `/statements/income` = reports role + `reports` grant.
+  const tillOk =
+    posOk &&
+    pageAccess.isAllowed('pos') &&
+    tierAccess.allows('pos') &&
+    company.vertical === 'restaurant'
+  const pnlOk = canReports(roles) && pageAccess.isAllowed('reports')
+  const doorGates = { tillOk, pnlOk }
   const closeOk = financeOk && pageAccess.isAllowed('close') && tierAccess.allows('orgStructure')
   const claimsQuery = useClaims({
     companyId: company.companyId,
@@ -289,7 +329,7 @@ function TodayHome({ company }: { company: CompanySession }) {
     posOk && pageAccess.isAllowed('kitchen') && tierAccess.allows('kitchen')
       ? { key: 'kitchen', to: '/kitchen', icon: CookingPot, label: t('mobile.more.kitchenDisplay') }
       : null,
-    pageAccess.isAllowed('dashboard')
+    pnlOk
       ? {
           key: 'pnl',
           to: '/statements/income',
@@ -326,9 +366,12 @@ function TodayHome({ company }: { company: CompanySession }) {
   })
   const lastWeekday = delta ? weekdayName(delta.lastKey) : ''
 
+  // Every figure is a door to the page that explains it (lib/homeDoors) — the till's sheets by
+  // `?sheet=`, the margin by Laba-rugi. `to: null` (no grant) leaves the tile a plain card.
   const stats = [
     {
       key: 'txn',
+      to: homeDoorFor('txn', doorGates),
       label: t('dashboardPhone.transactions'),
       value: integer.format(today.txn),
       sub: delta
@@ -340,6 +383,7 @@ function TodayHome({ company }: { company: CompanySession }) {
     },
     {
       key: 'avg',
+      to: homeDoorFor('avg', doorGates),
       label: t('dashboardPhone.avgBill'),
       value: avg != null ? formatMoney(Math.round(avg), currency, locale) : '—',
       sub:
@@ -352,6 +396,7 @@ function TodayHome({ company }: { company: CompanySession }) {
     },
     {
       key: 'bills',
+      to: homeDoorFor('bills', doorGates),
       label: t('dashboardPhone.openBills'),
       // A failed bills read is "—", never a confident "none open" on a floor with open tables.
       value: bills.isLoading
@@ -370,6 +415,7 @@ function TodayHome({ company }: { company: CompanySession }) {
     },
     {
       key: 'margin',
+      to: homeDoorFor('margin', doorGates),
       label: t('dashboardPhone.grossMargin'),
       value: margin ? formatPercent(margin.ratio, locale) : '—',
       sub: margin
@@ -426,11 +472,11 @@ function TodayHome({ company }: { company: CompanySession }) {
         />
       ) : (
         <>
-          {/* Hero — today's net on the inverted card, against the same weekday last week. */}
-          <div
-            className="rise-in rounded-card bg-ink-900 px-5 pb-[18px] pt-5 shadow-lg"
-            style={{ animationDelay: '0.05s' }}
-          >
+          {/* Hero — today's net on the inverted card, against the same weekday last week. A door
+              to today's transactions (the till's sales history), like every figure below it; a
+              plain card when there is no till to open. No aria-label on the link: its content
+              (label, figure, delta) IS its accessible name. */}
+          <HeroCard to={homeDoorFor('hero', doorGates)}>
             <div className="flex items-center gap-2.5">
               <span className="flex-1 text-xs font-semibold tracking-eyebrow text-paper/60">
                 {t('dashboardPhone.todayRevenue')}
@@ -500,7 +546,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                 </div>
               ))}
             </div>
-          </div>
+          </HeroCard>
 
           {/* An outlet that failed leaves the figure partial — say so, and offer the retry. */}
           {daily.failedCount > 0 ? (
@@ -516,28 +562,49 @@ function TodayHome({ company }: { company: CompanySession }) {
             </div>
           ) : null}
 
-          {/* Four figures about the day. */}
+          {/* Four figures about the day — each a door (the chevron says so). */}
           <div className="rise-in grid grid-cols-2 gap-2.5" style={{ animationDelay: '0.3s' }}>
-            {stats.map((s) => (
-              <div
-                key={s.key}
-                className="rounded-2xl border border-line bg-surface px-3.5 pb-3 pt-[13px]"
-              >
-                <div className="text-xs font-semibold text-ink-3">{s.label}</div>
-                {s.value == null ? (
-                  <div className="mt-1.5 h-[19px] w-16 animate-pulse rounded-md bg-ink-100" />
-                ) : (
-                  // A figure shrinks to the tile, never "Rp 28.73…" (a twelve-character rupiah
-                  // amount is wider than a 360px tile at text-xl).
-                  <FitText className="tnum mt-1.5 font-mono text-xl font-bold leading-none tracking-display text-ink">
-                    {s.value}
-                  </FitText>
-                )}
-                <div className="mt-1.5 line-clamp-2 min-h-[14px] text-2xs font-medium text-ink-3">
-                  {s.sub}
+            {stats.map((s) => {
+              const body = (
+                <>
+                  <div className="flex items-center gap-1">
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink-3">
+                      {s.label}
+                    </span>
+                    {s.to ? (
+                      <ChevronRight
+                        className="size-3.5 shrink-0 text-ink-300"
+                        strokeWidth={2}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </div>
+                  {s.value == null ? (
+                    <div className="mt-1.5 h-[19px] w-16 animate-pulse rounded-md bg-ink-100" />
+                  ) : (
+                    // A figure shrinks to the tile, never "Rp 28.73…" (a twelve-character rupiah
+                    // amount is wider than a 360px tile at text-xl).
+                    <FitText className="tnum mt-1.5 font-mono text-xl font-bold leading-none tracking-display text-ink">
+                      {s.value}
+                    </FitText>
+                  )}
+                  <div className="mt-1.5 line-clamp-2 min-h-[14px] text-2xs font-medium text-ink-3">
+                    {s.sub}
+                  </div>
+                </>
+              )
+              // No aria-label: the tile's own text (label, figure, sub-line) is the link's name —
+              // an aria-label would replace it and hide the figure from assistive tech.
+              return s.to ? (
+                <Link key={s.key} to={s.to} viewTransition className={cn(FIGURE_CLASS, PRESSABLE)}>
+                  {body}
+                </Link>
+              ) : (
+                <div key={s.key} className={FIGURE_CLASS}>
+                  {body}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Brand-new company — first-sale prompt instead of empty figures (UX audit parity). */}

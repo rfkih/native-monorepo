@@ -1,14 +1,22 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { ArrowRight, BookOpen, Info, Store, TriangleAlert } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  ChevronRight,
+  Info,
+  Store,
+  TriangleAlert,
+} from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Segmented } from '@/components/ui/Segmented'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { OverdueSettlementCard } from '@/features/platform/OverdueSettlementCard'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
-import { canFinance } from '@/lib/rolePreset'
+import { canFinance, canReports } from '@/lib/rolePreset'
+import { usePageAccess } from '@/lib/pageAccess'
 import { useSession } from '@/lib/session'
 import { useTierAccess } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
@@ -31,8 +39,13 @@ export function Dashboard() {
   const { company } = useSession()
   // The overdue read is FINANCE_ROLES-gated at the gateway, so a manager would 403 on it.
   const auth = useAuth()
-  const canSeeSettlements = canFinance(effectiveRoles(auth.roles, auth.elevatedRoles))
+  const roles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const canSeeSettlements = canFinance(roles)
   const tierAccess = useTierAccess()
+  const pageAccess = usePageAccess()
+  // The KPI tiles open Laba-rugi — gated as the route is (reports role + `reports` grant), so a
+  // login the router would bounce gets the plain card.
+  const pnlDoor = canReports(roles) && pageAccess.isAllowed('reports') ? '/statements/income' : undefined
   const { isExtended } = tierAccess
   const isPhone = useIsPhone()
   const locale = localeOf(i18n.language)
@@ -402,6 +415,7 @@ export function Dashboard() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi
               index={0}
+              to={pnlDoor}
               label={t('dashboard.revenue')}
               value={formatMoney(figures.revenue, displayCurrency, locale)}
               note={
@@ -414,6 +428,7 @@ export function Dashboard() {
             />
             <Kpi
               index={1}
+              to={pnlDoor}
               label={t('dashboard.expense')}
               value={formatMoney(figures.expense, displayCurrency, locale)}
               note={
@@ -425,6 +440,7 @@ export function Dashboard() {
             />
             <Kpi
               index={2}
+              to={pnlDoor}
               label={t('dashboard.netProfit')}
               value={formatMoney(figures.net, displayCurrency, locale)}
               valueClass={profit ? 'text-profit-ink' : 'text-loss'}
@@ -437,6 +453,7 @@ export function Dashboard() {
             />
             <Kpi
               index={3}
+              to={pnlDoor}
               label={t('dashboard.margin')}
               value={marginLabel}
               valueClass="text-profit-ink"
@@ -676,6 +693,7 @@ function Kpi({
   emphatic,
   loading,
   index = 0,
+  to,
 }: {
   label: string
   value: string
@@ -686,16 +704,17 @@ function Kpi({
   loading: boolean
   /** Position in the KPI row — sets the arrival stagger. */
   index?: number
+  /** The page that explains this figure — the tile is a door when set (the phone home's rule). */
+  to?: string
 }) {
-  return (
-    // `emphatic` singles ONE kpi out of a row. A #DEDEDE ring inside a #E4E4E4 border was a ~2%
-    // step — technically neutral, but it stopped saying anything. Ink is the emphasis colour now,
-    // so the ring uses it, the same way the hero figure does.
-    <Card
-      className={cn('rise-in p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')}
-      style={{ animationDelay: `${(0.05 + index * 0.07).toFixed(2)}s` }}
-    >
-      <div className="text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">{label}</div>
+  const body = (
+    <>
+      <div className="flex items-center gap-1">
+        <span className="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-eyebrow text-ink-3">
+          {label}
+        </span>
+        {to ? <ChevronRight className="size-3.5 shrink-0 text-ink-300" strokeWidth={2} aria-hidden="true" /> : null}
+      </div>
       {loading ? (
         <div className="mt-2 h-7 w-28 animate-pulse rounded bg-ink-100" />
       ) : (
@@ -709,6 +728,29 @@ function Kpi({
         </div>
       )}
       {note ? <div className={cn('mt-1.5 text-xs font-semibold', noteClass ?? 'text-ink-3')}>{note}</div> : null}
+    </>
+  )
+  // `emphatic` singles ONE kpi out of a row. A #DEDEDE ring inside a #E4E4E4 border was a ~2%
+  // step — technically neutral, but it stopped saying anything. Ink is the emphasis colour now,
+  // so the ring uses it, the same way the hero figure does.
+  const cardClass = cn('rise-in p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')
+  const style = { animationDelay: `${(0.05 + index * 0.07).toFixed(2)}s` }
+  return to ? (
+    // No aria-label: the tile's own text (label, figure, note) is the link's accessible name.
+    <Link
+      to={to}
+      viewTransition
+      className={cn(
+        cardClass,
+        'block rounded-card border border-line bg-surface transition-[background-color,border-color,transform,scale] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.99] motion-reduce:active:scale-100',
+      )}
+      style={style}
+    >
+      {body}
+    </Link>
+  ) : (
+    <Card className={cardClass} style={style}>
+      {body}
     </Card>
   )
 }

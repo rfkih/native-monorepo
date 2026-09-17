@@ -439,6 +439,54 @@ await section('[10] phone — More is a routed screen (ADR 0078)', async () => {
   await ctx.close()
 })
 
+// The home's figure cards are doors (ADR 0082 amendment). Two of them land on sheets the till
+// parks over /pos rather than on routes, via the till's one deep-link `?sheet=` — so the checks
+// are the nav contract's: the door PUSHES one entry, the parameter is gone by the time the sheet
+// is up (stripped with replace), Back closes the sheet and stays on /pos, and the next Back is
+// home. A door that pushed twice, or left `?sheet=` in the URL, would reopen the sheet on Back.
+await section('[11] phone — a home figure is a door into the till', async () => {
+  const { ctx, page } = await makeContext({ phone: true, guard: false })
+  await page.goto(`${BASE}/`, { waitUntil: 'load' })
+  await page.waitForTimeout(1500)
+  const homeIdx = await idxOf(page)
+
+  // The tile's accessible name is its whole text (label + figure + sub-line) — no aria-label.
+  await page.getByRole('link', { name: /^Bill terbuka/ }).click({ timeout: 8000 })
+  await page.waitForTimeout(1600)
+  check('the open-bills tile lands on the till', pathOf(page) === '/pos', pathOf(page))
+  check('the sheet parameter is stripped', !new URL(page.url()).searchParams.has('sheet'), page.url())
+  const switcher = page.getByRole('dialog', { name: 'Pesanan', exact: true })
+  check('the order switcher is open on arrival', await visible(switcher))
+
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('Back closes the switcher', !(await visible(switcher)))
+  check('…and stays on the till', pathOf(page) === '/pos', pathOf(page))
+  // The sheet's parked entry is a raw History entry (no router idx); with it popped, the till's own
+  // entry is current again — and it must be exactly one above home, with no `?sheet=` left on it.
+  check('the door PUSHED once', (await idxOf(page)) === homeIdx + 1, `${homeIdx} -> ${await idxOf(page)}`)
+  check('the URL beneath the sheet is clean', !new URL(page.url()).searchParams.has('sheet'), page.url())
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('the next Back is home', pathOf(page) === '/', pathOf(page))
+
+  await page.getByRole('link', { name: /^Transaksi/ }).click({ timeout: 8000 })
+  await page.waitForTimeout(1600)
+  const history = page.getByRole('dialog', { name: 'Penjualan hari ini', exact: true })
+  check('the transactions tile opens the sales history', await visible(history))
+  // Close with the sheet's OWN X this time. The sheet then unwinds the entry it parked — which
+  // only works if that entry is still the one it parked: a second `replace` from the arrival
+  // effect (setSearchParams is rebuilt after the strip) would have rewritten it, the unwind would
+  // be skipped, and the next Back would land on /pos again instead of home.
+  await history.getByRole('button', { name: 'Tutup', exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(900)
+  check('X closes the history and stays on the till', !(await visible(history)) && pathOf(page) === '/pos', pathOf(page))
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('after an X close, ONE Back is home', pathOf(page) === '/', pathOf(page))
+  await ctx.close()
+})
+
 await browser.close()
 console.log(failures === 0 ? '\nNAV SMOKE OK' : `\nNAV SMOKE FAILED (${failures})`)
 process.exit(failures === 0 ? 0 : 1)
