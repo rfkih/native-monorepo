@@ -19,7 +19,7 @@
  */
 import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Banknote,
@@ -68,6 +68,7 @@ import { useDisplayPublisher } from './display/displayPublisher'
 import { deriveCategories, visibleMenuItems } from './lib/categories'
 import { displayCategoryName } from './lib/categoryCanon'
 import { lineKey } from './lib/lineKey'
+import { sheetFromParam } from './lib/sheetParam'
 import { baseUnitPrice, modifierList } from './lib/lineLabels'
 import { parseDiscountInput } from './lib/discountInput'
 import {
@@ -237,6 +238,12 @@ function PosInner({ session }: { session: CompanySession }) {
   // (vs. a manual till-menu open) — only then does the sheet show the explanatory reason line.
   const [registerGateActive, setRegisterGateActive] = useState(false)
   const [showStocktakeSheet, setShowStocktakeSheet] = useState(false)
+  // The till's one deep-link (lib/sheetParam): `/pos?sheet=history|orders` — a home figure card
+  // is a door to the sheet that explains it (ADR 0082 amendment). Read ONCE, at mount; the
+  // effect below the overlay states consumes it. PosInner mounts only once OutletGate has an
+  // outlet, so on a multi-outlet company the parameter simply waits.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [arrivalSheet] = useState(() => sheetFromParam(searchParams.get('sheet')))
   const [showSalesHistory, setShowSalesHistory] = useState(false)
   // The manager/owner past closed-day history browse (till menu, owner/manager only).
   const [showClosingHistory, setShowClosingHistory] = useState(false)
@@ -355,6 +362,23 @@ function PosInner({ session }: { session: CompanySession }) {
   const [showBillSelector, setShowBillSelector] = useState(false)
   // New bill dialog
   const [showOpenBillDialog, setShowOpenBillDialog] = useState(false)
+
+  // Consume the arrival sheet: strip `?sheet=` with `replace` FIRST, then open the overlay. The
+  // order is the whole point, and it is why the overlay is not simply seeded from `arrivalSheet`
+  // in its initial state: the sheet parks its own Back entry in a child effect (useBackDismiss,
+  // ADR 0075), and child effects run BEFORE this one — seeded open, the park would land first and
+  // the replace would then rewrite the PARKED entry, leaving `?sheet=` on the entry beneath it, so
+  // Back closed the sheet onto a URL that reopens it and never reached home. Stripped first, the
+  // park lands above a clean `/pos`: BACK closes the sheet, the next BACK is home. `replace`, never
+  // a push — the URL change is bookkeeping, not a place the cashier went. The setState here IS
+  // the sequencing (an overlay that must open one commit after a URL rewrite), not an oversight.
+  useEffect(() => {
+    if (!arrivalSheet) return
+    setSearchParams(new URLSearchParams(), { replace: true })
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (arrivalSheet === 'history') setShowSalesHistory(true)
+    else setShowBillSelector(true)
+  }, [arrivalSheet, setSearchParams])
 
   // Category
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)

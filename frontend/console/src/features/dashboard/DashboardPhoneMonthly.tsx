@@ -148,7 +148,13 @@ export function DashboardPhoneMonthly() {
           {/* Hero — monthly net on the inverted card. */}
           {/* The home's choreography (DashboardPhone): sections rise in on a stagger, the hero
               figure rises last and re-rises when the period changes, the share bars grow. */}
-          <div className="rise-in rounded-card bg-ink-900 p-5 shadow-lg" style={{ animationDelay: '0.05s' }}>
+          <Link
+            to="/statements/income"
+            viewTransition
+            aria-label={profit ? t('dashboard.netProfit') : t('dashboard.netLoss')}
+            className="rise-in block rounded-card bg-ink-900 p-5 shadow-lg transition-[transform,scale] duration-150 active:scale-[0.99] motion-reduce:active:scale-100"
+            style={{ animationDelay: '0.05s' }}
+          >
             <div className="font-mono text-2xs font-semibold uppercase tracking-eyebrow text-paper/55">
               {profit ? t('dashboard.netProfit') : t('dashboard.netLoss')} ·{' '}
               {formatPeriod(period, locale)}
@@ -191,7 +197,7 @@ export function DashboardPhoneMonthly() {
                 </div>
               ))}
             </div>
-          </div>
+          </Link>
 
           {/* Brand-new company — first-sale prompt instead of empty figures (UX audit parity). */}
           {trendEmpty ? (

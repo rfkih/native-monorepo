@@ -1,5 +1,29 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-17 — the home's figures become doors, and the till gets its one deep-link
+
+The owner tapped "Bill terbuka" on the phone home and nothing happened. Every other card on that
+screen — the tasks, the four door tiles — was already a link; the hero and the four figure tiles
+(ADR 0082) were the odd ones out. Each figure now opens the page that explains it: Transaksi,
+Rata-rata bill and the hero → the till's sales-history sheet; Bill terbuka → the till's order
+switcher; Margin kotor → Laba-rugi (gated by the `dashboard` grant, like the door tile below it).
+The desktop KPI tiles and the accountant's monthly hero open Laba-rugi too. `homeDoors.ts` is the
+table, with tests; a chevron on the label row says "this opens".
+
+**The sheets are not routes, so the till gained its one deep-link**: `/pos?sheet=history|orders`
+(`sheetParam.ts`, an allow-list — a stray value opens nothing). The first cut seeded the overlay's
+initial state from the parameter and stripped it in an effect, and `nav-smoke` caught the trap:
+the sheet parks its Back entry in a *child* effect, which runs before the parent's — so the park
+landed first and the `replace` rewrote the **parked** entry, leaving `?sheet=` on the entry beneath
+it; Back closed the sheet onto a URL that reopened it, and home was never reached. The till now
+strips the parameter first and opens the sheet one commit later (a justified setState-in-effect,
+the `TransitionedRoutes` precedent). Section [11] of `nav-smoke` is the executable form: the door
+pushes once, the URL under the sheet is clean, Back closes, the next Back is home.
+
+Verified: pure tests (homeDoors, sheetParam), `tsc -b`/lint/design-token gate, `nav-smoke` 11/11,
+the overflow audit at 360/320 (the home is clean; the 320 ellipses are the top-seller names, as
+before), and the `screens` shot pass. ADR 0082 amended.
+
 ## 2026-09-17 — the phone bill form had forgotten how to buy by the pack
 
 The owner reported that "1 pack of tortilla (20 pcs)" recorded through the app landed in stock as

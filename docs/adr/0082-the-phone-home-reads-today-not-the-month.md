@@ -111,6 +111,19 @@ recipe. A day with no costed sale shows "—", never 100%.
 **`useIngredients` gained an `enabled` flag** (default true) so the low-stock task can be gated
 by role without a stray 403.
 
+**Amended 2026-09-17 — the figures are doors.** The owner tapped "Bill terbuka" and nothing
+happened: the four figure tiles and the hero were the only cards on the home that were not links.
+Each now opens the page that explains it — Transaksi, Rata-rata bill and the hero open the till's
+sales-history sheet; Bill terbuka opens the till's order switcher; Margin kotor opens Laba-rugi
+(gated by the `dashboard` page grant, like the "Laba rugi" door below). The till's sheets are not
+routes, so those two doors carry the till's ONE deep-link, `/pos?sheet=history|orders`
+(`features/pos/lib/sheetParam.ts`, an allow-list). `Pos.tsx` consumes it once: it strips the
+parameter with `replace` FIRST and opens the sheet one commit later — the sheet parks its own Back
+entry in a child effect, so seeded-open it would park first and the replace would rewrite the
+parked entry, leaving `?sheet=` beneath it and Back would reopen it instead of reaching home.
+`nav-smoke` section [11] is the executable form. The desktop KPI tiles and the accountant's
+monthly hero open Laba-rugi the same way. The decision table is `dashboard/lib/homeDoors.ts`.
+
 **Open.** No per-outlet zone; the "open bills" tile cannot say how long a bill has been open
 (`BillSummaryResponse` carries no opened-at, so the sub-line is the value on the floor instead of
 the design's "3 lewat dari 1 jam"); no hourly shape of the day (ADR 0071 P2+).
