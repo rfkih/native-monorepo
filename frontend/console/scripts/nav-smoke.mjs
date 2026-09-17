@@ -450,7 +450,8 @@ await section('[11] phone — a home figure is a door into the till', async () =
   await page.waitForTimeout(1500)
   const homeIdx = await idxOf(page)
 
-  await page.getByRole('link', { name: 'Bill terbuka', exact: true }).click({ timeout: 8000 })
+  // The tile's accessible name is its whole text (label + figure + sub-line) — no aria-label.
+  await page.getByRole('link', { name: /^Bill terbuka/ }).click({ timeout: 8000 })
   await page.waitForTimeout(1600)
   check('the open-bills tile lands on the till', pathOf(page) === '/pos', pathOf(page))
   check('the sheet parameter is stripped', !new URL(page.url()).searchParams.has('sheet'), page.url())
@@ -469,13 +470,20 @@ await section('[11] phone — a home figure is a door into the till', async () =
   await page.waitForTimeout(1200)
   check('the next Back is home', pathOf(page) === '/', pathOf(page))
 
-  await page.getByRole('link', { name: 'Transaksi', exact: true }).click({ timeout: 8000 })
+  await page.getByRole('link', { name: /^Transaksi/ }).click({ timeout: 8000 })
   await page.waitForTimeout(1600)
   const history = page.getByRole('dialog', { name: 'Penjualan hari ini', exact: true })
   check('the transactions tile opens the sales history', await visible(history))
+  // Close with the sheet's OWN X this time. The sheet then unwinds the entry it parked — which
+  // only works if that entry is still the one it parked: a second `replace` from the arrival
+  // effect (setSearchParams is rebuilt after the strip) would have rewritten it, the unwind would
+  // be skipped, and the next Back would land on /pos again instead of home.
+  await history.getByRole('button', { name: 'Tutup', exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(900)
+  check('X closes the history and stays on the till', !(await visible(history)) && pathOf(page) === '/pos', pathOf(page))
   await page.goBack()
   await page.waitForTimeout(1200)
-  check('Back closes the history and stays on the till', !(await visible(history)) && pathOf(page) === '/pos', pathOf(page))
+  check('after an X close, ONE Back is home', pathOf(page) === '/', pathOf(page))
   await ctx.close()
 })
 

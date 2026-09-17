@@ -39,7 +39,7 @@ import { FitText } from '@/components/ui/FitText'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { OverdueSettlementCard } from '@/features/platform/OverdueSettlementCard'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
-import { canFinance, canHr, canPos } from '@/lib/rolePreset'
+import { canFinance, canHr, canPos, canReports } from '@/lib/rolePreset'
 import { useSession, type CompanySession } from '@/lib/session'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
@@ -101,6 +101,29 @@ const TILE_CLASS = cn(
 )
 /** A figure tile. The same card whether or not it is a door; the door adds the press language. */
 const FIGURE_CLASS = 'block rounded-2xl border border-line bg-surface px-3.5 pb-3 pt-[13px] text-left'
+const HERO_CLASS = 'rise-in block rounded-card bg-ink-900 px-5 pb-[18px] pt-5 shadow-lg'
+
+/** The inverted hero card — a Link when it has somewhere to go, the same card otherwise. */
+function HeroCard({ to, children }: { to: string | null; children: React.ReactNode }) {
+  const style = { animationDelay: '0.05s' }
+  return to ? (
+    <Link
+      to={to}
+      viewTransition
+      className={cn(
+        HERO_CLASS,
+        'transition-[transform,scale] duration-150 active:scale-[0.99] motion-reduce:active:scale-100',
+      )}
+      style={style}
+    >
+      {children}
+    </Link>
+  ) : (
+    <div className={HERO_CLASS} style={style}>
+      {children}
+    </div>
+  )
+}
 
 export function DashboardPhone() {
   const { company } = useSession()
@@ -140,8 +163,16 @@ function TodayHome({ company }: { company: CompanySession }) {
   // Tasks — each gated exactly as the More page gates its door to the same place.
   const claimsOk = hrOk && pageAccess.isAllowed('expenses') && tierAccess.allows('expenses')
   const stockOk = posOk && pageAccess.isAllowed('menu') && tierAccess.allows('products')
-  // Laba-rugi's own grant — the same gate as the "Laba rugi" door tile at the bottom.
-  const pnlOk = pageAccess.isAllowed('dashboard')
+  // The doors' gates are the ROUTES' gates (lib/homeDoors): a door the router would bounce is a
+  // plain card instead. `/pos` = POS role + `pos` grant (+ the tier feature, as the More page), and
+  // only the restaurant till reads `?sheet=`; `/statements/income` = reports role + `reports` grant.
+  const tillOk =
+    posOk &&
+    pageAccess.isAllowed('pos') &&
+    tierAccess.allows('pos') &&
+    company.vertical === 'restaurant'
+  const pnlOk = canReports(roles) && pageAccess.isAllowed('reports')
+  const doorGates = { tillOk, pnlOk }
   const closeOk = financeOk && pageAccess.isAllowed('close') && tierAccess.allows('orgStructure')
   const claimsQuery = useClaims({
     companyId: company.companyId,
@@ -298,7 +329,7 @@ function TodayHome({ company }: { company: CompanySession }) {
     posOk && pageAccess.isAllowed('kitchen') && tierAccess.allows('kitchen')
       ? { key: 'kitchen', to: '/kitchen', icon: CookingPot, label: t('mobile.more.kitchenDisplay') }
       : null,
-    pageAccess.isAllowed('dashboard')
+    pnlOk
       ? {
           key: 'pnl',
           to: '/statements/income',
@@ -340,7 +371,7 @@ function TodayHome({ company }: { company: CompanySession }) {
   const stats = [
     {
       key: 'txn',
-      to: homeDoorFor('txn', { pnlOk }),
+      to: homeDoorFor('txn', doorGates),
       label: t('dashboardPhone.transactions'),
       value: integer.format(today.txn),
       sub: delta
@@ -352,7 +383,7 @@ function TodayHome({ company }: { company: CompanySession }) {
     },
     {
       key: 'avg',
-      to: homeDoorFor('avg', { pnlOk }),
+      to: homeDoorFor('avg', doorGates),
       label: t('dashboardPhone.avgBill'),
       value: avg != null ? formatMoney(Math.round(avg), currency, locale) : '—',
       sub:
@@ -365,7 +396,7 @@ function TodayHome({ company }: { company: CompanySession }) {
     },
     {
       key: 'bills',
-      to: homeDoorFor('bills', { pnlOk }),
+      to: homeDoorFor('bills', doorGates),
       label: t('dashboardPhone.openBills'),
       // A failed bills read is "—", never a confident "none open" on a floor with open tables.
       value: bills.isLoading
@@ -384,7 +415,7 @@ function TodayHome({ company }: { company: CompanySession }) {
     },
     {
       key: 'margin',
-      to: homeDoorFor('margin', { pnlOk }),
+      to: homeDoorFor('margin', doorGates),
       label: t('dashboardPhone.grossMargin'),
       value: margin ? formatPercent(margin.ratio, locale) : '—',
       sub: margin
@@ -442,14 +473,10 @@ function TodayHome({ company }: { company: CompanySession }) {
       ) : (
         <>
           {/* Hero — today's net on the inverted card, against the same weekday last week. A door
-              to today's transactions (the till's sales history), like every figure below it. */}
-          <Link
-            to={homeDoorFor('hero', { pnlOk }) ?? '/pos'}
-            viewTransition
-            aria-label={t('dashboardPhone.todayRevenue')}
-            className="rise-in block rounded-card bg-ink-900 px-5 pb-[18px] pt-5 shadow-lg transition-[transform,scale] duration-150 active:scale-[0.99] motion-reduce:active:scale-100"
-            style={{ animationDelay: '0.05s' }}
-          >
+              to today's transactions (the till's sales history), like every figure below it; a
+              plain card when there is no till to open. No aria-label on the link: its content
+              (label, figure, delta) IS its accessible name. */}
+          <HeroCard to={homeDoorFor('hero', doorGates)}>
             <div className="flex items-center gap-2.5">
               <span className="flex-1 text-xs font-semibold tracking-eyebrow text-paper/60">
                 {t('dashboardPhone.todayRevenue')}
@@ -519,7 +546,7 @@ function TodayHome({ company }: { company: CompanySession }) {
                 </div>
               ))}
             </div>
-          </Link>
+          </HeroCard>
 
           {/* An outlet that failed leaves the figure partial — say so, and offer the retry. */}
           {daily.failedCount > 0 ? (
@@ -566,14 +593,10 @@ function TodayHome({ company }: { company: CompanySession }) {
                   </div>
                 </>
               )
+              // No aria-label: the tile's own text (label, figure, sub-line) is the link's name —
+              // an aria-label would replace it and hide the figure from assistive tech.
               return s.to ? (
-                <Link
-                  key={s.key}
-                  to={s.to}
-                  viewTransition
-                  aria-label={s.label}
-                  className={cn(FIGURE_CLASS, PRESSABLE)}
-                >
+                <Link key={s.key} to={s.to} viewTransition className={cn(FIGURE_CLASS, PRESSABLE)}>
                   {body}
                 </Link>
               ) : (

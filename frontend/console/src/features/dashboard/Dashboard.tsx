@@ -15,7 +15,8 @@ import { Segmented } from '@/components/ui/Segmented'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { OverdueSettlementCard } from '@/features/platform/OverdueSettlementCard'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
-import { canFinance } from '@/lib/rolePreset'
+import { canFinance, canReports } from '@/lib/rolePreset'
+import { usePageAccess } from '@/lib/pageAccess'
 import { useSession } from '@/lib/session'
 import { useTierAccess } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
@@ -38,8 +39,13 @@ export function Dashboard() {
   const { company } = useSession()
   // The overdue read is FINANCE_ROLES-gated at the gateway, so a manager would 403 on it.
   const auth = useAuth()
-  const canSeeSettlements = canFinance(effectiveRoles(auth.roles, auth.elevatedRoles))
+  const roles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const canSeeSettlements = canFinance(roles)
   const tierAccess = useTierAccess()
+  const pageAccess = usePageAccess()
+  // The KPI tiles open Laba-rugi — gated as the route is (reports role + `reports` grant), so a
+  // login the router would bounce gets the plain card.
+  const pnlDoor = canReports(roles) && pageAccess.isAllowed('reports') ? '/statements/income' : undefined
   const { isExtended } = tierAccess
   const isPhone = useIsPhone()
   const locale = localeOf(i18n.language)
@@ -409,7 +415,7 @@ export function Dashboard() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi
               index={0}
-              to="/statements/income"
+              to={pnlDoor}
               label={t('dashboard.revenue')}
               value={formatMoney(figures.revenue, displayCurrency, locale)}
               note={
@@ -422,7 +428,7 @@ export function Dashboard() {
             />
             <Kpi
               index={1}
-              to="/statements/income"
+              to={pnlDoor}
               label={t('dashboard.expense')}
               value={formatMoney(figures.expense, displayCurrency, locale)}
               note={
@@ -434,7 +440,7 @@ export function Dashboard() {
             />
             <Kpi
               index={2}
-              to="/statements/income"
+              to={pnlDoor}
               label={t('dashboard.netProfit')}
               value={formatMoney(figures.net, displayCurrency, locale)}
               valueClass={profit ? 'text-profit-ink' : 'text-loss'}
@@ -447,7 +453,7 @@ export function Dashboard() {
             />
             <Kpi
               index={3}
-              to="/statements/income"
+              to={pnlDoor}
               label={t('dashboard.margin')}
               value={marginLabel}
               valueClass="text-profit-ink"
@@ -730,10 +736,10 @@ function Kpi({
   const cardClass = cn('rise-in p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-ink')
   const style = { animationDelay: `${(0.05 + index * 0.07).toFixed(2)}s` }
   return to ? (
+    // No aria-label: the tile's own text (label, figure, note) is the link's accessible name.
     <Link
       to={to}
       viewTransition
-      aria-label={label}
       className={cn(
         cardClass,
         'block rounded-card border border-line bg-surface transition-[background-color,border-color,transform,scale] duration-150 hover:border-line-strong hover:bg-hover active:scale-[0.99] motion-reduce:active:scale-100',

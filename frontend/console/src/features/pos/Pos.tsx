@@ -17,7 +17,7 @@
  * All behaviour, hooks, mutations, and data flows are kept exactly as they were.
  * Only the presentation layer changes.
  */
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -372,8 +372,16 @@ function PosInner({ session }: { session: CompanySession }) {
   // park lands above a clean `/pos`: BACK closes the sheet, the next BACK is home. `replace`, never
   // a push — the URL change is bookkeeping, not a place the cashier went. The setState here IS
   // the sequencing (an overlay that must open one commit after a URL rewrite), not an oversight.
+  //
+  // ONCE, by ref: `setSearchParams` is rebuilt whenever `location.search` changes — which the
+  // strip itself does — so the effect would fire a second time with `arrivalSheet` still set and
+  // that second `replace` would land on the sheet's freshly parked entry (wiping its
+  // `nativeBackDismiss` mark and its idx): the X close would then skip its balancing pop and the
+  // next hardware Back would be swallowed. Code review caught it; the guard is the fix.
+  const arrivalConsumed = useRef(false)
   useEffect(() => {
-    if (!arrivalSheet) return
+    if (!arrivalSheet || arrivalConsumed.current) return
+    arrivalConsumed.current = true
     setSearchParams(new URLSearchParams(), { replace: true })
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (arrivalSheet === 'history') setShowSalesHistory(true)

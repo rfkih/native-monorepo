@@ -19,7 +19,7 @@ import { Card } from '@/components/ui/Card'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { OverdueSettlementCard } from '@/features/platform/OverdueSettlementCard'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
-import { canFinance } from '@/lib/rolePreset'
+import { canFinance, canReports } from '@/lib/rolePreset'
 import { useSession } from '@/lib/session'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
@@ -36,12 +36,38 @@ import { DeltaPill } from './DeltaPill'
 /** Match the desktop's trailing window so the trend queries share the desktop's cache keys. */
 const TREND_MONTHS = 8
 
+
+const MONTHLY_HERO_CLASS = 'rise-in block rounded-card bg-ink-900 p-5 shadow-lg'
+
+/** The inverted hero — a Link when it has somewhere to go, the same card otherwise. */
+function MonthlyHero({ to, children }: { to: string | null; children: React.ReactNode }) {
+  const style = { animationDelay: '0.05s' }
+  return to ? (
+    <Link
+      to={to}
+      viewTransition
+      className={cn(
+        MONTHLY_HERO_CLASS,
+        'transition-[transform,scale] duration-150 active:scale-[0.99] motion-reduce:active:scale-100',
+      )}
+      style={style}
+    >
+      {children}
+    </Link>
+  ) : (
+    <div className={MONTHLY_HERO_CLASS} style={style}>
+      {children}
+    </div>
+  )
+}
+
 export function DashboardPhoneMonthly() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
   // The overdue read is FINANCE_ROLES-gated at the gateway, so a manager would 403 on it.
   const auth = useAuth()
-  const canSeeSettlements = canFinance(effectiveRoles(auth.roles, auth.elevatedRoles))
+  const roles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const canSeeSettlements = canFinance(roles)
   const pageAccess = usePageAccess()
   const tierAccess = useTierAccess()
   const locale = localeOf(i18n.language)
@@ -148,12 +174,12 @@ export function DashboardPhoneMonthly() {
           {/* Hero — monthly net on the inverted card. */}
           {/* The home's choreography (DashboardPhone): sections rise in on a stagger, the hero
               figure rises last and re-rises when the period changes, the share bars grow. */}
-          <Link
-            to="/statements/income"
-            viewTransition
-            aria-label={profit ? t('dashboard.netProfit') : t('dashboard.netLoss')}
-            className="rise-in block rounded-card bg-ink-900 p-5 shadow-lg transition-[transform,scale] duration-150 active:scale-[0.99] motion-reduce:active:scale-100"
-            style={{ animationDelay: '0.05s' }}
+          {/* The hero opens Laba-rugi — gated as the route is (reports role + `reports` grant); a
+              plain card otherwise. No aria-label: the content is the link's accessible name. */}
+          <MonthlyHero
+            to={
+              canReports(roles) && pageAccess.isAllowed('reports') ? '/statements/income' : null
+            }
           >
             <div className="font-mono text-2xs font-semibold uppercase tracking-eyebrow text-paper/55">
               {profit ? t('dashboard.netProfit') : t('dashboard.netLoss')} ·{' '}
@@ -197,7 +223,7 @@ export function DashboardPhoneMonthly() {
                 </div>
               ))}
             </div>
-          </Link>
+          </MonthlyHero>
 
           {/* Brand-new company — first-sale prompt instead of empty figures (UX audit parity). */}
           {trendEmpty ? (
