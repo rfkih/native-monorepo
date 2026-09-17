@@ -82,6 +82,11 @@ idempotently on deploy and creates the `finance` user.
 bill exactly as before (11 % when taxable, no discount, dates on post). The desktop form is
 unchanged and still creates drafts that way.
 
+**Amended 2026-09-17 — pack size restored.** The phone line card had dropped ADR 0072's "Isi per
+kemasan": `packSize` never reached the form, so a pack of 20 tortillas received 1 pcs. The field is
+back with the desktop's semantics (quantity counts packs, price is per pack, `packs × isi` →
+`ingredientQtyBase`), with a "N × isi = hasil · harga/unit" readback. No wire change.
+
 **The event's value changed meaning.** `InventoryPurchaseRecorded.lines[].value_minor` is now the
 line total NET of its share of a header discount (identical when there is none). The schema is
 unchanged; the catalog notes it.

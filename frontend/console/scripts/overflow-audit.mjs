@@ -287,6 +287,16 @@ const SCENES = [
     const printed = page.getByRole('textbox', { name: /^(Nilai tercetak di faktur|Amount printed on the invoice)$/ })
     await printed.fill('900000'); await page.waitForTimeout(500)
   }],
+  // A Persediaan line bought BY THE PACK: the "Isi per kemasan" row and its readback sentence
+  // ("2 kemasan × 20 = 40 pcs masuk Persediaan · Rp 1.500 / pcs") are the longest things on the card.
+  ['bills-new-pack', async (page) => {
+    await page.getByRole('button', { name: /^(Tambah baris|Add line)$/ }).click({ timeout: 8000 }); await page.waitForTimeout(300)
+    await page.getByRole('button', { name: /^(Akun biaya|Expense account)$/ }).nth(1).click({ timeout: 8000 }); await page.waitForTimeout(300)
+    await page.getByRole('button', { name: /5100/ }).click({ timeout: 8000 }); await page.waitForTimeout(600)
+    await page.getByRole('button', { name: /^Tortilla 8 inch/ }).click({ timeout: 8000 }); await page.waitForTimeout(500)
+    await page.getByRole('textbox', { name: /^(Jumlah \(kemasan\)|Quantity \(packs\))$/ }).fill('2')
+    await page.getByRole('textbox', { name: /^(Harga per kemasan|Price per pack)$/ }).fill('30000'); await page.waitForTimeout(400)
+  }],
   ['menu-item-open', async (page) => {
     await page.goto(`${BASE}/menu`, { waitUntil: 'load' }); await page.waitForTimeout(1400)
     await page.getByRole('button', { name: /^(Buka|Open) Nasi Goreng Spesial$/ }).click({ timeout: 8000 }); await page.waitForTimeout(900)

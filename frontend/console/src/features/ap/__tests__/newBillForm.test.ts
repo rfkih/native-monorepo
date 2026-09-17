@@ -5,7 +5,9 @@ import {
   dueDateOf,
   effectiveTerms,
   isDuplicateInvoice,
+  packSizeInputOf,
   parseLine,
+  perShownUnitMinor,
   reconcile,
   totals,
   vendorInitials,
@@ -13,8 +15,30 @@ import {
   type IngredientRef,
 } from '../lib/newBillForm'
 
-const ayam: IngredientRef = { id: 'ayam', name: 'Ayam broiler', unit: 'g', displayUnit: 'kg' }
-const telur: IngredientRef = { id: 'telur', name: 'Telur', unit: 'pcs', displayUnit: null }
+const ayam: IngredientRef = {
+  id: 'ayam',
+  name: 'Ayam broiler',
+  unit: 'g',
+  displayUnit: 'kg',
+  packSize: null,
+}
+const telur: IngredientRef = { id: 'telur', name: 'Telur', unit: 'pcs', displayUnit: null, packSize: null }
+// Sold by the pack, counted by the piece — the tortilla that started this.
+const tortilla: IngredientRef = {
+  id: 'tortilla',
+  name: 'Tortilla 8 inch',
+  unit: 'pcs',
+  displayUnit: null,
+  packSize: 20,
+}
+// A 25 kg sack on a gram-based item: the remembered default is BASE units.
+const tepung: IngredientRef = {
+  id: 'tepung',
+  name: 'Tepung terigu',
+  unit: 'g',
+  displayUnit: 'kg',
+  packSize: 25_000,
+}
 
 const expense = (over: Partial<Extract<DraftLine, { kind: 'expense' }>> = {}): DraftLine => ({
   key: 'l1',
@@ -31,6 +55,7 @@ const inventory = (over: Partial<Extract<DraftLine, { kind: 'inventory' }>> = {}
   description: '',
   qty: '24',
   price: '34500',
+  packSizeInput: '',
   ...over,
 })
 
@@ -41,6 +66,8 @@ describe('parseLine — expense lines', () => {
       ok: true,
       totalMinor: 45_000,
       unit: null,
+      packs: null,
+      qtyBase: 0,
       body: { description: 'Sewa freezer', quantity: 3, unitPriceMinor: 15_000, inventory: false },
     })
   })
@@ -69,6 +96,8 @@ describe('parseLine — inventory (Persediaan) lines', () => {
       ok: true,
       totalMinor: 86_250,
       unit: 'kg',
+      packs: null,
+      qtyBase: 2_500,
       body: {
         description: 'Ayam broiler',
         quantity: 1,
@@ -92,6 +121,76 @@ describe('parseLine — inventory (Persediaan) lines', () => {
       ok: false,
       issue: 'ingredient',
     })
+  })
+})
+
+describe('parseLine — bought by the pack, counted by the piece', () => {
+  it('packs × isi lands in stock; the total is packs × the per-pack price on the invoice', () => {
+    const r = parseLine(
+      inventory({ ingredient: tortilla, qty: '2', price: '30000', packSizeInput: '20' }),
+      'IDR',
+    )
+    expect(r).toEqual({
+      ok: true,
+      totalMinor: 60_000,
+      unit: 'pcs',
+      packs: 2,
+      qtyBase: 40,
+      body: {
+        description: 'Tortilla 8 inch',
+        quantity: 1,
+        unitPriceMinor: 60_000,
+        inventory: true,
+        ingredientId: 'tortilla',
+        ingredientName: 'Tortilla 8 inch',
+        ingredientQtyBase: 40,
+      },
+    })
+  })
+
+  it('a pack size in the shown unit converts to base — two 25 kg sacks are 50 000 g', () => {
+    const r = parseLine(
+      inventory({ ingredient: tepung, qty: '2', price: '310000', packSizeInput: '25' }),
+      'IDR',
+    )
+    expect(r.ok && [r.packs, r.qtyBase, r.totalMinor, r.body.ingredientQtyBase]).toEqual([
+      2,
+      50_000,
+      620_000,
+      50_000,
+    ])
+  })
+
+  it('a blank pack size is the plain purchase it always was', () => {
+    const r = parseLine(inventory({ ingredient: tortilla, qty: '3', price: '1500' }), 'IDR')
+    expect(r.ok && [r.packs, r.qtyBase, r.totalMinor]).toEqual([null, 3, 4_500])
+  })
+
+  it('refuses half a pack, a fractional piece per pack, and a zero pack size', () => {
+    const half = inventory({ ingredient: tortilla, qty: '1.5', price: '30000', packSizeInput: '20' })
+    const fraction = inventory({ ingredient: tortilla, qty: '1', price: '30000', packSizeInput: '2.5' })
+    const zero = inventory({ ingredient: tortilla, qty: '1', price: '30000', packSizeInput: '0' })
+    for (const line of [half, fraction, zero]) {
+      expect(parseLine(line, 'IDR')).toEqual({ ok: false, issue: 'amount' })
+    }
+  })
+})
+
+describe('packSizeInputOf — the field is seeded in the shown unit', () => {
+  it('nothing remembered → blank; pieces as-is; a base-unit default reads in kg', () => {
+    expect(packSizeInputOf(ayam)).toBe('')
+    expect(packSizeInputOf(tortilla)).toBe('20')
+    expect(packSizeInputOf(tepung)).toBe('25')
+  })
+})
+
+describe('perShownUnitMinor — the per-unit cost the owner reads back', () => {
+  it('divides the exact total by the base quantity, scaled to the shown unit', () => {
+    expect(perShownUnitMinor(60_000, 40, tortilla)).toBe(1_500)
+    // Rp 620 000 for 50 000 g → Rp 12,4 per g → Rp 12 400 per kg, from the total, not ×1000 of a
+    // rounded per-gram figure (which would read Rp 12 000).
+    expect(perShownUnitMinor(620_000, 50_000, tepung)).toBe(12_400)
+    expect(perShownUnitMinor(60_000, 0, tortilla)).toBeNull()
   })
 })
 
@@ -182,6 +281,8 @@ describe('checklist — every reason the bill cannot be saved yet, in order', ()
           ok: true,
           totalMinor: 1,
           unit: null,
+          packs: null,
+          qtyBase: 0,
           body: { description: 'x', quantity: 1, unitPriceMinor: 1 },
         },
       ],
@@ -209,6 +310,8 @@ describe('checklist — every reason the bill cannot be saved yet, in order', ()
             ok: true,
             totalMinor: 1,
             unit: null,
+            packs: null,
+            qtyBase: 0,
             body: { description: 'x', quantity: 1, unitPriceMinor: 1 },
           },
         ],
