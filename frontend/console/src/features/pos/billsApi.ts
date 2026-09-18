@@ -293,6 +293,10 @@ export function useRemoveLine(session: CompanySession) {
       apiFetch<void>(`/api/v1/bills/${billId}/lines/${lineId}`, {
         method: 'DELETE',
         tenant: tenantOf(session),
+        // Server-gated owner/manager (BillWriter.requireOwnerOrManager, open-bill lockdown). On a
+        // device terminal the ELEVATION token is what carries that role — the outlet bearer is
+        // cashier-tier and would be refused even with the owner standing there (ADR 0086).
+        auth: 'elevated',
       }),
     onSuccess: (_res, { billId }) => {
       void qc.invalidateQueries({ queryKey: billKey(session, billId) })
@@ -386,6 +390,12 @@ export function useCancelBill(session: CompanySession) {
       apiFetch<void>(`/api/v1/bills/${billId}/cancel`, {
         method: 'POST',
         tenant: tenantOf(session),
+        // Owner/manager when the bill has lines, anyone when it is empty — the SERVICE decides
+        // (BillWriter.cancelBill). `'elevated'` carries the elevation when there is one and still
+        // rides the outlet credential for a bare cashier's empty-bill cancel (ADR 0086). Side
+        // effect worth having: the bill's updated_by becomes the elevated owner's actor, which is
+        // what the CANCELLED_BILLS_WITH_ITEMS leak detector attributes the cancel to.
+        auth: 'elevated',
       }),
     onSuccess: (_res, billId) => {
       void qc.invalidateQueries({ queryKey: billKey(session, billId) })
