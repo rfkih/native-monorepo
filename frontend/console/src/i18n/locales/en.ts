@@ -3703,6 +3703,9 @@ export const en = {
     errNeedsManager: 'This action needs an owner or manager',
     errHasPaidLines: 'Some items are already paid — settle the remainder or reverse the paid checks first',
     errLinePaid: 'That item is already paid and cannot be removed',
+    errLineReserved:
+      'A QRIS payment is still in flight on this bill — complete or abandon it first',
+    errNotOpen: 'This bill is no longer open — reload to see the latest state',
     cancelBillTitle: 'Cancel bill',
     cancelBillBody: 'Cancel the bill for "{{label}}"? No sale will be recorded.',
     cancelBillConfirm: 'Cancel bill',

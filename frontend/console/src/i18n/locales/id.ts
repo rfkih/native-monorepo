@@ -3650,6 +3650,9 @@ export const id = {
     errNeedsManager: 'Aksi ini butuh owner atau manajer',
     errHasPaidLines: 'Sebagian item sudah dibayar — lunasi sisanya atau balikkan pembayaran dulu',
     errLinePaid: 'Item itu sudah dibayar dan tidak bisa dihapus',
+    errLineReserved:
+      'Ada pembayaran QRIS yang masih berjalan di tagihan ini — selesaikan atau batalkan pembayarannya dulu',
+    errNotOpen: 'Tagihan ini sudah tidak terbuka — muat ulang untuk melihat kondisi terkini',
     cancelBillTitle: 'Batalkan tagihan',
     cancelBillBody: 'Batalkan tagihan untuk "{{label}}"? Tidak ada penjualan yang akan dicatat.',
     cancelBillConfirm: 'Batalkan tagihan',

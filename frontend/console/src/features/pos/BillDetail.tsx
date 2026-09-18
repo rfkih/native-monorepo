@@ -42,7 +42,7 @@ import { BillLineGroupItem } from './components/BillLineGroupItem'
 import { groupUnpaidLines, type BillLineGroup } from './lib/billLineGroups'
 import { modifierList } from './lib/lineLabels'
 import { canCancelBill, canRemoveBillLines, showCancelNeedsManager } from './lib/billPermissions'
-import { ApiError } from '@/lib/api'
+import { billProblemMessage as localizeBillProblem } from './lib/billProblem'
 import { BillBreakdown } from './components/BillBreakdown'
 import { BillAttachments } from './components/BillAttachments'
 import { CancelConfirmDialog } from './components/CancelConfirmDialog'
@@ -217,18 +217,9 @@ export function BillDetail({
     if (firstError !== null) setGroupRemoveError(firstError)
   }
 
-  // RFC-7807: the lockdown's stable problem `type` slugs → localized copy (ENGINEERING-STANDARDS
-  // §1.2 — never surface the server's raw English `detail` to the operator). Anything else falls
-  // back to the message as before.
-  function billProblemMessage(err: unknown): string {
-    if (err instanceof ApiError && typeof err.problem?.type === 'string') {
-      const type = err.problem.type
-      if (type.includes('bill-mutation-forbidden')) return t('bills.errNeedsManager')
-      if (type.includes('bill-has-paid-lines')) return t('bills.errHasPaidLines')
-      if (type.includes('bill-line-paid')) return t('bills.errLinePaid')
-    }
-    return err instanceof Error ? err.message : String(err)
-  }
+  // RFC-7807: the lockdown's stable problem `type` slugs → localized copy (lib/billProblem.ts —
+  // shared with the order switcher's cancel action). Anything else falls back to the message.
+  const billProblemMessage = (err: unknown) => localizeBillProblem(t, err)
 
   function handleCancel() {
     if (!allowCancel) return // affordance is hidden; belt-and-braces (server enforces regardless)
