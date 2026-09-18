@@ -122,6 +122,26 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
       @Param("businessId") UUID businessId, @Param("limit") int limit);
 
   /**
+   * OPEN bills at the outlet right now — the close precondition (ADR 0086): a session cannot close
+   * while this is {@code > 0}; the owner pays or cancels each bill first, the close never sweeps
+   * them. A scalar count, not a projection (CODE-STRUCTURE §3.3). RLS scopes the company; {@code
+   * business_id} the outlet; served by {@code idx_bill_business_status}. Reads the bill table
+   * natively from here for the same reason the cash terms read {@code sale} — the register is the
+   * one place that reconciles the outlet's day, and a repository dependency into the bill feature
+   * would only add a cycle (bill → register lock, register → bill repository).
+   */
+  @Query(
+      value =
+          """
+          SELECT COUNT(*)
+            FROM bill b
+           WHERE b.business_id = :businessId
+             AND b.status = 'OPEN'
+          """,
+      nativeQuery = true)
+  long countOpenBillsByBusinessId(@Param("businessId") UUID businessId);
+
+  /**
    * Σ CASH physically collected for the outlet in the session window {@code [from, to)} — the
    * expected-cash term. Review C1: {@code cash_collected_minor} (grand total − gift-card portion,
    * V22) is the drawer figure; pre-V22 rows fall back to {@code amount_minor} via COALESCE.

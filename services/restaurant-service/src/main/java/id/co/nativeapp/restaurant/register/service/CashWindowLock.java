@@ -35,8 +35,10 @@ import org.springframework.stereotype.Component;
  *       sale/refund-COMMITTING transaction ({@code SaleWriter.create}, {@code
  *       OrderWriter.checkout}, {@code OrderWriter.payParked}, {@code BillWriter.payBill}, {@code
  *       PaymentCaptureWriter.capture}, {@code BillPaymentCaptureWriter.capture}, {@code
- *       VoidRefundWriter.refund}, {@code GiftCardSaleWriter.sell}). Any number of these may hold
- *       the SHARED lock simultaneously — they never block each other.
+ *       VoidRefundWriter.refund}, {@code GiftCardSaleWriter.sell}) — and, since ADR 0086, by {@code
+ *       BillWriter.open}, so a bill cannot be opened "under" a close that has already counted the
+ *       outlet's OPEN bills. Any number of these may hold the SHARED lock simultaneously — they
+ *       never block each other.
  *   <li>{@link #acquireForClose} — {@code pg_advisory_xact_lock} (EXCLUSIVE) — taken by {@link
  *       RegisterSessionWriter#close} (and, defensively, {@link RegisterSessionWriter#open}). An
  *       EXCLUSIVE acquisition blocks until every currently-held SHARED lock on the same key is

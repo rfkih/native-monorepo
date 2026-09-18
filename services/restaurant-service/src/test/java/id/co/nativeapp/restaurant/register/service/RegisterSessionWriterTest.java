@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.when;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionHasOpenBillsException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionTender;
@@ -34,6 +36,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 /**
  * Unit pins for the {@link RegisterSessionWriter} money path (ADR 0036) — the exact behaviors the
@@ -257,6 +260,39 @@ class RegisterSessionWriterTest {
     verify(repository).saveAndFlush(any());
   }
 
+  // ── close precondition: no OPEN bills at the outlet (ADR 0086) ───────────
+
+  @Test
+  void closeIsRefusedWhileBillsAreOpenAndConsumesNoKey() {
+    RegisterSession session = openSession(100_000L);
+    when(repository.findViewByCloseIdempotencyKey("close-key")).thenReturn(Optional.empty());
+    when(repository.findWithLockById(session.getId())).thenReturn(Optional.of(session));
+    when(repository.countOpenBillsByBusinessId(OUTLET)).thenReturn(2L);
+
+    assertThatThrownBy(
+            () ->
+                asTenant(
+                    () ->
+                        writer.close(
+                            session.getId(), new CloseSessionRequest(100_000L), "close-key")))
+        .isInstanceOf(RegisterSessionHasOpenBillsException.class)
+        .satisfies(
+            ex ->
+                assertThat(((RegisterSessionHasOpenBillsException) ex).getOpenBillCount())
+                    .isEqualTo(2L));
+
+    // Nothing was written: the session stays OPEN, the close key is NOT consumed (the console
+    // retries with the same stable key once the bills are settled), no event leaves.
+    assertThat(session.getStatus()).isEqualTo(RegisterSession.STATUS_OPEN);
+    verify(repository, never()).saveAndFlush(any());
+    verify(outboxWriter, never()).write(any(), any(), any(), any(), any(), any(), any());
+    // The count is taken UNDER the exclusive cash-window lock — after every in-flight pay has
+    // committed or is blocked — never before it.
+    InOrder order = inOrder(cashWindowLock, repository);
+    order.verify(cashWindowLock).acquireForClose(OUTLET);
+    order.verify(repository).countOpenBillsByBusinessId(OUTLET);
+  }
+
   // ── per-tender expected preview (ADR 0038) ───────────────────────────────
 
   @Test
@@ -289,6 +325,23 @@ class RegisterSessionWriterTest {
     assertThat(expectedOf(resp, "QRIS")).isEqualTo(400_000L); // 430k − 30k refund
     assertThat(expectedOf(resp, "ONLINE")).isEqualTo(615_000L);
     verify(guard).enforce(OUTLET);
+  }
+
+  @Test
+  void expectedBreakdownCarriesTheOpenBillCountTheCloseWillRefuseOn() {
+    UUID sessionId = UUID.randomUUID();
+    RegisterSessionView view = mock(RegisterSessionView.class);
+    when(view.getBusinessId()).thenReturn(OUTLET);
+    when(view.getStatus()).thenReturn(RegisterSession.STATUS_OPEN);
+    when(view.getOpeningFloatMinor()).thenReturn(0L);
+    when(view.getCurrency()).thenReturn("IDR");
+    when(view.getOpenedAt()).thenReturn(Instant.now().minusSeconds(3600));
+    when(repository.findViewById(sessionId)).thenReturn(Optional.of(view));
+    when(repository.countOpenBillsByBusinessId(OUTLET)).thenReturn(3L);
+
+    RegisterExpectedResponse resp = asTenant(() -> writer.expectedBreakdown(sessionId));
+
+    assertThat(resp.openBillCount()).isEqualTo(3L);
   }
 
   private static long expectedOf(RegisterExpectedResponse response, String tender) {
