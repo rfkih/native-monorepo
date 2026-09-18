@@ -142,6 +142,9 @@ export function useCurrentRegisterSession(session: CompanySession) {
  * on the close screen so the cashier sees what to count/verify per tender. A preview; the close
  * still snapshots the authoritative figures server-side.
  */
+// How often the blocked close sheet re-asks whether the open bills are still open (ADR 0086).
+const OPEN_BILLS_POLL_MS = 15_000
+
 export function useRegisterExpected(
   session: CompanySession,
   sessionId: string | null | undefined,
@@ -154,6 +157,13 @@ export function useRegisterExpected(
       apiFetch<RegisterExpectedResponse>(`/api/v1/register-sessions/${sessionId}/expected`, {
         tenant: tenantOf(session),
       }),
+    // ADR 0086 — the preview now decides whether Close is offered at all, so it must be fresh
+    // each time the sheet opens (the global 30 s staleTime would otherwise keep a bill that was
+    // just cancelled from the switcher counted as open), and while it IS blocking it polls: the
+    // bill may be paid or cancelled on another device, and the sheet has no other way to learn.
+    refetchOnMount: 'always',
+    refetchInterval: (query) =>
+      (query.state.data?.openBillCount ?? 0) > 0 ? OPEN_BILLS_POLL_MS : false,
   })
 }
 

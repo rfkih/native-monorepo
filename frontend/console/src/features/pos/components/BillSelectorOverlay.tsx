@@ -149,7 +149,12 @@ export function BillSelectorOverlay({
                     <div className="flex items-center justify-between gap-3">
                       <span className="min-w-0 truncate font-semibold text-ink">{bill.guestLabel}</span>
                       <span className="tnum shrink-0 font-mono text-sm font-semibold text-ink">
-                        {formatMoney(bill.runningTotalMinor, bill.currency, locale)}
+                        {formatMoney(
+                          bill.runningTotalMinor,
+                          // An empty bill carries the "XXX" placeholder until its first line.
+                          bill.currency === 'XXX' ? currency : bill.currency,
+                          locale,
+                        )}
                       </span>
                     </div>
                   </button>

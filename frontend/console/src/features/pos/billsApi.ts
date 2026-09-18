@@ -148,6 +148,17 @@ export function billsKey(session: CompanySession) {
   return ['bills', session.companyId, session.businessId]
 }
 
+/**
+ * ADR 0086 — the register's expected preview carries `openBillCount`, the close precondition. Every
+ * mutation that changes how many bills are OPEN (open, pay, cancel) drops that preview too, or the
+ * close sheet re-opened within the global 30 s staleTime would keep Close withheld over a count
+ * that is no longer true. Prefix key: the sheet's query is keyed by session id, which a bill
+ * mutation does not know.
+ */
+function invalidateOpenBillCount(qc: ReturnType<typeof useQueryClient>, session: CompanySession) {
+  void qc.invalidateQueries({ queryKey: ['register-expected', session.companyId] })
+}
+
 function billKey(session: CompanySession, billId: string) {
   return ['bill', session.companyId, billId]
 }
@@ -264,6 +275,7 @@ export function useOpenBill(session: CompanySession) {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: billsKey(session) })
+      invalidateOpenBillCount(qc, session)
     },
   })
 }
@@ -330,6 +342,7 @@ export function usePayBill(session: CompanySession) {
       void qc.invalidateQueries({ queryKey: billKey(session, billId) })
       void qc.invalidateQueries({ queryKey: billsKey(session) })
       void qc.invalidateQueries({ queryKey: ['pnl'] })
+      invalidateOpenBillCount(qc, session)
     },
   })
 }
@@ -408,6 +421,7 @@ export function useCancelBill(session: CompanySession) {
     onSuccess: (_res, billId) => {
       void qc.invalidateQueries({ queryKey: billKey(session, billId) })
       void qc.invalidateQueries({ queryKey: billsKey(session) })
+      invalidateOpenBillCount(qc, session)
     },
   })
 }

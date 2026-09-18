@@ -36,6 +36,8 @@ import {
 
 // How many blocking open bills the close form lists before "+N more" (the switcher has them all).
 const OPEN_BILLS_SHOWN = 5
+// ISO-4217 "no currency" — what BillWriter.open stamps on a bill until its first line.
+const BILL_CURRENCY_PLACEHOLDER = 'XXX'
 
 // Per-tender label keys (ADR 0038 daily close v2) — i18n only (rule 9).
 const TENDER_LABEL_KEY: Record<string, string> = {
@@ -94,6 +96,9 @@ export function RegisterSheet({
   const closeBlocked = closeBlockedByOpenBills(openBillCount)
   const openBillsQuery = useBills(session, !!currentId && closeBlocked)
   const openBills = openBillsQuery.data ?? []
+  // An EMPTY bill — the accidental one this list exists for — carries the server's "XXX"
+  // placeholder until its first line sets the real currency; it is the drawer's currency here.
+  const billCurrency = (code: string) => (code === BILL_CURRENCY_PLACEHOLDER ? currency : code)
 
   const [floatInput, setFloatInput] = useState('')
   // The cashier typed in the float field — never overwrite their entry with the default.
@@ -390,7 +395,7 @@ export function RegisterSheet({
                           </span>
                         </span>
                         <span className="tnum shrink-0 font-mono">
-                          {formatMoney(bill.runningTotalMinor, bill.currency, locale)}
+                          {formatMoney(bill.runningTotalMinor, billCurrency(bill.currency), locale)}
                         </span>
                       </li>
                     ))}

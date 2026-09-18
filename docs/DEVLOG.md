@@ -47,6 +47,16 @@ unchanged (ADR 0079: the cancel row is expanded-only vocabulary). `bill-line-res
 fixed 96px amount column, pre-existing, exposed by the new overflow scene; the amount keeps its
 natural width and the input wraps under it at 320.
 
+**What code review caught.** (1) The expected preview that now decides whether Close is offered
+was invalidated only by the close's own 409 — with the global 30 s `staleTime` and no focus
+refetch, the exact path this change builds (close sheet → "Lihat tagihan" → cancel → back to the
+sheet) kept Close withheld over "1 bill still open" and an empty list; cross-device it never
+refreshed. Open/pay/cancel now drop `['register-expected', companyId]`, the preview refetches on
+every mount, and while it is blocking it polls every 15 s. (2) An EMPTY bill — the accidental one
+the list exists for — carries the server's `XXX` placeholder currency until its first line, and
+`Intl` prints it as "XXX 0.00"; the close list and the switcher row render it in the drawer's
+currency instead.
+
 Verified: `RegisterSessionWriterTest` (refusal writes nothing, count after the lock, expected carries
 the count), `RegisterCloseOpenBillsGuardIntegrationTest` against Postgres (empty bill blocks until
 cancelled then the same key closes; PAID / owner-CANCELLED / other-outlet / other-tenant bills do
