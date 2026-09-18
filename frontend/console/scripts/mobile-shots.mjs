@@ -456,6 +456,11 @@ for (const pass of [
   await page.getByRole('dialog', { name: pass.ordersLabel }).waitFor({ timeout: 8000 })
   await page.screenshot({ path: `${dir}/pos-register-open-bills-door.png` })
   console.log(`[${pass.name}] pos-register-open-bills-door ok`)
+  // …and each row carries the cancel action (owner under dev auth), confirmed in the shared dialog.
+  await page.getByTestId('switcher-cancel-b1').click({ timeout: 8000 })
+  await page.waitForTimeout(600)
+  await page.screenshot({ path: `${dir}/pos-switcher-cancel-confirm.png` })
+  console.log(`[${pass.name}] pos-switcher-cancel-confirm ok`)
   }
 
   if (want('bills')) {

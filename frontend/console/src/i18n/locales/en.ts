@@ -3711,6 +3711,7 @@ export const en = {
     noLines: 'No items yet — tap the menu to add items to this bill.',
     pay: 'Pay',
     cancelBill: 'Cancel bill',
+    cancelBillAria: 'Cancel bill {{label}}',
     cancelNeedsManager: 'A bill with items can only be cancelled by an owner or manager',
     errNeedsManager: 'This action needs an owner or manager',
     errHasPaidLines: 'Some items are already paid — settle the remainder or reverse the paid checks first',

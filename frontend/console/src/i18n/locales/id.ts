@@ -3658,6 +3658,7 @@ export const id = {
     noLines: 'Belum ada item — ketuk menu untuk menambahkan item ke tagihan ini.',
     pay: 'Bayar',
     cancelBill: 'Batalkan tagihan',
+    cancelBillAria: 'Batalkan tagihan {{label}}',
     cancelNeedsManager: 'Tagihan yang sudah berisi item hanya bisa dibatalkan owner/manajer',
     errNeedsManager: 'Aksi ini butuh owner atau manajer',
     errHasPaidLines: 'Sebagian item sudah dibayar — lunasi sisanya atau balikkan pembayaran dulu',

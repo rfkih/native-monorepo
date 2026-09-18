@@ -890,7 +890,7 @@ export function BillDetail({
       {/* Cancel confirmation */}
       {showCancelConfirm ? (
         <CancelConfirmDialog
-          bill={bill}
+          guestLabel={bill.guestLabel}
           isCancelling={cancelBill.isPending}
           error={cancelBill.isError ? billProblemMessage(cancelBill.error) : null}
           onConfirm={handleCancel}

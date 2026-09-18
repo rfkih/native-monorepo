@@ -77,6 +77,12 @@ export interface BillSummaryResponse {
   /** Sum of all line totals in minor units (pre-tax/SC subtotal) */
   runningTotalMinor: number
   lineCount: number
+  /**
+   * Lines already paid by a recorded split check — > 0 makes the bill uncancellable (open-bill
+   * lockdown), so a list surface withholds the action. Optional: a console ahead of its backend
+   * reads it as 0 and lets the server's 409 answer instead.
+   */
+  paidLineCount?: number
 }
 
 // ---------------------------------------------------------------------------
