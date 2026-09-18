@@ -1690,6 +1690,13 @@ function PosInner({ session }: { session: CompanySession }) {
                   setShowSummary(true)
                 }
           }
+          onOpenBills={() => {
+            // ADR 0086 — open bills block the close: swap the sheet for the order switcher, where
+            // each bill can be picked up (to pay) or cancelled (owner/manager; empty ones by anyone).
+            setShowRegisterSheet(false)
+            setRegisterGateActive(false)
+            setShowBillSelector(true)
+          }}
         />
       ) : null}
 

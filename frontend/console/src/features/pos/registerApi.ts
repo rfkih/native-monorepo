@@ -11,6 +11,8 @@
  * unsynced cash would understate expected cash — ADR 0028).
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { billsKey } from './billsApi'
+import { isRegisterOpenBillsFault } from './lib/registerErrors'
 import { ApiError, apiFetch } from '@/lib/api'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
@@ -46,6 +48,12 @@ export interface RegisterExpectedResponse {
   currency: string
   asOf: string
   tenders: TenderExpected[]
+  /**
+   * OPEN bills at the outlet — the close precondition (ADR 0086): the close refuses (409
+   * `register-session-open-bills`) while this is > 0. Optional on the wire so a console ahead of
+   * its backend degrades to "no preflight block; the 409 still refuses".
+   */
+  openBillCount?: number
 }
 
 /**
@@ -320,11 +328,17 @@ export function useCloseRegisterSession(session: CompanySession) {
       // The just-closed session becomes a new row in the past-day history browse.
       void qc.invalidateQueries({ queryKey: closedHistoryKey(session) })
     },
-    onError: (err) => {
+    onError: (err, { sessionId }) => {
       // Already closed (double-close race or a changed recount after a lost response): the
       // server state is the truth — refetch so the sheet flips out of the close form.
       if (err instanceof ApiError && err.status === 409) {
         void qc.invalidateQueries({ queryKey: currentKey(session) })
+      }
+      // ADR 0086 — a bill was opened/paid/cancelled between the preview and the submit: refresh
+      // the count and the list so the sheet shows the truth rather than a stale "0 open".
+      if (isRegisterOpenBillsFault(err)) {
+        void qc.invalidateQueries({ queryKey: ['register-expected', session.companyId, sessionId] })
+        void qc.invalidateQueries({ queryKey: billsKey(session) })
       }
     },
   })

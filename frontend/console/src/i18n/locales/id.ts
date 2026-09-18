@@ -1510,6 +1510,18 @@ export const id = {
     errorNotOpen: 'Sesi kasir ini sudah tidak terbuka. Muat ulang untuk melihat kondisi terkini.',
     errorKeyConflict:
       'Penutupan itu sudah tercatat dengan jumlah berbeda. Muat ulang untuk melihat kondisi terkini.',
+    /** ADR 0086 — closing menolak selama masih ada tagihan terbuka di outlet. */
+    errorOpenBills:
+      'Masih ada tagihan terbuka di outlet ini. Bayar atau batalkan semuanya dulu, lalu coba tutup lagi.',
+    openBillsTitle: '{{count}} tagihan masih terbuka',
+    openBillsTitle_one: '{{count}} tagihan masih terbuka',
+    openBillsTitle_other: '{{count}} tagihan masih terbuka',
+    openBillsBody:
+      'Kasir tidak bisa ditutup selama masih ada tagihan terbuka. Bayar atau batalkan setiap tagihan di bawah ini dulu.',
+    openBillsGo: 'Lihat tagihan',
+    openBillsMore: '+{{count}} tagihan lagi',
+    openBillsMore_one: '+{{count}} tagihan lagi',
+    openBillsMore_other: '+{{count}} tagihan lagi',
     /** Ringkasan transaksi harian POS (Z-report) — dicetak saat tutup kasir dan dari menu kasir. */
     summaryTillMenuLabel: 'Ringkasan hari ini',
     summaryTitle: 'Ringkasan Harian',

@@ -11,6 +11,7 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { ScreenHeader } from '@/components/mobile/ScreenHeader'
@@ -26,6 +27,7 @@ import { DailySummary } from './DailySummary'
 
 export function StandaloneRegister({ onClose }: { onClose: () => void }) {
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
   useBackDismiss(onClose)
   useScrollLock()
   const { company } = useSession()
@@ -71,6 +73,14 @@ export function StandaloneRegister({ onClose }: { onClose: () => void }) {
                   onPrintSummary={(sessionId) => {
                     setSummarySessionId(sessionId)
                     setSummaryOpen(true)
+                  }}
+                  onOpenBills={() => {
+                    // ADR 0086 — open bills block the close; the till's order switcher is where
+                    // they are paid or cancelled. A door, not a Back (ADR 0075): close FIRST so the
+                    // parked entry unwinds, then navigate — the StocktakeSheet precedent; the
+                    // `?sheet=orders` param is consumed once by the till (lib/sheetParam.ts).
+                    onClose()
+                    navigate('/pos?sheet=orders')
                   }}
                 />
               )}

@@ -1526,6 +1526,18 @@ export const en = {
     errorNotOpen: 'This register session is no longer open. Refresh to see the current state.',
     errorKeyConflict:
       'That close was already recorded with a different amount. Refresh to see the current state.',
+    /** ADR 0086 — the close refuses while bills are still open at the outlet. */
+    errorOpenBills:
+      'Bills are still open at this outlet. Pay or cancel them first, then close again.',
+    openBillsTitle: '{{count}} bills still open',
+    openBillsTitle_one: '{{count}} bill still open',
+    openBillsTitle_other: '{{count}} bills still open',
+    openBillsBody:
+      'The register cannot close while bills are open. Pay or cancel each bill below first.',
+    openBillsGo: 'Open bills',
+    openBillsMore: '+{{count}} more bills',
+    openBillsMore_one: '+{{count}} more bill',
+    openBillsMore_other: '+{{count}} more bills',
     /** POS daily transaction summary (Z-report) — printed at close and from the till menu. */
     summaryTillMenuLabel: 'Today’s summary',
     summaryTitle: 'Daily summary',

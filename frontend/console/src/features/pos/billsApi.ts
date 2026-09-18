@@ -137,7 +137,8 @@ function tenantOf(session: CompanySession) {
   return { companyId: session.companyId, actor: session.actor }
 }
 
-function billsKey(session: CompanySession) {
+/** The open-bills list key — shared with the phone home's per-outlet fan-out and the close sheet. */
+export function billsKey(session: CompanySession) {
   return ['bills', session.companyId, session.businessId]
 }
 
@@ -149,9 +150,10 @@ function billKey(session: CompanySession, billId: string) {
 // List open bills — GET /api/v1/bills?businessId=...&status=OPEN
 // ---------------------------------------------------------------------------
 
-export function useBills(session: CompanySession) {
+export function useBills(session: CompanySession, enabled = true) {
   return useQuery({
     queryKey: billsKey(session),
+    enabled,
     queryFn: () =>
       apiFetch<BillSummaryResponse[]>('/api/v1/bills', {
         tenant: tenantOf(session),
