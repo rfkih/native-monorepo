@@ -61,7 +61,9 @@ public interface BillRepository extends JpaRepository<Bill, UUID> {
 
   /**
    * Lists bills for a business, optionally filtered by status. Used for the GET list endpoint.
-   * Returns a summary with the running total (aggregated from bill_line) and line count.
+   * Returns a summary with the running total (aggregated from bill_line), line count and the count
+   * of lines already PAID (split checks) — a list surface can then withhold the cancel action on a
+   * partially-paid bill instead of offering it and reading a 409.
    *
    * <p>When {@code tableId} is not null the query also filters by table_id — passed via a second
    * query to avoid dynamic SQL in a native query (see {@link
@@ -78,7 +80,8 @@ public interface BillRepository extends JpaRepository<Bill, UUID> {
                  b.currency                        AS currency,
                  b.discount_minor                  AS discount_minor,
                  COALESCE(SUM(l.line_total_minor), 0) AS running_total_minor,
-                 COUNT(l.id)                       AS line_count
+                 COUNT(l.id)                       AS line_count,
+                 COUNT(l.id) FILTER (WHERE l.paid) AS paid_line_count
             FROM bill b
             LEFT JOIN bill_line l ON l.bill_id = b.id
            WHERE b.business_id = :businessId
@@ -106,7 +109,8 @@ public interface BillRepository extends JpaRepository<Bill, UUID> {
                  b.currency                        AS currency,
                  b.discount_minor                  AS discount_minor,
                  COALESCE(SUM(l.line_total_minor), 0) AS running_total_minor,
-                 COUNT(l.id)                       AS line_count
+                 COUNT(l.id)                       AS line_count,
+                 COUNT(l.id) FILTER (WHERE l.paid) AS paid_line_count
             FROM bill b
             LEFT JOIN bill_line l ON l.bill_id = b.id
            WHERE b.business_id = :businessId
