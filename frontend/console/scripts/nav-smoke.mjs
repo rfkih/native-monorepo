@@ -487,6 +487,68 @@ await section('[11] phone — a home figure is a door into the till', async () =
   await ctx.close()
 })
 
+await section('[12] phone — cancelling a bill from the switcher stacks one confirm, and Back peels it', async () => {
+  const { ctx, page } = await makeContext({ phone: true, guard: false })
+  // One EMPTY open bill (cancellable by anyone — the "wrong table opened" case), and a cancel that
+  // answers 204. Registered after makeContext's catch-all, so it wins for these paths.
+  const bill = {
+    id: 'b-empty', businessId: OUTLET_ID, tableId: null, guestLabel: 'Meja 02', status: 'OPEN',
+    currency: 'IDR', discountMinor: null, runningTotalMinor: 0, lineCount: 0, paidLineCount: 0,
+  }
+  let cancelled = false
+  await ctx.route('**/api/v1/bills**', (route) => {
+    const p = new URL(route.request().url()).pathname
+    if (p.endsWith('/cancel')) {
+      cancelled = true
+      return route.fulfill({ status: 204 })
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cancelled ? [] : [bill]) })
+  })
+  await page.goto(`${BASE}/`, { waitUntil: 'load' })
+  await page.waitForTimeout(1500)
+  const homeIdx = await idxOf(page)
+  await page.getByRole('link', { name: /^Bill terbuka/ }).click({ timeout: 8000 })
+  await page.waitForTimeout(1600)
+  const switcher = page.getByRole('dialog', { name: 'Pesanan', exact: true })
+  check('the switcher lists the open bill', await visible(switcher.getByText('Meja 02')))
+
+  await page.getByTestId('switcher-cancel-b-empty').click({ timeout: 8000 })
+  await page.waitForTimeout(600)
+  const confirm = page.getByRole('dialog', { name: 'Batalkan tagihan', exact: true })
+  check('the cancel action opens the confirm above the switcher', (await visible(confirm)) && (await visible(switcher)))
+
+  await page.goBack()
+  await page.waitForTimeout(1000)
+  check('Back closes ONLY the confirm', !(await visible(confirm)) && (await visible(switcher)))
+  check('…and stays on the till', pathOf(page) === '/pos', pathOf(page))
+
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('the next Back closes the switcher', !(await visible(switcher)) && pathOf(page) === '/pos', pathOf(page))
+  check('the door still counts as ONE push', (await idxOf(page)) === homeIdx + 1, `${homeIdx} -> ${await idxOf(page)}`)
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('the next Back is home', pathOf(page) === '/', pathOf(page))
+
+  // Confirming for real: the row goes, the switcher stays (the cashier may have more to do), and
+  // the confirm's parked entry unwinds so the next Back is the switcher's, then home.
+  await page.getByRole('link', { name: /^Bill terbuka/ }).click({ timeout: 8000 })
+  await page.waitForTimeout(1600)
+  await page.getByTestId('switcher-cancel-b-empty').click({ timeout: 8000 })
+  await page.waitForTimeout(500)
+  await confirm.getByRole('button', { name: 'Batalkan tagihan', exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(1200)
+  check('a confirmed cancel closes the confirm and keeps the switcher', !(await visible(confirm)) && (await visible(switcher)))
+  check('the cancelled bill is gone from the list', !(await visible(switcher.getByText('Meja 02'))))
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('after a confirmed cancel, Back closes the switcher', !(await visible(switcher)) && pathOf(page) === '/pos', pathOf(page))
+  await page.goBack()
+  await page.waitForTimeout(1200)
+  check('…and the next Back is home', pathOf(page) === '/', pathOf(page))
+  await ctx.close()
+})
+
 await browser.close()
 console.log(failures === 0 ? '\nNAV SMOKE OK' : `\nNAV SMOKE FAILED (${failures})`)
 process.exit(failures === 0 ? 0 : 1)

@@ -10,6 +10,7 @@ import id.co.nativeapp.restaurant.bill.domain.BillLineReservedException;
 import id.co.nativeapp.restaurant.bill.domain.BillMutationForbiddenException;
 import id.co.nativeapp.restaurant.bill.dto.AppendLinesRequest;
 import id.co.nativeapp.restaurant.bill.dto.BillResponse;
+import id.co.nativeapp.restaurant.bill.dto.BillSummaryResponse;
 import id.co.nativeapp.restaurant.bill.dto.OpenBillRequest;
 import id.co.nativeapp.restaurant.bill.dto.PayBillRequest;
 import id.co.nativeapp.restaurant.bill.service.BillService;
@@ -208,6 +209,15 @@ class BillLockdownTest extends PostgresRlsTestBase {
     BillResponse partiallyPaid =
         TenantContext.callAs(TENANT, ACTOR, () -> billService.getById(bill.id()));
     assertThat(partiallyPaid.status()).isEqualTo("OPEN");
+    // The list summary says so too, so a list surface withholds the cancel action up front.
+    BillSummaryResponse summary =
+        TenantContext.callAs(TENANT, ACTOR, () -> billService.list(BUSINESS_ID, "OPEN", null))
+            .stream()
+            .filter(sm -> sm.id().equals(bill.id()))
+            .findFirst()
+            .orElseThrow();
+    assertThat(summary.lineCount()).isEqualTo(2);
+    assertThat(summary.paidLineCount()).isEqualTo(1);
 
     assertThatThrownBy(
             () ->

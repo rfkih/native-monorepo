@@ -15,6 +15,14 @@ import java.util.UUID;
  * @param currency ISO-4217 code of the drawer
  * @param asOf the instant the breakdown was computed (the window upper bound)
  * @param tenders one row per tender (CASH/CARD/QRIS/ONLINE), expected in minor units
+ * @param openBillCount OPEN bills at the outlet at {@code asOf} — the close precondition (ADR
+ *     0086): the close refuses ({@code 409 register-session-open-bills}) while this is {@code > 0},
+ *     so the close screen can say so before the cashier counts
  */
 public record RegisterExpectedResponse(
-    UUID sessionId, UUID businessId, String currency, Instant asOf, List<TenderExpected> tenders) {}
+    UUID sessionId,
+    UUID businessId,
+    String currency,
+    Instant asOf,
+    List<TenderExpected> tenders,
+    long openBillCount) {}

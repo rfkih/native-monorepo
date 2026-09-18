@@ -15,6 +15,8 @@ import java.util.UUID;
  * @param discountMinor optional fixed discount in minor units; null when none
  * @param runningTotalMinor sum of all line totals in minor units (pre-tax/SC subtotal)
  * @param lineCount number of lines on this bill
+ * @param paidLineCount lines already paid by a recorded split check; {@code > 0} means the bill can
+ *     no longer be cancelled (open-bill lockdown) — the list surfaces withhold the action
  */
 public record BillSummaryResponse(
     UUID id,
@@ -25,4 +27,5 @@ public record BillSummaryResponse(
     String currency,
     Long discountMinor,
     long runningTotalMinor,
-    int lineCount) {}
+    int lineCount,
+    int paidLineCount) {}

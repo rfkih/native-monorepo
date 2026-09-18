@@ -30,4 +30,7 @@ public interface BillSummaryView {
   long getRunningTotalMinor();
 
   int getLineCount();
+
+  /** Lines already paid by a recorded split check — {@code > 0} makes the bill uncancellable. */
+  int getPaidLineCount();
 }

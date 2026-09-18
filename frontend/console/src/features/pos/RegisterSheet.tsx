@@ -17,13 +17,14 @@ import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormSkeleton } from '@/components/ui/Skeleton'
-import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import { needsCountConfirmation } from './lib/closeGuard'
+import { useBills } from './billsApi'
+import { closeBlockedByOpenBills, needsCountConfirmation } from './lib/closeGuard'
 import { parseDiscountInput } from './lib/discountInput'
 import { minorToMajorInput } from './lib/registerFloat'
+import { registerErrorKey } from './lib/registerErrors'
 import {
   useCloseRegisterSession,
   useCurrentRegisterSession,
@@ -33,31 +34,17 @@ import {
   type RegisterSessionResponse,
 } from './registerApi'
 
+// How many blocking open bills the close form lists before "+N more" (the switcher has them all).
+const OPEN_BILLS_SHOWN = 5
+// ISO-4217 "no currency" — what BillWriter.open stamps on a bill until its first line.
+const BILL_CURRENCY_PLACEHOLDER = 'XXX'
+
 // Per-tender label keys (ADR 0038 daily close v2) — i18n only (rule 9).
 const TENDER_LABEL_KEY: Record<string, string> = {
   CASH: 'register.tenderCash',
   CARD: 'register.tenderCard',
   QRIS: 'register.tenderQris',
   ONLINE: 'register.tenderOnline',
-}
-
-// Map the register fault `type` slugs (RegisterAdvice) to friendly i18n keys — the day-final 409 is
-// a routine end-of-day event, not a raw English diagnostic with an internal id (rule 9). Returns the
-// key, or null to fall back to the server's detail message.
-const REGISTER_ERROR_KEY: Record<string, string> = {
-  'register-session-day-closed': 'register.errorDayClosed',
-  'register-session-already-open': 'register.errorAlreadyOpen',
-  'register-session-not-open': 'register.errorNotOpen',
-  'register-session-idempotency-key-conflict': 'register.errorKeyConflict',
-}
-
-function registerErrorKey(err: unknown): string | null {
-  if (err instanceof ApiError && typeof err.problem?.type === 'string') {
-    for (const slug of Object.keys(REGISTER_ERROR_KEY)) {
-      if (err.problem.type.includes(slug)) return REGISTER_ERROR_KEY[slug]
-    }
-  }
-  return null
 }
 
 export function RegisterSheet({
@@ -68,6 +55,7 @@ export function RegisterSheet({
   onClose,
   onContinueToStocktake,
   onPrintSummary,
+  onOpenBills,
 }: {
   session: CompanySession
   currency: string
@@ -87,6 +75,9 @@ export function RegisterSheet({
    * offer a "Cetak ringkasan" action, handed the session id to summarize. The parent owns the print
    * overlay (the DailySummary/ThermalReceipt surface) so this sheet stays print-agnostic. */
   onPrintSummary?: (sessionId: string) => void
+  /** ADR 0086 — the door to the order switcher when open bills block the close. Omitted (no till
+   * mounted, no route to offer) → the block still renders, without its button. */
+  onOpenBills?: () => void
 }) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
@@ -97,6 +88,17 @@ export function RegisterSheet({
   const currentId = currentQuery.data?.id ?? null
   // Live per-tender expected for the OPEN session (ADR 0038) — shown on the close form.
   const expectedQuery = useRegisterExpected(session, currentId, !!currentId)
+  // ADR 0086 — no open bill survives a close. The preview carries the count; while it is > 0 the
+  // close button is withheld and the bills are listed (same cache key as the till's switcher and
+  // the phone home, so nothing extra is fetched when the till is mounted). Unknown never blocks —
+  // the server re-counts under its lock and its 409 is the backstop.
+  const openBillCount = expectedQuery.data?.openBillCount ?? null
+  const closeBlocked = closeBlockedByOpenBills(openBillCount)
+  const openBillsQuery = useBills(session, !!currentId && closeBlocked)
+  const openBills = openBillsQuery.data ?? []
+  // An EMPTY bill — the accidental one this list exists for — carries the server's "XXX"
+  // placeholder until its first line sets the real currency; it is the drawer's currency here.
+  const billCurrency = (code: string) => (code === BILL_CURRENCY_PLACEHOLDER ? currency : code)
 
   const [floatInput, setFloatInput] = useState('')
   // The cashier typed in the float field — never overwrite their entry with the default.
@@ -329,15 +331,18 @@ export function RegisterSheet({
                         key={td.tenderType}
                         className="flex items-center justify-between gap-3 text-sm"
                       >
-                        <dt className="text-ink-3">{label}</dt>
-                        <dd className="flex items-center gap-2.5">
-                          <span className="tnum w-24 text-right font-mono text-ink-2">
+                        <dt className="shrink-0 text-ink-3">{label}</dt>
+                        {/* The amount keeps its natural width and the input wraps under it when
+                            the row is too narrow (320px) — a fixed 96px amount column clipped
+                            "IDR 1,850,000" at 360px. */}
+                        <dd className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-2.5 gap-y-1.5">
+                          <span className="tnum shrink-0 whitespace-nowrap text-right font-mono text-ink-2">
                             {formatMoney(td.expectedMinor, currency, locale)}
                           </span>
                           {/* Non-cash tenders take an optional counted/settled amount (cash is the
                               drawer count below). Left blank → that tender isn't settled at close. */}
                           {isCash ? (
-                            <span className="w-24" aria-hidden />
+                            <span className="w-24 shrink-0" aria-hidden />
                           ) : (
                             <input
                               aria-label={t('register.countedForTender', { tender: label })}
@@ -350,7 +355,7 @@ export function RegisterSheet({
                                 setTenderCounts((p) => ({ ...p, [td.tenderType]: e.target.value }))
                               }
                               placeholder={t('register.countedPlaceholder')}
-                              className="h-9 w-24 rounded-lg border border-line bg-surface px-2 text-right font-mono text-sm tnum text-ink placeholder:text-ink-3/50 focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10"
+                              className="h-9 w-24 shrink-0 rounded-lg border border-line bg-surface px-2 text-right font-mono text-sm tnum text-ink placeholder:text-ink-3/50 focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10"
                             />
                           )}
                         </dd>
@@ -361,6 +366,56 @@ export function RegisterSheet({
                 <p className="mt-2 text-xs leading-relaxed text-ink-3">
                   {t('register.expectedByTenderHint')}
                 </p>
+              </div>
+            ) : null}
+            {closeBlocked ? (
+              <div
+                className="rounded-xl bg-tint-warning px-4 py-3"
+                role="status"
+                data-testid="register-open-bills"
+              >
+                <div className="text-sm font-semibold text-amber-2">
+                  {t('register.openBillsTitle', { count: openBillCount ?? 0 })}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-amber-2">
+                  {t('register.openBillsBody')}
+                </p>
+                {openBills.length > 0 ? (
+                  <ul className="mt-2.5 space-y-1.5">
+                    {openBills.slice(0, OPEN_BILLS_SHOWN).map((bill) => (
+                      <li
+                        key={bill.id}
+                        className="flex items-baseline justify-between gap-3 text-sm text-ink"
+                      >
+                        <span className="min-w-0 truncate">
+                          <span className="font-medium">{bill.guestLabel}</span>
+                          <span className="text-ink-3">
+                            {' · '}
+                            {t('bills.lineCount', { n: bill.lineCount })}
+                          </span>
+                        </span>
+                        <span className="tnum shrink-0 font-mono">
+                          {formatMoney(bill.runningTotalMinor, billCurrency(bill.currency), locale)}
+                        </span>
+                      </li>
+                    ))}
+                    {openBills.length > OPEN_BILLS_SHOWN ? (
+                      <li className="text-xs text-ink-3">
+                        {t('register.openBillsMore', { count: openBills.length - OPEN_BILLS_SHOWN })}
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
+                {onOpenBills ? (
+                  <Button
+                    variant="outline"
+                    className="mt-3 w-full"
+                    data-testid="register-open-bills-go"
+                    onClick={onOpenBills}
+                  >
+                    {t('register.openBillsGo')}
+                  </Button>
+                ) : null}
               </div>
             ) : null}
             <div>
@@ -388,7 +443,7 @@ export function RegisterSheet({
             <Button
               className="w-full"
               data-testid="register-close"
-              disabled={busy || countedInput.trim() === ''}
+              disabled={busy || countedInput.trim() === '' || closeBlocked}
               onClick={handleCloseClick}
             >
               {busy ? <Spinner /> : t('register.closeAction')}

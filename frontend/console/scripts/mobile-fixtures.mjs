@@ -144,7 +144,7 @@ const BILL_SUMMARIES = [
   {
     id: 'b1', businessId: COMPANY.businessId, tableId: 't7', guestLabel: 'Meja 07',
     status: 'OPEN', currency: 'IDR', discountMinor: null,
-    runningTotalMinor: BILL_UNPAID, lineCount: BILL_LINES.length,
+    runningTotalMinor: BILL_UNPAID, lineCount: BILL_LINES.length, paidLineCount: 0,
   },
 ]
 
@@ -284,6 +284,18 @@ const REGISTER_SESSION = {
   openedAt: '2026-08-07T00:02:00Z', openingFloatMinor: 500000, currency: 'IDR',
   closedAt: null, cashSalesMinor: null, cashRefundsMinor: null,
   expectedCashMinor: null, countedCashMinor: null, overShortMinor: null,
+}
+// The close form's live preview (ADR 0038) — openBillCount: 1 matches the one OPEN row in
+// BILL_SUMMARIES, so the sheet renders its blocked state (ADR 0086) and the shot proves it.
+const REGISTER_EXPECTED = {
+  sessionId: 'rs1', businessId: COMPANY.businessId, currency: 'IDR', asOf: '2026-08-07T13:00:00Z',
+  tenders: [
+    { tenderType: 'CASH', expectedMinor: 1850000 },
+    { tenderType: 'CARD', expectedMinor: 640000 },
+    { tenderType: 'QRIS', expectedMinor: 925000 },
+    { tenderType: 'ONLINE', expectedMinor: 0 },
+  ],
+  openBillCount: 1,
 }
 
 const page1 = (content) => ({ content, page: 0, size: 20, totalElements: content.length, totalPages: 1 })
@@ -577,6 +589,7 @@ const ROUTES = [
   ['/api/v1/inventory-method', () => ({ active: false, method: null, cutoverPeriod: null, activatedAt: null, inventoryAssetMinor: 0, inventoryAssetNegative: false, currency: null })],
   ['/api/v1/orders', (u) => (u.searchParams.get('status') === 'PARKED' ? PARKED_SUMMARIES : [])],
   ['/api/v1/register-sessions/current', () => REGISTER_SESSION],
+  [/\/api\/v1\/register-sessions\/[^/]+\/expected$/, () => REGISTER_EXPECTED],
   [/\/api\/v1\/bills\/[^/]+\/attachments$/, () => []],
   [/\/api\/v1\/bills\/[^/]+$/, () => BILL],
   ['/api/v1/bills', () => BILL_SUMMARIES],
