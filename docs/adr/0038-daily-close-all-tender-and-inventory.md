@@ -136,3 +136,10 @@ till now PROMPTS to open the drawer when no session is open and GATES the paymen
 while online (offline stays exempt — ADR 0028's queue must never be blocked by a session read),
 which addresses the root cause of the drill finding (sales rung outside any session window ->
 "expected 0").
+
+## Amendment (2026-09-18) — the close has a precondition: no open bills
+
+A session cannot close while any bill at the outlet is OPEN; the close counts them under its
+exclusive `CashWindowLock` and refuses with 409 `register-session-open-bills` before writing, and
+the expected preview carries `openBillCount` so the close screen says so first. Each bill is paid
+or cancelled by a person — the close never sweeps them. See [ADR 0086](0086-register-close-refuses-open-bills.md).

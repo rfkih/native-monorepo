@@ -101,7 +101,11 @@ import org.springframework.transaction.annotation.Transactional;
  * ({@link CashWindowLock#acquireForCommit}) as the FIRST lock-acquiring statement in THEIR OWN
  * transaction — strictly BEFORE the {@code Instant now} that becomes the check's sale {@code
  * occurred_at} is captured — mirroring {@code OrderWriter.checkout}/{@code payParked}. SHARED
- * holders never block each other, only a concurrent register close's EXCLUSIVE mode. See {@code
+ * holders never block each other, only a concurrent register close's EXCLUSIVE mode. {@link #open}
+ * joins the SHARED side too (ADR 0086): the close counts OPEN bills under its EXCLUSIVE lock and
+ * refuses while any exist, so a bill must not be able to appear "under" a close that already
+ * counted. {@link #cancelBill} deliberately takes NO lock — its race with a close is conservative
+ * (an uncommitted cancel leaves the bill OPEN, the close refuses, the retry succeeds). See {@code
  * RegisterSessionWriter} class javadoc for the full contract. {@link #recordCheck} — the shared
  * sale-recording core both callers delegate to — does NOT re-acquire the lock itself: it mirrors
  * {@code SaleWriter#recordInCurrentTx}'s documented contract that a {@code MANDATORY}-joining
@@ -233,6 +237,14 @@ public class BillWriter {
     if (request.tableId() != null) {
       validateTableId(request.tableId(), request.businessId());
     }
+
+    // ADR 0086 — the register close refuses while any bill at the outlet is OPEN, counting under
+    // the EXCLUSIVE CashWindowLock. Opening joins the SHARED side so a bill cannot slip in "under"
+    // a close that already took its count: an open in flight either commits before the close
+    // counts (and blocks it) or queues behind it. FIRST lock-acquiring statement here, after the
+    // plain reads above; deadlock-safe — open takes no row lock, and the close never locks bill
+    // rows (see RegisterSessionWriter class javadoc).
+    cashWindowLock.acquireForCommit(request.businessId());
 
     // Bill is opened empty with a currency placeholder "XXX" (ISO 4217 "no currency").
     // The real currency is established on the first appendLines call from the menu items.

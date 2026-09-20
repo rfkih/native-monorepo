@@ -1690,6 +1690,13 @@ function PosInner({ session }: { session: CompanySession }) {
                   setShowSummary(true)
                 }
           }
+          onOpenBills={() => {
+            // ADR 0086 — open bills block the close: swap the sheet for the order switcher, where
+            // each bill can be picked up (to pay) or cancelled (owner/manager; empty ones by anyone).
+            setShowRegisterSheet(false)
+            setRegisterGateActive(false)
+            setShowBillSelector(true)
+          }}
         />
       ) : null}
 
@@ -1793,12 +1800,22 @@ function PosInner({ session }: { session: CompanySession }) {
       {/* Phone bill selector overlay */}
       {showBillSelector ? (
         <BillSelectorOverlay
+          session={session}
           bills={openBillsList}
           activeBillId={openBillId}
           locale={locale}
           walkInCount={lineCount}
           walkInTotalMinor={grandTotalMinor}
           currency={currency}
+          canVoid={canVoidBill}
+          onCancelled={(billId) => {
+            // The bill just cancelled from the switcher was the one on the deck: drop it, or the
+            // bill sheet would flip to its "bill closed" screen behind the switcher.
+            if (billId === openBillId) {
+              setOpenBillId(null)
+              setBillSheetOpen(false)
+            }
+          }}
           onWalkIn={() => {
             setOpenBillId(null)
             setShowBillSelector(false)

@@ -1510,6 +1510,18 @@ export const id = {
     errorNotOpen: 'Sesi kasir ini sudah tidak terbuka. Muat ulang untuk melihat kondisi terkini.',
     errorKeyConflict:
       'Penutupan itu sudah tercatat dengan jumlah berbeda. Muat ulang untuk melihat kondisi terkini.',
+    /** ADR 0086 — closing menolak selama masih ada tagihan terbuka di outlet. */
+    errorOpenBills:
+      'Masih ada tagihan terbuka di outlet ini. Bayar atau batalkan semuanya dulu, lalu coba tutup lagi.',
+    openBillsTitle: '{{count}} tagihan masih terbuka',
+    openBillsTitle_one: '{{count}} tagihan masih terbuka',
+    openBillsTitle_other: '{{count}} tagihan masih terbuka',
+    openBillsBody:
+      'Kasir tidak bisa ditutup selama masih ada tagihan terbuka. Bayar atau batalkan setiap tagihan di bawah ini dulu.',
+    openBillsGo: 'Lihat tagihan',
+    openBillsMore: '+{{count}} tagihan lagi',
+    openBillsMore_one: '+{{count}} tagihan lagi',
+    openBillsMore_other: '+{{count}} tagihan lagi',
     /** Ringkasan transaksi harian POS (Z-report) — dicetak saat tutup kasir dan dari menu kasir. */
     summaryTillMenuLabel: 'Ringkasan hari ini',
     summaryTitle: 'Ringkasan Harian',
@@ -3646,10 +3658,14 @@ export const id = {
     noLines: 'Belum ada item — ketuk menu untuk menambahkan item ke tagihan ini.',
     pay: 'Bayar',
     cancelBill: 'Batalkan tagihan',
+    cancelBillAria: 'Batalkan tagihan {{label}}',
     cancelNeedsManager: 'Tagihan yang sudah berisi item hanya bisa dibatalkan owner/manajer',
     errNeedsManager: 'Aksi ini butuh owner atau manajer',
     errHasPaidLines: 'Sebagian item sudah dibayar — lunasi sisanya atau balikkan pembayaran dulu',
     errLinePaid: 'Item itu sudah dibayar dan tidak bisa dihapus',
+    errLineReserved:
+      'Ada pembayaran QRIS yang masih berjalan di tagihan ini — selesaikan atau batalkan pembayarannya dulu',
+    errNotOpen: 'Tagihan ini sudah tidak terbuka — muat ulang untuk melihat kondisi terkini',
     cancelBillTitle: 'Batalkan tagihan',
     cancelBillBody: 'Batalkan tagihan untuk "{{label}}"? Tidak ada penjualan yang akan dicatat.',
     cancelBillConfirm: 'Batalkan tagihan',

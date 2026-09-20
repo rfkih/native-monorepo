@@ -63,7 +63,8 @@ public class RegisterSessionController {
   /**
    * Closes a session with the cashier's physical drawer count. The server computes expected cash
    * and the signed over/short, emits {@code RegisterSessionClosed} in the same transaction, and
-   * returns the closed session. Same-key replay → 200; double-close with a different key → 409.
+   * returns the closed session. Same-key replay → 200; double-close with a different key → 409;
+   * bills still OPEN at the outlet → 409 {@code register-session-open-bills} (ADR 0086).
    */
   @Operation(
       summary = "Close a register session",
@@ -71,7 +72,8 @@ public class RegisterSessionController {
           "Closes the drawer with the counted cash; expected cash and the signed over/short are"
               + " server-computed and the RegisterSessionClosed event is emitted atomically."
               + " Idempotency-Key required (replay returns 200); a non-OPEN session with a new key"
-              + " returns 409.")
+              + " returns 409, and so does a close while any bill at the outlet is still OPEN"
+              + " (register-session-open-bills, carrying openBillCount) — pay or cancel them first.")
   @PostMapping("/{id}/close")
   public ResponseEntity<RegisterSessionResponse> close(
       @PathVariable("id") UUID id,
@@ -121,8 +123,8 @@ public class RegisterSessionController {
       summary = "Register session expected breakdown",
       description =
           "The live per-tender expected amounts (cash/card/QRIS/online) for the OPEN session, so the"
-              + " close screen can show what to count/verify per tender. A preview; the close"
-              + " snapshots the authoritative figures.")
+              + " close screen can show what to count/verify per tender, plus openBillCount — the"
+              + " close precondition. A preview; the close snapshots the authoritative figures.")
   @GetMapping("/{id}/expected")
   public ResponseEntity<RegisterExpectedResponse> expected(@PathVariable("id") UUID id) {
     return ResponseEntity.ok(service.expectedBreakdown(id));

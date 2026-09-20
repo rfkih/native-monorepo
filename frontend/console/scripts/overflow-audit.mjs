@@ -275,6 +275,17 @@ const SCENES = [
     await page.goto(`${BASE}/pos`, { waitUntil: 'load' }); await page.waitForTimeout(1600)
     await page.getByTestId('pos-parked').click({ timeout: 8000 }); await page.waitForTimeout(800)
   }],
+  // ADR 0086 — the close form blocked by an open bill (amber block + list + door), then the order
+  // switcher it opens, whose rows now carry a cancel action.
+  ['pos-register-close-blocked', async (page, lang) => {
+    await page.goto(`${BASE}/pos`, { waitUntil: 'load' }); await page.waitForTimeout(1600)
+    await page.getByTestId('pos-till-menu').click({ timeout: 8000 }); await page.waitForTimeout(400)
+    await page.getByRole('menuitem', { name: lang === 'id' ? 'Closing kasir' : 'Close the register', exact: true }).click({ timeout: 8000 })
+    await page.getByTestId('register-open-bills').waitFor({ timeout: 8000 }); await page.waitForTimeout(400)
+  }],
+  ['pos-switcher', async (page) => {
+    await page.getByTestId('register-open-bills-go').click({ timeout: 8000 }); await page.waitForTimeout(700)
+  }],
   ['bills-new-filled', async (page) => {
     await page.goto(`${BASE}/bills/new`, { waitUntil: 'load' }); await page.waitForTimeout(1400)
     await page.getByRole('button', { name: /(Pilih vendor|Choose a vendor)/ }).click({ timeout: 8000 }); await page.waitForTimeout(500)

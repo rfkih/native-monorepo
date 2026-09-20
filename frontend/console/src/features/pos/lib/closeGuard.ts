@@ -19,3 +19,14 @@ export function needsCountConfirmation(
 ): boolean {
   return expectedCashMinor != null && countedCashMinor !== expectedCashMinor
 }
+
+/**
+ * ADR 0086 — the register cannot close while any bill at the outlet is OPEN; each one is paid or
+ * cancelled by a person first, never swept by the close. True when the live preview says bills are
+ * open. An unknown count (`null`/`undefined` — the preview is still loading or errored) never
+ * blocks: the server re-counts under its lock and refuses with 409 `register-session-open-bills`,
+ * which is the backstop — the same philosophy as {@link needsCountConfirmation}.
+ */
+export function closeBlockedByOpenBills(openBillCount: number | null | undefined): boolean {
+  return (openBillCount ?? 0) > 0
+}

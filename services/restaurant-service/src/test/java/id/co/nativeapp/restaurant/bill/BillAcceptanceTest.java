@@ -157,6 +157,7 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
             .orElseThrow();
     assertThat(guestASummary.runningTotalMinor()).isEqualTo(30_000L);
     assertThat(guestASummary.lineCount()).isEqualTo(1);
+    assertThat(guestASummary.paidLineCount()).isZero();
   }
 
   @Test

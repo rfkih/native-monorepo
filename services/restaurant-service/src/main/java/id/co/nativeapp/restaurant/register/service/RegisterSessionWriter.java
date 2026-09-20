@@ -7,6 +7,7 @@ import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.register.domain.RegisterCloseCorrectionNotAllowedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionHasOpenBillsException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
@@ -70,15 +71,19 @@ import org.springframework.transaction.annotation.Transactional;
  * sale/refund-committing transaction ({@code SaleWriter.create}, {@code OrderWriter.checkout},
  * {@code OrderWriter.payParked}, {@code BillWriter.payBill}, {@code PaymentCaptureWriter.capture},
  * {@code VoidRefundWriter.refund}) acquires the SHARED mode ({@link
- * CashWindowLock#acquireForCommit}) — SHARED holders never block each other, only EXCLUSIVE. Both
- * modes are acquired as the FIRST lock-acquiring statement in their transaction, strictly BEFORE
- * capturing the timestamp that will become {@code closeInstant} (here) or the row's {@code
- * occurred_at} (there). Ordering is deadlock-safe: {@link #close} takes the pessimistic {@code
- * findWithLockById} row lock BEFORE the advisory lock, but no OTHER transaction ever acquires that
- * same row lock (only {@code close} does, and the idempotency/status checks reject a second
- * concurrent close on the same session before it would reach either lock), so the two locks never
- * form a cross-transaction cycle. See {@link CashWindowLock} class javadoc for the full
- * before/after reasoning.
+ * CashWindowLock#acquireForCommit}) — SHARED holders never block each other, only EXCLUSIVE. {@code
+ * BillWriter.open} joins the SHARED side too (ADR 0086): {@link #close} counts the outlet's OPEN
+ * bills under its EXCLUSIVE lock and refuses while any exist ({@code
+ * RegisterSessionHasOpenBillsException}), so a bill must not appear "under" a close that already
+ * counted; {@code BillWriter.cancelBill} takes no lock — that race is conservative (an uncommitted
+ * cancel leaves the bill OPEN, the close refuses, the retry succeeds). Both modes are acquired as
+ * the FIRST lock-acquiring statement in their transaction, strictly BEFORE capturing the timestamp
+ * that will become {@code closeInstant} (here) or the row's {@code occurred_at} (there). Ordering
+ * is deadlock-safe: {@link #close} takes the pessimistic {@code findWithLockById} row lock BEFORE
+ * the advisory lock, but no OTHER transaction ever acquires that same row lock (only {@code close}
+ * does, and the idempotency/status checks reject a second concurrent close on the same session
+ * before it would reach either lock), so the two locks never form a cross-transaction cycle. See
+ * {@link CashWindowLock} class javadoc for the full before/after reasoning.
  */
 @Component
 public class RegisterSessionWriter {
@@ -235,6 +240,18 @@ public class RegisterSessionWriter {
     // cash_register_session, so the two never form a cross-transaction cycle (documented ordering
     // — see class javadoc). Waits for every in-flight sale/refund's SHARED lock to release.
     cashWindowLock.acquireForClose(session.getBusinessId());
+
+    // ADR 0086 — no open bill survives a close. Counted UNDER the exclusive lock, so every
+    // in-flight pay (a SHARED holder that flips a bill to PAID) has either committed or is blocked
+    // behind us; a bill still OPEN here — including one with lines reserved by a live QRIS
+    // payment — is money in flight, and the close refuses. Nothing has been written yet, so this
+    // rolls back without consuming the close key: the console retries with the same key once the
+    // bills are paid or cancelled. The close never cancels a bill itself (the owner's rule: each
+    // one is settled by a person, never swept).
+    long openBills = repository.countOpenBillsByBusinessId(session.getBusinessId());
+    if (openBills > 0) {
+      throw new RegisterSessionHasOpenBillsException(sessionId, session.getBusinessId(), openBills);
+    }
 
     Instant closeInstant = Instant.now();
     // Cash INTO the drawer = cash-collected sale portions + cash gift-card sales (a gift card
@@ -518,7 +535,10 @@ public class RegisterSessionWriter {
         businessId,
         session.getCurrency() == null ? null : session.getCurrency().strip(),
         asOf,
-        tenders);
+        tenders,
+        // The close precondition (ADR 0086), surfaced here so the close screen can name it before
+        // the count — a preview like the tenders; the close re-counts under its lock.
+        repository.countOpenBillsByBusinessId(businessId));
   }
 
   /**

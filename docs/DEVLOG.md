@@ -1,5 +1,73 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-09-18 — the register refuses to close over an open bill, and the phone owner can finally cancel one
+
+Two owner reports, one sentence each: an accidentally opened bill could not be deleted or
+cancelled and stayed open for good; and every closing must leave no open bill — "gada open bill
+kalau cabang tutup." Asked, the owner chose: the close is BLOCKED while open bills exist (each one
+paid or cancelled by a person, never swept by the close), and the cancel policy of the open-bill
+lockdown (2026-08-31) stays exactly as it is. ADR 0086.
+
+**The cancel was a bug, not the policy.** The Business Android app is a device login — an outlet
+credential with a cashier-tier JWT — and the owner elevates on top with "Masuk untuk mengelola".
+The till lit the "Batalkan tagihan" affordance from the MERGED roles, but `useCancelBill` and
+`useRemoveLine` sent the request on the default `'outlet'` bearer; the gateway stamped `X-Roles:
+cashier` from that token and `BillWriter.requireOwnerOrManager` refused with 403 — the owner read
+"Aksi ini butuh owner atau manajer" while being the owner. Refund, void and close-correction had
+been given `auth: 'personal'` deliberately; cancel had not. `'personal'` is not the fix either: an
+un-elevated device has no personal bearer, and a bearerless call is a 401 that trips the auth
+layer's recovery — yet a bare cashier may cancel an EMPTY bill. So `lib/api.ts` gains a third
+`AuthTarget`, **`'elevated'`** = personal when present, else outlet; cancel, remove-line and the
+self-order access hooks ride it. The service keeps deciding; the call just stops hiding who is
+asking. The audit of every other `requireOwnerOrManager` site: `ManualDiscountGuard` is not a
+live bug (its input is gated on BASE roles and checkout feeds the offline replay — separate
+design); refund/void/correct-close already ride `'personal'` under an effective-roles UI gate.
+
+**The close never looked at the bill table.** `RegisterSessionWriter.close()` now counts the
+outlet's OPEN bills UNDER the exclusive `CashWindowLock` — after every in-flight pay has committed
+or is blocked — and refuses with 409 `register-session-open-bills` (`openBillCount`) before anything
+is written, so the close key is not consumed and the console's stable `close:<sessionId>` key
+retries once the bills are settled. The count lives on `RegisterSessionRepository` beside the cash
+terms (no `BillRepository` into the writer — a feature cycle for nothing). `BillWriter.open` joins
+the SHARED side of the lock so a bill cannot be opened "under" a close that already counted;
+`cancelBill` stays lock-free — that race is conservative. Parked and awaiting-payment orders are
+not "open bills" (a saved cart; a digital tender with a TTL) and do not block; a POS-parked order
+has no discard path at all today — flagged in the ADR, the owner's call. The expected preview
+carries `openBillCount`; the close sheet renders an amber block naming the bills, a door to the
+order switcher, and withholds Close. Unknown never blocks — the 409 is the backstop.
+
+**The switcher gets the cancel.** It is where the owner lands from the home's "Bill terbuka" door
+and from the close sheet's "Lihat tagihan"; each row now carries "Batalkan tagihan" under the deck's
+own policy (`billPermissions`; the bill summary's new `paidLineCount` withholds it on a partially
+paid bill), one explainer for a cashier, the shared `CancelConfirmDialog` above it. The deck is
+unchanged (ADR 0079: the cancel row is expanded-only vocabulary). `bill-line-reserved` and
+`bill-not-open` now read in the operator's language (`lib/billProblem.ts`, shared).
+
+**Found on the way.** The close form's expected-by-tender rows clipped "IDR 1,850,000" at 360px — a
+fixed 96px amount column, pre-existing, exposed by the new overflow scene; the amount keeps its
+natural width and the input wraps under it at 320.
+
+**What code review caught.** (1) The expected preview that now decides whether Close is offered
+was invalidated only by the close's own 409 — with the global 30 s `staleTime` and no focus
+refetch, the exact path this change builds (close sheet → "Lihat tagihan" → cancel → back to the
+sheet) kept Close withheld over "1 bill still open" and an empty list; cross-device it never
+refreshed. Open/pay/cancel now drop `['register-expected', companyId]`, the preview refetches on
+every mount, and while it is blocking it polls every 15 s. (2) An EMPTY bill — the accidental one
+the list exists for — carries the server's `XXX` placeholder currency until its first line, and
+`Intl` prints it as "XXX 0.00"; the close list and the switcher row render it in the drawer's
+currency instead.
+
+Verified: `RegisterSessionWriterTest` (refusal writes nothing, count after the lock, expected carries
+the count), `RegisterCloseOpenBillsGuardIntegrationTest` against Postgres (empty bill blocks until
+cancelled then the same key closes; PAID / owner-CANCELLED / other-outlet / other-tenant bills do
+not), `BillLockdownTest` + `BillAcceptanceTest` (`paidLineCount`), `BillCancelRaceTest`,
+`RegisterCloseLockConcurrencyTest`, `LayeredArchitectureTest` 14/14, spotless/checkstyle/no-select-star;
+console: `selectBearerToken` `'elevated'`, `billProblem`, `registerErrors`, `closeGuard` vitest (pos +
+lib suites green), `tsc -b`, eslint, design-token gate, `nav-smoke` 12/12 (new [12]: the confirm
+stacks above the switcher, Back peels confirm → switcher → home, a confirmed cancel keeps the
+switcher and drops the row), `mobile-shots` pos pass asserting the blocked close lists the bill and
+Close stays disabled with a count typed (light/en + dark/id), overflow audit clean at 360/320.
+
 ## 2026-09-17 — the home's figures become doors, and the till gets its one deep-link
 
 The owner tapped "Bill terbuka" on the phone home and nothing happened. Every other card on that

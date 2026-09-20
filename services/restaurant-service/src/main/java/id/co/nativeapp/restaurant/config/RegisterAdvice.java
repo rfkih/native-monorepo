@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.restaurant.register.domain.RegisterCloseCorrectionNotAllowedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionAlreadyOpenException;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionHasOpenBillsException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
@@ -30,6 +31,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       {@code 409} ({@code register-session-idempotency-key-conflict})
  *   <li>{@link RegisterSessionNotFoundException} — unknown/cross-tenant id → {@code 404} ({@code
  *       register-session-not-found})
+ *   <li>{@link RegisterSessionHasOpenBillsException} — bills still OPEN at the outlet (ADR 0086) →
+ *       {@code 409} ({@code register-session-open-bills}, property {@code openBillCount})
  * </ul>
  */
 @RestControllerAdvice
@@ -63,6 +66,17 @@ public class RegisterAdvice {
         problem(HttpStatus.CONFLICT, "register-session-idempotency-key-conflict", request);
     problem.setTitle("Idempotency-Key conflict");
     problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  @ExceptionHandler(RegisterSessionHasOpenBillsException.class)
+  public ProblemDetail handleOpenBills(
+      RegisterSessionHasOpenBillsException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "register-session-open-bills", request);
+    problem.setTitle("Open bills must be settled before closing");
+    problem.setDetail(ex.getMessage());
+    problem.setProperty("openBillCount", ex.getOpenBillCount());
+    problem.setProperty("businessId", ex.getBusinessId().toString());
     return problem;
   }
 

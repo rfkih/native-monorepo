@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { needsCountConfirmation } from '../closeGuard'
+import { closeBlockedByOpenBills, needsCountConfirmation } from '../closeGuard'
 
 describe('needsCountConfirmation', () => {
   it('an exact match closes straight through (no confirm)', () => {
@@ -22,5 +22,21 @@ describe('needsCountConfirmation', () => {
 
   it('an empty drawer against a non-zero expected still confirms', () => {
     expect(needsCountConfirmation(50_000, 0)).toBe(true)
+  })
+})
+
+describe('closeBlockedByOpenBills (ADR 0086)', () => {
+  it('any OPEN bill at the outlet blocks the close', () => {
+    expect(closeBlockedByOpenBills(1)).toBe(true)
+    expect(closeBlockedByOpenBills(7)).toBe(true)
+  })
+
+  it('none blocks nothing', () => {
+    expect(closeBlockedByOpenBills(0)).toBe(false)
+  })
+
+  it('unknown (preview still loading/errored) never blocks — the server 409 is the backstop', () => {
+    expect(closeBlockedByOpenBills(null)).toBe(false)
+    expect(closeBlockedByOpenBills(undefined)).toBe(false)
   })
 })

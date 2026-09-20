@@ -11,6 +11,11 @@
  * future drift is a one-line fix):
  *   GET  /api/v1/self-order-access?outletId=         → SelfOrderAccessResponse
  *   POST /api/v1/self-order-access/rotate {outletId} → SelfOrderAccessResponse (fresh tokens)
+ *
+ * Both are owner/manager-gated in the SERVICE (`SelfOrderAccessService.requireOwnerOrManager`) and
+ * reached from the till (table floor → table management → QR), so they ride the `'elevated'` bearer
+ * (ADR 0086): on a device terminal the elevation token is what carries the role; without one the
+ * outlet credential goes and the server answers an honest 403 rather than a bearerless 401.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
@@ -46,6 +51,7 @@ export function useSelfOrderAccess(session: CompanySession, outletId: string) {
       apiFetch<SelfOrderAccessResponse>('/api/v1/self-order-access', {
         tenant: tenantOf(session),
         query: { outletId },
+        auth: 'elevated',
       }),
     staleTime: 60_000,
   })
@@ -59,6 +65,7 @@ export function useRotateSelfOrderAccess(session: CompanySession, outletId: stri
         method: 'POST',
         tenant: tenantOf(session),
         body: { outletId },
+        auth: 'elevated',
       }),
     onSuccess: (res) => {
       if (res) qc.setQueryData(queryKey(session, outletId), res)

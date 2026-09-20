@@ -147,8 +147,17 @@ export function isOrgUnitHasData(err: unknown): boolean {
  * (see {@link setPersonalAccessToken}'s doc), so this only matters on a device terminal. Ignored in
  * dev mode (header-trust, no bearer at all). `X-Company-Id` is unaffected either way — the outlet
  * token stays the only tenant source.
+ *
+ * `'elevated'` (ADR 0086) is the STRONGEST credential this login holds: the personal/elevation
+ * bearer when there is one, else the outlet credential. It is for the POS writes the SERVICE gates on
+ * owner/manager only in some states and leaves open to a bare cashier in others (cancelling a bill
+ * WITH lines vs an EMPTY one — `BillWriter.requireOwnerOrManager`). Not `'personal'`: an un-elevated
+ * device has no personal bearer, and a bearerless call is a 401 that trips the auth layer's recovery.
+ * Not `'outlet'`: the elevation would be invisible to the server — the gateway stamps X-Roles from
+ * whichever bearer is sent, so an elevated owner's cancel rode the device's cashier-tier token and was
+ * refused (the "owner cannot cancel from the phone" bug).
  */
-export type AuthTarget = 'outlet' | 'personal'
+export type AuthTarget = 'outlet' | 'personal' | 'elevated'
 
 /**
  * Pure bearer selection (ADR 0049 P3b) — kept standalone (no module state, no AUTH_MODE) so it is
@@ -158,7 +167,9 @@ export function selectBearerToken(
   target: AuthTarget,
   tokens: { outlet: string | null; personal: string | null },
 ): string | null {
-  return target === 'personal' ? tokens.personal : tokens.outlet
+  if (target === 'personal') return tokens.personal
+  if (target === 'elevated') return tokens.personal ?? tokens.outlet
+  return tokens.outlet
 }
 
 export interface RequestOptions {

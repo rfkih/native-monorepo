@@ -147,6 +147,7 @@ public class BillService {
         view.getCurrency().strip(),
         view.getDiscountMinor(),
         view.getRunningTotalMinor(),
-        view.getLineCount());
+        view.getLineCount(),
+        view.getPaidLineCount());
   }
 }

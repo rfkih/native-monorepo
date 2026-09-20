@@ -1,33 +1,29 @@
 /**
- * CancelConfirmDialog.tsx — extracted VERBATIM from BillDetail.tsx (redesign P2, mechanical move only).
+ * CancelConfirmDialog.tsx — extracted from BillDetail.tsx (redesign P2). Shared by the bill sheet
+ * and the order switcher's per-row cancel (ADR 0086), so it takes only the guest label it reads.
+ * Sits at z-[70], above the switcher (z-50), and parks its own Back entry: Back pops the confirm
+ * first, then whatever opened it (ADR 0075).
  */
 import { useTranslation } from 'react-i18next'
-import {
-  AlertTriangle,
-} from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import type { } from '@/lib/session'
-import type { BillResponse,
-} from '../billsApi'
-import type { } from '../lib/categories'
-
 
 // ---------------------------------------------------------------------------
 // CancelConfirmDialog
 // ---------------------------------------------------------------------------
 
 export function CancelConfirmDialog({
-  bill,
+  guestLabel,
   isCancelling,
   error,
   onConfirm,
   onClose,
 }: {
-  bill: BillResponse
+  guestLabel: string
   isCancelling: boolean
   error: string | null
   onConfirm: () => void
@@ -51,7 +47,7 @@ export function CancelConfirmDialog({
               {t('bills.cancelBillTitle')}
             </h3>
             <p className="mt-1 text-sm text-ink-3">
-              {t('bills.cancelBillBody', { label: bill.guestLabel })}
+              {t('bills.cancelBillBody', { label: guestLabel })}
             </p>
           </div>
         </div>

@@ -11,6 +11,8 @@
  * unsynced cash would understate expected cash — ADR 0028).
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { billsKey } from './billsApi'
+import { isRegisterOpenBillsFault } from './lib/registerErrors'
 import { ApiError, apiFetch } from '@/lib/api'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
@@ -46,6 +48,12 @@ export interface RegisterExpectedResponse {
   currency: string
   asOf: string
   tenders: TenderExpected[]
+  /**
+   * OPEN bills at the outlet — the close precondition (ADR 0086): the close refuses (409
+   * `register-session-open-bills`) while this is > 0. Optional on the wire so a console ahead of
+   * its backend degrades to "no preflight block; the 409 still refuses".
+   */
+  openBillCount?: number
 }
 
 /**
@@ -134,6 +142,9 @@ export function useCurrentRegisterSession(session: CompanySession) {
  * on the close screen so the cashier sees what to count/verify per tender. A preview; the close
  * still snapshots the authoritative figures server-side.
  */
+// How often the blocked close sheet re-asks whether the open bills are still open (ADR 0086).
+const OPEN_BILLS_POLL_MS = 15_000
+
 export function useRegisterExpected(
   session: CompanySession,
   sessionId: string | null | undefined,
@@ -146,6 +157,13 @@ export function useRegisterExpected(
       apiFetch<RegisterExpectedResponse>(`/api/v1/register-sessions/${sessionId}/expected`, {
         tenant: tenantOf(session),
       }),
+    // ADR 0086 — the preview now decides whether Close is offered at all, so it must be fresh
+    // each time the sheet opens (the global 30 s staleTime would otherwise keep a bill that was
+    // just cancelled from the switcher counted as open), and while it IS blocking it polls: the
+    // bill may be paid or cancelled on another device, and the sheet has no other way to learn.
+    refetchOnMount: 'always',
+    refetchInterval: (query) =>
+      (query.state.data?.openBillCount ?? 0) > 0 ? OPEN_BILLS_POLL_MS : false,
   })
 }
 
@@ -320,11 +338,17 @@ export function useCloseRegisterSession(session: CompanySession) {
       // The just-closed session becomes a new row in the past-day history browse.
       void qc.invalidateQueries({ queryKey: closedHistoryKey(session) })
     },
-    onError: (err) => {
+    onError: (err, { sessionId }) => {
       // Already closed (double-close race or a changed recount after a lost response): the
       // server state is the truth — refetch so the sheet flips out of the close form.
       if (err instanceof ApiError && err.status === 409) {
         void qc.invalidateQueries({ queryKey: currentKey(session) })
+      }
+      // ADR 0086 — a bill was opened/paid/cancelled between the preview and the submit: refresh
+      // the count and the list so the sheet shows the truth rather than a stale "0 open".
+      if (isRegisterOpenBillsFault(err)) {
+        void qc.invalidateQueries({ queryKey: ['register-expected', session.companyId, sessionId] })
+        void qc.invalidateQueries({ queryKey: billsKey(session) })
       }
     },
   })

@@ -59,10 +59,10 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true })
 
 for (const pass of [
   { name: 'light-en', theme: 'light', lang: 'en', moreLabel: 'More', ordersLabel: 'Orders',
-    parkedLabel: 'Parked orders',
+    parkedLabel: 'Parked orders', closeLabel: 'Close the register',
     lineChart: 'Line chart', tabs: { bs: 'Balance', cf: 'Cash flow', exp: 'Expenses' } },
   { name: 'dark-id', theme: 'dark', lang: 'id', moreLabel: 'Lainnya', ordersLabel: 'Pesanan',
-    parkedLabel: 'Pesanan tertahan',
+    parkedLabel: 'Pesanan tertahan', closeLabel: 'Closing kasir',
     lineChart: 'Grafik garis', tabs: { bs: 'Neraca', cf: 'Arus kas', exp: 'Biaya' } },
 ]) {
   const dir = `${OUT}/${pass.name}`
@@ -428,6 +428,39 @@ for (const pass of [
   await assertEmptiedDeck(page, pass.name, 'emptied resumed order')
   await page.screenshot({ path: `${dir}/pos-resumed-emptied.png` })
   console.log(`[${pass.name}] pos-resumed-emptied ok`)
+
+  // ADR 0086 — the close refuses over an open bill. The fixture's preview says one bill is open,
+  // so the close form must show the amber block with that bill, keep the Close button disabled
+  // even once a count is typed, and offer the door to the order switcher. Asserted, not just
+  // photographed: a sheet that quietly let the close through is exactly the bug this closes.
+  await page.goto(`${BASE}/pos`, { waitUntil: 'load' })
+  await page.waitForTimeout(1600)
+  await page.getByTestId('pos-till-menu').click({ timeout: 8000 })
+  await page.waitForTimeout(400)
+  await page.getByRole('menuitem', { name: pass.closeLabel, exact: true }).click({ timeout: 8000 })
+  await page.waitForTimeout(1200)
+  await page.getByTestId('register-open-bills').waitFor({ timeout: 8000 })
+  if (!(await page.getByTestId('register-open-bills').getByText('Meja 07').count())) {
+    throw new Error(`[${pass.name}] close form does not list the open bill`)
+  }
+  await page.getByTestId('register-counted').fill('1850000')
+  await page.waitForTimeout(300)
+  if (await page.getByTestId('register-close').isEnabled()) {
+    throw new Error(`[${pass.name}] close button enabled while a bill is open`)
+  }
+  await page.screenshot({ path: `${dir}/pos-register-close-blocked.png` })
+  console.log(`[${pass.name}] pos-register-close-blocked ok`)
+  // The door lands on the switcher, where the bill can be paid or cancelled.
+  await page.getByTestId('register-open-bills-go').click({ timeout: 8000 })
+  await page.waitForTimeout(700)
+  await page.getByRole('dialog', { name: pass.ordersLabel }).waitFor({ timeout: 8000 })
+  await page.screenshot({ path: `${dir}/pos-register-open-bills-door.png` })
+  console.log(`[${pass.name}] pos-register-open-bills-door ok`)
+  // …and each row carries the cancel action (owner under dev auth), confirmed in the shared dialog.
+  await page.getByTestId('switcher-cancel-b1').click({ timeout: 8000 })
+  await page.waitForTimeout(600)
+  await page.screenshot({ path: `${dir}/pos-switcher-cancel-confirm.png` })
+  console.log(`[${pass.name}] pos-switcher-cancel-confirm ok`)
   }
 
   if (want('bills')) {
