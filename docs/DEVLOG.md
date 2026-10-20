@@ -1,5 +1,40 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-10-19 — the app stays the app (Till v12, Karyawan v4)
+
+A Note 20 kept opening Chrome on the web console every time the app was opened; a reinstall
+"fixed" it until it came back. The 2026-08-21 `allowNavigation` fix had closed one door (the
+cross-host Keycloak login); this was a second one. Unzipping the shipped `native-app-prod-v11` and
+`native-employee-app-prod-v3` showed `server.url` correct but `www/error.html` — Capacitor's
+`errorPath`, shown on ANY main-frame network or HTTP error (offline cold start, a Cloudflare 5xx
+during a deploy) — still retrying to the hand-kept **UAT funnel** origin. That host is not the app's
+nor allowed, so `Bridge.launchIntent` handed it to the browser, and the page's 8-second auto-retry
+kept re-opening Chrome on every return to the still-alive process. A reinstall only worked because
+it killed the process.
+
+Two fixes, mirrored in both shells. **The error page is stamped**: `scripts/stamp-error-origin.mjs`
+runs as the `capacitor:copy:after` hook, so every `cap sync` rewrites the synced (gitignored) copy
+from the resolved `server.url`, and `build-app.mjs` refuses to build if the synced page disagrees.
+**The app never hands a Native host to the browser**: `AppOnlyNavigationPlugin` answers
+`shouldOverrideLoad` — which `launchIntent` asks before `ACTION_VIEW` — and cancels an http(s)
+navigation to a Native-owned domain (`plugins.AppOnlyNavigation.ownDomains`) that is not the app's
+own host nor in `allowNavigation`. Narrow on purpose: wa.me, Play, `intent:`/RawBT, `tel:`, `mailto:`
+keep opening outside. The policy is a pure `NavigationPolicy` with a JVM test.
+
+The fresh-context review (PASS) caught that the guard would have silently killed the in-app
+Privacy / Delete-account links on UAT and dev builds: the console's `LEGAL_BASE_URL` is always the
+prod business host, which there is neither the app's host nor allowed. That host is now in
+`allowNavigation` on every build (`LEGAL_ORIGIN`), so those pages open in-app. It also caught that
+an OTA bundle zipped from `www/` would skip the stamp, so the page now prefers Capacitor's runtime
+`WEBVIEW_SERVER_URL` (server.url origin, or `https://localhost` when bundled) over the stamped
+fallback. The policy is scheme-aware for the app host (Capacitor's own check is), and the hook's
+main-module guard compares realpaths.
+
+Verified: node tests 7/7 + JUnit 7/7 per app (prod, UAT and bundled configs modelled); signed prod
+APKs rebuilt through `build-app.mjs` and unzipped (stamped origin, runtime-origin line, plugin
+config, plugin class in dex, `apksigner verify`). Not yet device-tested, released to the edge, or
+uploaded to Play. Installs on v11/v3 keep the bug until they take the new APK.
+
 ## 2026-09-17 — the home's figures become doors, and the till gets its one deep-link
 
 The owner tapped "Bill terbuka" on the phone home and nothing happened. Every other card on that

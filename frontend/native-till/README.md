@@ -177,3 +177,20 @@ no corruption, not authorship. To revert to the thin client, build with `NATIVE_
 
 `versionCode`/`versionName` bump **only when native code changes** (plugin, kiosk, WebView host,
 manifest). Web features ship via the normal console deploy and appear in the app with no update.
+
+## The app stays the app (v12)
+
+The shell never drops the user onto the web console in Chrome:
+
+- **`AppOnlyNavigationPlugin`** cancels any http(s) navigation to a Native-owned domain
+  (`NATIVE_OWN_DOMAINS` in `capacitor.config.ts`) that is not this app's host or in
+  `allowNavigation` — Capacitor would otherwise `ACTION_VIEW` it into the browser. External links
+  (wa.me, Play) and app intents (`intent:`/RawBT, `tel:`, `mailto:`) still open outside. A cancel
+  logs `AppOnlyNavigation: blocked …` in logcat. If Native ever serves from a new domain, add it to
+  `NATIVE_OWN_DOMAINS` **in both apps**.
+- **`allowNavigation`** = the auth host + the legal host (`LEGAL_ORIGIN`, mirrors the console's
+  `LEGAL_BASE_URL`), so login and Privacy / Delete-account load in-app on every build.
+- **`www/error.html`** retries to Capacitor's runtime `WEBVIEW_SERVER_URL`, falling back to
+  `STAMPED_ORIGIN`, which the `capacitor:copy:after` hook (`scripts/stamp-error-origin.mjs`) stamps
+  from `server.url` on every sync; `build-app.mjs` refuses to build if they disagree. `npm test`
+  covers the stamp; `gradlew testUatDebugUnitTest` covers the navigation policy.

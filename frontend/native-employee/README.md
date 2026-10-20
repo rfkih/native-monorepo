@@ -133,3 +133,11 @@ native-till's (which is at 6/1.4). Same contract as native-till going forward: `
 `versionName` bump **only when native code changes** (WebView host, manifest, future plugins). Web
 features (the `/me` surface itself) ship via the normal console deploy and appear in the app with
 no update.
+
+## The app stays the app (v4)
+
+Same guard as native-till (see its README, "The app stays the app"): `AppOnlyNavigationPlugin`
+cancels navigations to a Native-owned domain outside this app's host / `allowNavigation` instead of
+opening Chrome; `allowNavigation` = the Business-host issuer + the legal host; `www/error.html`
+retries to the runtime `WEBVIEW_SERVER_URL`, with `STAMPED_ORIGIN` stamped on every sync.
+`NATIVE_OWN_DOMAINS` must match the Till app's list.

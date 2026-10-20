@@ -15,6 +15,8 @@ class MainActivity : BridgeActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(NativeShellPlugin::class.java)
+        // Never hand a Native web host to the system browser — the app stays the app.
+        registerPlugin(AppOnlyNavigationPlugin::class.java)
         super.onCreate(savedInstanceState)
         // The console layout is designed at CSS-pixel scale; Android's accessibility font size
         // otherwise multiplies into WebView text zoom and shatters the grid layouts.

@@ -26,6 +26,7 @@ import { execSync } from 'node:child_process'
 import { existsSync, mkdirSync, copyFileSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { errorPageOrigin, readErrorOrigin, syncedConfig, syncedErrorPage } from './stamp-error-origin.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const app = resolve(here, '..')
@@ -117,10 +118,34 @@ const run = (cmd, cwd) => {
   execSync(cmd, { cwd, env: buildEnv, stdio: 'inherit' })
 }
 
+// The offline page's retry must target THIS build's origin. The capacitor:copy:after hook stamps it;
+// this re-reads what actually got synced so a skipped/broken hook can never ship a page that retries
+// to a foreign host (the 2026-10-19 field bug: prod APKs retried to the UAT funnel → Chrome).
+function assertErrorPageOrigin() {
+  const config = syncedConfig(app)
+  const page = syncedErrorPage(app, config)
+  const expected = new URL(origin).origin
+  const served = errorPageOrigin(config)
+  if (served !== expected) {
+    console.error(`build-app: synced server.url origin ${served} != requested ${expected}`)
+    process.exit(1)
+  }
+  const stamped = page ? readErrorOrigin(readFileSync(page, 'utf8')) : null
+  if (stamped !== expected) {
+    console.error(
+      `build-app: the synced error page retries to ${stamped}, not this build's origin ${expected}.\n` +
+        '           Its retry would leave the app for the browser — is the capacitor:copy:after hook wired?',
+    )
+    process.exit(1)
+  }
+  console.log(`[build-app] ✓ error page retry origin = ${stamped}`)
+}
+
 const isAab = format === 'aab'
 const gradleTask = isAab ? 'bundle' : 'assemble'
 console.log(`[build-app] env=${env}  type=${type}  format=${format}  origin=${origin}  auth=${authOrigin}`)
 run('npx cap sync android', app)
+assertErrorPageOrigin()
 run(`${gradlew} ${gradleTask}${flavor}${typeCap}`, androidDir)
 
 // --- collect the artifact -----------------------------------------------------------------------

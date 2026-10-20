@@ -32,6 +32,8 @@ class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(NativePrintPlugin::class.java)
         registerPlugin(NativeShellPlugin::class.java)
+        // Never hand a Native web host to the system browser — the app stays the app.
+        registerPlugin(AppOnlyNavigationPlugin::class.java)
         super.onCreate(savedInstanceState)
         // A till must never dim mid-service (ADR 0043 D6).
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

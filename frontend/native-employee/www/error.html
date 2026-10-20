@@ -45,8 +45,13 @@
       <div class="hint" id="hint"></div>
     </div>
     <script>
-      // The employee shell's one origin. Keep in sync with capacitor.config.ts SERVER_URL.
-      var ORIGIN = 'https://a8.tailbf9662.ts.net:10000'
+      // The employee shell's one origin. Capacitor injects WEBVIEW_SERVER_URL into locally served
+      // pages (the server.url origin), so the retry always targets this app's own host.
+      // STAMPED_ORIGIN is the fallback; its literal is only the UAT default — every `cap sync`/`cap copy`
+      // re-stamps the synced copy from the resolved server.url (scripts/stamp-error-origin.mjs). A
+      // foreign host here is what threw prod users into Chrome.
+      var STAMPED_ORIGIN = 'https://a8.tailbf9662.ts.net:10000'
+      var ORIGIN = window.WEBVIEW_SERVER_URL || STAMPED_ORIGIN
       function retry() {
         window.location.href = ORIGIN
       }

@@ -4,8 +4,13 @@
   "description": "Native Till — Android thin-client shell over the live console + in-process NativePrint bridge (ADR 0043)",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "sync": "cap sync android",
+    "capacitor:copy:after": "node scripts/stamp-error-origin.mjs",
+    "test": "node --test \"scripts/*.test.mjs\"",
     "open": "cap open android",
     "apk": "cap sync android && cd android && gradlew assembleUatDebug",
     "build:uat": "node scripts/build-app.mjs --env uat",

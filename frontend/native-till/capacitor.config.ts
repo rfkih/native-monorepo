@@ -29,7 +29,19 @@ const UPDATE_URL = process.env.NATIVE_TILL_UPDATE_URL ?? '';
 // silently reintroduce the breakout, and because the bundled shell (ADR 0051, https://localhost)
 // will need the real auth host whitelisted on EVERY login.
 const AUTH_ORIGIN = process.env.NATIVE_TILL_AUTH_ORIGIN ?? SERVER_URL;
-const ALLOW_NAVIGATION = [new URL(AUTH_ORIGIN).hostname];
+// The console's in-app Privacy / Delete-account links (Play requires the latter reachable from inside
+// the app) always point at the prod business host — console src/lib/config.ts LEGAL_BASE_URL, keep in
+// sync. Whitelisted so they open IN the app on every build (in prod it is already the app's own host);
+// without it a UAT/dev build's AppOnlyNavigation guard would cancel the tap (it must never go to Chrome).
+const LEGAL_ORIGIN = 'https://app.native-app.my.id';
+const ALLOW_NAVIGATION = [...new Set([AUTH_ORIGIN, LEGAL_ORIGIN].map((o) => new URL(o).hostname))];
+
+// Every domain Native serves its WEB console from (prod domain + the Tailscale funnel tailnet).
+// AppOnlyNavigationPlugin cancels any navigation to one of these that is not this app's own host or
+// in allowNavigation, instead of letting Capacitor open it in the system browser — a user must never
+// be dropped from the app onto the web console (field bug 2026-10-19). Add a domain here if Native
+// ever serves from a new one.
+const NATIVE_OWN_DOMAINS = ['native-app.my.id', 'tailbf9662.ts.net'];
 
 const config: CapacitorConfig = {
   // appId is the app's permanent technical identity — NEVER rename it (a change = a different
@@ -54,6 +66,7 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
   },
   plugins: {
+    AppOnlyNavigation: { ownDomains: NATIVE_OWN_DOMAINS },
     // Cold-start splash (startup-perf pass): a thin client (ADR 0043) must fetch the whole console
     // over the network before first paint, and there is no service worker to soften it — so the gap
     // was a blank paper screen. This keeps a branded splash (paper background = --color-paper, no
